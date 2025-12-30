@@ -20,18 +20,23 @@ Database migrations are managed using **Supabase migrations** (SQL files, versio
 
 ---
 
-## Current Migrations (as of 2025-12-30)
+## How to List Migrations
 
-**16 migrations applied** (check `supabase/migrations/` for full list):
+**Check current migrations**:
+```bash
+# List all migration files
+ls -1 supabase/migrations/
 
-1. `20250101000001_initial_schema.sql` (18KB) - Core tables (agencies, properties, bookings, guests)
-2. `20250101000002_channels_and_financials.sql` (13.6KB) - Channel Manager tables
-3. `20250101000003_indexes.sql` (8.3KB) - Database indexes
-4. `20250101000004_rls_policies.sql` (20.5KB) - Row-Level Security policies
-5. `20251225190000_availability_inventory_system.sql` (8KB) - Availability/inventory tables
-6. `20251229200517_enforce_overlap_prevention_via_exclusion.sql` (6.7KB) - EXCLUSION constraint
+# Count total migrations
+ls -1 supabase/migrations/*.sql | wc -l
+```
 
-**Total**: 16 migrations (see directory listing for complete set)
+**Historical context**: As of [status-review-v3 snapshot](_staging/status-review-v3/PROJECT_STATUS.md), 16 migrations were applied. Check the directory for the current count.
+
+**Key migrations** (examples):
+- `20250101000001_initial_schema.sql` - Core tables (agencies, properties, bookings, guests)
+- `20250101000004_rls_policies.sql` - Row-Level Security policies
+- `20251229200517_enforce_overlap_prevention_via_exclusion.sql` - EXCLUSION constraint for double-booking prevention
 
 ---
 
@@ -198,11 +203,13 @@ supabase db push
 ### Detect Drift
 
 ```bash
-# Check current database schema
+# Check current database schema against migrations
 supabase db diff
 
 # If drift detected, review differences before creating migration
 ```
+
+**Production drift detection**: See [Runbook - Schema Drift](../ops/runbook.md#schema-drift) for troubleshooting steps when API returns "Schema not installed/out of date" errors.
 
 ### Resolve Drift
 

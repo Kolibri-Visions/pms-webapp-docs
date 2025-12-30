@@ -36,13 +36,16 @@
 
 **Container**: `pms-worker-v2` (Coolify deployment)
 
-**Status**: UNKNOWN (check deployment logs)
-
 **Broker**: Redis (shared with backend)
 
-**Tasks** (assumed, check code):
+**Tasks**:
 - Availability sync tasks
 - Channel manager tasks (if `CHANNEL_MANAGER_ENABLED=true`)
+
+**How to Verify in Coolify**:
+1. Check container `pms-worker-v2` is running
+2. Verify env vars: `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`
+3. Check logs: `docker logs pms-worker-v2 --tail 50`
 
 **Related Docs**: [Channel Manager Architecture](architecture/channel-manager.md)
 
@@ -52,9 +55,12 @@
 
 **Purpose**: Celery broker, caching (if used)
 
-**Status**: UNKNOWN (check deployment platform)
-
 **Network**: Shared with backend and worker
+
+**How to Verify in Coolify**:
+1. Check Redis container is running (name varies by Coolify deployment)
+2. Verify backend can connect: check `REDIS_URL` or `CELERY_BROKER_URL` env vars
+3. Test connection: `redis-cli -u $REDIS_URL ping` (should return PONG)
 
 ---
 
@@ -155,13 +161,13 @@
 
 ## Key URLs (Staging)
 
-**Backend API**: UNKNOWN (check deployment platform)
+**Backend API**: https://api.fewo.kolibri-visions.de
 
-**Frontend**: UNKNOWN (check deployment platform)
+**Frontend Admin UI**: https://admin.fewo.kolibri-visions.de
 
-**Supabase Dashboard**: UNKNOWN (check Supabase project)
+**Supabase Gateway**: https://sb-pms.kolibri-visions.de
 
-**Coolify Dashboard**: UNKNOWN (check Coolify deployment)
+**Coolify Dashboard**: (check deployment platform credentials)
 
 ---
 
@@ -235,7 +241,7 @@
 ## Historical Snapshots (Code-Derived)
 
 **For code-derived status snapshots** (commit-bound, read-only):
-- [status-review-v3/PROJECT_STATUS.md](_staging/status-review-v3/PROJECT_STATUS.md) - Snapshot at commit `3490c89` (2025-12-30 21:01 UTC)
+- [status-review-v3/PROJECT_STATUS.md](_staging/status-review-v3/PROJECT_STATUS.md) - Snapshot at commit `7f34c7d` (2025-12-30 21:01 UTC)
 - [status-review-v2/PROJECT_STATUS.md](_staging/status-review-v2/PROJECT_STATUS.md) - Snapshot at commit `1c42e95` (2025-12-30 20:48 UTC)
 - [status-review-v1/PROJECT_STATUS.md](_staging/status-review-v1/PROJECT_STATUS.md) - Snapshot at commit `393ba8da` (2025-12-30 17:34 UTC)
 

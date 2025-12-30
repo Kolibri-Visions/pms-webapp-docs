@@ -16,7 +16,7 @@
 
 **Test Types**: unit, integration, security, smoke
 
-**Workflow**: **No local tests; server-side smoke only** (tests run on server, not locally)
+**Official Workflow**: **Server-side smoke tests after deployment** (no local pytest in standard workflow)
 
 ---
 
@@ -50,11 +50,7 @@ backend/tests/
 - `test_database_generator.py` - Test data generation utilities
 - `test_channel_sync_log_service.py` - Channel sync log service
 
-**Run Locally** (if needed):
-```bash
-# Unit tests typically don't require DATABASE_URL
-pytest backend/tests/unit/
-```
+**Note**: See "Optional (Contributor Only)" section below for local test commands.
 
 ---
 
@@ -70,16 +66,7 @@ pytest backend/tests/unit/
 - `test_rbac.py` - RBAC enforcement integration tests
 - `test_auth_db_priority.py` - Auth vs DB priority tests
 
-**Run Locally** (if needed):
-```bash
-# Requires DATABASE_URL and JWT_SECRET
-export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/test"
-export JWT_SECRET="test-secret-key-1234567890123456"
-
-pytest backend/tests/integration/
-```
-
-**Note**: Integration tests create/destroy test data (use test database, not production)
+**Note**: See "Optional (Contributor Only)" section below for local test commands.
 
 ---
 
@@ -94,10 +81,7 @@ pytest backend/tests/integration/
 - `test_redis_client.py` - Redis client security
 - `test_webhook_signature.py` - Webhook signature validation
 
-**Run Locally** (if needed):
-```bash
-pytest backend/tests/security/
-```
+**Note**: See "Optional (Contributor Only)" section below for local test commands.
 
 ---
 
@@ -110,13 +94,9 @@ pytest backend/tests/security/
 **Examples**:
 - `test_channel_manager_smoke.py` - Channel Manager smoke test
 
-**Run on Server** (recommended workflow):
-```bash
-# Smoke tests run on server after deployment
-# See ops/runbook.md for smoke script usage
-```
+**Official Workflow**: Run on server after deployment
 
-**Related Docs**: [Runbook - Smoke Script Pitfalls](ops/runbook.md#smoke-script-pitfalls)
+**Related Docs**: [Runbook - Smoke Script Pitfalls](../ops/runbook.md#smoke-script-pitfalls) for smoke script usage and troubleshooting.
 
 ---
 
@@ -126,57 +106,28 @@ pytest backend/tests/security/
 
 **Purpose**: Shared test fixtures, configuration
 
-**Common Fixtures** (assumed, check code):
-- `db` - Database connection (for integration tests)
-- `client` - FastAPI test client (for API tests)
-- `test_user` - Mock user for auth tests
-- `test_agency` - Mock agency for multi-tenancy tests
-
-**Example Usage**:
-```python
-import pytest
-
-@pytest.fixture
-async def db():
-    # Setup: Create test database connection
-    conn = await asyncpg.connect(os.getenv("DATABASE_URL"))
-    yield conn
-    # Teardown: Close connection
-    await conn.close()
-```
+**Common Fixtures**: Check `backend/tests/conftest.py` for available fixtures (database connection, test client, mock users, etc.)
 
 ---
 
-## Workflow: No Local Tests; Server-Side Smoke Only
-
-### Current Workflow
+## Official Workflow: Server-Side Smoke Tests
 
 **Local Development**:
-- ❌ Do NOT run tests locally (no pytest in local dev workflow)
-- ✅ Rely on type checking (mypy), linting (ruff) instead
+- Rely on type checking (mypy), linting (ruff)
+- No pytest in standard local workflow
 
 **Server Deployment**:
 - ✅ Run smoke tests on server after deployment
 - ✅ Smoke tests verify critical paths (health, auth, DB connectivity)
 
 **Why**:
-- Tests require DATABASE_URL + JWT_SECRET (not available locally)
+- Tests require DATABASE_URL + JWT_SECRET (sensitive credentials)
 - Integration tests create/destroy data (risky on shared DB)
-- Smoke tests are faster feedback loop (seconds vs minutes)
+- Smoke tests provide faster feedback loop
 
 ---
 
-## Running Tests (Server-Side)
-
-### Smoke Tests (Recommended)
-
-**Location**: `backend/scripts/ops/smoke.py` (assumed, check `ops/runbook.md`)
-
-**Usage**:
-```bash
-# Run smoke script on server
-python backend/scripts/ops/smoke.py
-```
+### Server-Side Smoke Tests (Official Workflow)
 
 **What It Tests**:
 - `/health` endpoint returns 200
@@ -184,13 +135,16 @@ python backend/scripts/ops/smoke.py
 - JWT token validation works
 - Basic CRUD operations (if applicable)
 
-**Related Docs**: [Runbook - Smoke Script Pitfalls](ops/runbook.md#smoke-script-pitfalls)
+**How to Run**: See [Runbook - Smoke Script Pitfalls](../ops/runbook.md#smoke-script-pitfalls) for usage and troubleshooting.
 
 ---
 
-### Full Test Suite (If Needed)
+## Optional (Contributor Only): Local Test Execution
 
-**All Tests**:
+**Note**: The following commands are for contributors who need to run tests locally. This is NOT part of the standard workflow.
+
+### Full Test Suite
+
 ```bash
 # Requires DATABASE_URL, JWT_SECRET
 export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/test"
@@ -199,26 +153,23 @@ export JWT_SECRET="test-secret-key-1234567890123456"
 pytest backend/tests/
 ```
 
-**Unit Tests Only**:
+### By Test Type
+
 ```bash
+# Unit tests (no DB required)
 pytest backend/tests/unit/
-```
 
-**Integration Tests Only**:
-```bash
-# Requires DATABASE_URL, JWT_SECRET
+# Integration tests (requires DATABASE_URL, JWT_SECRET)
 pytest backend/tests/integration/
-```
 
-**Security Tests Only**:
-```bash
+# Security tests
 pytest backend/tests/security/
-```
 
-**Smoke Tests Only**:
-```bash
+# Smoke tests
 pytest backend/tests/smoke/
 ```
+
+**Warning**: Integration tests create/destroy test data. Use a test database, NOT production.
 
 ---
 

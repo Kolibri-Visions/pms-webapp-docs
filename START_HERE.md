@@ -48,7 +48,7 @@
 
 ### Historical Snapshots (Code-Derived)
 
-📸 **[_staging/status-review-v3/PROJECT_STATUS.md](_staging/status-review-v3/PROJECT_STATUS.md)** - Code-derived snapshot (commit `3490c89`, 2025-12-30 21:01 UTC)
+📸 **[_staging/status-review-v3/PROJECT_STATUS.md](_staging/status-review-v3/PROJECT_STATUS.md)** - Code-derived snapshot (commit `7f34c7d`, 2025-12-30 21:01 UTC)
 
 **Important Note**:
 - `_staging/status-review-v3/*` is a **historical, code-derived snapshot** (commit-bound, read-only).

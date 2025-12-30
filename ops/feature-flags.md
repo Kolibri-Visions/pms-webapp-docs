@@ -22,11 +22,13 @@ Feature flags control which features are enabled without code changes. All flags
 
 **Default**: `true`
 
-**Values**: `true` | `false` (case-sensitive)
+**Recommended Values**: `true` | `false`
 
 **Behavior**:
 - If `MODULES_ENABLED=true`: Use module system (`mount_modules(app)` in `backend/app/modules/bootstrap.py`)
 - If `MODULES_ENABLED=false`: Use fallback (explicit router mounting in `backend/app/main.py:126-136`)
+
+**Note**: Boolean parsing may accept various truthy/falsy values depending on settings implementation (e.g., `1`, `yes`, `True`). Recommend using lowercase `true`/`false` for consistency.
 
 **Impact**: If false, bypasses module registry and uses explicit router mounting
 
@@ -42,11 +44,13 @@ Feature flags control which features are enabled without code changes. All flags
 
 **Default**: `false`
 
-**Values**: `true` | `false` (case-sensitive)
+**Recommended Values**: `true` | `false`
 
 **Behavior**:
 - If `CHANNEL_MANAGER_ENABLED=true`: Import and mount Channel Manager module
 - If `CHANNEL_MANAGER_ENABLED=false`: Channel Manager module NOT imported (disabled)
+
+**Note**: Boolean parsing may accept various truthy/falsy values depending on settings implementation (e.g., `1`, `yes`, `True`). Recommend using lowercase `true`/`false` for consistency.
 
 **Impact**: If false, Channel Manager endpoints NOT available, sync tasks NOT registered
 
