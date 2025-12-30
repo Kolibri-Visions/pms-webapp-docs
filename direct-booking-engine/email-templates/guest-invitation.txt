@@ -1,0 +1,32 @@
+YOU'RE INVITED!
+===============
+
+Hi {{ guest_name }},
+
+{{ host_name }} has invited you to create an account on PMS-Webapp. This will make it easy to manage your bookings and communicate with your host.
+
+{% if custom_message %}
+MESSAGE FROM {{ host_name }}:
+"{{ custom_message }}"
+{% endif %}
+
+BENEFITS OF CREATING AN ACCOUNT
+-------------------------------
+- View all your bookings in one place
+- Message your host directly through the platform
+- Faster checkout for future bookings
+- Receive updates about booking changes and special offers
+
+CREATE YOUR ACCOUNT
+-------------------
+Click here to get started: {{ invitation_url }}
+
+This link expires on {{ expires_at }}.
+
+---
+
+If you don't want to create an account, you can ignore this email. Your existing bookings are not affected.
+
+Questions? Reply to this email or contact support@pms-webapp.com
+
+(c) {{ current_year }} PMS-Webapp. All rights reserved.

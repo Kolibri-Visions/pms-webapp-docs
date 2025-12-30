@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create Your Account - PMS-Webapp</title>
+  <style>
+    body, table, td, p, a { margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
+    img { border: 0; display: block; }
+    .wrapper { width: 100%; background-color: #f8fafc; padding: 40px 0; }
+    .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); }
+    .header { background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); color: #ffffff; text-align: center; padding: 40px 30px; }
+    .header h1 { font-size: 28px; font-weight: 700; margin-bottom: 10px; }
+    .header p { font-size: 16px; opacity: 0.9; }
+    .content { padding: 40px 30px; }
+    .section { margin-bottom: 30px; }
+    .message-box { background-color: #f8fafc; border-left: 4px solid #8b5cf6; padding: 20px; border-radius: 0 8px 8px 0; margin: 20px 0; }
+    .message-box p { font-style: italic; color: #334155; line-height: 1.6; }
+    .benefits-list { list-style: none; padding: 0; }
+    .benefits-list li { display: flex; gap: 12px; padding: 12px 0; align-items: flex-start; }
+    .benefit-icon { width: 24px; height: 24px; background-color: #ede9fe; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .benefit-icon svg { width: 14px; height: 14px; fill: #8b5cf6; }
+    .benefit-text { font-size: 14px; color: #334155; line-height: 1.5; }
+    .benefit-title { font-weight: 600; color: #0f172a; }
+    .button { display: inline-block; background-color: #8b5cf6; color: #ffffff !important; text-decoration: none; padding: 16px 32px; border-radius: 8px; font-weight: 600; font-size: 18px; text-align: center; width: 100%; box-sizing: border-box; }
+    .button:hover { background-color: #7c3aed; }
+    .expire-note { font-size: 14px; color: #64748b; text-align: center; margin-top: 16px; }
+    .footer { background-color: #f8fafc; padding: 30px; text-align: center; border-top: 1px solid #e2e8f0; }
+    .footer p { font-size: 14px; color: #64748b; margin-bottom: 8px; }
+    .footer a { color: #8b5cf6; text-decoration: none; }
+    @media (max-width: 600px) {
+      .wrapper { padding: 20px 10px; }
+      .content { padding: 30px 20px; }
+      .header { padding: 30px 20px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <table class="container" cellpadding="0" cellspacing="0" width="100%">
+      <tr>
+        <td class="header">
+          <div style="width: 60px; height: 60px; background-color: rgba(255,255,255,0.2); border-radius: 50%; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center;">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+          </div>
+          <h1>You're Invited!</h1>
+          <p>Create an account to manage your bookings</p>
+        </td>
+      </tr>
+      <tr>
+        <td class="content">
+          <div class="section">
+            <p style="font-size: 16px; color: #334155; line-height: 1.6;">
+              Hi {{ guest_name }},
+            </p>
+            <p style="font-size: 16px; color: #334155; line-height: 1.6; margin-top: 16px;">
+              {{ host_name }} has invited you to create an account on PMS-Webapp. This will make it easy to manage your bookings and communicate with your host.
+            </p>
+          </div>
+
+          {% if custom_message %}
+          <div class="section">
+            <div class="message-box">
+              <p>"{{ custom_message }}"</p>
+              <p style="margin-top: 12px; font-style: normal; font-weight: 600;">- {{ host_name }}</p>
+            </div>
+          </div>
+          {% endif %}
+
+          <div class="section">
+            <h3 style="font-size: 16px; font-weight: 600; color: #0f172a; margin-bottom: 16px;">Benefits of creating an account:</h3>
+            <ul class="benefits-list">
+              <li>
+                <span class="benefit-icon">
+                  <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+                </span>
+                <span class="benefit-text">
+                  <span class="benefit-title">View all your bookings</span><br>
+                  Access your booking history and upcoming stays in one place
+                </span>
+              </li>
+              <li>
+                <span class="benefit-icon">
+                  <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+                </span>
+                <span class="benefit-text">
+                  <span class="benefit-title">Easy communication</span><br>
+                  Message your host directly through the platform
+                </span>
+              </li>
+              <li>
+                <span class="benefit-icon">
+                  <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+                </span>
+                <span class="benefit-text">
+                  <span class="benefit-title">Faster checkout</span><br>
+                  Your details are saved for future bookings
+                </span>
+              </li>
+              <li>
+                <span class="benefit-icon">
+                  <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+                </span>
+                <span class="benefit-text">
+                  <span class="benefit-title">Receive updates</span><br>
+                  Get notified about booking updates and special offers
+                </span>
+              </li>
+            </ul>
+          </div>
+
+          <div class="section">
+            <a href="{{ invitation_url }}" class="button">Create My Account</a>
+            <p class="expire-note">This link expires on {{ expires_at }}</p>
+          </div>
+
+          <p style="font-size: 14px; color: #64748b; text-align: center;">
+            If you don't want to create an account, you can ignore this email. Your existing bookings are not affected.
+          </p>
+        </td>
+      </tr>
+      <tr>
+        <td class="footer">
+          <p>Questions? Reply to this email or contact <a href="mailto:support@pms-webapp.com">support@pms-webapp.com</a></p>
+          <p style="font-size: 12px; color: #94a3b8; margin-top: 16px;">
+            &copy; {{ current_year }} PMS-Webapp. All rights reserved.
+          </p>
+        </td>
+      </tr>
+    </table>
+  </div>
+</body>
+</html>

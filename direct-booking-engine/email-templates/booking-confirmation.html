@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Booking Confirmed - {{ property_name }}</title>
+  <style>
+    /* Reset */
+    body, table, td, p, a { margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
+    img { border: 0; display: block; }
+
+    /* Container */
+    .wrapper { width: 100%; background-color: #f8fafc; padding: 40px 0; }
+    .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); }
+
+    /* Header */
+    .header { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: #ffffff; text-align: center; padding: 40px 30px; }
+    .header h1 { font-size: 28px; font-weight: 700; margin-bottom: 10px; }
+    .header p { font-size: 16px; opacity: 0.9; }
+    .checkmark { width: 60px; height: 60px; background-color: #10b981; border-radius: 50%; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center; }
+    .checkmark svg { width: 32px; height: 32px; fill: #ffffff; }
+
+    /* Content */
+    .content { padding: 40px 30px; }
+    .section { margin-bottom: 30px; }
+    .section-title { font-size: 14px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+
+    /* Booking Details Card */
+    .booking-card { background-color: #f8fafc; border-radius: 8px; padding: 20px; }
+    .booking-reference { font-size: 20px; font-weight: 700; color: #0f172a; margin-bottom: 5px; }
+    .booking-status { display: inline-block; background-color: #10b981; color: #ffffff; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 4px; }
+
+    /* Property Info */
+    .property-card { display: flex; gap: 16px; align-items: flex-start; }
+    .property-image { width: 120px; height: 80px; border-radius: 8px; object-fit: cover; }
+    .property-name { font-size: 18px; font-weight: 600; color: #0f172a; margin-bottom: 4px; }
+    .property-address { font-size: 14px; color: #64748b; }
+
+    /* Details Grid */
+    .details-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .detail-item { }
+    .detail-label { font-size: 12px; color: #64748b; margin-bottom: 4px; }
+    .detail-value { font-size: 16px; font-weight: 600; color: #0f172a; }
+
+    /* Price Summary */
+    .price-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #e2e8f0; }
+    .price-row:last-child { border-bottom: none; }
+    .price-row.total { font-weight: 700; font-size: 18px; color: #0f172a; }
+
+    /* Host Info */
+    .host-card { display: flex; align-items: center; gap: 12px; }
+    .host-avatar { width: 48px; height: 48px; background-color: #e2e8f0; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 600; color: #64748b; }
+    .host-name { font-weight: 600; color: #0f172a; }
+    .host-response { font-size: 14px; color: #64748b; }
+
+    /* Buttons */
+    .button { display: inline-block; background-color: #3b82f6; color: #ffffff !important; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; font-size: 16px; text-align: center; }
+    .button:hover { background-color: #2563eb; }
+    .button-secondary { background-color: #f1f5f9; color: #0f172a !important; }
+    .button-secondary:hover { background-color: #e2e8f0; }
+    .button-group { display: flex; gap: 12px; flex-wrap: wrap; }
+
+    /* Next Steps */
+    .steps-list { list-style: none; padding: 0; }
+    .steps-list li { display: flex; gap: 12px; padding: 12px 0; }
+    .step-number { width: 28px; height: 28px; background-color: #3b82f6; color: #ffffff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; flex-shrink: 0; }
+    .step-text { font-size: 14px; color: #334155; line-height: 1.5; }
+
+    /* Footer */
+    .footer { background-color: #f8fafc; padding: 30px; text-align: center; border-top: 1px solid #e2e8f0; }
+    .footer p { font-size: 14px; color: #64748b; margin-bottom: 8px; }
+    .footer a { color: #3b82f6; text-decoration: none; }
+    .social-links { margin-top: 16px; }
+    .social-links a { display: inline-block; margin: 0 8px; }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      .wrapper { padding: 20px 10px; }
+      .content { padding: 30px 20px; }
+      .header { padding: 30px 20px; }
+      .details-grid { grid-template-columns: 1fr; }
+      .property-card { flex-direction: column; }
+      .property-image { width: 100%; height: 160px; }
+      .button-group { flex-direction: column; }
+      .button { width: 100%; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <table class="container" cellpadding="0" cellspacing="0" width="100%">
+      <!-- Header -->
+      <tr>
+        <td class="header">
+          <div class="checkmark">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
+            </svg>
+          </div>
+          <h1>Booking Confirmed!</h1>
+          <p>Thank you, {{ guest_name }}! Your booking is complete.</p>
+        </td>
+      </tr>
+
+      <!-- Content -->
+      <tr>
+        <td class="content">
+          <!-- Booking Reference -->
+          <div class="section">
+            <div class="booking-card">
+              <div class="booking-reference">{{ booking_reference }}</div>
+              <span class="booking-status">Confirmed</span>
+            </div>
+          </div>
+
+          <!-- Property Info -->
+          <div class="section">
+            <div class="section-title">Your Stay</div>
+            <div class="property-card">
+              {% if property_image %}
+              <img src="{{ property_image }}" alt="{{ property_name }}" class="property-image">
+              {% endif %}
+              <div>
+                <div class="property-name">{{ property_name }}</div>
+                <div class="property-address">{{ property_address }}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dates & Details -->
+          <div class="section">
+            <div class="section-title">Booking Details</div>
+            <div class="details-grid">
+              <div class="detail-item">
+                <div class="detail-label">Check-in</div>
+                <div class="detail-value">{{ check_in_date }}</div>
+                <div style="font-size: 14px; color: #64748b;">{{ check_in_time }}</div>
+              </div>
+              <div class="detail-item">
+                <div class="detail-label">Check-out</div>
+                <div class="detail-value">{{ check_out_date }}</div>
+                <div style="font-size: 14px; color: #64748b;">{{ check_out_time }}</div>
+              </div>
+              <div class="detail-item">
+                <div class="detail-label">Guests</div>
+                <div class="detail-value">{{ num_guests }} {% if num_guests == 1 %}guest{% else %}guests{% endif %}</div>
+              </div>
+              <div class="detail-item">
+                <div class="detail-label">Nights</div>
+                <div class="detail-value">{{ num_nights }} {% if num_nights == 1 %}night{% else %}nights{% endif %}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Price Summary -->
+          <div class="section">
+            <div class="section-title">Payment Summary</div>
+            <div class="booking-card">
+              <div class="price-row">
+                <span>Accommodation</span>
+                <span>{{ currency }} {{ accommodation_total }}</span>
+              </div>
+              {% if cleaning_fee %}
+              <div class="price-row">
+                <span>Cleaning fee</span>
+                <span>{{ currency }} {{ cleaning_fee }}</span>
+              </div>
+              {% endif %}
+              {% if service_fee %}
+              <div class="price-row">
+                <span>Service fee</span>
+                <span>{{ currency }} {{ service_fee }}</span>
+              </div>
+              {% endif %}
+              <div class="price-row total">
+                <span>Total Paid</span>
+                <span>{{ currency }} {{ total_price }}</span>
+              </div>
+            </div>
+          </div>
+
+          {% if special_requests %}
+          <!-- Special Requests -->
+          <div class="section">
+            <div class="section-title">Special Requests</div>
+            <p style="font-size: 14px; color: #334155; background-color: #f8fafc; padding: 16px; border-radius: 8px;">
+              {{ special_requests }}
+            </p>
+          </div>
+          {% endif %}
+
+          <!-- Host Info -->
+          <div class="section">
+            <div class="section-title">Your Host</div>
+            <div class="host-card">
+              <div class="host-avatar">{{ host_name[0] }}</div>
+              <div>
+                <div class="host-name">{{ host_name }}</div>
+                <div class="host-response">Response time: within an hour</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Next Steps -->
+          <div class="section">
+            <div class="section-title">Next Steps</div>
+            <ul class="steps-list">
+              <li>
+                <span class="step-number">1</span>
+                <span class="step-text">Save this confirmation email for your records</span>
+              </li>
+              <li>
+                <span class="step-number">2</span>
+                <span class="step-text">The host will contact you within 24 hours</span>
+              </li>
+              <li>
+                <span class="step-number">3</span>
+                <span class="step-text">Check-in instructions will be sent 24 hours before arrival</span>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="section">
+            <div class="button-group">
+              <a href="{{ booking_url }}" class="button">View Booking</a>
+              <a href="{{ calendar_url }}" class="button button-secondary">Add to Calendar</a>
+            </div>
+          </div>
+        </td>
+      </tr>
+
+      <!-- Footer -->
+      <tr>
+        <td class="footer">
+          <p>Questions about your booking? Reply to this email or contact us at <a href="mailto:support@pms-webapp.com">support@pms-webapp.com</a></p>
+          <p style="font-size: 12px; color: #94a3b8; margin-top: 16px;">
+            This email was sent to {{ guest_email }}. You received this because you made a booking on PMS-Webapp.
+          </p>
+          <p style="font-size: 12px; color: #94a3b8;">
+            &copy; {{ current_year }} PMS-Webapp. All rights reserved.
+          </p>
+        </td>
+      </tr>
+    </table>
+  </div>
+</body>
+</html>

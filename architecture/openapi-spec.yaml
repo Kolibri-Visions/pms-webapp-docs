@@ -1,0 +1,2566 @@
+openapi: 3.1.0
+info:
+  title: PMS-Webapp API
+  description: |
+    All-in-One vacation rental booking software API.
+
+    ## Overview
+    This API provides endpoints for:
+    - **Direct Booking**: Guest-facing property search and booking
+    - **PMS-Core**: Property owner management of properties, bookings, and guests
+    - **Channel Manager**: Integration with external booking platforms
+
+    ## Authentication
+    - **Property Owners**: JWT tokens via Supabase Auth
+    - **Guests**: Optional JWT or booking token for guest access
+    - **Channels**: OAuth 2.0 for platform connections
+
+    ## Rate Limiting
+    - Public endpoints: 100 requests/minute
+    - Authenticated endpoints: 1000 requests/minute
+    - Webhook endpoints: 10000 requests/minute
+  version: 1.0.0
+  contact:
+    name: PMS-Webapp Team
+    email: api@pms-webapp.com
+  license:
+    name: Proprietary
+    url: https://pms-webapp.com/terms
+
+servers:
+  - url: https://api.pms-webapp.com/v1
+    description: Production server
+  - url: https://api.staging.pms-webapp.com/v1
+    description: Staging server
+  - url: http://localhost:8000/v1
+    description: Local development
+
+tags:
+  - name: Direct Booking
+    description: Guest-facing booking endpoints
+  - name: Properties
+    description: Property management (PMS-Core)
+  - name: Bookings
+    description: Booking management (PMS-Core)
+  - name: Availability
+    description: Calendar and availability (PMS-Core)
+  - name: Guests
+    description: Guest management (PMS-Core)
+  - name: Financials
+    description: Financial reporting (PMS-Core)
+  - name: Channels
+    description: Channel Manager operations
+  - name: Webhooks
+    description: Inbound webhook handlers
+  - name: Auth
+    description: Authentication endpoints
+
+paths:
+  # ============================================================================
+  # DIRECT BOOKING APIS
+  # ============================================================================
+
+  /search/properties:
+    get:
+      tags:
+        - Direct Booking
+      summary: Search available properties
+      description: Search for properties with availability for the specified dates and guest count
+      operationId: searchProperties
+      parameters:
+        - name: location
+          in: query
+          description: Location search term (city, region, or coordinates)
+          schema:
+            type: string
+          example: "Munich, Germany"
+        - name: check_in
+          in: query
+          required: true
+          description: Check-in date
+          schema:
+            type: string
+            format: date
+          example: "2025-06-01"
+        - name: check_out
+          in: query
+          required: true
+          description: Check-out date
+          schema:
+            type: string
+            format: date
+          example: "2025-06-07"
+        - name: guests
+          in: query
+          required: true
+          description: Number of guests
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+          example: 4
+        - name: min_price
+          in: query
+          description: Minimum price per night
+          schema:
+            type: number
+            format: decimal
+          example: 50.00
+        - name: max_price
+          in: query
+          description: Maximum price per night
+          schema:
+            type: number
+            format: decimal
+          example: 300.00
+        - name: bedrooms
+          in: query
+          description: Minimum number of bedrooms
+          schema:
+            type: integer
+            minimum: 0
+          example: 2
+        - name: amenities
+          in: query
+          description: Required amenities (comma-separated)
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: false
+          example: ["wifi", "parking", "pool"]
+        - name: sort_by
+          in: query
+          description: Sort order
+          schema:
+            type: string
+            enum: [price_asc, price_desc, rating, distance]
+            default: rating
+        - name: page
+          in: query
+          description: Page number
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Results per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertySearchResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /properties/{propertyId}/availability:
+    get:
+      tags:
+        - Direct Booking
+      summary: Get property availability calendar
+      description: Returns availability and pricing for a property over a date range
+      operationId: getPropertyAvailability
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Availability calendar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvailabilityCalendar'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /properties/{propertyId}/check-availability:
+    post:
+      tags:
+        - Direct Booking
+      summary: Check availability for specific dates
+      description: Validates if the property is available for the requested dates
+      operationId: checkAvailability
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AvailabilityCheckRequest'
+      responses:
+        '200':
+          description: Availability check result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvailabilityCheckResponse'
+        '409':
+          description: Dates not available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvailabilityConflict'
+
+  /bookings/direct:
+    post:
+      tags:
+        - Direct Booking
+      summary: Create a direct booking
+      description: |
+        Creates a new direct booking in RESERVED state.
+        Returns a Stripe PaymentIntent client secret for completing payment.
+        The booking is confirmed after successful payment.
+      operationId: createDirectBooking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DirectBookingCreate'
+      responses:
+        '201':
+          description: Booking created (pending payment)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DirectBookingResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Booking conflict (dates no longer available)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingConflict'
+
+  /bookings/{bookingId}/confirm:
+    post:
+      tags:
+        - Direct Booking
+      summary: Confirm booking after payment
+      description: Called after successful Stripe payment to confirm the booking
+      operationId: confirmBooking
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - payment_intent_id
+              properties:
+                payment_intent_id:
+                  type: string
+                  description: Stripe PaymentIntent ID
+      responses:
+        '200':
+          description: Booking confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400':
+          description: Invalid booking state or payment not completed
+
+  /bookings/{bookingId}/guest:
+    get:
+      tags:
+        - Direct Booking
+      summary: Get booking details (guest view)
+      description: Returns booking details for guests using booking token
+      operationId: getGuestBooking
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      security:
+        - bookingToken: []
+      responses:
+        '200':
+          description: Booking details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuestBookingView'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ============================================================================
+  # PMS-CORE: PROPERTIES
+  # ============================================================================
+
+  /properties:
+    get:
+      tags:
+        - Properties
+      summary: List owner's properties
+      description: Returns all properties owned by the authenticated user
+      operationId: listProperties
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive, draft]
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: List of properties
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - Properties
+      summary: Create a new property
+      operationId: createProperty
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PropertyCreate'
+      responses:
+        '201':
+          description: Property created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Property'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /properties/{propertyId}:
+    get:
+      tags:
+        - Properties
+      summary: Get property details
+      operationId: getProperty
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+      responses:
+        '200':
+          description: Property details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Property'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Properties
+      summary: Update property
+      operationId: updateProperty
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PropertyUpdate'
+      responses:
+        '200':
+          description: Property updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Property'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Properties
+      summary: Delete property
+      operationId: deleteProperty
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+      responses:
+        '204':
+          description: Property deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Cannot delete property with active bookings
+
+  # ============================================================================
+  # PMS-CORE: BOOKINGS
+  # ============================================================================
+
+  /bookings:
+    get:
+      tags:
+        - Bookings
+      summary: List all bookings
+      description: Returns bookings for owner's properties (all sources)
+      operationId: listBookings
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: property_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: source
+          in: query
+          schema:
+            type: string
+            enum: [direct, airbnb, booking_com, expedia, fewo_direkt, google_vr]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [inquiry, reserved, confirmed, checked_in, checked_out, cancelled]
+        - name: from_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: List of bookings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - Bookings
+      summary: Create a manual booking
+      description: Owner creates a booking manually (e.g., phone reservation)
+      operationId: createBooking
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingCreate'
+      responses:
+        '201':
+          description: Booking created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /bookings/{bookingId}:
+    get:
+      tags:
+        - Bookings
+      summary: Get booking details
+      operationId: getBooking
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      responses:
+        '200':
+          description: Booking details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags:
+        - Bookings
+      summary: Update booking
+      operationId: updateBooking
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingUpdate'
+      responses:
+        '200':
+          description: Booking updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /bookings/{bookingId}/cancel:
+    post:
+      tags:
+        - Bookings
+      summary: Cancel booking
+      operationId: cancelBooking
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                refund_amount:
+                  type: number
+                  format: decimal
+      responses:
+        '200':
+          description: Booking cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400':
+          description: Cannot cancel (e.g., already checked out)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /bookings/{bookingId}/check-in:
+    post:
+      tags:
+        - Bookings
+      summary: Mark guest as checked in
+      operationId: checkInBooking
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      responses:
+        '200':
+          description: Guest checked in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+
+  /bookings/{bookingId}/check-out:
+    post:
+      tags:
+        - Bookings
+      summary: Mark guest as checked out
+      operationId: checkOutBooking
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      responses:
+        '200':
+          description: Guest checked out
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+
+  # ============================================================================
+  # PMS-CORE: AVAILABILITY & CALENDAR
+  # ============================================================================
+
+  /properties/{propertyId}/calendar:
+    get:
+      tags:
+        - Availability
+      summary: Get property calendar
+      description: Returns calendar with bookings and availability blocks
+      operationId: getPropertyCalendar
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Calendar data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyCalendar'
+
+  /properties/{propertyId}/availability-blocks:
+    get:
+      tags:
+        - Availability
+      summary: List availability blocks
+      operationId: listAvailabilityBlocks
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+      responses:
+        '200':
+          description: Availability blocks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AvailabilityBlock'
+
+    post:
+      tags:
+        - Availability
+      summary: Create availability block
+      description: Block dates for maintenance, personal use, or set custom pricing
+      operationId: createAvailabilityBlock
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AvailabilityBlockCreate'
+      responses:
+        '201':
+          description: Block created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvailabilityBlock'
+
+  /properties/{propertyId}/pricing-rules:
+    get:
+      tags:
+        - Availability
+      summary: List pricing rules
+      operationId: listPricingRules
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+      responses:
+        '200':
+          description: Pricing rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PricingRule'
+
+    post:
+      tags:
+        - Availability
+      summary: Create pricing rule
+      operationId: createPricingRule
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PropertyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PricingRuleCreate'
+      responses:
+        '201':
+          description: Rule created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricingRule'
+
+  # ============================================================================
+  # PMS-CORE: GUESTS
+  # ============================================================================
+
+  /guests:
+    get:
+      tags:
+        - Guests
+      summary: List all guests
+      operationId: listGuests
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          description: Search by name or email
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: List of guests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuestListResponse'
+
+  /guests/{guestId}:
+    get:
+      tags:
+        - Guests
+      summary: Get guest details
+      operationId: getGuest
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/GuestId'
+      responses:
+        '200':
+          description: Guest details with booking history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuestDetail'
+
+    patch:
+      tags:
+        - Guests
+      summary: Update guest
+      operationId: updateGuest
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/GuestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuestUpdate'
+      responses:
+        '200':
+          description: Guest updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Guest'
+
+  # ============================================================================
+  # PMS-CORE: FINANCIALS
+  # ============================================================================
+
+  /financials/summary:
+    get:
+      tags:
+        - Financials
+      summary: Get financial summary
+      operationId: getFinancialSummary
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: property_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [week, month, quarter, year]
+            default: month
+        - name: start_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Financial summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinancialSummary'
+
+  /financials/transactions:
+    get:
+      tags:
+        - Financials
+      summary: List transactions
+      operationId: listTransactions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: property_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [booking_payment, refund, payout, fee]
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Transaction list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionListResponse'
+
+  /financials/owner-statement:
+    get:
+      tags:
+        - Financials
+      summary: Generate owner statement
+      operationId: getOwnerStatement
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}$'
+          example: "2025-06"
+      responses:
+        '200':
+          description: Owner statement PDF
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+
+  # ============================================================================
+  # CHANNEL MANAGER
+  # ============================================================================
+
+  /channels:
+    get:
+      tags:
+        - Channels
+      summary: List supported channels
+      operationId: listChannels
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Available channel platforms
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChannelPlatform'
+
+  /channels/connections:
+    get:
+      tags:
+        - Channels
+      summary: List channel connections
+      operationId: listChannelConnections
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: property_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Channel connections
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChannelConnection'
+
+  /channels/{platform}/connect:
+    post:
+      tags:
+        - Channels
+      summary: Initiate channel connection (OAuth)
+      description: Starts OAuth flow for connecting a channel platform
+      operationId: initiateChannelConnection
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: platform
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [airbnb, booking_com, expedia, fewo_direkt, google_vr]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - property_id
+                - redirect_uri
+              properties:
+                property_id:
+                  type: string
+                  format: uuid
+                redirect_uri:
+                  type: string
+                  format: uri
+      responses:
+        '200':
+          description: OAuth authorization URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  authorization_url:
+                    type: string
+                    format: uri
+                  state:
+                    type: string
+
+  /channels/{platform}/callback:
+    get:
+      tags:
+        - Channels
+      summary: OAuth callback handler
+      description: Handles OAuth callback from channel platform
+      operationId: channelOAuthCallback
+      parameters:
+        - name: platform
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirect to success page
+          headers:
+            Location:
+              schema:
+                type: string
+
+  /channels/connections/{connectionId}:
+    get:
+      tags:
+        - Channels
+      summary: Get connection details
+      operationId: getChannelConnection
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ConnectionId'
+      responses:
+        '200':
+          description: Connection details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelConnectionDetail'
+
+    delete:
+      tags:
+        - Channels
+      summary: Disconnect channel
+      operationId: disconnectChannel
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ConnectionId'
+      responses:
+        '204':
+          description: Channel disconnected
+
+  /channels/connections/{connectionId}/sync:
+    post:
+      tags:
+        - Channels
+      summary: Trigger manual sync
+      operationId: triggerChannelSync
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ConnectionId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sync_type:
+                  type: string
+                  enum: [full, availability, bookings]
+                  default: full
+      responses:
+        '202':
+          description: Sync initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sync_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    enum: [queued, in_progress]
+
+  /channels/connections/{connectionId}/sync-logs:
+    get:
+      tags:
+        - Channels
+      summary: Get sync history
+      operationId: getChannelSyncLogs
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ConnectionId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Sync log entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncLogListResponse'
+
+  /channels/sync-status:
+    get:
+      tags:
+        - Channels
+      summary: Get overall sync status
+      operationId: getSyncStatus
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Sync status for all connections
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncStatusOverview'
+
+  # ============================================================================
+  # WEBHOOKS
+  # ============================================================================
+
+  /webhooks/airbnb:
+    post:
+      tags:
+        - Webhooks
+      summary: Airbnb webhook endpoint
+      operationId: handleAirbnbWebhook
+      security:
+        - webhookSignature: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook processed
+        '400':
+          description: Invalid webhook payload
+        '401':
+          description: Invalid signature
+
+  /webhooks/booking-com:
+    post:
+      tags:
+        - Webhooks
+      summary: Booking.com webhook endpoint
+      operationId: handleBookingComWebhook
+      security:
+        - webhookSignature: []
+      requestBody:
+        required: true
+        content:
+          application/xml:
+            schema:
+              type: string
+      responses:
+        '200':
+          description: Webhook processed
+
+  /webhooks/expedia:
+    post:
+      tags:
+        - Webhooks
+      summary: Expedia webhook endpoint
+      operationId: handleExpediaWebhook
+      security:
+        - webhookSignature: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook processed
+
+  /webhooks/fewo-direkt:
+    post:
+      tags:
+        - Webhooks
+      summary: FeWo-direkt webhook endpoint
+      operationId: handleFewoDirektWebhook
+      security:
+        - webhookSignature: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook processed
+
+  /webhooks/google-vr:
+    post:
+      tags:
+        - Webhooks
+      summary: Google Vacation Rentals webhook endpoint
+      operationId: handleGoogleVRWebhook
+      security:
+        - webhookSignature: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook processed
+
+  /webhooks/stripe:
+    post:
+      tags:
+        - Webhooks
+      summary: Stripe payment webhook
+      operationId: handleStripeWebhook
+      security:
+        - stripeSignature: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook processed
+
+  # ============================================================================
+  # AUTHENTICATION
+  # ============================================================================
+
+  /auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Login with email/password
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid credentials
+
+  /auth/register:
+    post:
+      tags:
+        - Auth
+      summary: Register new property owner
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrationRequest'
+      responses:
+        '201':
+          description: Registration successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Validation error
+        '409':
+          description: Email already registered
+
+  /auth/refresh:
+    post:
+      tags:
+        - Auth
+      summary: Refresh access token
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        '200':
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+
+  /auth/logout:
+    post:
+      tags:
+        - Auth
+      summary: Logout
+      operationId: logout
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Logged out
+
+  /auth/me:
+    get:
+      tags:
+        - Auth
+      summary: Get current user
+      operationId: getCurrentUser
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+# ==============================================================================
+# COMPONENTS
+# ==============================================================================
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Supabase Auth JWT token
+
+    bookingToken:
+      type: apiKey
+      in: header
+      name: X-Booking-Token
+      description: Token for guest access to specific booking
+
+    webhookSignature:
+      type: apiKey
+      in: header
+      name: X-Webhook-Signature
+      description: Platform-specific webhook signature
+
+    stripeSignature:
+      type: apiKey
+      in: header
+      name: Stripe-Signature
+      description: Stripe webhook signature
+
+  parameters:
+    PropertyId:
+      name: propertyId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    BookingId:
+      name: bookingId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    GuestId:
+      name: guestId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    ConnectionId:
+      name: connectionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Forbidden:
+      description: Access denied
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Conflict:
+      description: Resource conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    RateLimited:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds until rate limit resets
+
+  schemas:
+    # -------------------------------------------------------------------------
+    # Common Schemas
+    # -------------------------------------------------------------------------
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+
+    # -------------------------------------------------------------------------
+    # Property Schemas
+    # -------------------------------------------------------------------------
+
+    Property:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        owner_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        address:
+          $ref: '#/components/schemas/Address'
+        amenities:
+          type: array
+          items:
+            type: string
+        max_guests:
+          type: integer
+        bedrooms:
+          type: integer
+        bathrooms:
+          type: number
+        base_price:
+          type: number
+          format: decimal
+        currency:
+          type: string
+        status:
+          type: string
+          enum: [active, inactive, draft]
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/PropertyImage'
+        channel_connections:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChannelConnectionSummary'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PropertyCreate:
+      type: object
+      required:
+        - name
+        - address
+        - max_guests
+        - bedrooms
+        - bathrooms
+        - base_price
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 5000
+        address:
+          $ref: '#/components/schemas/Address'
+        amenities:
+          type: array
+          items:
+            type: string
+        max_guests:
+          type: integer
+          minimum: 1
+          maximum: 50
+        bedrooms:
+          type: integer
+          minimum: 0
+        bathrooms:
+          type: number
+          minimum: 0
+        base_price:
+          type: number
+          format: decimal
+          minimum: 0
+        currency:
+          type: string
+          default: EUR
+
+    PropertyUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        address:
+          $ref: '#/components/schemas/Address'
+        amenities:
+          type: array
+          items:
+            type: string
+        max_guests:
+          type: integer
+        bedrooms:
+          type: integer
+        bathrooms:
+          type: number
+        base_price:
+          type: number
+          format: decimal
+        status:
+          type: string
+          enum: [active, inactive, draft]
+
+    PropertyListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Property'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    PropertySearchResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PropertySearchResult'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    PropertySearchResult:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        address:
+          $ref: '#/components/schemas/Address'
+        max_guests:
+          type: integer
+        bedrooms:
+          type: integer
+        bathrooms:
+          type: number
+        amenities:
+          type: array
+          items:
+            type: string
+        price_per_night:
+          type: number
+          format: decimal
+        total_price:
+          type: number
+          format: decimal
+        currency:
+          type: string
+        thumbnail:
+          type: string
+          format: uri
+        rating:
+          type: number
+        review_count:
+          type: integer
+
+    PropertyImage:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        caption:
+          type: string
+        order:
+          type: integer
+
+    Address:
+      type: object
+      required:
+        - street
+        - city
+        - country
+      properties:
+        street:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        postal_code:
+          type: string
+        country:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+
+    # -------------------------------------------------------------------------
+    # Booking Schemas
+    # -------------------------------------------------------------------------
+
+    Booking:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        property_id:
+          type: string
+          format: uuid
+        property:
+          $ref: '#/components/schemas/PropertySummary'
+        source:
+          type: string
+          enum: [direct, airbnb, booking_com, expedia, fewo_direkt, google_vr]
+        external_id:
+          type: string
+        guest:
+          $ref: '#/components/schemas/Guest'
+        check_in:
+          type: string
+          format: date
+        check_out:
+          type: string
+          format: date
+        nights:
+          type: integer
+        guests:
+          type: integer
+        status:
+          type: string
+          enum: [inquiry, reserved, confirmed, checked_in, checked_out, cancelled]
+        total_price:
+          type: number
+          format: decimal
+        currency:
+          type: string
+        payment_status:
+          type: string
+          enum: [pending, paid, partially_refunded, refunded]
+        special_requests:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    BookingCreate:
+      type: object
+      required:
+        - property_id
+        - check_in
+        - check_out
+        - guests
+        - guest
+      properties:
+        property_id:
+          type: string
+          format: uuid
+        check_in:
+          type: string
+          format: date
+        check_out:
+          type: string
+          format: date
+        guests:
+          type: integer
+          minimum: 1
+        guest:
+          $ref: '#/components/schemas/GuestCreate'
+        special_requests:
+          type: string
+        source:
+          type: string
+          enum: [direct]
+          default: direct
+
+    BookingUpdate:
+      type: object
+      properties:
+        check_in:
+          type: string
+          format: date
+        check_out:
+          type: string
+          format: date
+        guests:
+          type: integer
+        status:
+          type: string
+          enum: [inquiry, reserved, confirmed, checked_in, checked_out, cancelled]
+        special_requests:
+          type: string
+
+    BookingListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Booking'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    DirectBookingCreate:
+      type: object
+      required:
+        - property_id
+        - check_in
+        - check_out
+        - guests
+        - guest
+      properties:
+        property_id:
+          type: string
+          format: uuid
+        check_in:
+          type: string
+          format: date
+        check_out:
+          type: string
+          format: date
+        guests:
+          type: integer
+          minimum: 1
+        guest:
+          $ref: '#/components/schemas/GuestCreate'
+        special_requests:
+          type: string
+
+    DirectBookingResponse:
+      type: object
+      properties:
+        booking_id:
+          type: string
+          format: uuid
+        client_secret:
+          type: string
+          description: Stripe PaymentIntent client secret
+        pricing:
+          $ref: '#/components/schemas/BookingPricing'
+
+    BookingPricing:
+      type: object
+      properties:
+        nights:
+          type: integer
+        price_per_night:
+          type: number
+          format: decimal
+        subtotal:
+          type: number
+          format: decimal
+        cleaning_fee:
+          type: number
+          format: decimal
+        service_fee:
+          type: number
+          format: decimal
+        taxes:
+          type: number
+          format: decimal
+        total:
+          type: number
+          format: decimal
+        currency:
+          type: string
+
+    BookingConflict:
+      type: object
+      properties:
+        code:
+          type: string
+          enum: [DATES_UNAVAILABLE, CONCURRENT_BOOKING]
+        message:
+          type: string
+        conflicting_dates:
+          type: array
+          items:
+            type: string
+            format: date
+
+    GuestBookingView:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        property:
+          $ref: '#/components/schemas/PropertySummary'
+        check_in:
+          type: string
+          format: date
+        check_out:
+          type: string
+          format: date
+        guests:
+          type: integer
+        status:
+          type: string
+        total_price:
+          type: number
+        currency:
+          type: string
+        check_in_instructions:
+          type: string
+        host_contact:
+          type: object
+          properties:
+            name:
+              type: string
+            phone:
+              type: string
+
+    PropertySummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        address:
+          $ref: '#/components/schemas/Address'
+        thumbnail:
+          type: string
+          format: uri
+
+    # -------------------------------------------------------------------------
+    # Availability Schemas
+    # -------------------------------------------------------------------------
+
+    AvailabilityCheckRequest:
+      type: object
+      required:
+        - check_in
+        - check_out
+        - guests
+      properties:
+        check_in:
+          type: string
+          format: date
+        check_out:
+          type: string
+          format: date
+        guests:
+          type: integer
+          minimum: 1
+
+    AvailabilityCheckResponse:
+      type: object
+      properties:
+        available:
+          type: boolean
+        pricing:
+          $ref: '#/components/schemas/BookingPricing'
+        min_stay:
+          type: integer
+        max_stay:
+          type: integer
+
+    AvailabilityConflict:
+      type: object
+      properties:
+        available:
+          type: boolean
+          enum: [false]
+        reason:
+          type: string
+        unavailable_dates:
+          type: array
+          items:
+            type: string
+            format: date
+        next_available:
+          type: string
+          format: date
+
+    AvailabilityCalendar:
+      type: object
+      properties:
+        property_id:
+          type: string
+          format: uuid
+        dates:
+          type: array
+          items:
+            $ref: '#/components/schemas/CalendarDate'
+
+    CalendarDate:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        available:
+          type: boolean
+        price:
+          type: number
+          format: decimal
+        min_stay:
+          type: integer
+        booking_id:
+          type: string
+          format: uuid
+          description: If booked, the booking ID
+
+    PropertyCalendar:
+      type: object
+      properties:
+        property_id:
+          type: string
+          format: uuid
+        bookings:
+          type: array
+          items:
+            $ref: '#/components/schemas/CalendarBooking'
+        blocks:
+          type: array
+          items:
+            $ref: '#/components/schemas/AvailabilityBlock'
+
+    CalendarBooking:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        check_in:
+          type: string
+          format: date
+        check_out:
+          type: string
+          format: date
+        guest_name:
+          type: string
+        source:
+          type: string
+        status:
+          type: string
+
+    AvailabilityBlock:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        block_type:
+          type: string
+          enum: [available, blocked, maintenance]
+        price_override:
+          type: number
+          format: decimal
+        min_stay:
+          type: integer
+        max_stay:
+          type: integer
+        note:
+          type: string
+
+    AvailabilityBlockCreate:
+      type: object
+      required:
+        - start_date
+        - end_date
+        - block_type
+      properties:
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        block_type:
+          type: string
+          enum: [available, blocked, maintenance]
+        price_override:
+          type: number
+          format: decimal
+        min_stay:
+          type: integer
+        max_stay:
+          type: integer
+        note:
+          type: string
+
+    PricingRule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        rule_type:
+          type: string
+          enum: [weekend, seasonal, last_minute, length_of_stay]
+        adjustment_type:
+          type: string
+          enum: [percentage, fixed]
+        adjustment_value:
+          type: number
+        conditions:
+          type: object
+        priority:
+          type: integer
+        active:
+          type: boolean
+
+    PricingRuleCreate:
+      type: object
+      required:
+        - rule_type
+        - adjustment_type
+        - adjustment_value
+      properties:
+        rule_type:
+          type: string
+          enum: [weekend, seasonal, last_minute, length_of_stay]
+        adjustment_type:
+          type: string
+          enum: [percentage, fixed]
+        adjustment_value:
+          type: number
+        conditions:
+          type: object
+        priority:
+          type: integer
+          default: 0
+
+    # -------------------------------------------------------------------------
+    # Guest Schemas
+    # -------------------------------------------------------------------------
+
+    Guest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        first_name:
+          type: string
+        last_name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        country:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    GuestCreate:
+      type: object
+      required:
+        - first_name
+        - last_name
+        - email
+      properties:
+        first_name:
+          type: string
+        last_name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        country:
+          type: string
+
+    GuestUpdate:
+      type: object
+      properties:
+        first_name:
+          type: string
+        last_name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        country:
+          type: string
+        notes:
+          type: string
+
+    GuestDetail:
+      allOf:
+        - $ref: '#/components/schemas/Guest'
+        - type: object
+          properties:
+            booking_count:
+              type: integer
+            total_spent:
+              type: number
+              format: decimal
+            bookings:
+              type: array
+              items:
+                $ref: '#/components/schemas/Booking'
+            notes:
+              type: string
+
+    GuestListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Guest'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    # -------------------------------------------------------------------------
+    # Financial Schemas
+    # -------------------------------------------------------------------------
+
+    FinancialSummary:
+      type: object
+      properties:
+        period:
+          type: object
+          properties:
+            start:
+              type: string
+              format: date
+            end:
+              type: string
+              format: date
+        revenue:
+          type: object
+          properties:
+            total:
+              type: number
+              format: decimal
+            by_property:
+              type: array
+              items:
+                type: object
+                properties:
+                  property_id:
+                    type: string
+                    format: uuid
+                  property_name:
+                    type: string
+                  amount:
+                    type: number
+                    format: decimal
+            by_channel:
+              type: array
+              items:
+                type: object
+                properties:
+                  channel:
+                    type: string
+                  amount:
+                    type: number
+                    format: decimal
+        bookings:
+          type: object
+          properties:
+            total:
+              type: integer
+            confirmed:
+              type: integer
+            cancelled:
+              type: integer
+        occupancy_rate:
+          type: number
+          description: Percentage (0-100)
+        average_daily_rate:
+          type: number
+          format: decimal
+        currency:
+          type: string
+
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [booking_payment, refund, payout, fee]
+        amount:
+          type: number
+          format: decimal
+        currency:
+          type: string
+        booking_id:
+          type: string
+          format: uuid
+        property_id:
+          type: string
+          format: uuid
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    TransactionListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    # -------------------------------------------------------------------------
+    # Channel Manager Schemas
+    # -------------------------------------------------------------------------
+
+    ChannelPlatform:
+      type: object
+      properties:
+        id:
+          type: string
+          enum: [airbnb, booking_com, expedia, fewo_direkt, google_vr]
+        name:
+          type: string
+        logo_url:
+          type: string
+          format: uri
+        features:
+          type: array
+          items:
+            type: string
+        documentation_url:
+          type: string
+          format: uri
+
+    ChannelConnection:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        property_id:
+          type: string
+          format: uuid
+        platform:
+          type: string
+        external_property_id:
+          type: string
+        sync_enabled:
+          type: boolean
+        last_sync_at:
+          type: string
+          format: date-time
+        sync_status:
+          type: string
+          enum: [pending, syncing, synced, error]
+        created_at:
+          type: string
+          format: date-time
+
+    ChannelConnectionSummary:
+      type: object
+      properties:
+        platform:
+          type: string
+        sync_status:
+          type: string
+        last_sync_at:
+          type: string
+          format: date-time
+
+    ChannelConnectionDetail:
+      allOf:
+        - $ref: '#/components/schemas/ChannelConnection'
+        - type: object
+          properties:
+            listing_url:
+              type: string
+              format: uri
+            last_error:
+              type: string
+            stats:
+              type: object
+              properties:
+                bookings_synced:
+                  type: integer
+                last_booking_at:
+                  type: string
+                  format: date-time
+                sync_success_rate:
+                  type: number
+
+    SyncLog:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sync_type:
+          type: string
+          enum: [outbound_booking, outbound_availability, inbound_booking, reconciliation]
+        status:
+          type: string
+          enum: [pending, in_progress, completed, failed]
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        details:
+          type: object
+        error:
+          type: string
+
+    SyncLogListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncLog'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    SyncStatusOverview:
+      type: object
+      properties:
+        overall_status:
+          type: string
+          enum: [healthy, degraded, error]
+        connections:
+          type: array
+          items:
+            type: object
+            properties:
+              connection_id:
+                type: string
+                format: uuid
+              property_name:
+                type: string
+              platform:
+                type: string
+              status:
+                type: string
+              last_sync_at:
+                type: string
+                format: date-time
+              pending_syncs:
+                type: integer
+
+    # -------------------------------------------------------------------------
+    # Auth Schemas
+    # -------------------------------------------------------------------------
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        first_name:
+          type: string
+        last_name:
+          type: string
+        company_name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    RegistrationRequest:
+      type: object
+      required:
+        - email
+        - password
+        - first_name
+        - last_name
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 8
+        first_name:
+          type: string
+        last_name:
+          type: string
+        company_name:
+          type: string
+
+    AuthResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          enum: [bearer]
+        expires_in:
+          type: integer
+          description: Seconds until access token expires
+        user:
+          $ref: '#/components/schemas/User'

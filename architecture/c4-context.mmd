@@ -1,0 +1,40 @@
+%% C4 Context Diagram - PMS-Webapp
+%% This diagram shows the system context: users, external systems, and PMS-Webapp
+
+C4Context
+    title System Context Diagram for PMS-Webapp
+
+    Person(propertyOwner, "Property Owner", "Manages vacation rental properties, views bookings, handles finances")
+    Person(guest, "Guest", "Searches for properties, makes bookings, manages reservations")
+
+    Enterprise_Boundary(pms, "PMS-Webapp") {
+        System(pmsWebapp, "PMS-Webapp", "All-in-one vacation rental booking software with PMS-Core, Direct Booking Engine, and Channel Manager")
+    }
+
+    System_Ext(airbnb, "Airbnb", "Vacation rental marketplace")
+    System_Ext(bookingCom, "Booking.com", "Online travel agency")
+    System_Ext(expedia, "Expedia", "Online travel company")
+    System_Ext(fewoDirekt, "FeWo-direkt (Vrbo)", "Vacation rental platform")
+    System_Ext(googleVR, "Google Vacation Rentals", "Google travel listings")
+
+    System_Ext(stripe, "Stripe", "Payment processing platform")
+    System_Ext(email, "Email Provider", "Transactional email service (SendGrid/Postmark)")
+
+    %% Property Owner interactions
+    Rel(propertyOwner, pmsWebapp, "Manages properties, views bookings, monitors channels", "HTTPS")
+
+    %% Guest interactions
+    Rel(guest, pmsWebapp, "Searches properties, makes direct bookings", "HTTPS")
+
+    %% Channel integrations (bidirectional)
+    BiRel(pmsWebapp, airbnb, "Syncs availability, pricing, bookings", "REST API + Webhooks")
+    BiRel(pmsWebapp, bookingCom, "Syncs availability, pricing, bookings", "XML API + Webhooks")
+    BiRel(pmsWebapp, expedia, "Syncs availability, pricing, bookings", "REST API + Webhooks")
+    BiRel(pmsWebapp, fewoDirekt, "Syncs availability, pricing, bookings", "REST API + Webhooks")
+    BiRel(pmsWebapp, googleVR, "Syncs availability, pricing, bookings", "REST API + Webhooks")
+
+    %% External services
+    Rel(pmsWebapp, stripe, "Processes payments for direct bookings", "HTTPS API")
+    Rel(pmsWebapp, email, "Sends booking confirmations, notifications", "HTTPS API")
+
+    UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")

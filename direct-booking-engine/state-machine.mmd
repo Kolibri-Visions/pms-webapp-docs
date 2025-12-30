@@ -1,0 +1,294 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#3B82F6', 'primaryTextColor': '#fff', 'primaryBorderColor': '#1E40AF', 'lineColor': '#64748B', 'secondaryColor': '#10B981', 'tertiaryColor': '#F1F5F9', 'edgeLabelBackground':'#ffffff'}}}%%
+
+%% =============================================================================
+%% Direct Booking Engine - Booking State Machine
+%% Version: 1.0.0
+%% Last Updated: 2025-12-21
+%% =============================================================================
+
+stateDiagram-v2
+    %% =============================================================================
+    %% MAIN BOOKING STATES
+    %% =============================================================================
+
+    [*] --> Inquiry: Guest sends inquiry
+    [*] --> Reserved: Guest starts direct booking
+
+    %% ----- INQUIRY STATE -----
+    state Inquiry {
+        [*] --> inquiry_pending
+        inquiry_pending --> inquiry_responded: Host responds
+        inquiry_responded --> inquiry_accepted: Guest accepts
+        inquiry_responded --> inquiry_expired: 48h timeout
+    }
+    Inquiry --> Reserved: Convert to booking
+    Inquiry --> Declined: Host declines
+    Inquiry --> [*]: No response (expires)
+
+    %% ----- RESERVED STATE -----
+    state Reserved {
+        [*] --> payment_pending
+        payment_pending --> payment_processing: Guest submits payment
+        payment_processing --> payment_3ds: 3DS required
+        payment_3ds --> payment_processing: 3DS completed
+        payment_processing --> payment_failed: Payment declined
+        payment_failed --> payment_pending: Retry (max 3)
+        payment_pending --> expired: 30min timeout
+    }
+    Reserved --> Confirmed: Payment succeeded
+    Reserved --> Cancelled: Payment timeout/max retries
+
+    %% ----- CONFIRMED STATE -----
+    state Confirmed {
+        [*] --> awaiting_checkin
+        awaiting_checkin --> checkin_instructions_sent: 24h before check-in
+        checkin_instructions_sent --> ready_for_checkin: Check-in day
+    }
+    Confirmed --> CheckedIn: Guest checks in
+    Confirmed --> Cancelled: Guest cancels (refund based on policy)
+
+    %% ----- CHECKED IN STATE -----
+    state CheckedIn {
+        [*] --> in_progress
+        in_progress --> issue_reported: Guest reports issue
+        issue_reported --> issue_resolved: Issue fixed
+        issue_resolved --> in_progress
+    }
+    CheckedIn --> CheckedOut: Guest checks out
+
+    %% ----- CHECKED OUT STATE -----
+    state CheckedOut {
+        [*] --> review_requested
+        review_requested --> review_received: Guest leaves review
+        review_requested --> review_expired: 14d no review
+    }
+    CheckedOut --> [*]: Complete
+
+    %% ----- CANCELLED STATE -----
+    state Cancelled {
+        [*] --> cancellation_processing
+        cancellation_processing --> refund_full: Full refund
+        cancellation_processing --> refund_partial: Partial refund
+        cancellation_processing --> refund_none: No refund
+        refund_full --> refund_completed
+        refund_partial --> refund_completed
+        refund_none --> refund_completed
+    }
+    Cancelled --> [*]: Complete
+
+    %% ----- DECLINED STATE -----
+    Declined --> [*]: Complete
+
+
+%% =============================================================================
+%% PAYMENT STATUS STATES
+%% =============================================================================
+
+---
+
+stateDiagram-v2
+    [*] --> pending
+
+    state "Payment Status" as PaymentStatus {
+        pending --> processing: Payment submitted
+        processing --> requires_action: 3DS required
+        requires_action --> processing: 3DS completed
+        processing --> paid: Payment confirmed
+        processing --> failed: Payment declined
+        failed --> pending: Retry attempt
+        pending --> expired: Reservation timeout
+        paid --> refunded: Refund processed
+        paid --> partially_refunded: Partial refund
+    }
+
+    paid --> [*]
+    expired --> [*]
+    refunded --> [*]
+    partially_refunded --> [*]
+
+
+%% =============================================================================
+%% CALENDAR AVAILABILITY STATES
+%% =============================================================================
+
+---
+
+stateDiagram-v2
+    [*] --> available
+
+    state "Calendar Date Status" as CalendarStatus {
+        available --> tentative: Booking reserved
+        tentative --> booked: Payment confirmed
+        tentative --> available: Booking cancelled/expired
+        booked --> available: Booking cancelled
+        available --> blocked: Owner blocks dates
+        blocked --> available: Owner unblocks
+        booked --> maintenance: Post-checkout cleaning
+        maintenance --> available: Maintenance complete
+    }
+
+    available --> [*]
+
+
+%% =============================================================================
+%% TRANSITION DETAILS
+%% =============================================================================
+
+---
+
+%% Transition: [*] --> Reserved (Direct Booking)
+%% Trigger: POST /api/v1/bookings
+%% Actions:
+%%   - Validate availability
+%%   - Create guest record
+%%   - Create Stripe PaymentIntent
+%%   - Create booking (status=reserved)
+%%   - Block calendar dates (tentative)
+%%   - Schedule 30min timeout
+%%   - Return client_secret
+
+%% Transition: Reserved --> Confirmed
+%% Trigger: payment_intent.succeeded (webhook or POST /api/v1/bookings/{id}/confirm)
+%% Actions:
+%%   - Verify payment status with Stripe
+%%   - Update booking status to confirmed
+%%   - Update payment_status to paid
+%%   - Update calendar dates to booked
+%%   - Send confirmation email
+%%   - Publish booking.confirmed event
+%%   - Trigger channel sync
+
+%% Transition: Reserved --> Cancelled (Timeout)
+%% Trigger: Celery task after 30 minutes
+%% Actions:
+%%   - Check if still in reserved state
+%%   - Update status to cancelled
+%%   - Update payment_status to expired
+%%   - Release calendar dates
+%%   - Cancel Stripe PaymentIntent
+%%   - Send expiration email
+
+%% Transition: Confirmed --> Cancelled (Guest Cancellation)
+%% Trigger: POST /api/v1/bookings/{id}/cancel
+%% Actions:
+%%   - Calculate refund based on policy
+%%   - Process refund via Stripe
+%%   - Update booking status
+%%   - Release calendar dates
+%%   - Send cancellation email
+%%   - Publish booking.cancelled event
+%%   - Trigger channel sync
+
+%% Transition: Confirmed --> CheckedIn
+%% Trigger: Manual action or auto on check-in date
+%% Actions:
+%%   - Update status to checked_in
+%%   - Update check_in_at timestamp
+%%   - Send check-in confirmation
+%%   - Optional: Activate smart lock code
+
+%% Transition: CheckedIn --> CheckedOut
+%% Trigger: Manual action or auto on check-out date
+%% Actions:
+%%   - Update status to checked_out
+%%   - Update check_out_at timestamp
+%%   - Send review request email
+%%   - Create cleaning task
+%%   - Finalize financial records
+
+
+%% =============================================================================
+%% SEQUENCE DIAGRAM: BOOKING FLOW
+%% =============================================================================
+
+---
+
+sequenceDiagram
+    participant G as Guest
+    participant F as Frontend
+    participant B as Backend (FastAPI)
+    participant S as Stripe
+    participant R as Redis
+    participant DB as PostgreSQL
+    participant C as Celery
+
+    %% Step 1: Check Availability
+    G->>F: Select dates
+    F->>B: POST /bookings/check-availability
+    B->>DB: Query calendar_availability
+    DB-->>B: Available dates + prices
+    B-->>F: { available: true, price_breakdown }
+    F-->>G: Show pricing
+
+    %% Step 2: Create Booking
+    G->>F: Enter details + click "Book Now"
+    F->>B: POST /bookings
+    B->>R: Acquire lock (property + dates)
+    R-->>B: Lock acquired
+    B->>DB: Check availability (with lock)
+    B->>DB: Create/get guest record
+    B->>S: Create PaymentIntent
+    S-->>B: { id, client_secret }
+    B->>DB: Create booking (status=reserved)
+    B->>DB: Block calendar dates (tentative)
+    B->>C: Schedule expiration check (30min)
+    B->>R: Release lock
+    B-->>F: { booking_id, client_secret, expires_at }
+
+    %% Step 3: Payment
+    F-->>G: Show payment form
+    G->>F: Enter card + submit
+    F->>S: stripe.confirmPayment()
+
+    alt 3D Secure Required
+        S-->>F: requires_action
+        F->>G: Show 3DS modal
+        G->>S: Complete authentication
+        S-->>F: Payment succeeded
+    else No 3DS
+        S-->>F: Payment succeeded
+    end
+
+    %% Step 4: Confirm Booking
+    F->>B: POST /bookings/{id}/confirm
+    B->>S: Retrieve PaymentIntent
+    S-->>B: status=succeeded
+    B->>DB: Update booking (status=confirmed)
+    B->>DB: Update calendar (status=booked)
+    B-->>F: { status: confirmed }
+
+    par Send Emails
+        B->>B: Send confirmation email
+    and Publish Event
+        B->>R: Publish booking.confirmed
+    end
+
+    F-->>G: Show confirmation page
+
+    %% Webhook (backup)
+    S->>B: POST /webhooks/stripe (payment_intent.succeeded)
+    B->>R: Check if event processed
+    alt Already processed
+        B-->>S: { status: already_processed }
+    else Not processed
+        B->>DB: Update booking (idempotent)
+        B->>R: Mark event as processed
+        B-->>S: { status: success }
+    end
+
+
+%% =============================================================================
+%% STATE TRANSITION TABLE
+%% =============================================================================
+
+%% | Current State | Event                  | Next State  | Actions                                    |
+%% |---------------|------------------------|-------------|-------------------------------------------|
+%% | -             | booking.created        | reserved    | Create booking, block dates, start timer   |
+%% | reserved      | payment.succeeded      | confirmed   | Confirm booking, send email, sync channels |
+%% | reserved      | payment.failed         | reserved    | Increment retry count, allow retry         |
+%% | reserved      | payment.timeout        | cancelled   | Release dates, cancel PaymentIntent        |
+%% | reserved      | max_retries_exceeded   | cancelled   | Release dates, send failure email          |
+%% | confirmed     | checkin.started        | checked_in  | Update timestamp, activate access          |
+%% | confirmed     | booking.cancelled      | cancelled   | Calculate refund, release dates            |
+%% | checked_in    | checkout.completed     | checked_out | Finalize booking, request review           |
+%% | checked_out   | review.submitted       | completed   | Store review, update ratings               |

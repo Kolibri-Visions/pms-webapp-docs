@@ -1,0 +1,27 @@
+COMPLETE YOUR BOOKING
+=====================
+
+Hi {{ guest_name }},
+
+Your reservation is waiting! You started a booking but haven't completed payment yet.
+
+URGENT: Your reservation expires in {{ remaining_minutes }} minutes (at {{ expires_at }})
+
+YOUR RESERVATION
+----------------
+{{ property_name }}
+{{ check_in_date }} - {{ check_out_date }}
+
+Total: {{ currency }} {{ total_price }}
+
+COMPLETE YOUR BOOKING
+---------------------
+Click here to complete payment: {{ payment_url }}
+
+---
+
+If you didn't start this booking or no longer wish to proceed, you can ignore this email and the reservation will be automatically cancelled.
+
+Need help? Reply to this email or contact support@pms-webapp.com
+
+(c) {{ current_year }} PMS-Webapp. All rights reserved.

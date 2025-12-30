@@ -1,0 +1,439 @@
+# Channel Manager Sync Workflow Diagrams
+
+## 1. Outbound Sync Flow (PMS-Core -> Channels)
+
+```mermaid
+sequenceDiagram
+    participant PMS as PMS-Core
+    participant Event as Event Bus (Redis)
+    participant Worker as Celery Worker
+    participant RL as Rate Limiter
+    participant CB as Circuit Breaker
+    participant Adapter as Platform Adapter
+    participant Channel as External Channel
+    participant Log as Sync Log
+
+    PMS->>Event: Emit booking.confirmed
+    Event->>Worker: Consume event
+
+    Worker->>Worker: Get active connections for property
+
+    loop For each channel connection
+        Worker->>RL: Check rate limit
+        alt Rate limit exceeded
+            RL-->>Worker: Wait/Retry later
+            Worker->>Worker: Queue for retry
+        else Within limit
+            RL-->>Worker: Proceed
+
+            Worker->>CB: Check circuit state
+            alt Circuit OPEN
+                CB-->>Worker: Reject
+                Worker->>Log: Log skipped (circuit open)
+            else Circuit CLOSED/HALF_OPEN
+                CB-->>Worker: Proceed
+
+                Worker->>Adapter: Update availability
+                Adapter->>Channel: API call
+                Channel-->>Adapter: Response
+
+                alt Success
+                    Adapter-->>Worker: Success
+                    Worker->>CB: Record success
+                    Worker->>Log: Log success
+                else Failure
+                    Adapter-->>Worker: Error
+                    Worker->>CB: Record failure
+                    Worker->>Log: Log failure
+                    Worker->>Worker: Retry with backoff
+                end
+            end
+        end
+    end
+```
+
+---
+
+## 2. Inbound Sync Flow (Channels -> PMS-Core)
+
+```mermaid
+sequenceDiagram
+    participant Channel as External Channel
+    participant WH as Webhook Handler
+    participant Redis as Redis (Idempotency)
+    participant Worker as Celery Worker
+    participant DB as PostgreSQL
+    participant PMS as PMS-Core
+    participant Outbound as Outbound Sync
+
+    Channel->>WH: POST /webhooks/{channel}
+    WH->>WH: Verify signature
+
+    alt Invalid signature
+        WH-->>Channel: 401 Unauthorized
+    else Valid signature
+        WH->>WH: Parse payload
+        WH->>Redis: Check idempotency key
+
+        alt Already processed
+            Redis-->>WH: Key exists
+            WH-->>Channel: 200 OK (duplicate)
+        else Not processed
+            Redis-->>WH: Key not found
+            WH->>Worker: Queue import task
+            WH-->>Channel: 202 Accepted
+
+            Worker->>Worker: Map channel data to PMS schema
+            Worker->>DB: Create/Update booking
+
+            alt Duplicate (DB constraint)
+                DB-->>Worker: IntegrityError
+                Worker->>Worker: Skip (already imported)
+            else Success
+                DB-->>Worker: Booking created
+                Worker->>Redis: Mark as processed
+                Worker->>PMS: Emit booking.imported event
+                PMS->>Outbound: Sync to OTHER channels
+            end
+        end
+    end
+```
+
+---
+
+## 3. Booking Confirmation Sync
+
+```mermaid
+flowchart TD
+    A[Booking Confirmed in PMS] --> B{Source?}
+
+    B -->|Direct| C[Emit booking.confirmed event]
+    B -->|Channel| D[Emit booking.confirmed event<br/>with source channel]
+
+    C --> E[Channel Manager receives event]
+    D --> E
+
+    E --> F[Get all active connections<br/>for property]
+
+    F --> G{For each connection}
+
+    G --> H{Same as source?}
+
+    H -->|Yes| I[Skip - already knows]
+    H -->|No| J[Check rate limit]
+
+    J --> K{Within limit?}
+
+    K -->|No| L[Queue for later]
+    K -->|Yes| M[Check circuit breaker]
+
+    M --> N{Circuit state?}
+
+    N -->|OPEN| O[Skip - log failure]
+    N -->|CLOSED| P[Call platform adapter]
+    N -->|HALF_OPEN| P
+
+    P --> Q{API success?}
+
+    Q -->|Yes| R[Record success]
+    Q -->|No| S[Record failure<br/>Retry with backoff]
+
+    R --> T[Log to channel_sync_logs]
+    S --> T
+    I --> T
+    O --> T
+    L --> T
+
+    T --> U[Update last_sync_at]
+```
+
+---
+
+## 4. Polling Fallback Flow
+
+```mermaid
+sequenceDiagram
+    participant Beat as Celery Beat
+    participant Worker as Polling Worker
+    participant DB as Database
+    participant Adapter as Platform Adapter
+    participant Channel as External Channel
+    participant Import as Import Worker
+
+    Beat->>Worker: poll_all_channel_bookings (every 5 min)
+
+    Worker->>DB: Get connections not synced in 5 min
+    DB-->>Worker: List of connections
+
+    loop For each connection
+        Worker->>Adapter: get_bookings(since=last_sync)
+        Adapter->>Channel: GET /reservations
+        Channel-->>Adapter: Bookings list
+        Adapter-->>Worker: Parsed bookings
+
+        loop For each booking
+            Worker->>Import: Queue import task
+        end
+
+        Worker->>DB: Update last_sync_at
+    end
+```
+
+---
+
+## 5. Token Refresh Flow
+
+```mermaid
+flowchart TD
+    A[Celery Beat: Hourly] --> B[refresh_expiring_tokens task]
+
+    B --> C[Query connections with<br/>token_expires_at < now + 7 days]
+
+    C --> D{For each connection}
+
+    D --> E[Get refresh token]
+    E --> F[Decrypt token]
+    F --> G{Channel type?}
+
+    G -->|Airbnb| H[Call Airbnb token endpoint]
+    G -->|Booking.com| I[Call Booking.com token endpoint]
+    G -->|Expedia| J[Get new client credentials token]
+    G -->|FeWo-direkt| K[Call Vrbo token endpoint]
+    G -->|Google| L[Refresh service account]
+
+    H --> M{Success?}
+    I --> M
+    J --> M
+    K --> M
+    L --> M
+
+    M -->|Yes| N[Encrypt new tokens]
+    N --> O[Save to database]
+    O --> P[Update token_expires_at]
+
+    M -->|No| Q[Increment error_count]
+    Q --> R{error_count >= 3?}
+
+    R -->|Yes| S[Set status = expired]
+    S --> T[Send alert to owner]
+
+    R -->|No| U[Log failure]
+```
+
+---
+
+## 6. Daily Reconciliation Flow
+
+```mermaid
+flowchart TD
+    A[Celery Beat: 2 AM daily] --> B[run_daily_reconciliation task]
+
+    B --> C[Get all active connections]
+
+    C --> D{For each connection}
+
+    D --> E[Fetch channel availability<br/>next 90 days]
+    E --> F[Fetch PMS availability<br/>next 90 days]
+
+    F --> G[Compare day by day]
+
+    G --> H{Mismatches found?}
+
+    H -->|No| I[Log: Reconciled OK]
+
+    H -->|Yes| J{Mismatch count > 10?}
+
+    J -->|Yes| K[Send drift alert]
+
+    J -->|No| L[Auto-correct: Push PMS to channel]
+
+    K --> L
+
+    L --> M[Group consecutive dates]
+    M --> N{For each date group}
+
+    N --> O[update_channel_availability task]
+    O --> P{Success?}
+
+    P -->|Yes| Q[Log correction]
+    P -->|No| R[Log failure]
+
+    Q --> S[Update reconciliation stats]
+    R --> S
+    I --> S
+```
+
+---
+
+## 7. Conflict Resolution Flow
+
+```mermaid
+flowchart TD
+    A[Booking Request Received] --> B{Source?}
+
+    B -->|Direct| C[Acquire distributed lock]
+    B -->|Channel| D[Acquire distributed lock]
+
+    C --> E{Lock acquired?}
+    D --> E
+
+    E -->|No| F[Return 409 Conflict]
+
+    E -->|Yes| G[Check availability in DB]
+
+    G --> H{Available?}
+
+    H -->|No| I[Release lock]
+    I --> J[Return 409 Conflict]
+
+    H -->|Yes| K[Create booking in DB]
+
+    K --> L{DB constraint violation?}
+
+    L -->|Yes| M[Release lock]
+    M --> N[Return 409 Conflict]
+
+    L -->|No| O[Booking created]
+    O --> P[Release lock]
+    P --> Q[Emit booking.confirmed]
+    Q --> R[Sync to all channels]
+    R --> S[Return 201 Created]
+```
+
+---
+
+## 8. Circuit Breaker State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> CLOSED
+
+    CLOSED --> OPEN: failures >= threshold
+    CLOSED --> CLOSED: success
+
+    OPEN --> HALF_OPEN: timeout elapsed
+    OPEN --> OPEN: request rejected
+
+    HALF_OPEN --> CLOSED: successes >= success_threshold
+    HALF_OPEN --> OPEN: any failure
+
+    note right of CLOSED
+        Normal operation
+        All requests pass through
+    end note
+
+    note right of OPEN
+        Platform unavailable
+        All requests rejected
+        Wait for timeout
+    end note
+
+    note right of HALF_OPEN
+        Testing recovery
+        Limited requests allowed
+    end note
+```
+
+---
+
+## 9. Rate Limiting Sliding Window
+
+```mermaid
+flowchart LR
+    subgraph "Sliding Window (1 second)"
+        A[T-1.0s] --> B[T-0.8s]
+        B --> C[T-0.6s]
+        C --> D[T-0.4s]
+        D --> E[T-0.2s]
+        E --> F[Now]
+    end
+
+    G[New Request] --> H{Count in window < limit?}
+
+    H -->|Yes| I[Add to window]
+    I --> J[Allow request]
+
+    H -->|No| K[Reject request]
+    K --> L[Return retry-after]
+
+    subgraph "Redis Sorted Set"
+        M["timestamp: score"]
+        N["ZREMRANGEBYSCORE (cleanup)"]
+        O["ZCARD (count)"]
+        P["ZADD (new request)"]
+    end
+```
+
+---
+
+## 10. Event-Driven Architecture Overview
+
+```mermaid
+flowchart TB
+    subgraph "PMS-Core"
+        A[Booking Service]
+        B[Availability Service]
+        C[Pricing Service]
+    end
+
+    subgraph "Event Bus"
+        D[(Redis Streams)]
+    end
+
+    subgraph "Channel Manager"
+        E[Event Consumer]
+        F[Outbound Workers]
+        G[Inbound Workers]
+        H[Reconciliation]
+    end
+
+    subgraph "External Platforms"
+        I[Airbnb]
+        J[Booking.com]
+        K[Expedia]
+        L[FeWo-direkt]
+        M[Google VR]
+    end
+
+    A -->|booking.confirmed| D
+    A -->|booking.cancelled| D
+    B -->|availability.updated| D
+    C -->|pricing.updated| D
+
+    D -->|consume| E
+    E --> F
+
+    F -->|API| I
+    F -->|API| J
+    F -->|API| K
+    F -->|API| L
+    F -->|API| M
+
+    I -->|webhook| G
+    J -->|push| G
+    K -->|webhook| G
+    L -->|webhook| G
+    M -->|pubsub| G
+
+    G -->|import| A
+
+    H -->|daily| F
+```
+
+---
+
+## Legend
+
+| Symbol | Meaning |
+|--------|---------|
+| Rectangle | Process/Action |
+| Diamond | Decision |
+| Cylinder | Database |
+| Arrow | Data flow |
+| Dashed line | Optional/Alternative path |
+
+---
+
+*Document Version: 1.0.0*
+*Last Updated: 2024-12-21*
+*Author: channel-manager-architect*

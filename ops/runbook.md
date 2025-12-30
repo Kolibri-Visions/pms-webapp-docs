@@ -1,0 +1,6141 @@
+# PMS Operations Runbook
+
+**Purpose**: Practical troubleshooting guide for common production issues.
+
+**Audience**: Ops engineers, DevOps, on-call responders.
+
+**Last Updated**: 2025-12-26
+
+---
+
+## Quick Reference
+
+| Issue | Symptom | Section |
+|-------|---------|---------|
+| API returns 503 after deploy | "Service degraded" or "Database unavailable" | [DB DNS / Degraded Mode](#db-dns--degraded-mode) |
+| JWT auth fails | 401 Unauthorized despite valid token | [Token Validation](#token-validation-apikey-header) |
+| API returns 503 with schema error | "Schema not installed/out of date" | [Schema Drift](#schema-drift) |
+| Smoke script fails | Empty TOKEN/PID, bash errors | [Smoke Script Pitfalls](#smoke-script-pitfalls) |
+
+---
+
+## DB DNS / Degraded Mode
+
+### Symptom
+
+After deployment or container restart:
+- API returns `503 Service Unavailable`
+- Logs show: `"Database connection pool creation FAILED"` or `"Service degraded"`
+- Health endpoint (`/health`) returns 200, but `/health/ready` returns 503
+
+### Root Cause
+
+PMS backend container cannot resolve Supabase database DNS (`supabase-db`) due to missing Docker network attachment.
+
+**Why this happens:**
+- Coolify creates a dedicated network for Supabase stack: `bccg4gs4o4kgsowocw08wkw4`
+- Coolify creates a default network for PMS app: `coolify`
+- Container needs to be attached to **both** networks to resolve `supabase-db` hostname
+
+### Verify
+
+```bash
+# SSH to host server
+ssh root@your-host
+
+# Check container networks
+docker inspect $(docker ps -q -f name=pms) | grep -A 10 Networks
+
+# Expected: both "coolify" and "bccg4gs4o4kgsowocw08wkw4" networks
+
+# Test DNS resolution inside container
+docker exec $(docker ps -q -f name=pms) getent hosts supabase-db
+
+# Expected: IP address (e.g., 172.20.0.2)
+# If empty/error: DNS resolution failed
+```
+
+### Fix
+
+**Option 1: Via Coolify Dashboard (Recommended)**
+
+1. Open Coolify dashboard
+2. Navigate to: **Applications > PMS-Webapp > Networks**
+3. Ensure both networks are selected:
+   - `coolify` (default)
+   - `bccg4gs4o4kgsowocw08wkw4` (Supabase network)
+4. Click **Save** and **Restart** application
+
+**Option 2: Manual Docker Network Attachment**
+
+```bash
+# Attach container to Supabase network
+docker network connect bccg4gs4o4kgsowocw08wkw4 $(docker ps -q -f name=pms)
+
+# Verify
+docker exec $(docker ps -q -f name=pms) getent hosts supabase-db
+# Should now return IP address
+
+# Restart container to recreate pool
+docker restart $(docker ps -q -f name=pms)
+```
+
+**Option 3: Update DATABASE_URL to use public DNS**
+
+If network attachment fails, use Supabase public URL:
+
+```bash
+# In Coolify: Applications > PMS-Webapp > Environment Variables
+DATABASE_URL=postgresql://postgres:your-password@your-project.supabase.co:5432/postgres
+
+# Note: This bypasses pgBouncer connection pooling (less efficient)
+```
+
+### Prevention
+
+- Ensure Coolify deployment config includes both networks
+- Add network check to CI/CD health checks
+- Monitor `/health/ready` endpoint (should return 200 within 10s of deploy)
+
+### Auto-Heal Supabase Network Attachment (Host Cron)
+
+**Problem:** Coolify redeploys may drop the extra network attachment, causing DB DNS resolution failures and "Database temporarily unavailable" errors even when the network is configured in Coolify UI.
+
+**Solution:** Use a host-side cron job to automatically reconnect containers to the Supabase network if they become detached.
+
+---
+
+#### The Auto-Heal Script
+
+**Location (Production):** `/usr/local/bin/pms_ensure_supabase_net.sh`
+
+**Source:** `backend/scripts/ops/pms_ensure_supabase_net.sh` (in repo)
+
+**What It Does:**
+
+The script performs automatic network attachment healing for PMS containers:
+
+1. **Checks target containers** (`pms-backend`, `pms-worker-v2`) every 2 minutes
+2. **Inspects Docker networks** for each container
+3. **Detects missing attachment** to Supabase network (`bccg4gs4o4kgsowocw08wkw4`)
+4. **Auto-attaches + restarts** if detached (logs action to `/var/log/pms_ensure_supabase_net.log`)
+5. **Silent no-op** if already attached (logs daily "OK" heartbeat to `/var/log/pms_ensure_supabase_net.ok`)
+
+**Behavior Summary:**
+- **Intentionally quiet:** No output when everything is OK (except daily heartbeat)
+- **Logs only when fixing:** Writes to `.log` when it reconnects a container
+- **Daily heartbeat:** Writes single "OK" message to `.ok` file once per day (confirms cron is alive)
+- **Restart required:** Container must restart after network attachment for DNS to work
+
+**Key Features:**
+- Idempotent (safe to run every 2 minutes)
+- No-op if containers don't exist or are stopped
+- Automatic restart after network reattachment
+- Timestamped logs (UTC)
+
+---
+
+#### Cron Schedule
+
+**Location:** `/etc/cron.d/pms_ensure_supabase_net` (production)
+
+**Schedule:** Every 2 minutes
+
+**Content:**
+```bash
+# PMS Supabase Network Auto-Heal
+# Runs every 2 minutes to ensure pms-backend and pms-worker-v2
+# are always attached to the Supabase network (bccg4gs4o4kgsowocw08wkw4)
+*/2 * * * * root /usr/local/bin/pms_ensure_supabase_net.sh >> /var/log/pms_ensure_supabase_net.log 2>&1
+```
+
+**Alternative (Root crontab):**
+```bash
+# Edit root crontab
+crontab -e
+
+# Add this line:
+*/2 * * * * /usr/local/bin/pms_ensure_supabase_net.sh >> /var/log/pms_ensure_supabase_net.log 2>&1
+```
+
+---
+
+#### Log Files
+
+**Primary Log:** `/var/log/pms_ensure_supabase_net.log`
+
+Contains timestamped entries when script takes action (attaches network, restarts container):
+
+```
+[2025-12-29 14:32:01 UTC] ====== PMS Supabase Network Auto-Attach Check ======
+[2025-12-29 14:32:01 UTC] FIXING: pms-backend not attached to bccg4gs4o4kgsowocw08wkw4
+[2025-12-29 14:32:01 UTC] ACTION: Connecting pms-backend to bccg4gs4o4kgsowocw08wkw4...
+[2025-12-29 14:32:02 UTC] SUCCESS: Connected pms-backend to bccg4gs4o4kgsowocw08wkw4
+[2025-12-29 14:32:02 UTC] ACTION: Restarting pms-backend...
+[2025-12-29 14:32:05 UTC] SUCCESS: Restarted pms-backend
+[2025-12-29 14:32:05 UTC] OK: pms-worker-v2 already attached to bccg4gs4o4kgsowocw08wkw4
+[2025-12-29 14:32:05 UTC] ====== Check Complete ======
+```
+
+**Heartbeat Log:** `/var/log/pms_ensure_supabase_net.ok`
+
+Contains daily heartbeat (single "OK" message per day, confirms cron is running):
+
+```
+[2025-12-29 00:00:01 UTC] OK: Daily heartbeat - pms-backend and pms-worker-v2 healthy
+[2025-12-30 00:00:01 UTC] OK: Daily heartbeat - pms-backend and pms-worker-v2 healthy
+```
+
+**Why separate .ok file?**
+- Keeps primary log clean (only shows actual fixes)
+- Easy grep for "all is well" vs "something was fixed"
+- Prevents log bloat (1 heartbeat/day vs 720 checks/day)
+
+---
+
+#### Verification Commands
+
+**Check cron is configured:**
+```bash
+# Option 1: Check /etc/cron.d/
+ls -la /etc/cron.d/pms_ensure_supabase_net
+
+# Option 2: Check root crontab
+crontab -l | grep pms_ensure_supabase_net
+```
+
+**Check cron daemon is running:**
+```bash
+# SystemD (most modern distros)
+systemctl status cron
+
+# OR
+systemctl status crond
+
+# Expected: "active (running)"
+```
+
+**Check script exists and is executable:**
+```bash
+ls -la /usr/local/bin/pms_ensure_supabase_net.sh
+
+# Expected: -rwxr-xr-x (executable)
+```
+
+**Check recent logs:**
+```bash
+# Last 20 lines of action log (shows fixes)
+tail -20 /var/log/pms_ensure_supabase_net.log
+
+# Last heartbeat (daily OK)
+tail -5 /var/log/pms_ensure_supabase_net.ok
+
+# Live tail (watch for fixes in real-time)
+tail -f /var/log/pms_ensure_supabase_net.log
+```
+
+**Verify network attachment:**
+```bash
+# Check pms-backend networks
+docker inspect pms-backend --format '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}'
+
+# Expected: coolify bccg4gs4o4kgsowocw08wkw4
+
+# Check pms-worker-v2 networks
+docker inspect pms-worker-v2 --format '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}'
+
+# Expected: coolify bccg4gs4o4kgsowocw08wkw4
+```
+
+**Manual test (trigger script immediately):**
+```bash
+# Run script manually (see output)
+/usr/local/bin/pms_ensure_supabase_net.sh
+
+# Expected output (if already attached):
+# [2025-12-29 14:45:01 UTC] ====== PMS Supabase Network Auto-Attach Check ======
+# [2025-12-29 14:45:01 UTC] OK: pms-backend already attached to bccg4gs4o4kgsowocw08wkw4
+# [2025-12-29 14:45:01 UTC] OK: pms-worker-v2 already attached to bccg4gs4o4kgsowocw08wkw4
+# [2025-12-29 14:45:01 UTC] ====== Check Complete ======
+```
+
+---
+
+#### Setup Instructions (HOST-SERVER-TERMINAL)
+
+**Step 1: Install script to production path**
+
+```bash
+# SSH to host server
+ssh root@your-server.com
+
+# Option A: Copy from cloned repo
+cd /root
+git clone https://github.com/Kolibri-Visions/PMS-Webapp.git
+cp PMS-Webapp/backend/scripts/ops/pms_ensure_supabase_net.sh /usr/local/bin/
+chmod +x /usr/local/bin/pms_ensure_supabase_net.sh
+
+# Option B: Download directly (if repo is public)
+curl -o /usr/local/bin/pms_ensure_supabase_net.sh \
+  https://raw.githubusercontent.com/Kolibri-Visions/PMS-Webapp/main/backend/scripts/ops/pms_ensure_supabase_net.sh
+chmod +x /usr/local/bin/pms_ensure_supabase_net.sh
+```
+
+**Step 2: Create cron.d entry (Recommended)**
+
+```bash
+# Create /etc/cron.d/pms_ensure_supabase_net
+cat > /etc/cron.d/pms_ensure_supabase_net <<'EOF'
+# PMS Supabase Network Auto-Heal
+# Runs every 2 minutes to ensure containers stay attached to Supabase network
+*/2 * * * * root /usr/local/bin/pms_ensure_supabase_net.sh >> /var/log/pms_ensure_supabase_net.log 2>&1
+EOF
+
+# Set correct permissions
+chmod 644 /etc/cron.d/pms_ensure_supabase_net
+
+# Reload cron
+systemctl reload cron || systemctl reload crond
+```
+
+**Step 3: Verify cron is active**
+
+```bash
+# Check cron daemon
+systemctl status cron
+
+# Wait 2 minutes, then check logs
+tail -f /var/log/pms_ensure_supabase_net.log
+
+# Expected (if all OK):
+# [2025-12-29 14:50:01 UTC] ====== PMS Supabase Network Auto-Attach Check ======
+# [2025-12-29 14:50:01 UTC] OK: pms-backend already attached to bccg4gs4o4kgsowocw08wkw4
+# [2025-12-29 14:50:01 UTC] OK: pms-worker-v2 already attached to bccg4gs4o4kgsowocw08wkw4
+# [2025-12-29 14:50:01 UTC] ====== Check Complete ======
+```
+
+**Step 4: Verify network attachment persists**
+
+```bash
+# Check backend networks
+docker inspect pms-backend | grep -A 10 '"Networks"'
+
+# Check worker networks
+docker inspect pms-worker-v2 | grep -A 10 '"Networks"'
+
+# Expected: Both "coolify" and "bccg4gs4o4kgsowocw08wkw4" networks
+```
+
+---
+
+#### Customization
+
+**Find your Supabase network ID:**
+
+```bash
+# Method 1: List all networks
+docker network ls | grep supabase
+
+# Method 2: Inspect Supabase DB container
+docker inspect supabase-db | grep -A 5 '"Networks"'
+
+# Update script with your network ID:
+# Edit SUPABASE_NETWORK="your-network-id" in script
+```
+
+**Add more containers to monitor:**
+
+```bash
+# Edit /usr/local/bin/pms_ensure_supabase_net.sh
+# Change CONTAINERS array:
+CONTAINERS=("pms-backend" "pms-worker-v2" "your-other-service")
+```
+
+---
+
+#### Troubleshooting
+
+**Script not running:**
+```bash
+# Check cron daemon
+systemctl status cron || systemctl status crond
+
+# Check cron.d file permissions (must be 644)
+ls -la /etc/cron.d/pms_ensure_supabase_net
+
+# Check script permissions (must be executable)
+ls -la /usr/local/bin/pms_ensure_supabase_net.sh
+
+# Check cron logs (SystemD journal)
+journalctl -u cron -f
+```
+
+**No log output:**
+```bash
+# Ensure log directory is writable
+touch /var/log/pms_ensure_supabase_net.log
+chmod 644 /var/log/pms_ensure_supabase_net.log
+
+# Run script manually to see output
+/usr/local/bin/pms_ensure_supabase_net.sh
+```
+
+**Container keeps getting detached:**
+```bash
+# Verify Coolify network config
+# Coolify Dashboard → pms-backend → Settings → Networks
+# Ensure "bccg4gs4o4kgsowocw08wkw4" is selected
+
+# Check if Coolify is fighting with cron (check timestamps)
+tail -f /var/log/pms_ensure_supabase_net.log
+# If you see "FIXING" messages every 2 minutes → Coolify may be removing network
+```
+
+---
+
+#### Security Note
+
+**Caution:** This script requires root access on the host server and uses the Docker socket. This is acceptable for single-server ops environments but should be carefully reviewed for multi-tenant or high-security deployments.
+
+**Alternative approaches for more secure environments:**
+- Use Coolify API to trigger redeploy with network config
+- Use Docker Swarm or Kubernetes for network management
+- Implement network checks in application health probes
+- Use Docker events API to trigger network reattachment (reactive instead of polling)
+
+---
+
+### Optional: Cleanup Stale Sync Logs
+
+**Problem:** Sync logs may remain in `running` status after previous outages or worker crashes.
+
+**Solution:** Run this SQL snippet to mark stale logs as `failed`:
+
+```sql
+-- Mark sync logs stuck in "running" status for > 1 hour as failed
+UPDATE channel_sync_logs
+SET
+    status = 'failed',
+    error = 'Task timed out or worker crashed (auto-cleaned)',
+    updated_at = NOW()
+WHERE
+    status = 'running'
+    AND created_at < NOW() - INTERVAL '1 hour';
+
+-- Check affected rows
+SELECT COUNT(*)
+FROM channel_sync_logs
+WHERE status = 'failed' AND error LIKE '%auto-cleaned%';
+```
+
+**When to run:**
+- After resolving worker outages
+- Before investigating sync issues (to clear old noise)
+- As part of regular maintenance (monthly)
+
+**Caution:** Review logs before cleaning to ensure you're not cancelling legitimate long-running tasks.
+
+---
+
+## Token Validation (apikey Header)
+
+### Symptom
+
+- JWT token fetched successfully (200 from Supabase auth)
+- API requests with `Authorization: Bearer <token>` return `401 Unauthorized`
+- Logs show: `"Invalid JWT"` or `"Unauthorized"`
+
+### Root Cause
+
+**IMPORTANT: apikey header scope depends on which service you're calling:**
+
+1. **Supabase Kong endpoints** (e.g., `https://sb-pms.../auth/v1/...`) require **two headers**:
+   - `Authorization: Bearer <jwt>`
+   - `apikey: <anon_key>`
+
+2. **PMS Backend API** (e.g., `https://api.fewo.../api/v1/...`) requires **only**:
+   - `Authorization: Bearer <jwt>`
+   - **NO apikey header needed**
+
+**Why does Supabase Kong require both?**
+- `Authorization` header contains user's JWT (specific user identity)
+- `apikey` header contains project's anon key (project identification for rate limiting/routing)
+
+**Why doesn't PMS Backend need apikey?**
+- PMS Backend validates JWT directly using the JWT_SECRET
+- No Kong gateway in front of PMS Backend
+- apikey is only needed for Supabase services
+
+### Verify
+
+```bash
+# Test Supabase Kong endpoint (requires both headers)
+# Example: Fetch current user profile
+curl -X GET "https://sb-pms.kolibri-visions.de/auth/v1/user" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "apikey: $ANON_KEY"
+# Returns: 200 OK (user profile)
+
+# Test without apikey (FAILS on Kong)
+curl -X GET "https://sb-pms.kolibri-visions.de/auth/v1/user" \
+  -H "Authorization: Bearer $TOKEN"
+# Returns: 401 Unauthorized
+
+# Test PMS Backend API (only Authorization needed)
+curl -X GET "https://api.fewo.kolibri-visions.de/api/v1/properties?limit=1" \
+  -H "Authorization: Bearer $TOKEN"
+# Returns: 200 OK (no apikey needed)
+```
+
+### Fix
+
+**For Supabase Kong API Clients:**
+
+When calling Supabase services (auth, storage, etc.), include both headers:
+
+```python
+# Python example - Supabase Kong endpoint
+headers = {
+    "Authorization": f"Bearer {jwt_token}",
+    "apikey": anon_key,  # Required for Kong
+    "Content-Type": "application/json"
+}
+response = requests.get(f"{supabase_url}/auth/v1/user", headers=headers)
+```
+
+**For PMS Backend API Clients:**
+
+When calling PMS Backend, only Authorization header is needed:
+
+```python
+# Python example - PMS Backend API
+headers = {
+    "Authorization": f"Bearer {jwt_token}",
+    # NO apikey needed
+    "Content-Type": "application/json"
+}
+response = requests.get(f"{api_url}/api/v1/properties", headers=headers)
+```
+
+**For Smoke Scripts:**
+
+Our smoke scripts call both:
+- Supabase Kong for auth (`fetch_token()` includes apikey)
+- PMS Backend API for tests (only Authorization header)
+
+### Prevention
+
+- Document apikey requirement in API docs
+- Add example requests showing both headers
+- Test authentication flow in CI/CD
+
+---
+
+## CORS Errors (Admin Console Blocked)
+
+### Symptom
+
+- Admin UI at `https://admin.fewo.kolibri-visions.de` shows CORS error in browser console
+- Browser error: `Access to fetch at 'https://api.fewo.kolibri-visions.de/...' has been blocked by CORS policy`
+- Preflight request (OPTIONS) fails with missing `Access-Control-Allow-Origin` header
+- API returns 403 or connection refused for cross-origin requests
+
+### Root Cause
+
+CORS (Cross-Origin Resource Sharing) middleware not configured to allow admin console origin:
+- Default CORS origins only include localhost (development)
+- Production domains not added to `ALLOWED_ORIGINS` environment variable
+- Missing `Authorization` header in allowed headers (rare, default allows all)
+
+### Verify
+
+Check current CORS configuration:
+
+```bash
+# Check environment variable on backend container
+docker exec pms-backend env | grep ALLOWED_ORIGINS
+# Should show: ALLOWED_ORIGINS=https://admin.fewo.kolibri-visions.de,https://fewo.kolibri-visions.de,...
+
+# Or check backend logs on startup for CORS origins
+docker logs pms-backend | grep -i cors
+```
+
+Test CORS preflight manually:
+
+```bash
+# Send OPTIONS preflight request
+curl -X OPTIONS https://api.fewo.kolibri-visions.de/api/v1/properties \
+  -H "Origin: https://admin.fewo.kolibri-visions.de" \
+  -H "Access-Control-Request-Method: GET" \
+  -H "Access-Control-Request-Headers: Authorization" \
+  -v
+
+# Should return:
+# Access-Control-Allow-Origin: https://admin.fewo.kolibri-visions.de
+# Access-Control-Allow-Methods: GET, POST, PUT, DELETE, PATCH
+# Access-Control-Allow-Headers: *
+```
+
+### Fix
+
+**Option 1: Set Environment Variable** (Recommended)
+
+Add `ALLOWED_ORIGINS` to backend environment:
+
+```bash
+# In Coolify or deployment config
+ALLOWED_ORIGINS=https://admin.fewo.kolibri-visions.de,https://fewo.kolibri-visions.de,http://localhost:3000
+```
+
+Restart backend:
+
+```bash
+docker restart pms-backend
+```
+
+**Option 2: Update Default in Code** (Already Done)
+
+The default in `backend/app/core/config.py` now includes:
+- `https://admin.fewo.kolibri-visions.de` (admin console)
+- `https://fewo.kolibri-visions.de` (public site)
+- `http://localhost:3000` (local dev)
+
+If env var is not set, these defaults will be used.
+
+### Prevention
+
+- Always include admin and frontend origins in `ALLOWED_ORIGINS`
+- Test CORS with `curl -X OPTIONS` before deploying frontend changes
+- Document required origins in deployment checklist
+
+---
+
+## Schema Drift
+
+### Symptom
+
+- API returns `503 Service Unavailable`
+- Logs show: `"Schema not installed"` or `"Schema out of date"` or `"Relation does not exist"`
+- Database is reachable (DNS resolves, pool created), but queries fail
+
+### Root Cause
+
+Database schema is out of sync with application code:
+- Migrations not applied after deploy
+- Database restored from old backup
+- Manual schema changes not tracked in migrations
+
+### Verify
+
+```bash
+# SSH to host server
+ssh root@your-host
+
+# Check migration status (if using Alembic)
+docker exec $(docker ps -q -f name=pms) alembic current
+# Expected: Latest migration hash
+
+# Check if tables exist
+docker exec $(docker ps -q -f name=pms) psql "$DATABASE_URL" -c "\dt"
+# Expected: List of tables (properties, bookings, availability_blocks, etc.)
+
+# Check Supabase migrations (if using Supabase CLI)
+docker exec $(docker ps -q -f name=supabase) supabase migration list
+# Expected: All migrations marked as applied
+```
+
+### Fix
+
+**Option 1: Apply Missing Migrations (Recommended)**
+
+```bash
+# If using Alembic
+docker exec $(docker ps -q -f name=pms) alembic upgrade head
+
+# If using Supabase CLI
+docker exec $(docker ps -q -f name=supabase) supabase migration up
+
+# Restart application
+docker restart $(docker ps -q -f name=pms)
+```
+
+**Option 2: Manual Schema Inspection**
+
+```bash
+# Connect to database
+docker exec -it $(docker ps -q -f name=supabase) psql -U postgres -d postgres
+
+# Check if critical tables exist
+\dt properties
+\dt bookings
+\dt availability_blocks
+
+# If missing, check migration files in /app/migrations/ or supabase/migrations/
+```
+
+**Option 3: Full Database Reset (DESTRUCTIVE - Dev/Staging Only)**
+
+```bash
+# DANGER: This deletes all data
+docker exec $(docker ps -q -f name=supabase) supabase db reset
+
+# Re-apply migrations
+docker exec $(docker ps -q -f name=pms) alembic upgrade head
+```
+
+### Prevention
+
+- Include migration check in deployment pipeline
+- Version migrations with semantic versioning
+- Test migrations on staging before production
+- Document schema changes in migration files
+
+### Channel Manager Sync Logs Migration
+
+**Migration File**: `supabase/migrations/20251227000000_create_channel_sync_logs.sql`
+
+**When to Apply**: Required for Channel Manager sync log persistence (replaces stub/dummy data)
+
+**Symptom if Missing**:
+- GET `/api/v1/channel-connections/{id}/sync-logs` returns `503 Service Unavailable`
+- Error message: `"Channel sync logs schema not installed (missing table: channel_sync_logs)"`
+- Logs show: `UndefinedTableError: relation "channel_sync_logs" does not exist`
+
+**Apply Migration**:
+
+```bash
+# Option 1: Using Supabase CLI
+cd supabase/migrations
+docker exec $(docker ps -q -f name=supabase) supabase migration up
+
+# Option 2: Manual SQL execution
+docker exec -it $(docker ps -q -f name=supabase) psql -U postgres -d postgres \
+  < supabase/migrations/20251227000000_create_channel_sync_logs.sql
+
+# Option 3: Via Supabase Dashboard
+# Navigate to: SQL Editor > Paste migration content > Run
+```
+
+**Verify Installation**:
+
+```bash
+# Check table exists
+docker exec $(docker ps -q -f name=supabase) psql -U postgres -d postgres \
+  -c "\dt channel_sync_logs"
+
+# Expected output:
+#  Schema |        Name          | Type  | Owner
+# --------+----------------------+-------+-------
+#  public | channel_sync_logs    | table | postgres
+
+# Check indexes
+docker exec $(docker ps -q -f name=supabase) psql -U postgres -d postgres \
+  -c "\d channel_sync_logs"
+
+# Expected: 4 indexes (connection_id, task_id, tenant_id, status)
+```
+
+**What This Migration Does**:
+- Creates `channel_sync_logs` table with JSONB details column
+- Adds indexes for fast queries (connection_id, task_id, tenant_id, status)
+- Sets up CHECK constraints for operation_type, direction, status
+- Conditionally adds FK to `channel_connections` (if table exists)
+- Enables persistent tracking of Channel Manager sync operations
+
+**Rollback** (if needed):
+
+```bash
+docker exec -it $(docker ps -q -f name=supabase) psql -U postgres -d postgres \
+  -c "DROP TABLE IF EXISTS public.channel_sync_logs CASCADE;"
+```
+
+---
+
+## Smoke Script Pitfalls
+
+### Symptom
+
+Smoke script (`pms_phase23_smoke.sh`) fails with:
+- `"Required environment variable not set"`
+- `"Token is empty"`
+- `"PID not set and could not auto-derive"`
+- Bash errors: `"unbound variable"`
+
+### Root Causes & Fixes
+
+#### 1. Empty TOKEN (Authentication Failure)
+
+**Cause:** Invalid credentials or Supabase unreachable.
+
+**Fix:**
+```bash
+# Verify credentials (do NOT print PASSWORD or full ANON_KEY)
+echo "SB_URL: $SB_URL"
+echo "ANON_KEY length: ${#ANON_KEY}"
+echo "EMAIL: $EMAIL"
+
+# Test auth manually
+curl -X POST "$SB_URL/auth/v1/token?grant_type=password" \
+  -H "apikey: $ANON_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"'$EMAIL'","password":"'$PASSWORD'"}'
+
+# Expected: JSON with "access_token" field
+# If error: check credentials, network, Supabase status
+```
+
+#### 2. Empty PID (Auto-Derive Failed)
+
+**Cause:** No properties exist, or properties endpoint returned empty items.
+
+**Fix:**
+```bash
+# Check if properties exist
+curl -X GET "$API/api/v1/properties?limit=1" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "apikey: $ANON_KEY"
+
+# Expected: {"items": [{"uuid": "...", ...}], ...}
+# If empty: create a test property first
+
+# Override PID explicitly
+export PID="your-property-uuid"
+bash scripts/pms_phase23_smoke.sh
+```
+
+#### 3. Bash `set -u` (Unbound Variable Errors)
+
+**Cause:** Script uses `set -u` (strict mode) - accessing undefined variables causes immediate exit.
+
+**Fix:**
+```bash
+# Always use ${VAR:-default} syntax
+export PID="${PID:-}"  # Empty string if not set
+export API="${API:-https://api.fewo.kolibri-visions.de}"
+
+# Or export all required vars before running
+export SB_URL="..."
+export ANON_KEY="..."
+export EMAIL="..."
+export PASSWORD="..."
+bash scripts/pms_phase23_smoke.sh
+```
+
+#### 4. Running on Host vs Container
+
+**Problem:** Script expects `/app/scripts/` paths (container), but you're on host.
+
+**Fix:**
+
+**Run in Container (Recommended):**
+```bash
+# SSH to host
+ssh root@your-host
+
+# Run in container terminal (via Coolify dashboard)
+# OR via docker exec:
+docker exec -it $(docker ps -q -f name=pms) bash
+
+# Inside container:
+export ENV_FILE=/root/pms_env.sh
+bash /app/scripts/pms_phase23_smoke.sh
+```
+
+**Run on Host (Alternative):**
+```bash
+# SSH to host
+ssh root@your-host
+
+# Use docker exec one-liner
+docker exec $(docker ps -q -f name=pms) bash -c '
+export ENV_FILE=/root/pms_env.sh
+bash /app/scripts/pms_phase23_smoke.sh
+'
+```
+
+#### 5. Environment File Not Found
+
+**Cause:** ENV_FILE path is wrong (host vs container filesystem).
+
+**Fix:**
+```bash
+# Check if file exists in container
+docker exec $(docker ps -q -f name=pms) ls -la /root/pms_env.sh
+
+# If missing, create it:
+cat > /tmp/pms_env.sh <<'ENVEOF'
+export SB_URL="https://your-project.supabase.co"
+export ANON_KEY="eyJhbGc..."
+export EMAIL="admin@example.com"
+export PASSWORD="your-password"
+export API="https://api.fewo.kolibri-visions.de"
+ENVEOF
+
+# Copy to container
+docker cp /tmp/pms_env.sh $(docker ps -q -f name=pms):/root/pms_env.sh
+
+# Run script
+docker exec $(docker ps -q -f name=pms) bash -c '
+export ENV_FILE=/root/pms_env.sh
+bash /app/scripts/pms_phase23_smoke.sh
+'
+```
+
+### Prevention
+
+- Document required environment variables clearly
+- Provide example env file template
+- Add validation at script start (require_env)
+- Test scripts in CI/CD pipeline
+
+---
+
+## Optional: Availability Block Conflict Test
+
+### Overview
+
+The Phase 23 smoke script includes an **opt-in** test for availability block/booking conflict validation. This test:
+- Creates an availability block for a future window (today + 30 days, 3 days duration)
+- Verifies the block appears in `/api/v1/availability` response
+- Attempts to create an overlapping booking (expects 409 conflict)
+- Always cleans up the block (via trap, even on failure)
+
+**Use Case:** Validate inventory conflict detection after schema changes or deployment.
+
+**Safety:** Future window (30 days out) avoids interfering with real operations.
+
+### Enable the Test
+
+Set `AVAIL_BLOCK_TEST=true` to enable:
+
+```bash
+# SSH to host server
+ssh root@your-host
+
+# Run in container with block test enabled
+docker exec $(docker ps -q -f name=pms) bash -c '
+export ENV_FILE=/root/pms_env.sh
+export AVAIL_BLOCK_TEST=true
+bash /app/scripts/pms_phase23_smoke.sh
+'
+```
+
+**Expected Output (when enabled):**
+```
+ℹ️  Test 8: Availability block conflict test (opt-in via AVAIL_BLOCK_TEST=true)
+ℹ️  Creating availability block: 2026-01-25 to 2026-01-28 (PID: abc-123...)
+ℹ️  Block created: def-456...
+ℹ️  Verifying block appears in /api/v1/availability...
+ℹ️  ✓ Block found in availability response
+ℹ️  Attempting to create overlapping booking (expect 409 conflict)...
+ℹ️  ✓ Booking correctly rejected with 409 (conflict_type: inventory_overlap)
+ℹ️  Deleting block def-456...
+ℹ️  ✓ Block deleted successfully
+ℹ️  ✅ PASS - Availability block conflict test complete
+
+Summary:
+  ...
+  ✓ Availability block conflict test passed
+```
+
+**Expected Output (when disabled, default):**
+```
+ℹ️  Test 8: Availability block conflict test (opt-in via AVAIL_BLOCK_TEST=true)
+⚠️  AVAIL_BLOCK_TEST not set to 'true' - skipping block conflict test
+⚠️  To enable: export AVAIL_BLOCK_TEST=true
+
+Summary:
+  ...
+  ⊘ Availability block conflict test skipped (AVAIL_BLOCK_TEST not enabled)
+```
+
+### Requirements
+
+- Requires PID (uses auto-derived or explicit `export PID=...`)
+- Requires JWT token (automatic via SB_URL/ANON_KEY/EMAIL/PASSWORD)
+- Requires write access to `/api/v1/availability/blocks` (admin/manager role)
+
+### What It Tests
+
+1. **Block Creation** (`POST /api/v1/availability/blocks`)
+   - Verifies block can be created for future window
+   - Captures block ID for cleanup
+
+2. **Block Visibility** (`GET /api/v1/availability`)
+   - Verifies block appears in availability response
+   - Checks: `kind=block`, `state=blocked`, `block_id` present
+   - **Property Validation:** Returns 404 if property_id does not exist (prevents false positives from demo UUIDs)
+
+3. **Conflict Detection** (`POST /api/v1/bookings`)
+   - Verifies overlapping booking is rejected with 409
+   - Checks: `conflict_type=inventory_overlap`
+
+4. **Block Deletion** (`DELETE /api/v1/availability/blocks/{id}`)
+   - Verifies block can be deleted (cleanup)
+   - Trap ensures cleanup even on test failure
+
+### Cleanup Guarantee
+
+The test uses a bash trap to ensure cleanup:
+```bash
+trap cleanup_block EXIT
+```
+
+**If test fails mid-execution:**
+- Block will still be deleted automatically
+- No orphaned test data left in database
+
+**Manual cleanup (if needed):**
+```bash
+# List blocks with reason="smoke-test"
+curl -X GET "$API/api/v1/availability/blocks?reason=smoke-test" \
+  -H "Authorization: Bearer $TOKEN"
+
+# Delete specific block
+curl -X DELETE "$API/api/v1/availability/blocks/<block-id>" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### When to Use
+
+**Recommended:**
+- After schema migrations affecting `availability_blocks` or `inventory_ranges`
+- After deployment of conflict detection logic changes
+- When validating EXCLUSION constraint behavior
+- Pre-production smoke test before go-live
+
+**Not Recommended:**
+- In CI/CD pipelines (adds ~5-10s, requires write access)
+- Production health checks (read-only tests preferred)
+- Frequent monitoring (creates/deletes data)
+
+### Important Notes
+
+**Demo UUIDs vs Real Properties:**
+- Some documentation examples use demo UUIDs like `550e8400-e29b-41d4-a716-446655440000`
+- These may exist in `channel_connections` mocks but are NOT real properties in the database
+- `GET /api/v1/availability` now returns **404 Property not found** for non-existent property_id
+- This prevents false positives from smoke tests using invalid property IDs
+
+**Smoke Script PID Validation:**
+- The smoke script (`pms_phase23_smoke.sh`) now validates PID before running availability tests
+- If PID is invalid (property not found), script auto-selects a valid PID from `/api/v1/properties`
+- Warning displayed: `⚠️ PID invalid (Property not found). Using fallback PID=<id> from /properties`
+- This ensures tests run against real properties, not demo UUIDs
+
+**To override PID:**
+```bash
+export PID="<valid-property-uuid>"
+bash scripts/pms_phase23_smoke.sh
+```
+
+---
+
+## Phase 30 — Inventory Final Validation
+
+**Date:** 2025-12-27
+
+**Summary:** Comprehensive validation of inventory/availability conflict detection and date semantics.
+
+### What Was Validated
+
+#### Test 8: Availability Block Conflict (AVAIL_BLOCK_TEST=true)
+- ✅ Availability block creation (future window: 2026-01-25 to 2026-01-28)
+- ✅ Block visibility in `/api/v1/availability` response
+- ✅ Overlapping booking rejection with HTTP 409 `conflict_type=inventory_overlap`
+- ✅ Block deletion cleanup
+
+**Result:** PASS — Availability blocks correctly prevent overlapping bookings.
+
+#### Test 9: Back-to-Back Booking Boundary (B2B_TEST=true)
+- ✅ Free gap detection (found 2026-02-26 to 2026-03-02)
+- ✅ Booking A creation (2026-02-26 to 2026-02-28, 2 nights)
+- ✅ Booking B creation (2026-02-28 to 2026-03-02, check-in = A's check-out)
+- ✅ Both bookings returned HTTP 201 (no boundary conflict)
+- ✅ Booking cancellation cleanup via PATCH
+
+**Result:** PASS — Confirms end-exclusive date semantics (check-out date is NOT occupied).
+
+### How to Run Validation
+
+**Location:** HOST-SERVER-TERMINAL
+
+```bash
+# SSH to host server
+ssh root@your-host
+
+# Load environment (contains SB_URL, ANON_KEY, EMAIL, PASSWORD, API)
+source /root/pms_env.sh
+
+# Enable opt-in tests (optional - choose one or both)
+export AVAIL_BLOCK_TEST=true  # Availability block conflict test
+export B2B_TEST=true          # Back-to-back booking boundary test
+
+# Run smoke script
+bash backend/scripts/pms_phase23_smoke.sh
+```
+
+**Notes:**
+- Tests are **opt-in** (disabled by default)
+- Tests use **future dates** (30-60+ days out) to avoid production conflicts
+- Tests **clean up after themselves**:
+  - Availability blocks: deleted via DELETE `/api/v1/availability/blocks/{id}`
+  - Bookings: cancelled via PATCH `/api/v1/bookings/{id}` with `status=cancelled`
+- Cleanup runs via trap (executes even on test failure)
+- No data left behind on success or failure
+
+### Production Impact
+
+**Zero** — Tests create and delete temporary data in far-future date ranges.
+
+---
+
+## Module System Kill-Switch
+
+**Purpose:** Emergency fallback to bypass the module mounting system if issues are detected.
+
+### Overview
+
+The PMS backend uses a modular monolith architecture (Phase 33B) where routers are registered and mounted via a module system. If module system issues are detected in production, the `MODULES_ENABLED` environment variable provides a kill-switch to bypass it.
+
+**Default:** `MODULES_ENABLED=true` (module system active)
+
+**Fallback behavior when disabled:**
+- Mounts health router (core_pms)
+- Mounts `/api/v1` routers: properties, bookings, availability
+- Same API paths and behavior as module system
+- No module validation or dependency checks
+
+### When to Use the Kill-Switch
+
+**Symptoms that may require kill-switch:**
+- Routes appear missing (404 errors on expected endpoints)
+- Module import errors in startup logs
+- Circular dependency errors on startup
+- Module registration failures
+- Routers not mounting correctly
+
+**DO NOT use unless:**
+- Module system is confirmed broken
+- Rollback to previous deployment is not possible
+- Business impact requires immediate resolution
+
+### How to Disable Module System
+
+**Location:** Coolify Dashboard (Environment Variables)
+
+**Steps:**
+1. Open Coolify dashboard
+2. Navigate to: **Applications > PMS-Webapp > Environment Variables**
+3. Add or update variable:
+   - Name: `MODULES_ENABLED`
+   - Value: `false`
+4. Click **Save**
+5. **Restart** the application
+
+**Expected Behavior:**
+- Application startup logs: `"MODULES_ENABLED=false → Mounting routers via fallback"`
+- Fallback mounts health + `/api/v1/properties`, `/api/v1/bookings`, `/api/v1/availability`
+- Same API paths and behavior as module system
+- No module validation or dependency checks
+
+### How to Re-enable Module System
+
+**Steps:**
+1. Open Coolify dashboard
+2. Navigate to: **Applications > PMS-Webapp > Environment Variables**
+3. Update variable:
+   - Name: `MODULES_ENABLED`
+   - Value: `true` (or remove the variable - defaults to `true`)
+4. Click **Save**
+5. **Restart** the application
+
+**Expected Behavior:**
+- Application startup logs: `"MODULES_ENABLED=true → Mounting modules via module system"`
+- Module validation runs (detects circular dependencies)
+- Routers mounted via registry in dependency order
+
+### Verification
+
+**After changing MODULES_ENABLED:**
+
+```bash
+# SSH to host server
+ssh root@your-host
+
+# Check application logs
+docker logs pms-backend --tail 50 | grep "MODULES_ENABLED"
+
+# Expected: "MODULES_ENABLED=true →" or "MODULES_ENABLED=false →"
+
+# Verify health endpoint
+curl http://localhost:8000/health
+# Expected: {"status": "healthy"}
+
+# Verify API endpoints
+curl http://localhost:8000/api/v1/properties
+# Expected: 200 OK or 401 Unauthorized (depends on auth)
+```
+
+### Important Notes
+
+- **No API changes**: Both modes mount the same routers with the same prefixes and tags
+- **No data loss**: Kill-switch only affects router mounting, not database or data
+- **Backwards compatible**: `/docs` and `/openapi.json` show identical routes in both modes
+- **Temporary measure**: After using kill-switch, investigate root cause and restore module system
+- **Module system preferred**: Default mode includes dependency validation and better error detection
+
+### Rollback Plan
+
+If disabling the module system causes issues:
+1. Set `MODULES_ENABLED=true` in Coolify
+2. Restart application
+3. If still broken, rollback to previous deployment
+
+---
+
+## Module Feature Flags
+
+**Purpose:** Control which optional modules are loaded and exposed via API.
+
+### Channel Manager Module
+
+**Environment Variable:** `CHANNEL_MANAGER_ENABLED`
+
+**Default:** `false` (disabled)
+
+**Purpose:**
+- Controls whether Channel Manager API endpoints are exposed
+- Channel Manager handles OAuth credentials and platform integrations
+- Disabled by default for security
+
+**Endpoints (when enabled):**
+- `/api/v1/channel-connections/*` - Channel connection management (CRUD, sync, health checks)
+
+**⚠️ SECURITY WARNING:**
+
+**NEVER enable CHANNEL_MANAGER_ENABLED in production unless authentication is verified.**
+
+All Channel Manager endpoints require Bearer JWT authentication. Before enabling in production:
+
+1. Verify authentication is enforced (without token → 401):
+   ```bash
+   curl -k -i https://api.fewo.kolibri-visions.de/api/v1/channel-connections/ | head
+   # Expected: HTTP/1.1 401 Unauthorized (or 403 Forbidden)
+   ```
+
+2. Verify authenticated access works (with token → 200):
+   ```bash
+   TOKEN="<valid-jwt-token>"
+   curl -k -i https://api.fewo.kolibri-visions.de/api/v1/channel-connections/ \
+     -H "Authorization: Bearer $TOKEN" | head
+   # Expected: HTTP/1.1 200 OK
+   ```
+
+If authentication check fails (returns 200 without token), **DO NOT enable** and escalate immediately.
+
+**How to Enable:**
+
+1. Open Coolify dashboard
+2. Navigate to: **Applications > PMS-Webapp > Environment Variables**
+3. Add variable:
+   - Name: `CHANNEL_MANAGER_ENABLED`
+   - Value: `true`
+4. Click **Save**
+5. **Restart** the application
+
+**Verification:**
+
+```bash
+# Check application logs
+docker logs pms-backend --tail 50 | grep "Channel Manager"
+
+# Expected when enabled:
+# "Channel Manager module enabled via CHANNEL_MANAGER_ENABLED=true"
+
+# Expected when disabled:
+# "Channel Manager module disabled (CHANNEL_MANAGER_ENABLED=false, default)"
+
+# Verify endpoints are exposed (when enabled)
+curl http://localhost:8000/docs
+# Check for /api/v1/channel-connections endpoints in Swagger UI
+```
+
+**Important Notes:**
+- Requires `MODULES_ENABLED=true` (module system must be active)
+- If `MODULES_ENABLED=false`, the Channel Manager module is bypassed regardless of this flag
+- OpenAPI documentation (`/docs`) only shows Channel Manager endpoints when enabled
+- Ensure proper authentication and RBAC policies are configured before enabling
+
+---
+
+## Redis + Celery Worker Setup (Channel Manager)
+
+**Purpose:** Configure Redis and Celery worker for Channel Manager background sync operations.
+
+### Background / Symptoms
+
+If Redis or Celery worker are not properly configured, you may encounter these issues:
+
+**Redis Connection Failures:**
+- `/health/ready` endpoint shows `redis: down` with error:
+  ```
+  "Authentication required."
+  "invalid username-password pair or user is disabled."
+  ```
+
+**Celery Worker Issues:**
+- `/health/ready` shows `celery: down` with error:
+  ```
+  "Celery inspect timeout (broker may be unreachable)"
+  "No active Celery workers detected"
+  ```
+
+**Channel Manager Sync Failures:**
+- Channel sync endpoints return connection refused
+- Celery tasks fail with "Broker connection error"
+- Background jobs (Airbnb/Booking.com sync) do not execute
+
+---
+
+### Required Coolify Resources
+
+To enable Channel Manager background processing, you need:
+
+#### 1. Redis Service
+
+**Service Name:** `coolify-redis` (or your chosen name)
+
+**Configuration:**
+- Type: Redis
+- Enable authentication: **YES**
+- Set `requirepass` in Redis config or via environment variable
+- Network: Must be on same Docker network as backend/worker
+
+**How to Deploy in Coolify:**
+1. Go to: **Services > Add New Service > Redis**
+2. Set service name: `coolify-redis`
+3. Set Redis password in configuration
+4. Deploy and note the password for next steps
+
+#### 2. PMS Backend App
+
+**App Name:** `pms-backend` (already exists)
+
+**Purpose:** Main FastAPI application serving HTTP API
+
+**Configuration:**
+- Already deployed
+- Will connect to Redis for health checks
+- Will trigger Celery tasks via broker
+
+#### 3. PMS Worker App (NEW)
+
+**App Name:** `pms-worker`
+
+**Purpose:** Celery worker process for background jobs (sync operations)
+
+**Configuration:**
+- Type: Git-based Application
+- Repository: Same as pms-backend
+- Branch: Same as pms-backend (usually `main`)
+- Base Directory: `/backend`
+- Build Pack: Nixpacks
+- Start Command: See [Worker Start Command](#worker-start-command) section below
+
+**Important:**
+- Worker does NOT need public domain/Traefik proxy
+- Worker does NOT serve HTTP traffic (background processing only)
+- Coolify requires "Ports Exposes" field: set to `8000` (harmless value, not actually used)
+
+---
+
+### Required Environment Variables
+
+The worker app must have **identical configuration** to the backend for task execution consistency.
+
+**Copy ALL of these environment variables from `pms-backend` to `pms-worker`:**
+
+#### Core Application
+```
+DATABASE_URL
+ENCRYPTION_KEY
+JWT_SECRET
+SUPABASE_JWT_SECRET
+JWT_AUDIENCE
+```
+
+#### Module Feature Flags
+```
+CHANNEL_MANAGER_ENABLED=true
+MODULES_ENABLED=true
+```
+
+#### Redis & Celery
+```
+REDIS_URL
+CELERY_BROKER_URL
+CELERY_RESULT_BACKEND
+```
+
+#### Health Checks
+```
+ENABLE_REDIS_HEALTHCHECK=true
+ENABLE_CELERY_HEALTHCHECK=true
+```
+
+#### Optional (if used in backend)
+```
+SUPABASE_URL
+SUPABASE_SERVICE_ROLE_KEY
+SENTRY_DSN
+LOG_LEVEL
+ENVIRONMENT
+```
+
+**Why copy all variables?**
+- Worker executes the same application code as backend
+- Tasks may need database access, encryption, JWT validation, etc.
+- Missing variables cause cryptic task failures
+
+**Important Notes:**
+- Worker should NOT have public domains configured
+- Worker does NOT need port exposure (but Coolify may require "Ports Exposes" field - use `8000`)
+- Worker and backend must share the same Redis/Celery configuration
+
+---
+
+### Redis URL Format + Password Encoding
+
+#### Redis URL Structure
+
+Redis with authentication uses this format:
+```
+redis://:<PASSWORD>@<HOST>:<PORT>/<DB>
+```
+
+**Example:**
+```bash
+redis://:my_secure_password_123@coolify-redis:6379/0
+```
+
+**Components:**
+- `<PASSWORD>`: Redis requirepass value
+- `<HOST>`: Redis service name (e.g., `coolify-redis`)
+- `<PORT>`: Redis port (usually `6379`)
+- `<DB>`: Redis database number (usually `0`)
+
+#### Special Characters MUST Be URL-Encoded
+
+**⚠️ CRITICAL: Password Encoding Required**
+
+If your Redis password contains special characters (`+`, `=`, `@`, `:`, `/`, `?`, `#`, `&`, `%`), you **MUST** URL-encode the password in environment variables.
+
+**Why?**
+- Special characters have meaning in URLs
+- `+` is interpreted as space if not encoded
+- `@` and `:` are URL delimiters
+- Unencoded passwords cause "Authentication required" or "invalid username-password pair" errors
+
+#### How to URL-Encode Password
+
+**Location:** HOST-SERVER-TERMINAL (your local machine or SSH to host server)
+
+**Method 1: Using Python (recommended)**
+```bash
+python3 - <<'PY'
+import urllib.parse
+# Replace PASTE_PASSWORD_HERE with your actual Redis password
+password = "PASTE_PASSWORD_HERE"
+encoded = urllib.parse.quote(password, safe="")
+print(f"Encoded password: {encoded}")
+PY
+```
+
+**Example:**
+```bash
+# Original password: my+pass=word@123
+# Encoded password: my%2Bpass%3Dword%40123
+```
+
+**Method 2: Using Node.js**
+```bash
+node -e "console.log(encodeURIComponent('PASTE_PASSWORD_HERE'))"
+```
+
+**Method 3: Online tool** (not recommended for production secrets)
+- Use https://www.urlencoder.org/ (avoid for sensitive passwords)
+
+#### Setting Encoded Password in Environment Variables
+
+**Example with encoded password:**
+```bash
+# Original password: complex+pass=word
+# Encoded password: complex%2Bpass%3Dword
+
+REDIS_URL=redis://:complex%2Bpass%3Dword@coolify-redis:6379/0
+CELERY_BROKER_URL=redis://:complex%2Bpass%3Dword@coolify-redis:6379/0
+CELERY_RESULT_BACKEND=redis://:complex%2Bpass%3Dword@coolify-redis:6379/0
+```
+
+**Where to set:**
+1. Coolify Dashboard → `pms-backend` → Environment Variables
+2. Coolify Dashboard → `pms-worker` → Environment Variables
+3. **Both apps must have identical Redis URLs**
+
+---
+
+### Worker Start Command
+
+**NOTE:** This section applies to **Nixpacks build pack** deployments. If using **Dockerfile.worker** (recommended), the Start Command is **automatic** and cannot be set in Coolify UI. See [Alternative: Build with Dockerfile.worker](#alternative-build-with-dockerfileworker-recommended-for-non-root) for Dockerfile deployments.
+
+**Location:** Coolify Dashboard → `pms-worker` → Settings → Start Command
+
+**Command (Nixpacks only):**
+```bash
+celery -A app.channel_manager.core.sync_engine:celery_app --broker "$CELERY_BROKER_URL" --result-backend "$CELERY_RESULT_BACKEND" worker -l INFO
+```
+
+**Breakdown:**
+- `-A app.channel_manager.core.sync_engine:celery_app`: Celery app module path
+- `--broker "$CELERY_BROKER_URL"`: Redis broker URL (from environment)
+- `--result-backend "$CELERY_RESULT_BACKEND"`: Redis result backend (from environment)
+- `worker`: Run as worker process
+- `-l INFO`: Log level (INFO for production, DEBUG for troubleshooting)
+
+**Alternative log levels:**
+- `-l DEBUG`: Verbose logging (troubleshooting)
+- `-l WARNING`: Minimal logging (production)
+- `-l ERROR`: Only errors
+
+**Why use Dockerfile.worker instead?**
+- Runs as non-root user (no SecurityWarning)
+- Includes wait-for-deps preflight (prevents DNS failures)
+- Configurable via environment variables
+- Start Command handled automatically by Dockerfile CMD
+
+---
+
+### Deployment Steps
+
+#### Step 1: Verify Redis Password
+
+**Location:** HOST-SERVER-TERMINAL
+
+Get Redis password from Coolify Redis service configuration or container:
+
+```bash
+# Option A: Check Redis container command/env
+docker inspect coolify-redis | grep -i requirepass
+
+# Option B: Check Redis config inside container
+docker exec -it coolify-redis cat /etc/redis/redis.conf | grep requirepass
+
+# Note the password - you'll need it for URL encoding
+```
+
+#### Step 2: URL-Encode Password
+
+**Location:** HOST-SERVER-TERMINAL
+
+```bash
+python3 - <<'PY'
+import urllib.parse
+# Replace with your actual Redis password
+password = "YOUR_REDIS_PASSWORD_HERE"
+encoded = urllib.parse.quote(password, safe="")
+print(f"Original: {password}")
+print(f"Encoded:  {encoded}")
+print(f"\nRedis URL: redis://:{encoded}@coolify-redis:6379/0")
+PY
+```
+
+Copy the encoded password for next steps.
+
+#### Step 3: Test Redis Connection
+
+**Location:** HOST-SERVER-TERMINAL
+
+```bash
+# Test with raw password (before encoding)
+redis-cli -h coolify-redis -a 'YOUR_RAW_PASSWORD' ping
+# Expected output: PONG
+
+# If you get "Authentication required" or "invalid username-password pair":
+# - Password is wrong
+# - Redis requirepass is not set
+# - Network connectivity issue
+```
+
+#### Step 4: Configure pms-backend Environment
+
+**Location:** Coolify Dashboard → pms-backend → Environment Variables
+
+Add or update these variables with your encoded password:
+
+```bash
+REDIS_URL=redis://:YOUR_ENCODED_PASSWORD@coolify-redis:6379/0
+CELERY_BROKER_URL=redis://:YOUR_ENCODED_PASSWORD@coolify-redis:6379/0
+CELERY_RESULT_BACKEND=redis://:YOUR_ENCODED_PASSWORD@coolify-redis:6379/0
+ENABLE_REDIS_HEALTHCHECK=true
+ENABLE_CELERY_HEALTHCHECK=true
+CHANNEL_MANAGER_ENABLED=true
+```
+
+Click **Save** and **Restart** pms-backend.
+
+#### Step 5: Create pms-worker App
+
+**Location:** Coolify Dashboard
+
+1. Click **Add New Resource > Application**
+2. Select **Git Repository**
+3. Configure:
+   - Repository: Same as pms-backend
+   - Branch: Same as pms-backend
+   - Base Directory: `/backend`
+   - Build Pack: Nixpacks
+   - Start Command: (see [Worker Start Command](#worker-start-command))
+   - Ports Exposes: `8000` (required by Coolify, not actually used)
+4. **Do NOT configure public domain** (worker doesn't serve HTTP)
+
+#### Step 6: Configure pms-worker Environment
+
+**Location:** Coolify Dashboard → pms-worker → Environment Variables
+
+**Copy ALL environment variables from pms-backend**, especially:
+
+```bash
+DATABASE_URL=<same as backend>
+ENCRYPTION_KEY=<same as backend>
+JWT_SECRET=<same as backend>
+SUPABASE_JWT_SECRET=<same as backend>
+JWT_AUDIENCE=<same as backend>
+
+REDIS_URL=redis://:YOUR_ENCODED_PASSWORD@coolify-redis:6379/0
+CELERY_BROKER_URL=redis://:YOUR_ENCODED_PASSWORD@coolify-redis:6379/0
+CELERY_RESULT_BACKEND=redis://:YOUR_ENCODED_PASSWORD@coolify-redis:6379/0
+
+ENABLE_REDIS_HEALTHCHECK=true
+ENABLE_CELERY_HEALTHCHECK=true
+CHANNEL_MANAGER_ENABLED=true
+MODULES_ENABLED=true
+
+# Optional (if used)
+SUPABASE_URL=<same as backend>
+SUPABASE_SERVICE_ROLE_KEY=<same as backend>
+SENTRY_DSN=<same as backend>
+LOG_LEVEL=INFO
+ENVIRONMENT=production
+```
+
+Click **Save** and **Deploy**.
+
+#### Step 7: Verify Deployment
+
+Wait for both apps to deploy, then proceed to [Verification Steps](#verification-steps).
+
+---
+
+### Verification Steps
+
+#### 1. Check /health/ready Endpoint
+
+**Location:** Browser or curl from HOST-SERVER-TERMINAL
+
+```bash
+curl -s https://api.fewo.kolibri-visions.de/health/ready | jq .
+```
+
+**Expected output:**
+```json
+{
+  "status": "ready",
+  "checks": {
+    "database": "up",
+    "redis": "up",
+    "celery": "up"
+  },
+  "celery_workers": [
+    "celery@<worker-hostname>"
+  ]
+}
+```
+
+**If redis shows "down":**
+- Check Redis URL encoding
+- Verify Redis password matches
+- Check network connectivity
+
+**If celery shows "down":**
+- Worker not running
+- Worker cannot connect to Redis
+- Wrong start command
+
+#### 2. Check Worker Logs
+
+**Location:** Coolify Dashboard → pms-worker → Logs
+
+**Look for:**
+```
+[INFO] Connected to redis://coolify-redis:6379/0
+[INFO] celery@<hostname> ready.
+[INFO] Tasks: [...list of registered tasks...]
+```
+
+**Red flags:**
+```
+Authentication required
+Connection refused
+invalid username-password pair
+Cannot connect to redis
+```
+
+#### 3. Test Celery Connection from Backend
+
+**Location:** Coolify Terminal (pms-backend container)
+
+```bash
+# Ping Celery workers
+celery -A app.channel_manager.core.sync_engine:celery_app \
+  --broker "$CELERY_BROKER_URL" \
+  inspect ping -t 3
+
+# Expected output:
+# -> celery@<worker-hostname>: {'ok': 'pong'}
+```
+
+**If timeout:**
+- Worker not running
+- Worker on different network
+- Redis broker unreachable
+
+#### 4. Verify Redis Connection from Backend
+
+**Location:** Coolify Terminal (pms-backend container)
+
+```bash
+# Test Redis connection (masked password)
+python3 - <<'PY'
+import os
+import redis
+from urllib.parse import urlparse
+
+redis_url = os.environ.get("REDIS_URL", "")
+parsed = urlparse(redis_url)
+
+# Mask password for logging
+masked_url = redis_url.replace(parsed.password or "", "***") if parsed.password else redis_url
+print(f"Testing Redis connection to: {masked_url}")
+
+try:
+    r = redis.from_url(redis_url)
+    result = r.ping()
+    print(f"✓ Redis PING successful: {result}")
+    print(f"✓ Password length: {len(parsed.password or '')}")
+except Exception as e:
+    print(f"✗ Redis connection failed: {e}")
+PY
+```
+
+**Expected output:**
+```
+Testing Redis connection to: redis://:***@coolify-redis:6379/0
+✓ Redis PING successful: True
+✓ Password length: 16
+```
+
+#### 5. Test Channel Sync Endpoint
+
+**Location:** Browser or curl
+
+```bash
+# Trigger a manual sync (requires valid channel connection ID)
+curl -X POST https://api.fewo.kolibri-visions.de/api/v1/channel-connections/{id}/sync \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"sync_type": "full"}'
+```
+
+**Expected:**
+- HTTP 200 OK
+- Returns task IDs
+- Check worker logs for task execution
+
+---
+
+### Troubleshooting
+
+#### Redis Authentication Errors
+
+**Symptom:**
+```
+Authentication required.
+invalid username-password pair or user is disabled.
+```
+
+**Causes & Solutions:**
+
+1. **Password not URL-encoded**
+   - Solution: URL-encode password (see [Password Encoding](#how-to-url-encode-password))
+   - Example: `pass+word` → `pass%2Bword`
+
+2. **Password mismatch**
+   - Solution: Verify Redis requirepass:
+     ```bash
+     docker exec -it coolify-redis redis-cli CONFIG GET requirepass
+     ```
+   - Ensure encoded password matches requirepass
+
+3. **Wrong Redis URL format**
+   - Correct: `redis://:password@host:6379/0`
+   - Wrong: `redis://password@host:6379/0` (missing colon)
+   - Wrong: `redis://user:password@host:6379/0` (Redis usually no username)
+
+#### Celery Worker Not Detected
+
+**Symptom:**
+```
+No active Celery workers detected
+Celery inspect timeout
+```
+
+**Causes & Solutions:**
+
+1. **Worker not running**
+   - Check Coolify: pms-worker app status
+   - View logs: Look for "ready" message
+   - Restart worker app
+
+2. **Wrong start command**
+   - Verify Start Command in Coolify matches [Worker Start Command](#worker-start-command)
+   - Check for typos in module path
+
+3. **Worker cannot reach Redis**
+   - Verify CELERY_BROKER_URL is correct
+   - Check network: worker and Redis on same Docker network
+   - Test Redis connection from worker container
+
+4. **Environment variables missing**
+   - Ensure worker has all required env vars
+   - Compare with backend environment variables
+
+#### Database Connection Issues
+
+**Symptom:**
+```
+Connection refused to database
+Database name resolution failed
+```
+
+**Causes & Solutions:**
+
+1. **DNS flapping after deploy**
+   - Wait 30-60 seconds after deployment
+   - DNS resolution can be temporarily unstable
+   - Check again after services stabilize
+
+2. **Network misconfiguration**
+   - Worker must be on Coolify network AND Supabase network
+   - Verify network configuration in Coolify
+   - Check docker network ls on host
+
+3. **Wrong DATABASE_URL**
+   - Verify worker has correct DATABASE_URL
+   - Must match backend exactly
+   - Test connection from worker container:
+     ```bash
+     python3 -c "import asyncpg; import asyncio; asyncio.run(asyncpg.connect(os.environ['DATABASE_URL']).close())"
+     ```
+
+4. **Worker database operations fail**
+   - **Symptom:** Worker logs show `"Database is temporarily unavailable"` or `"Failed to update sync log ... 503"`
+   - **Cause:** Celery workers must NOT rely on FastAPI lifespan pool (pool doesn't exist in worker context)
+   - **Solution (Current Architecture):** Workers use direct `asyncpg.connect()` connections
+     - `_check_database_availability()`: Creates short-lived connection with 5s timeout for health checks
+     - `_update_log_status()`: Creates connection per sync log update with JSON/JSONB codec registration
+     - All connections are properly closed in finally blocks (fork/event-loop safe)
+   - **Verification checklist:**
+     a) Worker is connected to supabase network (check Coolify network config)
+     b) DATABASE_URL environment variable is set correctly in worker
+     c) Worker has latest code with direct connection architecture
+   - **Test from worker container:**
+     ```bash
+     docker exec pms-worker python3 -c "import asyncpg; import asyncio; import os; asyncio.run(asyncpg.connect(os.environ['DATABASE_URL']).close()); print('DB OK')"
+     ```
+
+#### Worker Logs Show Task Failures
+
+**Symptom:**
+```
+Task failed: KeyError, AttributeError, etc.
+```
+
+**Causes & Solutions:**
+
+1. **Missing environment variables**
+   - Worker needs same env as backend
+   - Check for missing: ENCRYPTION_KEY, JWT_SECRET, etc.
+
+2. **Code version mismatch**
+   - Worker and backend must be on same git commit
+   - Redeploy both to sync versions
+
+3. **Database schema mismatch**
+   - Run migrations if needed
+   - Ensure worker has latest schema
+
+#### Password Special Characters Reference
+
+**Characters requiring URL encoding:**
+
+| Character | URL Encoded | Example |
+|-----------|-------------|---------|
+| `+` | `%2B` | `pass+word` → `pass%2Bword` |
+| `=` | `%3D` | `pass=word` → `pass%3Dword` |
+| `@` | `%40` | `pass@word` → `pass%40word` |
+| `:` | `%3A` | `pass:word` → `pass%3Aword` |
+| `/` | `%2F` | `pass/word` → `pass%2Fword` |
+| `?` | `%3F` | `pass?word` → `pass%3Fword` |
+| `#` | `%23` | `pass#word` → `pass%23word` |
+| `&` | `%26` | `pass&word` → `pass%26word` |
+| `%` | `%25` | `pass%word` → `pass%25word` |
+| Space | `%20` | `pass word` → `pass%20word` |
+
+**Tool to check encoding:**
+```bash
+python3 -c "import urllib.parse; print(urllib.parse.quote('YOUR_PASSWORD', safe=''))"
+```
+
+---
+
+### Quick Smoke (5 minutes)
+
+**Purpose:** Rapid health check after Redis/Celery deployment or configuration changes.
+
+**Prerequisites:**
+
+Check in **Coolify UI**:
+- ✅ `pms-backend` deployed and running (green status)
+- ✅ `pms-worker` deployed and running (green status)
+- ✅ `coolify-redis` service running
+- ✅ Required environment variables set (see [Required Environment Variables](#required-environment-variables))
+
+**Execution Location:** HOST-SERVER-TERMINAL (SSH to host server)
+
+#### Step 1: Load Environment
+
+```bash
+# Load environment file
+source /root/pms_env.sh
+
+# Verify required variables are set
+echo "SB_URL: ${SB_URL:0:30}..."
+echo "EMAIL: $EMAIL"
+```
+
+#### Step 2: Get JWT Token
+
+```bash
+# Fetch JWT token from Supabase auth
+TOKEN="$(curl -sS "$SB_URL/auth/v1/token?grant_type=password" \
+  -H "apikey: $ANON_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}" \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin).get("access_token",""))')"
+
+# Verify token (without printing secret)
+echo "TOKEN len=${#TOKEN} parts=$(awk -F. '{print NF}' <<<"$TOKEN")"
+# Expected: len > 100, parts = 3 (JWT format: header.payload.signature)
+```
+
+**Expected output:**
+```
+TOKEN len=857 parts=3
+```
+
+**If token fetch fails:**
+- Check Supabase URL: `curl -s "$SB_URL/health" | head -c 50`
+- Verify credentials in `/root/pms_env.sh`
+- Check network connectivity to Supabase
+
+#### Step 3: Check Health Endpoint
+
+```bash
+# Check /health/ready endpoint
+curl -k -sS https://api.fewo.kolibri-visions.de/health/ready
+```
+
+**Expected output:**
+```json
+{
+  "status": "ready",
+  "checks": {
+    "database": "up",
+    "redis": "up",
+    "celery": "up"
+  },
+  "celery_workers": [
+    "celery@pms-worker-abc123"
+  ]
+}
+```
+
+**If redis shows "down":**
+- Check Redis URL encoding (see [Password Encoding](#redis-url-format--password-encoding))
+- Verify Redis service is running: `docker ps | grep redis`
+
+**If celery shows "down":**
+- Check worker is running: `docker ps | grep worker`
+- View worker logs: Coolify UI → pms-worker → Logs
+
+**If database shows "down":**
+- Check DATABASE_URL in backend environment
+- Verify Supabase database is running
+
+#### Step 4: Get Channel Connection ID
+
+```bash
+# Fetch first channel connection ID
+# NOTE: Use -L to follow redirects (trailing slash redirect)
+CID="$(curl -k -sS -L "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/" \
+  -H "Authorization: Bearer $TOKEN" \
+  | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d[0]["id"] if d else "")')"
+
+echo "CID=$CID"
+```
+
+**Expected output:**
+```
+CID=550e8400-e29b-41d4-a716-446655440000
+```
+
+**If CID is empty:**
+- No channel connections exist
+- Create one first via POST `/api/v1/channel-connections`
+- Or use Swagger UI (`/docs`) to create a test connection
+
+**If you get 307 redirect:**
+- Add trailing slash: `/api/v1/channel-connections/`
+- Or use `-L` flag (already included above)
+
+**If you get 401 Unauthorized:**
+- Token expired or invalid
+- Re-fetch token (Step 2)
+- Verify CHANNEL_MANAGER_ENABLED=true in backend
+
+#### Step 5: Trigger Manual Sync
+
+```bash
+# Trigger full sync on channel connection
+curl -k -sS -i -X POST "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/$CID/sync" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"sync_type":"full"}'
+```
+
+**Expected output:**
+```
+HTTP/2 200
+content-type: application/json
+
+{
+  "status": "queued",
+  "message": "Sync queued successfully",
+  "task_ids": ["abc123-def456-..."]
+}
+```
+
+**If you get 405 Method Not Allowed:**
+- Check OpenAPI spec: endpoint requires POST
+- Verify URL is correct (no trailing slash after `$CID/sync`)
+
+**If you get 422 Validation Error:**
+- CID must be valid UUID
+- Request body must include `{"sync_type":"full"}` (or "availability", "pricing", "bookings")
+
+**If you get 404 Not Found:**
+- Channel connection doesn't exist
+- Verify CID is correct: `echo $CID`
+
+#### Step 6: Check Sync Logs
+
+```bash
+# Fetch sync logs (save to file to avoid pipe JSON errors)
+OUT="/tmp/sync_logs.json"
+HDR="/tmp/sync_logs.headers.txt"
+CODE="$(curl -k -sS -L -D "$HDR" -o "$OUT" -w '%{http_code}' \
+  "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/$CID/sync-logs?limit=20&offset=0" \
+  -H "Authorization: Bearer $TOKEN")"
+
+echo "HTTP=$CODE"
+head -c 200 "$OUT"; echo
+```
+
+**Parse logs:**
+```bash
+python3 - <<'PY'
+import json
+d = json.load(open("/tmp/sync_logs.json"))
+logs = d.get("logs", [])
+print(f"Total logs: {len(logs)}")
+if logs:
+    last = logs[0]
+    print(f"Last operation: {last.get('operation_type')}")
+    print(f"Last status: {last.get('status')}")
+    print(f"Last created_at: {last.get('created_at')}")
+PY
+```
+
+**Expected output:**
+```
+HTTP=200
+Total logs: 5
+Last operation: full_sync
+Last status: success
+Last created_at: 2025-12-27T10:30:45.123Z
+```
+
+**If last.status is "failed":**
+- Check worker logs for task errors
+- Review sync_logs error_message field
+- Verify channel connection credentials are valid
+
+**If HTTP=404:**
+- No sync logs exist for this connection
+- Sync may not have completed yet (check worker logs)
+
+---
+
+### Deep Diagnostics (15–30 minutes)
+
+**Purpose:** Comprehensive troubleshooting for Redis, Celery, and Channel Manager issues.
+
+**When to use:**
+- Quick Smoke fails
+- Persistent connection errors
+- Task execution failures
+- After configuration changes
+
+---
+
+#### Common HTTP Responses Reference
+
+Understanding API response codes:
+
+| Code | Meaning | Common Causes | Solution |
+|------|---------|---------------|----------|
+| 200 | Success | - | Expected for GET/POST/PATCH |
+| 201 | Created | - | Expected for POST (create) |
+| 307 | Temporary Redirect | Missing trailing slash | Add `/` or use `-L` flag |
+| 401 | Unauthorized | Missing/invalid token | Re-fetch JWT token |
+| 403 | Forbidden | Insufficient permissions | Check user role/permissions |
+| 404 | Not Found | Wrong URL or missing resource | Verify endpoint and resource ID |
+| 405 | Method Not Allowed | Wrong HTTP method | Check OpenAPI: `/sync` needs POST |
+| 422 | Validation Error | Invalid request body | CID must be UUID; sync needs `sync_type` |
+| 500 | Internal Server Error | Backend exception | Check backend logs |
+| 503 | Service Unavailable | Database/Redis down | Check /health/ready |
+
+**Examples:**
+
+**307 Redirect (trailing slash):**
+```bash
+# Without -L flag, you'll see:
+curl -k -i "https://api.fewo.kolibri-visions.de/api/v1/channel-connections"
+# HTTP/2 307
+# location: /api/v1/channel-connections/
+
+# Solution: Add -L or trailing slash
+curl -k -L "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/"
+```
+
+**Common symptom with 307 redirects:**
+```bash
+# Without -L, curl returns empty body + redirect header
+curl -k "https://api.fewo.kolibri-visions.de/api/v1/channel-connections" > /tmp/output.json
+# HTTP_CODE=307, output file is empty
+
+# Parsing fails with JSONDecodeError:
+cat /tmp/output.json | jq .
+# jq: parse error: Invalid numeric literal at line 1, column 2
+
+# Fix: Always use -L to follow redirects
+curl -k -L "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/" > /tmp/output.json
+# HTTP_CODE=200, output contains valid JSON array
+```
+
+**Note:** When using `curl` in runbook examples for endpoints like:
+- `GET /api/v1/channel-connections?...`
+- `GET /api/v1/availability/blocks?...`
+- Any GET endpoint that may have trailing slash redirects
+
+Always include `-L` flag to automatically follow 307 redirects and avoid empty response bodies.
+
+**422 Validation (sync endpoint):**
+```bash
+# Missing sync_type causes 422
+curl -X POST ".../channel-connections/$CID/sync" -H "..." -d '{}'
+
+# Solution: Include required field
+curl -X POST ".../channel-connections/$CID/sync" -H "..." \
+  -d '{"sync_type":"full"}'
+```
+
+---
+
+#### Redis Connection Diagnostics
+
+**Execution Location:** HOST-SERVER-TERMINAL
+
+##### 1. Get Redis Password (requirepass)
+
+**⚠️ Security:** Do NOT paste raw password in production logs/docs.
+
+```bash
+# Extract requirepass from Redis container config
+# This shows the password - use with caution
+docker inspect coolify-redis --format '{{range .Config.Cmd}}{{println .}}{{end}}' \
+  | awk 'p{print; exit} $0=="--requirepass"{p=1}'
+
+# Store in variable (don't echo to logs)
+REDIS_PASS="$(docker inspect coolify-redis --format '{{range .Config.Cmd}}{{println .}}{{end}}' \
+  | awk 'p{print; exit} $0=="--requirepass"{p=1}')"
+
+# Verify password length (safe to log)
+echo "Redis password length: ${#REDIS_PASS}"
+```
+
+##### 2. Test Redis Connection
+
+```bash
+# Test with raw password
+redis-cli -h coolify-redis -a "$REDIS_PASS" ping
+# Expected output: PONG
+
+# If you get "Authentication required":
+# - Password is wrong
+# - Redis requirepass not set
+# - Network connectivity issue
+```
+
+##### 3. Verify Password Encoding
+
+**Compare Redis password with REDIS_URL:**
+
+```bash
+# Get decoded password from REDIS_URL (from pms-backend env)
+python3 - <<'PY'
+import os
+import urllib.parse
+
+# Get REDIS_URL from environment (set this to your actual REDIS_URL)
+# In production: docker exec pms-backend env | grep REDIS_URL
+redis_url = os.environ.get("REDIS_URL", "redis://:password@host:6379/0")
+
+parsed = urllib.parse.urlparse(redis_url)
+decoded_pass = urllib.parse.unquote(parsed.password or "")
+
+print(f"REDIS_URL password length: {len(decoded_pass)}")
+print(f"REDIS_URL password SHA256: ", end="")
+
+import hashlib
+print(hashlib.sha256(decoded_pass.encode()).hexdigest()[:16] + "...")
+PY
+```
+
+**Compare with Redis requirepass:**
+```bash
+# Get SHA256 of Redis requirepass (don't print password)
+echo -n "$REDIS_PASS" | sha256sum | cut -c1-16
+```
+
+**If hashes don't match:**
+- Password mismatch between Redis and REDIS_URL
+- Check if password needs URL encoding
+- Re-encode password: see [Password Encoding](#how-to-url-encode-password)
+
+##### 4. Test Connection from Backend Container
+
+**Execution Location:** Coolify Terminal (pms-backend container)
+
+```bash
+# Test Redis connection from backend
+python3 - <<'PY'
+import os
+import redis
+from urllib.parse import urlparse
+
+redis_url = os.environ.get("REDIS_URL", "")
+parsed = urlparse(redis_url)
+
+# Mask password for logging
+masked_url = redis_url.replace(parsed.password or "", "***") if parsed.password else redis_url
+print(f"Testing: {masked_url}")
+
+try:
+    r = redis.from_url(redis_url)
+    result = r.ping()
+    print(f"✓ Redis PING: {result}")
+    print(f"✓ Password length: {len(parsed.password or '')}")
+
+    # Test basic operations
+    r.set("test_key", "test_value", ex=10)
+    val = r.get("test_key")
+    print(f"✓ SET/GET test: {val.decode() if val else 'None'}")
+except Exception as e:
+    print(f"✗ Redis connection failed: {e}")
+PY
+```
+
+---
+
+#### Celery Worker Diagnostics
+
+**Execution Location:** HOST-SERVER-TERMINAL
+
+##### 1. Verify Worker Container Exists
+
+```bash
+# Check if worker container is running
+docker ps -a | egrep -i 'pms-worker|celery|worker'
+
+# Expected: pms-worker container with "Up" status
+# If "Exited": worker crashed - check logs
+```
+
+##### 2. Check Worker Logs for Tasks
+
+```bash
+# View recent worker logs (last 60 minutes)
+# Replace <worker_container> with actual container name/ID
+docker logs <worker_container> --since 60m | egrep -n 'received|succeeded|ERROR|Traceback'
+
+# Look for:
+# - "Task ... received" (task queued)
+# - "Task ... succeeded" (task completed)
+# - "ERROR" or "Traceback" (task failed)
+```
+
+**Search for specific task ID:**
+```bash
+# If you have a task ID from sync trigger response
+TASK_ID="abc123-def456-..."
+docker logs <worker_container> | egrep -n "$TASK_ID"
+```
+
+##### 3. Test Celery Connection from Backend
+
+**Execution Location:** Coolify Terminal (pms-backend container)
+
+```bash
+# Ping Celery workers from backend
+celery -A app.channel_manager.core.sync_engine:celery_app \
+  --broker "$CELERY_BROKER_URL" \
+  inspect ping -t 3
+
+# Expected output:
+# -> celery@pms-worker-abc123: {'ok': 'pong'}
+```
+
+**If timeout:**
+```bash
+# Check broker URL is correct
+echo "CELERY_BROKER_URL (masked):"
+python3 -c "import os; url=os.environ.get('CELERY_BROKER_URL',''); print(url[:20] + '***' + url[-10:] if len(url) > 30 else url)"
+
+# Verify worker can reach Redis
+docker exec <worker_container> redis-cli -h coolify-redis -a "$REDIS_PASS" ping
+```
+
+##### 4. Check Active Workers and Registered Tasks
+
+**Execution Location:** Coolify Terminal (pms-backend container)
+
+```bash
+# List active workers
+celery -A app.channel_manager.core.sync_engine:celery_app \
+  --broker "$CELERY_BROKER_URL" \
+  inspect active
+
+# List registered tasks
+celery -A app.channel_manager.core.sync_engine:celery_app \
+  --broker "$CELERY_BROKER_URL" \
+  inspect registered
+```
+
+**Expected output includes:**
+- `app.channel_manager.sync_tasks.full_sync`
+- `app.channel_manager.sync_tasks.availability_sync`
+- etc.
+
+---
+
+#### Coolify / Nixpacks Quirks
+
+##### Start Command Quoting Issues
+
+**Problem:** Quoting `$ENV_VAR` in Coolify Start Command can break Nixpacks build.
+
+**Bad (may break):**
+```bash
+celery -A app.celery_app --broker "$CELERY_BROKER_URL" worker
+```
+
+**Good (recommended):**
+```bash
+# Rely on environment variables (unquoted)
+celery -A app.channel_manager.core.sync_engine:celery_app worker -l INFO
+```
+
+**Why?** Nixpacks may interpret quotes literally during build phase.
+
+**Workaround:** Use simple start command, ensure `CELERY_BROKER_URL` and `CELERY_RESULT_BACKEND` are in environment variables.
+
+##### COOLIFY_URL Null Issue
+
+**Symptom:** Build fails with "COOLIFY_URL is null" or similar.
+
+**Workaround:**
+```bash
+# Add to Environment Variables (build + runtime)
+COOLIFY_URL=https://coolify.example.com
+# Or any non-empty string - value may not matter for worker
+```
+
+---
+
+#### Database Connection Diagnostics
+
+##### DNS Flapping After Deploy
+
+**Symptom:** `/health/ready` shows database errors like:
+```
+"name resolution failed"
+"connection refused"
+```
+
+**Cause:** Docker DNS can be temporarily unstable after deployment.
+
+**Solution:**
+1. Wait 30-60 seconds after deployment
+2. Recheck `/health/ready`
+3. If persists, check network configuration
+
+##### Network Configuration
+
+**Execution Location:** HOST-SERVER-TERMINAL
+
+```bash
+# Check if pms-backend is on both networks
+docker inspect pms-backend | grep -A 10 '"Networks"'
+
+# Expected: coolify network AND supabase network
+```
+
+**If backend can't resolve `supabase-db`:**
+```bash
+# Test DNS from backend container
+docker exec pms-backend nslookup supabase-db
+
+# If fails, backend may not be on supabase network
+# Fix: Add supabase network in Coolify UI
+```
+
+##### Database URL Verification
+
+**Execution Location:** Coolify Terminal (pms-backend container)
+
+```bash
+# Test database connection (masked URL)
+python3 - <<'PY'
+import os
+import asyncio
+import asyncpg
+from urllib.parse import urlparse
+
+db_url = os.environ.get("DATABASE_URL", "")
+parsed = urlparse(db_url)
+
+# Mask password
+masked = db_url.replace(parsed.password or "", "***") if parsed.password else db_url
+print(f"Testing: {masked}")
+
+async def test_connection():
+    try:
+        conn = await asyncpg.connect(db_url)
+        version = await conn.fetchval("SELECT version()")
+        print(f"✓ Connected: {version[:50]}...")
+        await conn.close()
+    except Exception as e:
+        print(f"✗ Connection failed: {e}")
+
+asyncio.run(test_connection())
+PY
+```
+
+---
+
+#### Worker Configuration Checklist
+
+**Verify in Coolify UI → pms-worker:**
+
+- ✅ **No public domain configured** (worker doesn't serve HTTP)
+- ✅ **No Traefik labels** (no proxy/routing needed)
+- ✅ **Ports Exposes:** `8000` (Coolify UI requirement, not actually used)
+- ✅ **Start Command:** `celery -A app.channel_manager.core.sync_engine:celery_app worker -l INFO`
+- ✅ **Environment variables:** All copied from pms-backend
+- ✅ **Network:** On same Docker network as Redis and backend
+
+**Common mistakes:**
+- Adding public domain → Worker gets Traefik labels → Port conflicts
+- Missing environment variables → Worker can't connect to database/Redis
+- Wrong start command → Worker starts but doesn't register tasks
+
+---
+
+#### Special Characters in Passwords
+
+**Characters requiring URL encoding:**
+
+| Character | URL Encoded | Example |
+|-----------|-------------|---------|
+| `+` | `%2B` | `pass+word` → `pass%2Bword` |
+| `=` | `%3D` | `pass=word` → `pass%3Dword` |
+| `@` | `%40` | `pass@word` → `pass%40word` |
+| `:` | `%3A` | `pass:word` → `pass%3Aword` |
+| `/` | `%2F` | `pass/word` → `pass%2Fword` |
+| `?` | `%3F` | `pass?word` → `pass%3Fword` |
+| `#` | `%23` | `pass#word` → `pass%23word` |
+| `&` | `%26` | `pass&word` → `pass%26word` |
+| `%` | `%25` | `pass%word` → `pass%25word` |
+
+**URL encoding script:**
+```bash
+python3 - <<'PY'
+import urllib.parse
+password = "YOUR_PASSWORD_HERE"
+encoded = urllib.parse.quote(password, safe="")
+print(f"Original: {password}")
+print(f"Encoded:  {encoded}")
+PY
+```
+
+**Why `+` is problematic:**
+- In URLs, `+` is interpreted as space (URL encoding legacy)
+- `redis://:pass+word@host` → server sees `redis://:pass word@host`
+- Must encode as `redis://:pass%2Bword@host`
+
+---
+
+#### Execution Location Quick Reference
+
+| Task | Location | Access Method |
+|------|----------|---------------|
+| Check Coolify app status | Coolify UI | Browser → Dashboard |
+| Get Redis password | HOST-SERVER-TERMINAL | SSH to host, `docker inspect` |
+| Test Redis connection | HOST-SERVER-TERMINAL | `redis-cli -h coolify-redis` |
+| Check worker logs | Coolify UI or HOST | Dashboard → Logs or `docker logs` |
+| Test Celery ping | Coolify Terminal (backend) | Dashboard → pms-backend → Terminal |
+| Verify environment vars | Coolify UI | Dashboard → Environment Variables |
+| Run smoke tests | HOST-SERVER-TERMINAL | SSH + `/root/pms_env.sh` |
+
+---
+
+## Channel Manager Error Handling & Retry Logic
+
+**Purpose:** Understand how the Channel Manager handles failures and retries sync operations.
+
+### Overview
+
+The Channel Manager implements comprehensive error handling at two layers:
+1. **API Layer** (immediate retry for user-facing endpoints)
+2. **Celery Task Layer** (background retry for async operations)
+
+Both layers use exponential backoff to prevent overwhelming failed services.
+
+---
+
+### Exponential Backoff Strategy
+
+**Formula:** `delay = base_delay * (2 ^ retry_count)`
+
+**Default Configuration:**
+- Base delay: 1 second
+- Max retries: 3
+- Total duration: 7 seconds (1s + 2s + 4s)
+
+**Retry Progression:**
+```
+Attempt 1: Execute immediately
+├─ Fails → Wait 1 second (2^0)
+Attempt 2: Execute after 1s delay
+├─ Fails → Wait 2 seconds (2^1)
+Attempt 3: Execute after 2s delay
+├─ Fails → Wait 4 seconds (2^2)
+Attempt 4: Execute after 4s delay
+└─ Fails → Mark as permanently failed
+```
+
+**Benefits:**
+- ✅ Fast recovery from transient failures (starts with 1s)
+- ✅ Reduces load on failing services (exponentially increasing delays)
+- ✅ Predictable total duration (7 seconds max vs. previous 180 seconds)
+
+---
+
+### Error Types and Handling
+
+#### 1. Database Unavailable (503)
+
+**Errors Caught:**
+```python
+asyncpg.PostgresError
+asyncpg.exceptions.PostgresConnectionError
+asyncpg.exceptions.ConnectionDoesNotExistError
+asyncpg.exceptions.TooManyConnectionsError
+```
+
+**Response:**
+```json
+{
+  "error": "service_unavailable",
+  "message": "Database is temporarily unavailable.",
+  "retry_count": 3
+}
+```
+
+**What Happens:**
+1. **Pre-flight Check**: Database availability validated BEFORE sync
+2. **Retry**: Up to 3 retries with exponential backoff (1s, 2s, 4s)
+3. **Logging**: Each retry logged with countdown duration
+4. **Sync Log**: Status updated to "running" with retry details
+5. **Final Failure**: After 3 retries, marked as "failed" with error details
+
+**Example Log Output:**
+```
+WARNING: Database error on attempt 2/4: connection timeout. Retrying in 2 seconds...
+ERROR: Database still unavailable after 3 retries. Final error: connection timeout
+```
+
+#### 2. General Exceptions (500)
+
+**Response:**
+```json
+{
+  "error": "internal_server_error",
+  "message": "Failed to trigger availability sync: [error details]"
+}
+```
+
+**What Happens:**
+1. **Retry**: Up to 3 retries with exponential backoff
+2. **Logging**: Full exception stacktrace logged
+3. **Sync Log**: Error type and message stored in JSONB details
+4. **Best-Effort Cleanup**: Attempts to update sync log even on failure
+
+**Example Log Output:**
+```
+ERROR: Error updating availability on airbnb (task_id=abc123, retry=1): API timeout
+WARNING: Retrying task abc123 after error (countdown=2s, retry=2/3)
+```
+
+#### 3. Validation Errors (400)
+
+**No Retry** — These are permanent failures requiring user correction.
+
+**Common Causes:**
+- Invalid `sync_type` (must be "availability" or "pricing")
+- Invalid `platform` (must be one of: airbnb, booking_com, expedia, etc.)
+- Invalid UUID format
+
+**Response:**
+```json
+{
+  "detail": "Invalid sync_type. Must be one of: ['availability', 'pricing']"
+}
+```
+
+#### 4. Not Found (404)
+
+**No Retry** — Resource doesn't exist.
+
+**Response:**
+```json
+{
+  "detail": "Property not found or does not belong to your agency"
+}
+```
+
+---
+
+### Database Pre-flight Check
+
+**When:** Before every sync operation
+**Why:** Fail-fast to avoid wasted work
+**How:** Simple `SELECT 1` query to verify connection pool health
+
+**Implementation:**
+```python
+async def _check_database_availability():
+    """Verify database is reachable before sync"""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        await conn.fetchval("SELECT 1")
+```
+
+**Benefits:**
+- ✅ Detects DB issues immediately (before triggering tasks)
+- ✅ Clear error message: "Database is temporarily unavailable."
+- ✅ Prevents queuing tasks that will fail
+
+---
+
+### Celery Task Retry Logic
+
+**Configured on Task Decorator:**
+```python
+@celery_app.task(bind=True, max_retries=3, autoretry_for=(Retry,))
+def update_channel_availability(self, ...):
+```
+
+**Retry Behavior:**
+1. **Immediate Execution**: First attempt runs immediately
+2. **Exponential Backoff**: Retries at 1s, 2s, 4s intervals
+3. **Status Updates**: Sync log updated on each attempt
+4. **Max Retries**: After 3 retries, task marked as permanently failed
+
+**Retry Details Stored in Sync Log:**
+```json
+{
+  "retry_count": 2,
+  "error_type": "database_unavailable",
+  "next_retry_seconds": 4
+}
+```
+
+---
+
+### Monitoring Retry Attempts
+
+**Check /health/ready:**
+```bash
+curl https://api.your-domain.com/health/ready | jq .
+```
+
+**Check Sync Logs:**
+```bash
+curl https://api.your-domain.com/api/v1/channel-connections/{id}/sync-logs \
+  -H "Authorization: Bearer TOKEN" | jq '.logs[0]'
+```
+
+**Sample Retry Log Entry:**
+```json
+{
+  "id": "log-uuid",
+  "operation_type": "availability_update",
+  "status": "running",
+  "details": {
+    "retry_count": 2,
+    "error_type": "database_unavailable",
+    "next_retry_seconds": 4,
+    "platform": "airbnb"
+  },
+  "error": null,
+  "task_id": "celery-task-uuid",
+  "created_at": "2025-12-28T10:00:00Z",
+  "updated_at": "2025-12-28T10:00:03Z"
+}
+```
+
+**Sample Failed Log Entry:**
+```json
+{
+  "id": "log-uuid",
+  "operation_type": "availability_update",
+  "status": "failed",
+  "details": {
+    "retry_count": 3,
+    "error_type": "database_unavailable"
+  },
+  "error": "Database unavailable after 3 retries: connection timeout",
+  "task_id": "celery-task-uuid",
+  "created_at": "2025-12-28T10:00:00Z",
+  "updated_at": "2025-12-28T10:00:07Z"
+}
+```
+
+---
+
+## Channel Manager API Endpoints
+
+**Purpose:** Complete reference for Channel Manager API endpoints with request/response examples.
+
+### Authentication
+
+**All endpoints require Bearer JWT authentication:**
+```bash
+curl -H "Authorization: Bearer YOUR_JWT_TOKEN" ...
+```
+
+**Without token → 401 Unauthorized**
+
+---
+
+### POST /api/availability/sync
+
+**Purpose:** Trigger availability or pricing sync to external booking platform
+
+**RBAC:** admin, manager only (NOT owner, staff, accountant)
+
+**Request Body:**
+```json
+{
+  "sync_type": "availability",           // Required: "availability" or "pricing"
+  "platform": "airbnb",                   // Required: "airbnb", "booking_com", "expedia", "fewo_direkt", "google"
+  "property_id": "uuid-here",             // Required: Property UUID
+  "connection_id": "uuid-optional",       // Optional: Specific connection UUID
+  "manual_trigger": true,                 // Optional: Default true
+  "start_date": "2025-12-28",            // Optional: Default today
+  "end_date": "2026-03-28"               // Optional: Default today + 90 days
+}
+```
+
+**Success Response (200):**
+```json
+{
+  "status": "triggered",
+  "message": "Availability sync task triggered successfully",
+  "task_id": "abc123-def456-ghi789",
+  "sync_log_id": "xyz789-uvw012-rst345",
+  "platform": "airbnb",
+  "retry_count": 0
+}
+```
+
+**Error Responses:**
+
+**400 Bad Request** (Invalid sync_type):
+```json
+{
+  "detail": "Invalid sync_type. Must be one of: ['availability', 'pricing']"
+}
+```
+
+**400 Bad Request** (Invalid platform):
+```json
+{
+  "detail": "Invalid platform. Must be one of: ['airbnb', 'booking_com', 'expedia', 'fewo_direkt', 'google']"
+}
+```
+
+**404 Not Found** (Property not found):
+```json
+{
+  "detail": "Property not found or does not belong to your agency"
+}
+```
+
+**503 Service Unavailable** (Database down after retries):
+```json
+{
+  "error": "service_unavailable",
+  "message": "Database is temporarily unavailable.",
+  "retry_count": 3
+}
+```
+
+**500 Internal Server Error** (Other failures):
+```json
+{
+  "detail": "Failed to trigger availability sync: [error details]"
+}
+```
+
+**Example Usage:**
+```bash
+# Trigger availability sync to Airbnb
+curl -X POST https://api.your-domain.com/api/availability/sync \
+  -H "Authorization: Bearer YOUR_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sync_type": "availability",
+    "platform": "airbnb",
+    "property_id": "550e8400-e29b-41d4-a716-446655440000",
+    "manual_trigger": true,
+    "start_date": "2025-12-28",
+    "end_date": "2026-03-28"
+  }'
+```
+
+---
+
+### POST /api/v1/channel-connections/{id}/sync
+
+**Purpose:** Trigger manual sync for a channel connection
+
+**RBAC:** Requires valid JWT (all authenticated users)
+
+**Request Body:**
+```json
+{
+  "sync_type": "full"  // Required: "full", "availability", "pricing", "bookings"
+}
+```
+
+**Success Response (200):**
+```json
+{
+  "status": "triggered",
+  "message": "Manual full sync triggered successfully",
+  "task_ids": ["task-uuid-1", "task-uuid-2"]
+}
+```
+
+**Error Responses:**
+
+**400 Bad Request** (Invalid sync_type):
+```json
+{
+  "detail": "Invalid sync_type. Must be one of: ['full', 'availability', 'pricing', 'bookings']"
+}
+```
+
+**404 Not Found** (Connection not found):
+```json
+{
+  "status": "error",
+  "message": "Connection not found",
+  "task_ids": []
+}
+```
+
+---
+
+### GET /api/v1/channel-connections/{id}/sync-logs
+
+**Purpose:** Retrieve sync operation logs for a connection
+
+**RBAC:** Requires valid JWT
+
+**Query Parameters:**
+- `limit` (optional): Number of logs to return (max 100, default 50)
+- `offset` (optional): Pagination offset (default 0)
+
+**Success Response (200):**
+```json
+{
+  "connection_id": "connection-uuid",
+  "logs": [
+    {
+      "id": "log-uuid",
+      "connection_id": "connection-uuid",
+      "operation_type": "availability_update",
+      "direction": "outbound",
+      "status": "success",
+      "details": {
+        "platform": "airbnb",
+        "property_id": "property-uuid",
+        "manual_trigger": true,
+        "start_date": "2025-12-28",
+        "end_date": "2026-03-28",
+        "check_in": "2025-12-28",
+        "check_out": "2025-12-30",
+        "available": true
+      },
+      "error": null,
+      "task_id": "celery-task-uuid",
+      "created_at": "2025-12-28T10:00:00Z",
+      "updated_at": "2025-12-28T10:00:05Z"
+    }
+  ],
+  "limit": 50,
+  "offset": 0
+}
+```
+
+**Error Response (503):**
+```json
+{
+  "error": "service_unavailable",
+  "message": "Channel sync logs schema not installed (missing table: channel_sync_logs). Run DB migration: supabase/migrations/20251227000000_create_channel_sync_logs.sql"
+}
+```
+
+---
+
+### GET /api/v1/channel-connections
+
+**Purpose:** List all channel connections for current agency
+
+**RBAC:** Requires valid JWT
+
+**Success Response (200):**
+```json
+[
+  {
+    "id": "connection-uuid",
+    "tenant_id": "agency-uuid",
+    "property_id": "property-uuid",
+    "platform_type": "airbnb",
+    "platform_listing_id": "airbnb-listing-123",
+    "status": "active",
+    "platform_metadata": {"listing_id": "123"},
+    "last_sync_at": "2025-12-28T10:00:00Z",
+    "created_at": "2025-12-01T00:00:00Z",
+    "updated_at": "2025-12-28T10:00:00Z"
+  }
+]
+```
+
+---
+
+### POST /api/v1/channel-connections
+
+**Purpose:** Create new channel connection (OAuth integration)
+
+**RBAC:** admin, manager only
+
+**Request Body:**
+```json
+{
+  "property_id": "property-uuid",
+  "platform_type": "airbnb",
+  "platform_listing_id": "airbnb-listing-123",
+  "access_token": "oauth-access-token",
+  "refresh_token": "oauth-refresh-token",
+  "platform_metadata": {
+    "listing_id": "123",
+    "host_id": "456"
+  }
+}
+```
+
+**Success Response (201):**
+```json
+{
+  "id": "new-connection-uuid",
+  "tenant_id": "agency-uuid",
+  "property_id": "property-uuid",
+  "platform_type": "airbnb",
+  "platform_listing_id": "airbnb-listing-123",
+  "status": "active",
+  "platform_metadata": {"listing_id": "123", "host_id": "456"},
+  "last_sync_at": null,
+  "created_at": "2025-12-28T10:00:00Z",
+  "updated_at": "2025-12-28T10:00:00Z"
+}
+```
+
+---
+
+## Admin UI - Channel Sync
+
+**Purpose:** Web-based admin interface for triggering and monitoring channel sync operations.
+
+**URL:** `https://admin.fewo.kolibri-visions.de/channel-sync`
+
+**RBAC:** Admin and Manager roles only (same as API `/api/availability/sync`)
+
+---
+
+### Features
+
+The Channel Sync Admin UI provides:
+
+1. **Trigger Sync Operations:**
+   - Select sync type (availability or pricing)
+   - Select platform (airbnb, booking_com, expedia, fewo_direkt, google)
+   - Select property from dropdown
+   - Optional: Choose specific channel connection
+   - Optional: Set custom date range (default: today → +90 days)
+
+2. **View Sync Logs:**
+   - Real-time table of recent sync operations
+   - Columns: Status, Platform, Sync Type, Property, Error (if failed), Duration, Started At, Finished At
+   - Status badges: triggered (blue), running (yellow), success (green), failed (red)
+   - Click any row to view full log details in slide-in drawer
+   - **Note:** Logs are fetched via `GET /api/v1/channel-connections/{connection_id}/sync-logs`
+     - Connection ID must be a valid UUID format
+     - Invalid connection ID shows helpful message instead of attempting fetch
+     - After successful trigger, UI automatically retries fetch (0s, 1s, 2s, 3s) until new log appears
+
+3. **Detail Drawer:**
+   - Full log JSON with syntax highlighting
+   - Copy individual fields to clipboard (task_id, sync_log_id, etc.)
+   - View error messages and retry counts
+   - View complete details JSONB payload
+
+4. **Filters:**
+   - Filter logs by status (All, Triggered, Running, Success, Failed)
+   - Smart auto-refresh (only polls when active triggered/running logs exist)
+
+5. **Toast Notifications:**
+   - Success feedback when sync triggered
+   - Error feedback for validation failures or API errors
+   - Clipboard copy confirmations
+
+---
+
+### How to Access
+
+1. **Login to Admin UI:**
+   - Navigate to: `https://admin.fewo.kolibri-visions.de`
+   - Login with admin or manager credentials
+
+2. **Navigate to Channel Sync:**
+   - Click "Channel Sync" in sidebar navigation
+   - Or directly: `https://admin.fewo.kolibri-visions.de/channel-sync`
+
+---
+
+### How to Trigger a Sync
+
+1. **Fill out the Trigger Form:**
+   - **Sync Type:** Select "availability" or "pricing"
+   - **Platform:** Select target booking platform
+   - **Property:** Select property from dropdown (auto-fetched from `/api/v1/properties`)
+   - **Connection (Optional):** Select specific connection if needed
+   - **Date Range (Optional):** Defaults to today → +90 days
+
+2. **Click "Trigger Sync"**
+   - Request sent to `POST /api/availability/sync`
+   - Success toast shows task_id and sync_log_id
+   - UI automatically fetches logs with retry (up to 4 attempts: 0s, 1s, 2s, 3s)
+   - New log appears at top of sync logs table and detail drawer opens automatically
+   - Status starts as "triggered", transitions to "running" → "success" or "failed"
+   - If log doesn't appear after retries, click Refresh button manually
+
+3. **Monitor Progress:**
+   - Watch status badge change in real-time
+   - Duration updates when log completes
+   - Click row to view full details
+
+---
+
+### Interpreting Sync Statuses
+
+| Status | Badge Color | Meaning | Next Action |
+|--------|-------------|---------|-------------|
+| **triggered** | Blue | Sync task queued in Celery | Wait for worker to pick up task |
+| **running** | Yellow | Worker actively processing sync | Wait for completion (usually < 30s) |
+| **success** | Green | Sync completed successfully | No action needed |
+| **failed** | Red | Sync failed with error | Click row → view error → troubleshoot |
+
+**Duration Calculation:**
+- Shows time from `started_at` to `finished_at`
+- Only visible after log completes (status = success/failed)
+- Format: `XXXms` (if < 1s) or `X.Xs` (if ≥ 1s)
+
+---
+
+### Troubleshooting Common Issues
+
+#### 1. Validation Errors (422) — No Sync Log Created
+
+**Symptom:**
+- Trigger button disabled or form shows red field errors
+- Yellow banner: "Validation failed — fix highlighted fields"
+- No sync log appears in table
+
+**Cause:**
+- **Client-side validation failed:**
+  - Connection ID is not a valid UUID format
+  - End date is before start date
+- **Server-side validation failed (422):**
+  - Invalid field values sent to API
+  - Missing required fields
+
+**Why No Log Appears:**
+- **422 validation errors mean the request was rejected before queuing**
+- The sync task was never created, so no log entry exists in `channel_sync_logs` table
+- Only successfully triggered syncs (status 200) create log entries
+
+**Fix:**
+1. **Check field-level error messages** under each input (red text)
+2. **Fix highlighted fields:**
+   - Connection ID must be valid UUID format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
+   - End date must be on or after start date
+3. **Trigger button will re-enable** once validation passes
+4. **After fixing:** Click "Trigger Sync" again
+
+**Note:** Client-side validation now prevents most 422 errors before API call. If you still see 422 from the server, check the field error messages for details.
+
+---
+
+#### 2. Trigger Button Disabled or "No properties available"
+
+**Symptom:**
+- Trigger form shows "No properties available"
+- Property dropdown is empty
+
+**Cause:**
+- GET `/api/v1/properties` returned empty array or failed
+- User's agency has no properties created yet
+- RLS policies preventing property access
+
+**Fix:**
+```bash
+# Check if properties exist for this user
+curl -X GET https://api.fewo.kolibri-visions.de/api/v1/properties \
+  -H "Authorization: Bearer YOUR_JWT" | jq '.properties'
+
+# Expected: Array with at least one property
+# If empty: Create a property first or check RLS policies
+```
+
+---
+
+#### 3. Sync Triggered but Logs Stay "triggered" Forever
+
+**Symptom:**
+- POST `/api/availability/sync` returns 200 with task_id
+- Sync log appears in table with status "triggered"
+- Status never transitions to "running" or "success/failed"
+
+**Cause:**
+- Celery worker not running or not connected to Redis broker
+- Worker crashed or stuck in infinite loop
+- Worker old version (code drift)
+
+**Fix:**
+```bash
+# SSH to host server
+ssh root@your-host
+
+# Check if pms-worker-v2 is running
+docker ps | grep pms-worker
+
+# Check worker logs for errors
+docker logs --tail 100 pms-worker-v2
+
+# Ping Celery workers from backend
+docker exec pms-backend \
+  celery -A app.channel_manager.core.sync_engine:celery_app \
+  --broker "$CELERY_BROKER_URL" inspect ping -t 3
+
+# Expected: -> celery@pms-worker-v2-...: {'ok': 'pong'}
+# If timeout: Worker not connected to Redis
+
+# Restart worker
+docker restart pms-worker-v2
+```
+
+**See Also:** [Celery Worker Troubleshooting](#celery-worker-pms-worker-v2-start-verify-troubleshoot)
+
+---
+
+#### 4. 401 Unauthorized (Token Expired)
+
+**Symptom:**
+- UI shows error toast: "Unauthorized" or "Token expired"
+- Trigger sync fails with 401
+- Sync logs fail to load
+
+**Cause:**
+- JWT token expired (tokens expire after 1 hour by default)
+- User session invalidated
+
+**Fix:**
+1. **Logout and Login Again:**
+   - Click logout in Admin UI
+   - Login with credentials again
+   - Token will be refreshed
+
+2. **Manual Token Refresh (for testing):**
+   ```bash
+   # Fetch new token via Supabase auth
+   curl -X POST "https://your-project.supabase.co/auth/v1/token?grant_type=password" \
+     -H "apikey: YOUR_ANON_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{"email":"admin@example.com","password":"your-password"}' \
+     | jq -r '.access_token'
+   ```
+
+---
+
+#### 5. 503 Service Unavailable (Database Temporarily Unavailable)
+
+**Symptom:**
+- UI shows error toast: "Service temporarily unavailable"
+- API returns 503 with message "Database is temporarily unavailable"
+
+**Cause:**
+- Backend container lost connection to Supabase database
+- Supabase network attachment dropped during redeploy
+- Database DNS resolution failed
+
+**Fix:**
+
+See: [DB DNS / Degraded Mode](#db-dns--degraded-mode)
+
+**Quick check:**
+```bash
+# SSH to host
+ssh root@your-host
+
+# Check if backend can resolve supabase-db
+docker exec pms-backend getent hosts supabase-db
+
+# Expected: IP address (e.g., 172.20.0.2)
+# If empty: DNS resolution failed → reattach network
+
+# Reattach Supabase network
+docker network connect bccg4gs4o4kgsowocw08wkw4 pms-backend
+docker restart pms-backend
+```
+
+---
+
+#### 6. Sync Logs Table Empty or Stale
+
+**Symptom:**
+- Sync logs table shows "No sync logs found"
+- OR logs are stale (not updating after triggering sync)
+
+**Cause A:** No syncs triggered yet
+- **Fix:** Trigger a sync first
+
+**Cause B:** GET `/api/v1/channel-connections/{id}/sync-logs` failed silently
+- **Fix:** Open browser console (F12) → check for API errors
+
+**Cause C:** Database migration not applied (`channel_sync_logs` table missing)
+- **Symptom:** API returns 503 with message "Channel sync logs schema not installed"
+- **Fix:** Apply migration: `supabase/migrations/20251227000000_create_channel_sync_logs.sql`
+
+```bash
+# Check if table exists
+docker exec $(docker ps -q -f name=supabase) psql -U postgres -d postgres \
+  -c "\dt channel_sync_logs"
+
+# Expected: Table listing
+# If not found: Apply migration (see "Channel Manager Sync Logs Migration" section)
+```
+
+---
+
+### Environment Variables
+
+**Frontend (`pms-admin`):**
+- `NEXT_PUBLIC_API_BASE`: API base URL (default: `https://api.fewo.kolibri-visions.de`)
+  - Used for all API calls: `/api/v1/properties`, `/api/availability/sync`, `/api/v1/channel-connections/*/sync-logs`
+
+**Backend (`pms-backend`):**
+- `DATABASE_URL`: PostgreSQL connection string (must include `channel_sync_logs` table)
+- `JWT_SECRET`: JWT signing key (must match frontend auth)
+
+---
+
+### Monitoring & Logging
+
+**Frontend Logs:**
+- Browser console (F12) shows API request/response
+- Toast notifications show success/error feedback
+
+**Backend Logs:**
+- Coolify Dashboard → pms-backend → Logs
+- Shows incoming POST `/api/availability/sync` requests
+- Shows Celery task dispatch
+
+**Worker Logs:**
+- Coolify Dashboard → pms-worker-v2 → Logs
+- Shows task execution (received → started → success/failed)
+- Shows retry attempts and exponential backoff
+
+**Database Logs:**
+- Query `channel_sync_logs` table directly:
+  ```sql
+  SELECT id, operation_type, status, error, created_at, updated_at
+  FROM channel_sync_logs
+  ORDER BY created_at DESC
+  LIMIT 50;
+  ```
+
+---
+
+### Smart Auto-Refresh Behavior
+
+The Admin UI uses **conditional polling** to reduce unnecessary API calls:
+
+- **Polls every 5 seconds** ONLY when there are active logs (status = "triggered" or "running")
+- **Stops polling** when all logs are in terminal state (success/failed)
+- **Resumes polling** when user triggers a new sync
+
+This ensures:
+- Real-time updates for active syncs
+- Minimal backend load when idle
+- No browser tab wake-up spam
+
+---
+
+### Known Limitations
+
+1. **No Bulk Sync:**
+   - UI only supports triggering one sync at a time
+   - For bulk operations, use API directly or create custom script
+
+2. **No Cancel Operation:**
+   - Once triggered, sync cannot be cancelled from UI
+   - Must wait for completion or manually kill Celery task
+
+3. **Log Pagination:**
+   - Currently loads all sync logs (no pagination in UI)
+   - For large log history, use API with `limit`/`offset` parameters
+
+4. **No Real-Time WebSocket:**
+   - Uses HTTP polling (not WebSocket)
+   - 5-second refresh interval may show delayed status updates
+
+---
+
+### Related Sections
+
+- [Channel Manager API Endpoints](#channel-manager-api-endpoints) - API documentation
+- [Sync Logs Persistence](#sync-logs-persistence) - Database schema
+- [Celery Worker Troubleshooting](#celery-worker-pms-worker-v2-start-verify-troubleshoot) - Worker issues
+- [DB DNS / Degraded Mode](#db-dns--degraded-mode) - Database connectivity
+
+---
+
+## Sync Logs Persistence
+
+**Purpose:** Understand how sync operations are tracked in the database.
+
+### Database Table: `channel_sync_logs`
+
+**Schema:**
+```sql
+CREATE TABLE public.channel_sync_logs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NULL,
+  connection_id uuid NOT NULL,
+  operation_type text NOT NULL CHECK (operation_type IN (
+    'full_sync', 'availability_update', 'pricing_update',
+    'bookings_import', 'calendar_sync', 'listing_update'
+  )),
+  direction text NOT NULL DEFAULT 'outbound' CHECK (direction IN ('outbound', 'inbound')),
+  status text NOT NULL CHECK (status IN (
+    'triggered', 'queued', 'running', 'success', 'failed', 'cancelled'
+  )),
+  details jsonb NULL,
+  error text NULL,
+  task_id text NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NULL
+);
+```
+
+**Indexes:**
+- `(connection_id, created_at DESC)` - Fast queries by connection
+- `(task_id)` - Fast updates by Celery task ID
+- `(tenant_id, created_at DESC)` - Multi-tenant queries
+- `(status, created_at DESC)` - Filter by status
+
+---
+
+### Logged Information
+
+**Mandatory Fields:**
+- `id`: Unique log entry UUID
+- `connection_id`: Channel connection or property UUID
+- `operation_type`: Type of sync operation
+- `direction`: "outbound" (PMS → Channel) or "inbound" (Channel → PMS)
+- `status`: Current status (triggered/queued/running/success/failed/cancelled)
+- `created_at`: When log entry was created
+
+**Optional Fields:**
+- `tenant_id`: Agency UUID (for multi-tenant filtering)
+- `task_id`: Celery task UUID (for async tracking)
+- `error`: Error message (if status=failed)
+- `updated_at`: Last status update timestamp
+
+**JSONB Details Field:**
+
+Flexible metadata storage, varies by operation:
+
+**Availability Sync:**
+```json
+{
+  "platform": "airbnb",
+  "property_id": "uuid",
+  "manual_trigger": true,
+  "start_date": "2025-12-28",
+  "end_date": "2026-03-28",
+  "check_in": "2025-12-28",
+  "check_out": "2025-12-30",
+  "available": true,
+  "retry_count": 0,
+  "next_retry_seconds": null
+}
+```
+
+**Pricing Sync:**
+```json
+{
+  "platform": "booking_com",
+  "property_id": "uuid",
+  "manual_trigger": false,
+  "check_in": "2025-12-28",
+  "check_out": "2025-12-30",
+  "nightly_rate": 150.00,
+  "currency": "EUR"
+}
+```
+
+**During Retry:**
+```json
+{
+  "retry_count": 2,
+  "error_type": "database_unavailable",
+  "next_retry_seconds": 4
+}
+```
+
+---
+
+### Status Lifecycle
+
+```
+triggered → queued → running → success
+                              ↘ failed
+                              ↘ cancelled
+```
+
+**Status Descriptions:**
+
+| Status | Description | Updated By |
+|--------|-------------|------------|
+| `triggered` | Sync request received, log created | API endpoint |
+| `queued` | Task queued in Celery | Celery broker |
+| `running` | Task execution started | Celery worker |
+| `success` | Task completed successfully | Celery worker |
+| `failed` | Task failed after all retries | Celery worker |
+| `cancelled` | Task manually cancelled | Manual intervention |
+
+---
+
+### Querying Sync Logs
+
+**Via API:**
+```bash
+# Get last 50 logs for connection
+curl https://api.your-domain.com/api/v1/channel-connections/{id}/sync-logs?limit=50 \
+  -H "Authorization: Bearer TOKEN"
+
+# Get logs with pagination
+curl https://api.your-domain.com/api/v1/channel-connections/{id}/sync-logs?limit=20&offset=40 \
+  -H "Authorization: Bearer TOKEN"
+```
+
+**Via Database:**
+```sql
+-- Get recent logs for connection
+SELECT id, operation_type, status, created_at, updated_at
+FROM channel_sync_logs
+WHERE connection_id = 'uuid-here'
+ORDER BY created_at DESC
+LIMIT 50;
+
+-- Get failed logs
+SELECT id, operation_type, error, created_at
+FROM channel_sync_logs
+WHERE status = 'failed'
+ORDER BY created_at DESC;
+
+-- Get logs with retry details
+SELECT id, operation_type, status,
+       details->>'retry_count' as retries,
+       created_at
+FROM channel_sync_logs
+WHERE details->>'retry_count' IS NOT NULL
+ORDER BY created_at DESC;
+```
+
+---
+
+### Log Retention
+
+**Current:** No automatic deletion (logs accumulate indefinitely)
+
+**Recommended:** Implement log rotation policy
+```sql
+-- Delete logs older than 90 days
+DELETE FROM channel_sync_logs
+WHERE created_at < NOW() - INTERVAL '90 days';
+```
+
+---
+
+## Celery Worker (pms-worker / pms-worker-v2)
+
+**Purpose:** Comprehensive guide for setting up and troubleshooting the Celery worker application in Coolify.
+
+---
+
+### What is the Celery Worker?
+
+The Celery worker (`pms-worker` or `pms-worker-v2`) is a **headless background task processor** that executes Channel Manager operations:
+- Availability sync to external platforms (Airbnb, Booking.com, etc.)
+- Pricing sync to external platforms
+- Booking imports from external platforms
+- Retry logic with exponential backoff for failed operations
+
+**Key Characteristics:**
+- No public HTTP endpoints (no domains required)
+- Connects to Redis broker for task queue
+- Connects to PostgreSQL database for sync log persistence
+- Runs independently of pms-backend (different container)
+- Must be on same git commit as pms-backend for task compatibility
+
+---
+
+### Coolify Setup (Step-by-Step)
+
+#### Step 1: Create New Application
+
+**Location:** Coolify Dashboard → Add New Resource → Application
+
+1. **Application Name:** `pms-worker-v2` (or `pms-worker`)
+2. **Source:** Select your Git repository
+3. **Branch:** `main`
+4. **Base Directory:** `/backend`
+5. **Build Pack:** Nixpacks (auto-detected)
+
+#### Step 2: Configure Start Command
+
+**Location:** Application Settings → Build & Deploy → Start Command
+
+```bash
+celery -A app.channel_manager.core.sync_engine:celery_app worker -l INFO
+```
+
+**Breakdown:**
+- `-A app.channel_manager.core.sync_engine:celery_app`: Celery app module path
+- `worker`: Run as worker process (not beat/flower)
+- `-l INFO`: Log level (use `DEBUG` for troubleshooting)
+
+#### Step 3: Configure Ports (Coolify UI Requirement)
+
+**Location:** Application Settings → Network → Ports Exposes
+
+**Set:** `8000`
+
+**Important:** This is a dummy value required by Coolify UI. The worker does NOT actually serve HTTP traffic on this port.
+
+#### Step 4: Configure Domains (Leave Empty)
+
+**Location:** Application Settings → Domains
+
+**Action:** Do NOT add any domains. Worker is headless and should not be exposed via Traefik proxy.
+
+#### Step 5: Coolify Beta Workarounds
+
+**Problem:** Deployment may fail with `"Deployment failed: Undefined variable $labels"`
+
+**Solution:**
+
+1. **Enable Read-only Labels:**
+   - Application Settings → Advanced → Enable "Read-only labels"
+
+2. **Add Label to Disable Traefik:**
+   - Application Settings → Labels
+   - Add: `traefik.enable=false`
+
+3. **Disable Proxy Features:**
+   - Force HTTPS: **OFF**
+   - Gzip Compression: **OFF**
+   - Strip Prefixes: **OFF**
+
+4. **Clean Rebuild (if code seems stale):**
+   - Deployment Settings → Check "Disable build cache"
+   - Pin to specific commit SHA instead of branch reference
+
+---
+
+### Alternative: Build with Dockerfile.worker (Recommended for Non-Root)
+
+**Why use Dockerfile.worker instead of Nixpacks:**
+
+Nixpacks auto-detection installs Python packages under `/root/.nix-profile`, which prevents running as non-root user. Using a dedicated Dockerfile provides:
+- **Reliable non-root execution** (appuser UID 10001)
+- **No Celery SecurityWarning** (avoids "running as root" warning)
+- **Explicit dependency management** (no Nixpacks magic)
+- **Better security posture** (principle of least privilege)
+- **Configurable worker pool** (threads, prefork, gevent via env vars)
+
+#### Step-by-Step: Switch to Dockerfile.worker
+
+**Step 1: Update Build Pack**
+
+**Location:** Application Settings → Build & Deploy → Build Pack
+
+Change from `Nixpacks` to `Dockerfile`
+
+**Step 2: Set Dockerfile Path**
+
+**Location:** Application Settings → Build & Deploy → Dockerfile
+
+Set: `Dockerfile.worker`
+
+**Base Directory** should still be: `/backend`
+
+**Step 3: Start Command (Automatic via Dockerfile)**
+
+**IMPORTANT:** When using Dockerfile build pack, Coolify does **NOT** allow setting a Start Command in the UI. The worker image automatically boots via the CMD defined in `backend/Dockerfile.worker`:
+
+```bash
+CMD ["bash", "/app/scripts/ops/start_worker.sh"]
+```
+
+**Note:** With Coolify Build Pack set to "Dockerfile", the Start Command UI field may not be available. The Dockerfile CMD/ENTRYPOINT defines the start command. All customization happens via environment variables (see Step 4 below), not by overriding the start command.
+
+**What this means:**
+- Leave "Start Command" field **empty** in Coolify UI (field is disabled/ignored for Dockerfile build pack)
+- Worker boots via `scripts/ops/start_worker.sh` by default
+- **Wait-for-deps preflight is active automatically** (waits for DB/Redis DNS+TCP before starting Celery)
+- Worker pool and concurrency are controlled via environment variables (see Step 4 below)
+
+**Why use the start script:**
+- Prevents transient DNS/network failures after Coolify deploys
+- Ensures DB and Redis are reachable before Celery starts
+- If dependencies unavailable after timeout (default 60s), container exits to trigger restart
+
+**Step 4: Set Worker Pool Environment Variables (Optional)**
+
+**Location:** Application Settings → Environment Variables
+
+Add these optional variables to customize worker behavior:
+
+```bash
+# Worker pool type (default: threads)
+# Options: threads, prefork, gevent, eventlet, solo
+CELERY_POOL=threads
+
+# Number of worker threads/processes (default: 4)
+CELERY_CONCURRENCY=4
+
+# Log level (default: INFO)
+CELERY_LOGLEVEL=INFO
+
+# Optional: Max tasks before worker restart (prevents memory leaks)
+CELERY_MAX_TASKS_PER_CHILD=1000
+
+# Optional: Hard time limit for tasks in seconds
+CELERY_TIME_LIMIT=300
+```
+
+**Wait-for-deps configuration (prevents transient DNS failures):**
+
+The worker includes a preflight check that waits for database and Redis to be reachable before starting Celery. This prevents transient failures caused by Docker DNS/network timing issues after deployments.
+
+```bash
+# Enable dependency wait (default: true)
+# Set to false to skip wait (not recommended)
+WORKER_WAIT_FOR_DEPS=true
+
+# Max wait time in seconds (default: 60)
+# Worker exits if dependencies not ready within this time
+WORKER_WAIT_TIMEOUT=60
+
+# Check interval in seconds (default: 2)
+# How often to retry DNS/TCP checks
+WORKER_WAIT_INTERVAL=2
+
+# Database hostname to wait for (default: supabase-db)
+WORKER_WAIT_DB_HOST=supabase-db
+
+# Database port (default: 5432)
+WORKER_WAIT_DB_PORT=5432
+
+# Redis hostname to wait for (default: coolify-redis)
+WORKER_WAIT_REDIS_HOST=coolify-redis
+
+# Redis port (default: 6379)
+WORKER_WAIT_REDIS_PORT=6379
+```
+
+**Why wait-for-deps:**
+- **Problem:** Docker DNS resolution and network attachment can take 5-30 seconds after container start
+- **Symptom:** Worker logs show `socket.gaierror: [Errno -3] Temporary failure in name resolution`
+- **Solution:** Wait for DNS + TCP connectivity before starting Celery
+- **Behavior:** If timeout exceeded, worker exits (container restarts automatically)
+- **Reliability:** Prefer delayed start over starting "half-ready" and failing tasks
+
+**Recommended settings:**
+- **Development:** `CELERY_POOL=threads`, `CELERY_CONCURRENCY=4`, `CELERY_LOGLEVEL=DEBUG`
+- **Production:** `CELERY_POOL=threads`, `CELERY_CONCURRENCY=8`, `CELERY_LOGLEVEL=INFO`
+- **Heavy I/O:** Use `threads` pool (better for async DB/HTTP operations)
+- **CPU-bound:** Use `prefork` pool (isolates tasks in separate processes)
+
+**Step 5: Deploy**
+
+Click **Deploy** and monitor logs for:
+```
+[INFO/MainProcess] celery@pms-worker-v2 ready.
+[INFO/MainProcess] Tasks:
+  - app.channel_manager.core.sync_engine.update_channel_availability
+  - app.channel_manager.core.sync_engine.update_channel_pricing
+```
+
+**Verification:**
+
+```bash
+# Check process user (should be appuser, not root)
+docker exec pms-worker-v2 ps aux | head -3
+
+# Expected output:
+# USER       PID  %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+# appuser      1   0.0  0.1 123456 12345 ?        Ss   12:00   0:00 celery -A app.channel_manager...
+
+# Check for SecurityWarning (should be empty)
+docker logs pms-worker-v2 2>&1 | grep -i "securitywarning\|running as root"
+
+# Expected: No output (warning is gone)
+```
+
+**What changed:**
+- Build uses `backend/Dockerfile.worker` instead of Nixpacks auto-detection
+- Worker runs as `appuser` (UID 10001) instead of root
+- All files owned by `appuser:appuser`
+- Celery SecurityWarning no longer appears
+- Worker pool and concurrency configurable via env vars
+
+**Rollback to Nixpacks (if needed):**
+1. Set Build Pack back to `Nixpacks`
+2. Clear "Dockerfile" field
+3. Set Start Command to: `celery -A app.channel_manager.core.sync_engine:celery_app worker -l INFO`
+4. Redeploy
+
+---
+
+### Required Environment Variables
+
+**Location:** Application Settings → Environment Variables
+
+**Copy ALL environment variables from `pms-backend`, especially:**
+
+#### Core Application
+```
+ENVIRONMENT=production
+DEBUG=false
+LOG_LEVEL=INFO
+```
+
+#### Redis & Celery (CRITICAL)
+```
+REDIS_URL=redis://:<password>@coolify-redis:6379/0
+CELERY_BROKER_URL=redis://:<password>@coolify-redis:6379/0
+CELERY_RESULT_BACKEND=redis://:<password>@coolify-redis:6379/0
+```
+
+**Important:** Encode special characters in Redis password (e.g., `+` → `%2B`, `=` → `%3D`)
+
+#### Database (CRITICAL)
+```
+DATABASE_URL=postgresql+asyncpg://postgres:<password>@supabase-db:5432/postgres
+```
+
+**Note:** Use `supabase-db` hostname (requires Supabase network attachment, see below)
+
+#### Health Checks
+```
+ENABLE_REDIS_HEALTHCHECK=true
+ENABLE_CELERY_HEALTHCHECK=true
+```
+
+#### Authentication (CRITICAL)
+```
+JWT_SECRET=<same-as-backend>
+SUPABASE_JWT_SECRET=<same-as-goTrue>
+JWT_AUDIENCE=authenticated
+ENCRYPTION_KEY=<same-as-backend>
+```
+
+**Important:** JWT secrets must EXACTLY match pms-backend and Supabase GoTrue for token validation.
+
+#### Optional
+```
+SENTRY_DSN=<if-using-sentry>
+FEATURE_CHANNEL_MANAGER_ENABLED=true
+```
+
+---
+
+### Networks (CRITICAL)
+
+**Problem:** Worker needs access to BOTH Coolify infrastructure AND Supabase database.
+
+**Required Networks:**
+1. `coolify` (default, for Redis access)
+2. `bccg4gs4o4kgsowocw08wkw4` (Supabase network, for database access)
+
+#### Attach to Supabase Network
+
+**Symptom if missing:** Database DNS resolution fails, "Database temporarily unavailable" errors
+
+**Solution (Host Server Terminal):**
+
+```bash
+# SSH to host server
+ssh root@your-server.com
+
+# Connect worker to Supabase network
+docker network connect bccg4gs4o4kgsowocw08wkw4 pms-worker-v2
+
+# Restart worker to pick up network changes
+docker restart pms-worker-v2
+
+# Verify networks
+docker inspect pms-worker-v2 | grep -A 10 '"Networks"'
+
+# Expected: both "coolify" and "bccg4gs4o4kgsowocw08wkw4" networks
+```
+
+**Test DNS Resolution:**
+
+```bash
+# Test database DNS from inside worker container
+docker exec pms-worker-v2 nslookup supabase-db
+
+# Expected: IP address (e.g., 172.20.0.2)
+# If empty/error: Network attachment failed
+```
+
+---
+
+### Verification Checklist
+
+#### 1. Container is Running
+
+```bash
+# Host server terminal
+docker ps | grep pms-worker
+
+# Expected: pms-worker-v2 container with "Up" status
+# If "Exited": Check logs for crash reason
+```
+
+#### 2. Celery Worker is Ready
+
+```bash
+# Host server terminal
+docker logs pms-worker-v2 --tail 50 | grep "ready"
+
+# Expected output:
+# [INFO/MainProcess] celery@pms-worker-v2 ready.
+# [INFO/MainProcess] Tasks:
+#   - app.channel_manager.core.sync_engine.update_channel_availability
+#   - app.channel_manager.core.sync_engine.update_channel_pricing
+```
+
+#### 3. Tasks are Being Received
+
+**Trigger a test sync:**
+
+```bash
+# From backend API
+curl -X POST https://api.fewo.kolibri-visions.de/api/v1/availability/sync \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sync_type": "availability",
+    "platform": "airbnb",
+    "property_id": "<property-uuid>",
+    "manual_trigger": true
+  }'
+
+# Check worker logs for task receipt
+docker logs pms-worker-v2 --tail 20 | grep "received"
+
+# Expected:
+# [INFO/MainProcess] Task update_channel_availability[abc123] received
+# [INFO/ForkPoolWorker-1] Task update_channel_availability[abc123] succeeded
+```
+
+#### 4. Sync Logs are Updated
+
+```bash
+# From backend API
+curl https://api.fewo.kolibri-visions.de/api/v1/channel-connections/<connection-id>/sync-logs?limit=5 \
+  -H "Authorization: Bearer $TOKEN"
+
+# Expected: Logs show status progression
+# triggered → running → success (or failed)
+# updated_at timestamps should be set
+```
+
+#### 5. Verify Code Version (Optional)
+
+**Use Case:** Ensure worker is running latest code after deployment
+
+```bash
+# Get SHA256 hash of sync_engine.py in container
+docker exec pms-worker-v2 sha256sum /app/app/channel_manager/core/sync_engine.py
+
+# Compare with local repo hash
+sha256sum backend/app/channel_manager/core/sync_engine.py
+
+# Hashes should match
+```
+
+**Alternative: Check Git Commit**
+
+```bash
+# Backend commit
+docker exec pms-backend git rev-parse HEAD
+
+# Worker commit
+docker exec pms-worker-v2 git rev-parse HEAD
+
+# Must match exactly
+```
+
+---
+
+### Common Issues & Troubleshooting
+
+#### Worker Crashes on Startup
+
+**Symptom:** Container exits immediately after deployment
+
+**Diagnosis:**
+
+```bash
+docker logs pms-worker-v2 --tail 100
+```
+
+**Common Causes:**
+1. **Redis connection failed:** Check `REDIS_URL` and password encoding
+2. **Module import error:** Check if code compiles (`python3 -m py_compile app/channel_manager/core/sync_engine.py`)
+3. **Missing environment variable:** Check logs for "KeyError" or "FieldValidationError"
+
+#### Tasks Not Being Received
+
+**Symptom:** Worker is "ready" but no tasks appear in logs
+
+**Diagnosis:**
+
+```bash
+# From backend container, ping Celery workers
+docker exec pms-backend celery -A app.channel_manager.core.sync_engine:celery_app \
+  --broker "$CELERY_BROKER_URL" inspect ping -t 3
+
+# Expected: -> celery@pms-worker-v2: {'ok': 'pong'}
+# If timeout: Worker cannot connect to Redis broker
+```
+
+**Solutions:**
+1. Verify `CELERY_BROKER_URL` matches between backend and worker
+2. Check Redis is running: `docker ps | grep redis`
+3. Check worker is on `coolify` network
+
+#### Database Temporarily Unavailable
+
+**Symptom:** Worker logs show `"Database is temporarily unavailable"` or `"Failed to update sync log ... 503"`
+
+**Cause:** Worker not attached to Supabase network
+
+**Solution:** See [Networks (CRITICAL)](#networks-critical) section above
+
+**Test:**
+
+```bash
+# Test direct DB connection from worker
+docker exec pms-worker-v2 python3 -c "import asyncpg; import asyncio; import os; asyncio.run(asyncpg.connect(os.environ['DATABASE_URL']).close()); print('DB OK')"
+
+# Expected: "DB OK"
+# If error: DATABASE_URL wrong or network missing
+```
+
+#### Worker Starts with Wrong CMD (start_worker.sh Not Used)
+
+**Symptom:**
+- `docker inspect` shows wrong command even though Dockerfile.worker has correct CMD:
+  ```bash
+  docker inspect pms-worker-v2 --format 'Cmd={{json .Config.Cmd}}'
+  # Shows: ["/bin/sh","-c","celery -A app.channel_manager.core.sync_engine:celery_app worker ..."]
+  # Expected: ["bash","/app/scripts/ops/start_worker.sh"]
+  ```
+- Worker logs do NOT show:
+  ```
+  [worker] start_worker.sh active
+  ====== Wait-for-Deps Preflight Check ======
+  ```
+
+**Root Causes:**
+
+A) **Coolify Start Command Override:** Legacy "Start Command" field in Coolify UI overrides Dockerfile CMD
+B) **Coolify Git Commit Pinned:** Build log shows checkout of old commit SHA before Dockerfile.worker was updated
+C) **Dockerfile Path Mismatch:** Coolify prepends "/" automatically; incorrect Base Directory or Dockerfile Location
+
+**Diagnosis (HOST-SERVER-TERMINAL):**
+
+```bash
+# 1. Compare container CMD vs image CMD
+docker inspect pms-worker-v2 --format 'Image={{.Config.Image}} Cmd={{json .Config.Cmd}}'
+# Container shows: Cmd=["/bin/sh","-c","celery ..."]
+
+# Get image ID from above output
+IMAGE_ID="<image-id-or-tag-from-above>"
+docker inspect $IMAGE_ID --format 'Cmd={{json .Config.Cmd}}'
+# Image shows: ["bash","/app/scripts/ops/start_worker.sh"]
+# If these differ: Coolify Start Command override is active
+
+# 2. Confirm repo has correct CMD
+cd /path/to/PMS-Webapp
+git log -n 3 --oneline
+# Should show recent commits including Dockerfile.worker updates
+
+grep -nE '^(CMD|ENTRYPOINT)\b' backend/Dockerfile.worker
+# Should show: CMD ["bash", "/app/scripts/ops/start_worker.sh"]
+```
+
+**Fix Steps (Coolify UI):**
+
+1. **Clear Start Command Override:**
+   - Location: Coolify Dashboard → pms-worker-v2 → General → Start Command
+   - Action: **Delete any text in the field** (leave it empty)
+   - Why: Dockerfile CMD should be used, not UI override
+
+2. **Unpin Git Commit (Build from HEAD):**
+   - Location: Coolify Dashboard → pms-worker-v2 → General → Git
+   - Field: "Commit SHA" or "Git Commit to deploy"
+   - Action: **Clear the field** (empty = build latest commit from main)
+   - Why: Ensures latest Dockerfile.worker is used
+
+3. **Verify Build Settings:**
+   - Location: Coolify Dashboard → pms-worker-v2 → Build & Deploy
+   - Base Directory: `/backend` (with leading slash)
+   - Dockerfile Location: `/Dockerfile.worker` (with leading slash)
+   - Note: Coolify may prepend "/" automatically; do not use `backend/Dockerfile.worker`
+
+4. **Redeploy (NOT just restart):**
+   - Location: Coolify Dashboard → pms-worker-v2 → Deployments
+   - Action: Click "Redeploy" (triggers new build)
+   - Why: Restart uses existing image; redeploy builds fresh image
+
+**Verification:**
+
+```bash
+# After redeploy completes, verify container CMD
+docker inspect pms-worker-v2 --format 'Cmd={{json .Config.Cmd}}'
+# Expected: ["bash","/app/scripts/ops/start_worker.sh"]
+
+# Check worker logs for startup sequence
+docker logs pms-worker-v2 --tail 50 | head -20
+# Expected output:
+#   [worker] start_worker.sh active
+#   [2025-12-29 ...] ====== Wait-for-Deps Preflight Check ======
+#   [2025-12-29 ...] Waiting for Database (supabase-db:5432)...
+#   [2025-12-29 ...]   ✓ Database is ready (supabase-db:5432)
+#   [2025-12-29 ...] Waiting for Redis (coolify-redis:6379)...
+#   [2025-12-29 ...]   ✓ Redis is ready (coolify-redis:6379)
+#   [2025-12-29 ...] ✓ All dependencies ready
+#   [2025-12-29 ...] ====== Celery Worker Starting ======
+#   [2025-12-29 ...] Configuration:
+#   [2025-12-29 ...]   Pool: threads
+#   [2025-12-29 ...]   Concurrency: 4
+```
+
+**Related Issues:**
+- If worker crashes after fixing CMD: Check [Worker Crashes on Startup](#worker-crashes-on-startup)
+- If wait-for-deps times out: Check [Networks (CRITICAL)](#networks-critical) and DNS resolution
+
+#### Stale Code After Deployment
+
+**Symptom:** New code changes don't appear in worker behavior
+
+**Diagnosis:**
+
+```bash
+# Check if code hash matches local repo
+docker exec pms-worker-v2 sha256sum /app/app/channel_manager/core/sync_engine.py
+
+# Compare with local
+sha256sum backend/app/channel_manager/core/sync_engine.py
+```
+
+**Solutions:**
+1. **Pin to commit SHA** in Coolify deployment settings (instead of branch reference)
+2. **Enable "Disable build cache"** in deployment settings
+3. **Force rebuild:** Settings → Deployments → Redeploy with cache disabled
+
+#### Sync Logs Stuck at "running"
+
+**Symptom:** Sync logs never transition to `success` or `failed`
+
+**Diagnosis:**
+
+```bash
+# Check worker logs for exceptions during task execution
+docker logs pms-worker-v2 --tail 100 | grep -i error
+
+# Check if MaxRetriesExceededError is being caught
+docker logs pms-worker-v2 | grep "Max retries exceeded"
+```
+
+**Common Causes:**
+1. Task is hanging indefinitely (no timeout configured)
+2. Exception handler not marking log as failed
+3. Worker crashed mid-task
+
+**Solution:** Check sync_engine.py retry logic and ensure MaxRetriesExceededError sets status to "failed"
+
+---
+
+### Architecture Notes
+
+**Direct Database Connections (Celery-Safe):**
+
+Celery workers do NOT use the FastAPI connection pool (pool only exists in backend lifespan). Instead, workers use direct connections:
+
+- `_check_database_availability()`: Creates short-lived connection with 5s timeout for health checks
+- `_update_log_status()`: Creates connection per sync log update with JSON/JSONB codec registration
+- All connections are properly closed in `finally` blocks (fork/event-loop safe)
+
+**Fork-Safety:**
+
+Celery uses prefork pool model. Workers register a `worker_process_init` signal to reset pool state in forked children, ensuring each worker process creates its own connections.
+
+**Celery 6 Broker Connection Retry:**
+
+The worker explicitly sets `broker_connection_retry_on_startup = True` to silence Celery 6 deprecation warnings. This makes the broker connection retry behavior explicit on worker startup.
+
+**Why this setting:**
+- **Celery 6 deprecation:** Celery 6 warns if this setting is not explicitly configured
+- **Default behavior:** When `True`, the worker retries connecting to Redis broker on startup if the initial connection fails
+- **Recommended for production:** Prevents worker crash if Redis is temporarily unavailable during startup
+- **Location:** Configured in `app/channel_manager/core/sync_engine.py` (celery_app.conf)
+
+**Expected behavior:**
+- Worker startup logs no longer show deprecation warning about `broker_connection_retry_on_startup`
+- If Redis is down during worker startup, worker retries connection instead of crashing
+- Consistent with existing retry behavior for broker connection during runtime
+
+**Worker Runs as Non-Root User:**
+
+Both pms-backend and pms-worker-v2 containers run as a non-root user (`app` with UID 1000) for improved security and to silence Celery's SecurityWarning.
+
+**Why non-root:**
+- **Security best practice:** Reduces attack surface if container is compromised
+- **Celery warning:** Celery emits a SecurityWarning when running as root
+- **Production hygiene:** Follows principle of least privilege
+- **Container standards:** Aligns with Docker/Kubernetes security best practices
+
+**Implementation:**
+- Dockerfile creates user `app` (UID 1000) during build
+- All application files owned by `app:app`
+- Container switches to `USER app` before running commands
+- Both backend (uvicorn) and worker (celery) run as this user
+
+**Verification:**
+
+Check which user is running the worker process:
+
+```bash
+# Inside worker container
+docker exec pms-worker-v2 ps aux
+
+# Expected output:
+# USER       PID  %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+# app          1   0.0  0.1 123456 12345 ?        Ss   12:00   0:00 celery -A app.channel_manager...
+# app         XX   0.0  0.1 123456 12345 ?        S    12:00   0:00 [celery worker process]
+```
+
+Check worker startup logs for absence of SecurityWarning:
+
+```bash
+# Check logs for security warning (should be empty)
+docker logs pms-worker-v2 2>&1 | grep -i "securitywarning\|running as root"
+
+# Expected: No output (warning is gone)
+```
+
+**Files:**
+- `backend/Dockerfile`: Defines non-root user and sets USER directive
+- Image build: Coolify auto-detects Dockerfile and uses it instead of Nixpacks
+
+**Note:** If you see permission errors after deployment, check that `/app` and `/app/logs` are owned by `app:app` (UID 1000).
+
+---
+
+## Celery Worker (pms-worker-v2): Start, Verify, Troubleshoot
+
+**Purpose:** Reference guide for verifying worker startup, CMD/entrypoint configuration, and diagnosing build/cache drift issues (SOURCE_COMMIT mismatch).
+
+---
+
+### 1. Current Stable Setup (pms-worker-v2)
+
+**Production Container Topology:**
+
+```
+Containers:
+- pms-backend        (FastAPI application)
+- pms-worker-v2      (Celery worker - headless background processor)
+- coolify-redis      (Redis broker for Celery task queue)
+- supabase-db-<id>   (PostgreSQL database)
+```
+
+**Network Configuration:**
+
+```
+pms-backend:
+  - coolify                          (default Coolify network)
+  - bccg4gs4o4kgsowocw08wkw4          (Supabase network - for supabase-db DNS)
+
+pms-worker-v2:
+  - coolify                          (default Coolify network)
+  - bccg4gs4o4kgsowocw08wkw4          (Supabase network - for supabase-db DNS)
+
+coolify-redis:
+  - coolify                          (default Coolify network)
+```
+
+**Why both containers need Supabase network:**
+- Resolves `supabase-db` hostname for DATABASE_URL
+- Without it: `socket.gaierror: [Errno -3] Temporary failure in name resolution`
+
+**Health Evidence:**
+
+Endpoint: `GET /health/ready`
+
+Expected response when worker is operational:
+```json
+{
+  "status": "ready",
+  "checks": {
+    "database": "up",
+    "redis": "up",
+    "celery": "up"
+  },
+  "celery_workers": [
+    "celery@pms-worker-v2-<hostname>"
+  ]
+}
+```
+
+**Key indicators:**
+- `celery: "up"` → Redis connection OK
+- `celery_workers` array not empty → At least one worker is registered and responding to ping
+
+---
+
+### 2. Worker Startup CMD / Entrypoint (from CMD Issue Diagnose)
+
+**Container Boot Path:**
+
+The `pms-worker-v2` container is started via the repository script (not direct Celery command):
+
+**Path in container:** `/app/scripts/ops/start_worker.sh`
+
+**Purpose:**
+- Stable Celery startup with configurable pool/concurrency/loglevel
+- Preflight dependency checks (wait-for-deps: database + Redis DNS/TCP reachable)
+- Environment-driven configuration (no hardcoded values)
+
+**Effective Celery Command:**
+
+The script executes:
+```bash
+celery -A app.channel_manager.core.sync_engine:celery_app worker \
+  --pool=${CELERY_POOL:-threads} \
+  --concurrency=${CELERY_CONCURRENCY:-4} \
+  --loglevel=${CELERY_LOGLEVEL:-INFO}
+```
+
+**Environment Variable Defaults:**
+```bash
+CELERY_POOL=threads           # Worker pool type (threads, prefork, gevent)
+CELERY_CONCURRENCY=4          # Number of worker threads/processes
+CELERY_LOGLEVEL=INFO          # Log verbosity (DEBUG, INFO, WARNING, ERROR)
+```
+
+**Optional environment overrides:**
+```bash
+CELERY_MAX_TASKS_PER_CHILD=1000   # Max tasks before worker restart (memory leak prevention)
+CELERY_TIME_LIMIT=300             # Hard time limit for tasks (seconds)
+```
+
+**Coolify Build Pack Quirk:**
+
+When using **Dockerfile** build pack (recommended for pms-worker-v2):
+- Coolify UI does **NOT** allow setting "Start Command" (field disabled/ignored)
+- Worker boots via `CMD` defined in `backend/Dockerfile.worker`:
+  ```dockerfile
+  CMD ["bash", "/app/scripts/ops/start_worker.sh"]
+  ```
+- **Workaround:** All customization happens via environment variables (not Start Command override)
+
+**Coolify "Ports Exposes" Requirement:**
+
+Even though pms-worker-v2 does NOT serve HTTP traffic, Coolify UI may require a port value:
+- **Location:** Application Settings → Network → Ports Exposes
+- **Set:** `8000` (placeholder - not actually used)
+- **Why:** Coolify beta UI validation bug (worker is headless, no real port needed)
+
+---
+
+### 3. Verification Checklist (Copy/Paste Commands)
+
+**HOST-SERVER-TERMINAL:**
+
+```bash
+# Check all PMS containers and their networks
+docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Networks}}' | egrep -i 'pms|redis|supabase' || true
+
+# Expected output:
+# NAMES              STATUS          NETWORKS
+# pms-backend        Up X hours      coolify, bccg4gs4o4kgsowocw08wkw4
+# pms-worker-v2      Up X hours      coolify, bccg4gs4o4kgsowocw08wkw4
+# coolify-redis      Up X hours      coolify
+# supabase-db-<id>   Up X hours      bccg4gs4o4kgsowocw08wkw4
+```
+
+**Coolify TERMINAL (Container: pms-backend):**
+
+```bash
+# Check API health and worker registration
+curl -k -sS https://api.fewo.kolibri-visions.de/health/ready | sed -n '1,200p'
+
+# Expected JSON:
+# {
+#   "status": "ready",
+#   "checks": { "database": "up", "redis": "up", "celery": "up" },
+#   "celery_workers": ["celery@pms-worker-v2-..."]
+# }
+```
+
+**Coolify TERMINAL (Container: pms-worker-v2) - Optional Verification:**
+
+```bash
+# Verify start script exists
+ls -la /app/scripts/ops/start_worker.sh
+
+# Expected:
+# -rwxr-xr-x 1 app app <size> <date> /app/scripts/ops/start_worker.sh
+# (executable bit set, owned by app:app)
+
+# Inspect start script content
+head -n 40 /app/scripts/ops/start_worker.sh
+
+# Expected to see:
+# - #!/usr/bin/env bash
+# - wait-for-deps preflight checks (DNS + TCP for database/Redis)
+# - celery -A app.channel_manager.core.sync_engine:celery_app worker ...
+```
+
+**Quick Smoke Test:**
+
+```bash
+# Test Celery worker responds to ping
+docker exec pms-worker-v2 celery -A app.channel_manager.core.sync_engine:celery_app inspect ping
+
+# Expected:
+# -> celery@pms-worker-v2-<hostname>: {'ok': 'pong'}
+```
+
+---
+
+### 4. Critical Failure Mode: SOURCE_COMMIT Correct but Worker Runs Old Code (Build/Cache Drift)
+
+**Symptoms:**
+
+1. **Worker cannot update channel_sync_logs:**
+   - Sync logs stuck in "triggered" status (never transition to "running" → "success/failed")
+   - Worker logs show errors about missing columns/tables that SHOULD exist in new schema
+
+2. **Worker errors look "wrong" vs expected commit:**
+   - Code references functions/modules that were refactored/removed in latest commit
+   - Import errors for recently added modules
+
+3. **SOURCE_COMMIT env says new SHA but code files differ:**
+   - Environment variable shows latest commit hash
+   - Actual Python files in `/app/` directory contain old code
+
+**Root Cause:**
+
+Coolify built the worker image from an **outdated checkout or stale build cache**:
+- Git source directory under `/data/coolify/source` not updated to origin/main
+- Build cache from previous deployment used despite new SOURCE_COMMIT
+- Image layering cached old dependencies/code even though new commit was deployed
+
+**Diagnosis (Copy/Paste Commands):**
+
+**Coolify TERMINAL (Container: pms-worker-v2):**
+
+```bash
+# Check SOURCE_COMMIT environment variable
+echo "SOURCE_COMMIT=$SOURCE_COMMIT"
+
+# Expected: Latest commit SHA from origin/main (e.g., 733038a...)
+```
+
+```bash
+# Verify actual code file hash (example: sync_engine.py)
+python -c 'import pathlib,hashlib; p=pathlib.Path("/app/app/channel_manager/core/sync_engine.py"); print(p, p.exists(), hashlib.sha256(p.read_bytes()).hexdigest() if p.exists() else "missing")'
+
+# Expected: File exists + SHA256 hash
+# Compare this hash with the file at SOURCE_COMMIT in GitHub repo
+# If hashes differ → build/cache drift confirmed
+```
+
+```bash
+# Inspect start script content
+head -n 40 /app/scripts/ops/start_worker.sh
+
+# Expected: Script content matches repo at SOURCE_COMMIT
+# If script is missing/outdated → build/cache drift confirmed
+```
+
+**Additional Verification:**
+
+```bash
+# Check git status inside container (if .git exists)
+docker exec pms-worker-v2 git rev-parse HEAD 2>/dev/null || echo ".git not in image"
+
+# If .git exists: compare with SOURCE_COMMIT env
+# If they differ OR .git missing → verify via file hash instead
+```
+
+**Fix Guidance (High-Level):**
+
+1. **Force Clean Rebuild in Coolify:**
+   - Coolify Dashboard → pms-worker-v2 → Deployment Settings
+   - Enable: **"Disable build cache"** (forces fresh build)
+   - Trigger new deployment
+
+2. **Pin to Specific Commit SHA (instead of branch reference):**
+   - Coolify Dashboard → pms-worker-v2 → General → Git
+   - Change branch from `main` to specific commit SHA (e.g., `733038a`)
+   - This prevents Coolify from using stale branch pointer
+
+3. **Ensure Source Directory is Updated:**
+   - **If using host checkout:** Coolify may clone repo to `/data/coolify/source/<app-id>`
+   - SSH to host server and verify:
+     ```bash
+     cd /data/coolify/source/<app-id>
+     git fetch origin
+     git log --oneline -5  # Should show latest commits
+     ```
+   - If outdated: `git pull origin main` and redeploy
+
+4. **Verify Base Directory is Correct:**
+   - Coolify Dashboard → pms-worker-v2 → General → Base Directory
+   - Must be: `/backend` (NOT `/` or `/backend/app`)
+   - Dockerfile.worker path: `Dockerfile.worker` (relative to base directory)
+
+**Prevention:**
+
+- Always deploy pms-backend FIRST, then pms-worker-v2 (sequential, not parallel)
+- Use commit SHA instead of branch name for critical deployments
+- Enable "Disable build cache" after major refactors
+- Verify `/health/ready` shows worker registration after each deploy
+
+---
+
+### 5. Decommission Old Worker (if it ever exists again)
+
+**"Done" Criteria:**
+
+Only `pms-worker-v2` exists in production:
+```bash
+docker ps | egrep -i 'pms-worker'
+
+# Expected output:
+# pms-worker-v2   Up X hours   ...
+
+# NOT expected:
+# pms-worker      Up X hours   ...  (old worker should NOT exist)
+# pms-worker-v2   Up X hours   ...
+```
+
+**Why multiple workers are dangerous:**
+
+- **Task distribution is non-deterministic:** Redis/Celery load-balance tasks across ALL registered workers
+- **Version skew:** If old worker runs outdated code, some tasks execute with wrong logic
+- **Silent failures:** HTTP 201 from POST /availability/sync but task runs on wrong worker → logs stuck "triggered"
+- **Diagnosis confusion:** Half of tasks succeed (new worker), half fail (old worker) → intermittent issues
+
+**Decommission Steps:**
+
+1. **Identify old worker container:**
+   ```bash
+   docker ps -a | grep pms-worker | grep -v v2
+   ```
+
+2. **Stop and remove old worker:**
+   ```bash
+   docker stop pms-worker
+   docker rm pms-worker
+   ```
+
+3. **Disable old worker service in Coolify:**
+   - Coolify Dashboard → Applications
+   - Find `pms-worker` (without v2 suffix)
+   - Settings → Danger Zone → Delete Application
+
+4. **Verify only pms-worker-v2 remains:**
+   ```bash
+   curl -k -sS https://api.fewo.kolibri-visions.de/health/ready | jq '.celery_workers'
+
+   # Expected:
+   # ["celery@pms-worker-v2-<hostname>"]
+   # (only ONE worker, name includes "v2")
+   ```
+
+**Migration from pms-worker → pms-worker-v2:**
+
+If you need to migrate (upgrade old worker to new version):
+1. Create new `pms-worker-v2` app in Coolify (following setup steps in this runbook)
+2. Deploy pms-worker-v2 and verify `/health/ready` shows it registered
+3. Stop old `pms-worker` container (verify tasks still processing via v2)
+4. Monitor for 24-48 hours (ensure no issues)
+5. Delete old `pms-worker` app from Coolify permanently
+
+---
+
+## Deployment Process
+
+**Purpose:** Safe sequential deployment of pms-backend and pms-worker to avoid race conditions.
+
+### Critical Requirement: Sequential Deployment
+
+**⚠️ NEVER deploy pms-backend and pms-worker in parallel!**
+
+**Why Sequential?**
+1. Backend and worker must be on the **same git commit**
+2. Code changes may affect both HTTP endpoints and Celery tasks
+3. Deploying in parallel → version mismatch → task failures
+
+**Correct Order:**
+```
+1. Deploy pms-backend (wait for completion)
+2. Deploy pms-worker (after backend is stable)
+```
+
+---
+
+### Deployment Workflow
+
+#### Step 1: Pre-Deployment Checks
+
+**Location:** Coolify Dashboard
+
+**Verify:**
+- ✅ All tests pass in CI/CD (if configured)
+- ✅ Database migrations ready (if schema changes)
+- ✅ No active incidents or alerts
+- ✅ Current deployments are stable (check `/health/ready`)
+
+**Health Check:**
+```bash
+curl https://api.your-domain.com/health/ready | jq .
+
+# Expected:
+# {
+#   "status": "ready",
+#   "checks": {
+#     "database": "up",
+#     "redis": "up",
+#     "celery": "up"
+#   }
+# }
+```
+
+#### Step 2: Deploy pms-backend
+
+**Location:** Coolify Dashboard → pms-backend
+
+1. Click **Deploy** button
+2. Monitor deployment logs for errors
+3. Wait for "Deployment successful" message
+4. **DO NOT proceed to worker deployment yet**
+
+**Verify Backend Deployment:**
+```bash
+# Check health endpoint
+curl https://api.your-domain.com/health | jq .
+
+# Check API version (if versioned)
+curl https://api.your-domain.com/docs | grep version
+
+# Verify git commit
+docker exec pms-backend git rev-parse HEAD
+```
+
+#### Step 3: Verify Backend Stability
+
+**Wait Time:** 2-3 minutes minimum
+
+**Health Checks:**
+```bash
+# Check /health/ready multiple times
+for i in {1..5}; do
+  echo "Check $i:"
+  curl -s https://api.your-domain.com/health/ready | jq '.status'
+  sleep 10
+done
+
+# Expected: All checks return "ready"
+```
+
+**Check Logs:**
+```bash
+# Look for errors in backend logs
+docker logs pms-backend --tail 100 | grep -i error
+
+# No critical errors should appear
+```
+
+#### Step 4: Run Database Migrations (If Needed)
+
+**If schema changes in this deployment:**
+
+```bash
+# SSH to host
+ssh root@your-host
+
+# Run migrations (adjust path as needed)
+docker exec -it pms-backend python -m alembic upgrade head
+
+# OR for Supabase migrations:
+cd supabase/migrations
+docker exec $(docker ps -q -f name=supabase) supabase migration up
+```
+
+**Verify Migration:**
+```bash
+# Check if channel_sync_logs table exists
+docker exec $(docker ps -q -f name=supabase) psql -U postgres -d postgres \
+  -c "\dt channel_sync_logs"
+```
+
+#### Step 5: Deploy pms-worker
+
+**⚠️ Only proceed if backend is stable!**
+
+**Location:** Coolify Dashboard → pms-worker
+
+1. Click **Deploy** button
+2. Monitor deployment logs
+3. Wait for "Deployment successful"
+
+**Verify Worker Deployment:**
+```bash
+# Check worker logs for startup
+docker logs pms-worker --tail 50 | grep "ready"
+
+# Expected:
+# [INFO] celery@pms-worker ready.
+# [INFO] Tasks: [list of registered tasks]
+```
+
+#### Step 6: Post-Deployment Verification
+
+**Check Health Endpoint:**
+```bash
+curl https://api.your-domain.com/health/ready | jq .
+```
+
+**Expected Output:**
+```json
+{
+  "status": "ready",
+  "checks": {
+    "database": "up",
+    "redis": "up",
+    "celery": "up"
+  },
+  "celery_workers": [
+    "celery@pms-worker-abc123"
+  ]
+}
+```
+
+**Test Celery Connection:**
+```bash
+# From backend container
+docker exec pms-backend \
+  celery -A app.channel_manager.core.sync_engine:celery_app \
+  --broker "$CELERY_BROKER_URL" inspect ping -t 3
+
+# Expected: -> celery@pms-worker-abc123: {'ok': 'pong'}
+```
+
+**Verify Git Commits Match:**
+```bash
+# Get backend commit
+BACKEND_COMMIT=$(docker exec pms-backend git rev-parse HEAD)
+echo "Backend: $BACKEND_COMMIT"
+
+# Get worker commit
+WORKER_COMMIT=$(docker exec pms-worker git rev-parse HEAD)
+echo "Worker:  $WORKER_COMMIT"
+
+# They should match!
+if [ "$BACKEND_COMMIT" = "$WORKER_COMMIT" ]; then
+  echo "✓ Commits match - deployment consistent"
+else
+  echo "✗ COMMIT MISMATCH - redeploy worker!"
+fi
+```
+
+#### Step 7: Smoke Test
+
+**Run Quick Smoke Test:**
+```bash
+# Load environment
+source /root/pms_env.sh
+
+# Get JWT token
+TOKEN="$(curl -sS "$SB_URL/auth/v1/token?grant_type=password" \
+  -H "apikey: $ANON_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}" \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin).get("access_token",""))')"
+
+# Trigger test sync
+CID="$(curl -k -sS -L "https://api.your-domain.com/api/v1/channel-connections/" \
+  -H "Authorization: Bearer $TOKEN" \
+  | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d[0]["id"] if d else "")')"
+
+curl -X POST "https://api.your-domain.com/api/v1/channel-connections/$CID/sync" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"sync_type":"availability"}'
+
+# Check sync logs
+sleep 5
+curl "https://api.your-domain.com/api/v1/channel-connections/$CID/sync-logs?limit=5" \
+  -H "Authorization: Bearer $TOKEN" | jq '.logs[0]'
+```
+
+---
+
+### Coolify Auto-Deploy Configuration
+
+**⚠️ DO NOT enable auto-deploy for both apps simultaneously!**
+
+**Safe Configuration:**
+
+**Option 1: Manual Deployment (Recommended)**
+- pms-backend: Auto-deploy **OFF**
+- pms-worker: Auto-deploy **OFF**
+- Deploy manually via dashboard in correct sequence
+
+**Option 2: Backend Auto-Deploy Only**
+- pms-backend: Auto-deploy **ON** (trigger: push to `main`)
+- pms-worker: Auto-deploy **OFF** (manual only)
+- After backend auto-deploys, manually deploy worker
+
+**Option 3: Deployment Script (Advanced)**
+
+Create deployment script that enforces sequence:
+
+```bash
+#!/bin/bash
+# deploy-pms.sh
+
+set -e  # Exit on error
+
+echo "Step 1: Deploying pms-backend..."
+# Trigger backend deployment via Coolify API
+curl -X POST https://coolify.example.com/api/deploy/pms-backend \
+  -H "Authorization: Bearer $COOLIFY_API_TOKEN"
+
+echo "Waiting for backend to stabilize (2 minutes)..."
+sleep 120
+
+echo "Step 2: Verifying backend health..."
+STATUS=$(curl -s https://api.your-domain.com/health/ready | jq -r '.status')
+if [ "$STATUS" != "ready" ]; then
+  echo "✗ Backend health check failed - aborting worker deployment"
+  exit 1
+fi
+
+echo "Step 3: Deploying pms-worker..."
+curl -X POST https://coolify.example.com/api/deploy/pms-worker \
+  -H "Authorization: Bearer $COOLIFY_API_TOKEN"
+
+echo "Waiting for worker to start..."
+sleep 60
+
+echo "Step 4: Verifying worker health..."
+CELERY_STATUS=$(curl -s https://api.your-domain.com/health/ready | jq -r '.checks.celery')
+if [ "$CELERY_STATUS" = "up" ]; then
+  echo "✓ Deployment complete and healthy"
+else
+  echo "✗ Worker health check failed"
+  exit 1
+fi
+```
+
+**Trigger via GitHub Actions:**
+```yaml
+name: Deploy PMS
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run sequential deployment
+        run: |
+          ssh root@your-host 'bash /root/deploy-pms.sh'
+```
+
+---
+
+### Rollback Procedure
+
+**If deployment fails:**
+
+**Step 1: Identify Failed Component**
+```bash
+# Check which service is unhealthy
+curl https://api.your-domain.com/health/ready | jq '.checks'
+```
+
+**Step 2: Rollback via Coolify**
+
+**Location:** Coolify Dashboard → pms-backend (or pms-worker) → Deployments
+
+1. Find previous successful deployment
+2. Click **Redeploy** on that version
+3. Wait for completion
+4. Verify health
+
+**Step 3: Verify Rollback Success**
+```bash
+# Check health
+curl https://api.your-domain.com/health/ready
+
+# Verify git commit matches expected version
+docker exec pms-backend git rev-parse HEAD
+```
+
+---
+
+### Common Deployment Issues
+
+**Issue:** Worker shows old code after backend deployment
+
+**Cause:** Worker not redeployed
+**Solution:** Deploy worker manually
+
+**Issue:** Celery tasks fail with "Task not registered"
+
+**Cause:** Backend/worker version mismatch
+**Solution:** Redeploy worker to match backend commit
+
+**Issue:** Database migration fails
+
+**Cause:** Schema conflict or missing dependency
+**Solution:** Rollback deployment, fix migration, redeploy
+
+---
+
+### TLS: Admin Subdomain Shows TRAEFIK DEFAULT CERT (Let's Encrypt Missing)
+
+**Purpose:** Diagnose and fix admin.fewo.kolibri-visions.de (or other subdomains) serving Traefik's default certificate instead of a valid Let's Encrypt certificate.
+
+#### Symptoms
+
+**Browser:**
+- Certificate warning: "Your connection is not private" or "Invalid certificate"
+- Certificate issuer shown as "TRAEFIK DEFAULT CERT" instead of "Let's Encrypt"
+
+**CLI Verification (HOST-SERVER-TERMINAL):**
+```bash
+# Check certificate for admin subdomain
+echo | openssl s_client -connect admin.fewo.kolibri-visions.de:443 \
+  -servername admin.fewo.kolibri-visions.de 2>/dev/null \
+  | openssl x509 -noout -subject -issuer -dates
+
+# Output with TRAEFIK DEFAULT CERT:
+# subject=CN = TRAEFIK DEFAULT CERT
+# issuer=CN = TRAEFIK DEFAULT CERT
+# notBefore=...
+# notAfter=...
+```
+
+**Compare to Working Host (api.fewo.kolibri-visions.de):**
+```bash
+echo | openssl s_client -connect api.fewo.kolibri-visions.de:443 \
+  -servername api.fewo.kolibri-visions.de 2>/dev/null \
+  | openssl x509 -noout -subject -issuer -dates
+
+# Expected output with Let's Encrypt:
+# subject=CN = api.fewo.kolibri-visions.de
+# issuer=C = US, O = Let's Encrypt, CN = R13
+# notBefore=...
+# notAfter=...
+```
+
+#### Root Causes
+
+**A) Router Rule Parse Error → Router Not Loaded → Default Cert**
+
+Traefik fails to parse the router rule, so the router is never registered, and Traefik falls back to the default certificate.
+
+Common Traefik log errors:
+```
+level=error msg="Router rule parse error: expected operand, found '/'"
+level=error msg="PathPrefix: path does not start with a '/'"
+level=error msg="invalid rule syntax"
+```
+
+**Typical Mistakes:**
+- Using hostname in PathPrefix: `PathPrefix(admin.fewo.kolibri-visions.de)` ❌
+- Missing backticks: `PathPrefix(/)` ❌
+- Correct syntax: `PathPrefix(\`/\`)` ✅ (with backticks)
+- Best practice: Use `Host(\`admin.fewo...\`)` alone, no PathPrefix needed for single-domain apps
+
+**B) Missing Certificate Resolver for Router**
+
+Router has `tls=true` but no `tls.certresolver` label, so Traefik does not request/attach a Let's Encrypt certificate for this hostname and falls back to the default certificate.
+
+#### Diagnosis Steps
+
+**1. Check Current Certificate (HOST-SERVER-TERMINAL):**
+```bash
+echo | openssl s_client -connect admin.fewo.kolibri-visions.de:443 \
+  -servername admin.fewo.kolibri-visions.de 2>/dev/null \
+  | openssl x509 -noout -subject -issuer
+
+# If subject/issuer = "TRAEFIK DEFAULT CERT": Problem confirmed
+```
+
+**2. Confirm Traefik Proxy Container and Cert Resolver Name (HOST-SERVER-TERMINAL):**
+```bash
+# List Traefik/proxy containers
+docker ps --format 'table {{.Names}}\t{{.Image}}' | egrep -i 'proxy|traefik'
+# Expected: coolify-proxy (or similar)
+
+# Inspect Traefik args to find cert resolver name
+docker inspect coolify-proxy --format '{{range .Args}}{{println .}}{{end}}' \
+  | egrep -i 'certificatesresolvers|acme' | head -n 20
+
+# Look for lines like:
+# --certificatesresolvers.letsencrypt.acme.email=...
+# --certificatesresolvers.letsencrypt.acme.storage=...
+# Resolver name is "letsencrypt" in this example
+```
+
+**3. Inspect pms-admin Container Labels and Router Rules (HOST-SERVER-TERMINAL):**
+```bash
+# View Traefik labels on pms-admin
+docker inspect pms-admin --format 'Labels={{json .Config.Labels}}' \
+  | python3 -m json.tool | grep -A 2 -B 2 traefik | head -n 100
+
+# Check for:
+# - traefik.http.routers.pmsadmin-https.rule: Should be Host(`admin.fewo...`)
+# - traefik.http.routers.pmsadmin-https.tls: Should be "true"
+# - traefik.http.routers.pmsadmin-https.tls.certresolver: Should be "letsencrypt" (or resolver name from step 2)
+
+# Common issues:
+# - Rule syntax error: PathPrefix(/) instead of PathPrefix(`/`)
+# - Missing tls.certresolver label
+```
+
+**4. Check Traefik Logs for Errors (HOST-SERVER-TERMINAL):**
+```bash
+# Grep Traefik logs for admin subdomain and errors
+docker logs --since 48h coolify-proxy 2>&1 \
+  | egrep -i 'admin\.fewo\.kolibri-visions\.de|acme|letsencrypt|certificate|tls|router|rule|error' \
+  | tail -n 100
+
+# Look for:
+# - Rule parsing errors: "expected operand", "PathPrefix: path does not start with a '/'"
+# - ACME errors: "unable to obtain certificate", "DNS challenge failed"
+# - Router registration: "Creating router pmsadmin-https" (should appear if rule is valid)
+```
+
+#### Fix Steps (Coolify UI)
+
+**1. Fix Invalid Router Rules:**
+
+Location: Coolify Dashboard → pms-admin → Domains
+
+- **If using Host-only rule (recommended for single-domain apps):**
+  - Rule: `Host(\`admin.fewo.kolibri-visions.de\`)`
+  - No PathPrefix needed
+
+- **If PathPrefix is needed (e.g., for path-based routing):**
+  - Correct: `Host(\`admin.fewo...\`) && PathPrefix(\`/\`)`
+  - Incorrect: `PathPrefix(/)` (missing backticks)
+  - Incorrect: `PathPrefix(admin.fewo...)` (hostname in PathPrefix)
+
+**2. Explicitly Set Certificate Resolver on HTTPS Router:**
+
+Location: Coolify Dashboard → pms-admin → Environment Variables or Labels
+
+Add container label (or verify it exists):
+```
+traefik.http.routers.pmsadmin-https.tls.certresolver=letsencrypt
+```
+
+**Important:** Resolver name (`letsencrypt`) must match the name from step 2 diagnosis. Common names: `letsencrypt`, `le`, `default`.
+
+**3. Redeploy pms-admin (NOT Just Restart):**
+
+Location: Coolify Dashboard → pms-admin → Deployments
+
+- Action: Click "Redeploy"
+- Why: Container labels are set during build/deploy; restart does not update labels
+- Note: Domain changes also require redeploy, not just restart
+
+**4. Wait for Certificate Issuance (30-60 seconds):**
+
+- Traefik will automatically request Let's Encrypt certificate for the hostname
+- Check Traefik logs for ACME progress:
+  ```bash
+  docker logs --since 5m coolify-proxy 2>&1 | grep -i acme
+  ```
+- Look for: "Certificate obtained for domain admin.fewo..."
+
+#### Verification
+
+**1. Check Certificate via OpenSSL (HOST-SERVER-TERMINAL):**
+```bash
+echo | openssl s_client -connect admin.fewo.kolibri-visions.de:443 \
+  -servername admin.fewo.kolibri-visions.de 2>/dev/null \
+  | openssl x509 -noout -subject -issuer -dates
+
+# Expected output with Let's Encrypt:
+# subject=CN = admin.fewo.kolibri-visions.de
+# issuer=C = US, O = Let's Encrypt, CN = R13
+# notBefore=Dec 29 12:00:00 2025 GMT
+# notAfter=Mar 29 12:00:00 2026 GMT  (90 days validity)
+```
+
+**2. Check Browser:**
+- Open https://admin.fewo.kolibri-visions.de
+- Click lock icon → Certificate → Verify issuer is "Let's Encrypt"
+- No certificate warnings
+
+**3. Optional: Verify Traefik Logs Show No Rule Errors (HOST-SERVER-TERMINAL):**
+```bash
+docker logs --since 10m coolify-proxy 2>&1 \
+  | grep -i admin.fewo | grep -i error
+
+# Expected: No output (no errors for admin.fewo router)
+```
+
+#### Related Issues
+
+- If certificate still shows TRAEFIK DEFAULT CERT after fix:
+  - Check DNS: `nslookup admin.fewo.kolibri-visions.de` (must resolve to server IP)
+  - Check firewall: Port 443 must be open
+  - Check Traefik ACME logs for challenge failures
+- If router rule still invalid:
+  - Review Traefik documentation: https://doc.traefik.io/traefik/routing/routers/
+  - Test rule syntax in isolation before deploying
+
+---
+
+## Monitoring & Troubleshooting
+
+**Purpose:** Monitor system health and troubleshoot Channel Manager issues.
+
+### Health Endpoints
+
+#### GET /health
+
+**Purpose:** Basic application health check
+**Auth:** None required
+**Response:**
+```json
+{
+  "status": "healthy"
+}
+```
+
+#### GET /health/ready
+
+**Purpose:** Comprehensive readiness check (database, Redis, Celery)
+**Auth:** None required
+**Response:**
+```json
+{
+  "status": "ready",
+  "checks": {
+    "database": "up",
+    "redis": "up",
+    "celery": "up"
+  },
+  "celery_workers": [
+    "celery@pms-worker-abc123"
+  ]
+}
+```
+
+**Possible Status Values:**
+- `ready`: All checks passed
+- `degraded`: Some checks failed
+
+**Individual Check Status:**
+- `up`: Component healthy
+- `down`: Component unavailable
+
+---
+
+### Monitoring Strategy
+
+**Automated Monitoring (Recommended):**
+
+```bash
+# Set up cron job to check health every minute
+* * * * * curl -f https://api.your-domain.com/health/ready || echo "Health check failed" | mail -s "PMS Alert" ops@example.com
+```
+
+**Manual Monitoring:**
+
+```bash
+# Quick health check
+watch -n 10 'curl -s https://api.your-domain.com/health/ready | jq .'
+
+# Monitor sync log failures
+watch -n 30 'curl -s https://api.your-domain.com/api/v1/channel-connections/{id}/sync-logs?limit=5 -H "Authorization: Bearer TOKEN" | jq ".logs[] | select(.status==\"failed\")"'
+```
+
+---
+
+### Troubleshooting Sync Log Issues
+
+#### Issue: Sync Logs Not Persisting
+
+**Symptom:**
+- POST `/availability/sync` returns 200
+- GET `/sync-logs` shows no entries or 503 error
+
+**Diagnosis:**
+```bash
+# Check if channel_sync_logs table exists
+docker exec $(docker ps -q -f name=supabase) psql -U postgres -d postgres \
+  -c "\dt channel_sync_logs"
+
+# Expected: Table listing
+# If not found: Migration not applied
+```
+
+**Solution:**
+```bash
+# Apply migration
+cd supabase/migrations
+docker exec $(docker ps -q -f name=supabase) supabase migration up
+
+# Verify
+docker exec $(docker ps -q -f name=supabase) psql -U postgres -d postgres \
+  -c "SELECT COUNT(*) FROM channel_sync_logs;"
+```
+
+---
+
+#### Issue: Sync Logs Show "failed" Status
+
+**Symptom:**
+- All syncs marked as "failed" in logs
+- Worker logs show errors
+
+**Diagnosis:**
+```bash
+# Get failed log details
+curl -s https://api.your-domain.com/api/v1/channel-connections/{id}/sync-logs?limit=10 \
+  -H "Authorization: Bearer TOKEN" | jq '.logs[] | select(.status=="failed")'
+
+# Check worker logs for exceptions
+docker logs pms-worker --tail 100 | grep -i error
+```
+
+**Common Causes & Solutions:**
+
+**1. Database Connection Error:**
+```
+Solution: Check DATABASE_URL in worker environment
+```
+
+**2. Missing Environment Variables:**
+```bash
+# Compare worker env with backend
+docker exec pms-backend env | grep -E "DATABASE_URL|JWT_SECRET|ENCRYPTION_KEY" | sort > /tmp/backend-env.txt
+docker exec pms-worker env | grep -E "DATABASE_URL|JWT_SECRET|ENCRYPTION_KEY" | sort > /tmp/worker-env.txt
+diff /tmp/backend-env.txt /tmp/worker-env.txt
+
+# Any differences? Add missing vars to worker
+```
+
+**3. Code Version Mismatch:**
+```bash
+# Check git commits match
+docker exec pms-backend git rev-parse HEAD
+docker exec pms-worker git rev-parse HEAD
+
+# If different: Redeploy worker
+```
+
+---
+
+#### Issue: Retry Count Not Updating
+
+**Symptom:**
+- Sync fails but retry_count stays at 0
+- No retry attempts logged
+
+**Diagnosis:**
+```bash
+# Check if Celery task has retry configured
+docker exec pms-worker celery -A app.channel_manager.core.sync_engine:celery_app inspect registered | grep update_channel
+
+# Should show: max_retries=3
+```
+
+**Solution:**
+- Verify task decorator has `@celery_app.task(bind=True, max_retries=3)`
+- Redeploy worker if code changes needed
+
+---
+
+### Alert Thresholds
+
+**Recommended Alert Rules:**
+
+| Metric | Threshold | Action |
+|--------|-----------|--------|
+| `/health/ready` status | degraded | Investigate immediately |
+| Failed sync logs | >10% in 1 hour | Check worker logs |
+| Celery workers | 0 workers | Restart pms-worker |
+| Database response time | >500ms | Check Supabase load |
+| Redis response time | >100ms | Check Redis container |
+
+---
+
+### Troubleshooting Inventory Conflicts
+
+#### Database-Level Exclusion Constraints (Source of Truth)
+
+**Overview:**
+
+The PMS uses PostgreSQL exclusion constraints to prevent inventory conflicts (double-bookings, overlapping blocks) at the database level. This is the **source of truth** for inventory management and provides race-safe protection under high concurrency.
+
+**Constraints Enforced:**
+
+1. **`bookings.no_double_bookings`**
+   - Prevents overlapping bookings for same property within agency
+   - Scope: `(agency_id, property_id, daterange)`
+   - Excludes: `cancelled`, `declined`, `no_show` statuses
+   - Uses: `[)` end-exclusive daterange semantics
+
+2. **`availability_blocks.availability_blocks_no_overlap`**
+   - Prevents overlapping blocks for same property
+   - Scope: `(property_id, daterange)`
+   - Uses: `[)` end-exclusive daterange semantics
+
+3. **`inventory_ranges.inventory_ranges_no_overlap`**
+   - Prevents overlapping inventory holds
+   - Scope: `(property_id, daterange)` for active ranges only
+   - Uses: `[)` end-exclusive daterange semantics
+
+**Date Semantics:**
+
+All constraints use `[)` end-exclusive semantics:
+- `check_in` / `start_date`: **Included** (occupied)
+- `check_out` / `end_date`: **Excluded** (available)
+- **Back-to-back bookings allowed**: Booking A `check_out` = Booking B `check_in`
+
+**Example:**
+```
+Booking A: 2026-01-10 to 2026-01-12  (occupies: Jan 10, Jan 11)
+Booking B: 2026-01-12 to 2026-01-14  (occupies: Jan 12, Jan 13)
+Result: ✓ Both allowed (Jan 12 is available for Booking B)
+```
+
+#### Issue: HTTP 409 with `conflict_type=inventory_overlap`
+
+**Symptom:**
+- POST `/api/v1/bookings` returns 409 Conflict
+- Response body: `{"detail": "Property is already booked for these dates", "conflict_type": "inventory_overlap"}`
+- Or: `{"detail": "Property is already occupied for dates...", "conflict_type": "inventory_overlap"}`
+
+**Root Cause:**
+
+Database exclusion constraint detected overlapping dates:
+- Another booking/block exists for same property and overlapping dates
+- Application-level checks passed, but DB constraint fired (race condition)
+- Constraint provides **definitive** conflict detection (no false negatives)
+
+**Diagnosis:**
+
+```bash
+# Check for overlapping bookings in same property
+docker exec $(docker ps -q -f name=supabase) psql -U postgres -d postgres -c "
+  SELECT
+    id,
+    property_id,
+    check_in,
+    check_out,
+    status,
+    created_at
+  FROM bookings
+  WHERE property_id = '<property-uuid>'
+    AND status NOT IN ('cancelled', 'declined', 'no_show')
+    AND daterange(check_in, check_out, '[)') && daterange('2026-01-10', '2026-01-12', '[)')
+  ORDER BY check_in;
+"
+
+# Check for overlapping availability blocks
+docker exec $(docker ps -q -f name=supabase) psql -U postgres -d postgres -c "
+  SELECT
+    id,
+    property_id,
+    start_date,
+    end_date,
+    created_at
+  FROM availability_blocks
+  WHERE property_id = '<property-uuid>'
+    AND daterange(start_date, end_date, '[)') && daterange('2026-01-10', '2026-01-12', '[)')
+  ORDER BY start_date;
+"
+
+# Check for overlapping inventory ranges
+docker exec $(docker ps -q -f name=supabase) psql -U postgres -d postgres -c "
+  SELECT
+    id,
+    property_id,
+    start_date,
+    end_date,
+    kind,
+    state,
+    created_at
+  FROM inventory_ranges
+  WHERE property_id = '<property-uuid>'
+    AND state = 'active'
+    AND daterange(start_date, end_date, '[)') && daterange('2026-01-10', '2026-01-12', '[)')
+  ORDER BY start_date;
+"
+```
+
+**Expected Behavior:**
+
+- HTTP 409 is **correct** when overlap exists
+- Clients should retry with different dates or cancel conflicting booking/block
+- This is **not an error** — it's race-safe conflict prevention working as designed
+
+**Verify Constraints Exist:**
+
+```bash
+# List all exclusion constraints
+docker exec $(docker ps -q -f name=supabase) psql -U postgres -d postgres -c "
+  SELECT
+    conrelid::regclass AS table_name,
+    conname AS constraint_name,
+    pg_get_constraintdef(oid) AS definition
+  FROM pg_constraint
+  WHERE contype = 'x'  -- exclusion constraint
+    AND connamespace = 'public'::regnamespace
+  ORDER BY conrelid::regclass::text;
+"
+```
+
+**Expected Output:**
+```
+table_name          | constraint_name                     | definition
+--------------------+-------------------------------------+---------------------------
+bookings            | no_double_bookings                  | EXCLUDE USING gist (agency_id WITH =, property_id WITH =, daterange(check_in, check_out, '[)'::text) WITH &&) WHERE ((status <> ALL (ARRAY['cancelled'::text, 'declined'::text, 'no_show'::text])))
+availability_blocks | availability_blocks_no_overlap      | EXCLUDE USING gist (property_id WITH =, daterange(start_date, end_date, '[)'::text) WITH &&)
+inventory_ranges    | inventory_ranges_no_overlap         | EXCLUDE USING gist (property_id WITH =, daterange(start_date, end_date, '[)'::text) WITH &&) WHERE ((state = 'active'::text))
+```
+
+**Migration:**
+
+Constraints added via migration: `supabase/migrations/20251229200517_enforce_overlap_prevention_via_exclusion.sql`
+
+**Error Handling:**
+
+Application code catches `asyncpg.exceptions.ExclusionViolationError` (SQLSTATE 23P01) and maps to:
+- HTTP 409 Conflict
+- `conflict_type=inventory_overlap`
+- Human-readable error message
+
+**Locations:**
+- `backend/app/services/booking_service.py:678` (booking creation)
+- `backend/app/services/availability_service.py:325` (inventory_range creation)
+- `backend/app/services/availability_service.py:404` (inventory_range update)
+
+#### Testing Race-Safe Behavior (Concurrency Test)
+
+**Script:** `backend/scripts/pms_booking_concurrency_test.sh`
+
+**Purpose:** Validate that exclusion constraints prevent double-bookings under concurrent requests.
+
+**What it does:**
+- Fires N parallel POST /bookings requests (default: 10) to same property/dates
+- Expects exactly **1 success** (HTTP 201) and **N-1 conflicts** (HTTP 409)
+- Validates DB-level race-safe inventory management
+
+**Usage:**
+```bash
+# Basic usage (auto-picks property)
+export ENV_FILE=/root/pms_env.sh
+bash scripts/pms_booking_concurrency_test.sh
+
+# With explicit property and dates
+export PID="your-property-uuid"
+export FROM="2026-06-01"
+export TO="2026-06-03"
+bash scripts/pms_booking_concurrency_test.sh
+```
+
+**Important:** If you see **HTTP 401 "Token has expired"**, re-fetch your TOKEN:
+```bash
+source /root/pms_env.sh
+bash scripts/pms_phase23_smoke.sh  # Auto-fetches token
+# OR manually fetch token (see script output for instructions)
+```
+
+**Expected PASS:**
+- Exactly 1 booking succeeds (201)
+- All other requests rejected with 409 `inventory_overlap`
+- No double-booking occurred
+
+**See:** `backend/scripts/README.md` for full documentation.
+
+---
+
+## Ops Console (Admin UI)
+
+**Purpose:** Optional web-based operations console for system diagnostics and monitoring.
+
+**URL:** `https://admin.fewo.kolibri-visions.de/ops`
+
+**Access Control:**
+- **Admin-only:** Only users with `admin` role can access
+- **Feature-flagged:** Must be explicitly enabled via environment variable
+
+---
+
+### How to Enable
+
+**Environment Variable (Frontend):**
+```bash
+NEXT_PUBLIC_ENABLE_OPS_CONSOLE=1
+```
+
+**Accepted Values (case-insensitive):**
+- `1` (recommended)
+- `true`
+- `yes`
+- `on`
+
+**Default:** Disabled (when not set, or set to `0`, `false`, etc.)
+
+**Where to Set:**
+- Coolify Dashboard → pms-admin → Build Pack Variables (Environment Variables)
+- Add new variable: `NEXT_PUBLIC_ENABLE_OPS_CONSOLE` = `1`
+- Redeploy frontend for changes to take effect
+
+---
+
+### Who Can Access
+
+**Requirements (ALL must be met):**
+1. User must be logged in with valid JWT token
+2. User role must be `admin` (not manager/staff/owner/accountant)
+3. Feature flag `NEXT_PUBLIC_ENABLE_OPS_CONSOLE` must be set to a truthy value
+
+**Access Control Behavior (No Silent Redirects):**
+- **If auth loading:** Shows loading skeleton
+- **If feature disabled:** Shows "Ops Console is Disabled" error page with:
+  - Clear explanation that feature flag must be set
+  - List of accepted values (`1`, `true`, `yes`, `on`)
+  - Link to return to Channel Sync
+- **If non-admin (but feature enabled):** Shows "Access Denied" error page with:
+  - Message: "Ops Console is restricted to administrators only"
+  - Link to return to Channel Sync
+  - Logout button
+- **If admin AND feature enabled:** Full access to Ops Console
+
+**Important:** Ops Console **never redirects silently** to `/login` or `/channel-sync`. This makes debugging easier — you always see the exact reason you can't access the console.
+
+---
+
+### Pages
+
+The Ops Console includes three main pages:
+
+#### 1. `/ops/status` - System Health
+
+**What it shows:**
+- Overall system status (Healthy / Degraded / Down)
+- GET `/health` response with version/commit if available
+- GET `/health/ready` response with component statuses
+  - Database (db)
+  - Redis (if exposed)
+  - Celery workers (if exposed)
+- Degraded mode clearly indicated when any component is down
+
+**Actions:**
+- **Refresh:** Manually refresh health checks
+- **Copy Diagnostics:** Copies system diagnostics to clipboard:
+  - Timestamp
+  - API base URL
+  - User role (admin)
+  - `/health` response
+  - `/health/ready` response
+  - **NO secrets / NO environment values exposed**
+
+**Use Cases:**
+- Quick system health check after deployment
+- Verify database/Redis/worker connectivity
+- Gather diagnostics for issue reports
+
+#### 2. `/ops/sync` - Channel Sync Operations
+
+**What it shows:**
+- Link button to existing `/channel-sync` page
+- Info cards explaining sync features:
+  - Trigger Sync (manual availability/pricing sync)
+  - View Logs (real-time sync logs table)
+  - Monitor (auto-refresh, error tracking)
+- Related resources links (Runbook, System Status)
+
+**Use Cases:**
+- Quick navigation to channel sync console
+- Overview of sync capabilities
+
+#### 3. `/ops/runbook` - Troubleshooting Guide
+
+**What it shows:**
+- Link to full runbook documentation (GitHub)
+- Common issues cards:
+  - 503: Database Temporarily Unavailable
+  - Celery Worker / Redis Down
+  - 401: JWT Token Expired
+  - 422: Validation Errors (No Sync Log Created)
+- Each card includes:
+  - Symptoms
+  - Causes
+  - Quick fix steps
+
+**Actions:**
+- **Copy Troubleshooting Template:** Copies issue report template to clipboard:
+  - What I was doing
+  - Expected vs actual behavior
+  - Paste `/health` + `/health/ready` diagnostics
+  - Paste last sync log IDs (if applicable)
+  - Browser/timestamp/user role
+  - **NO secrets exposed**
+
+**Use Cases:**
+- Quick reference for common issues
+- Generate structured issue reports
+- Link to full runbook documentation
+
+---
+
+### Navigation
+
+**Ops Console Navigation Bar:**
+- Status → `/ops/status`
+- Sync → `/ops/sync`
+- Runbook → `/ops/runbook`
+- Channel Sync (external link) → `/channel-sync`
+
+**Default Route:**
+- Accessing `/ops` redirects to `/ops/status`
+
+---
+
+### Safety & Security
+
+**Read-Only Operations:**
+- All Ops Console pages are **read-only diagnostics**
+- No dangerous actions (restart services, delete data, etc.)
+- No configuration changes allowed
+
+**No Secrets Exposed:**
+- Copy Diagnostics does NOT include:
+  - Environment variables
+  - Database credentials
+  - API keys
+  - JWT tokens
+  - User passwords
+- Only exposes:
+  - Public health check responses
+  - User's own role (admin)
+  - API base URL (already public)
+  - Timestamps
+
+**RBAC Enforcement:**
+- Backend API endpoints still enforce RBAC
+- Ops Console UI only provides convenient access
+- Admin-only endpoints (like `/health/ready`) still require admin token
+
+---
+
+### How to Use "Copy Diagnostics"
+
+**When to use:**
+- Investigating system issues
+- Reporting bugs to ops team
+- Post-deployment health checks
+- Troubleshooting sync failures
+
+**Steps:**
+1. Navigate to `/ops/status`
+2. Click "Copy Diagnostics" button
+3. Paste into issue tracker, Slack, or email
+4. Diagnostics include full JSON from `/health` and `/health/ready`
+5. Safe to share (no secrets included)
+
+**Example Output:**
+```json
+{
+  "timestamp": "2025-12-30T12:34:56.789Z",
+  "api_base": "https://api.fewo.kolibri-visions.de",
+  "user_role": "admin",
+  "health": {
+    "status": "healthy",
+    "version": "1.0.0",
+    "commit": "abc123def"
+  },
+  "health_ready": {
+    "status": "degraded",
+    "components": {
+      "db": "ok",
+      "redis": "error"
+    }
+  }
+}
+```
+
+---
+
+### Troubleshooting Ops Console Access
+
+#### Issue: "Access Denied" Message Although User is Admin
+
+**Symptom:**
+- Admin UI shows "Access Denied" error page when opening `/ops`
+- Message: "Ops Console is restricted to administrators only"
+- Page shows "Access Check Diagnostics" panel with user details
+- User verified as admin in database via PostgREST/psql
+
+**Root Cause:**
+The frontend now queries the `team_members` table directly (using `user_id` column) instead of relying on JWT metadata. Common reasons for denial:
+1. RLS policy blocks the query (user can't read their own team_members row)
+2. `is_active=false` in team_members table
+3. User ID mismatch (auth.users.id vs team_members.user_id)
+4. Static page cache (old access check cached from before role was granted)
+
+**Diagnostics Panel (New in v2):**
+The Access Denied page now shows detailed diagnostics:
+- User ID and Email
+- Team Members Found count (should be ≥1 for valid users)
+- Resolved Role (what role was found in team_members)
+- Last Active Agency ID (from profiles table)
+- Error message (Supabase error or "No active team_members record found")
+
+**Verify Database State with PostgREST:**
+```bash
+# Replace with your actual JWT token and Supabase URL
+export JWT="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+export SUPABASE_URL="https://your-project.supabase.co"
+
+# Check team_members (should return at least one row with role='admin')
+curl -s "${SUPABASE_URL}/rest/v1/team_members?user_id=eq.USER_ID_HERE&select=user_id,agency_id,role,is_active" \
+  -H "apikey: YOUR_ANON_KEY" \
+  -H "Authorization: Bearer ${JWT}" | jq
+
+# Expected result:
+# [{"user_id":"8036f477-...","agency_id":"ffd0123a-...","role":"admin","is_active":true}]
+
+# Check profiles for last_active_agency_id
+curl -s "${SUPABASE_URL}/rest/v1/profiles?id=eq.USER_ID_HERE&select=id,last_active_agency_id" \
+  -H "apikey: YOUR_ANON_KEY" \
+  -H "Authorization: Bearer ${JWT}" | jq
+
+# Expected result:
+# [{"id":"8036f477-...","last_active_agency_id":"ffd0123a-..."}]
+```
+
+**Fix Steps:**
+
+1. **Check Diagnostics Panel First:**
+   - Look at "Team Members Found" count
+   - If 0: User has no active team_members row (see step 2)
+   - If ≥1: Check "Resolved Role" (see step 3)
+   - If error message shown: See step 4
+
+2. **If Team Members Found = 0:**
+   ```sql
+   -- Check if row exists but is_active=false
+   SELECT user_id, agency_id, role, is_active
+   FROM public.team_members
+   WHERE user_id = 'USER_ID_HERE';
+
+   -- If exists but is_active=false, activate it
+   UPDATE public.team_members
+   SET is_active = true
+   WHERE user_id = 'USER_ID_HERE';
+
+   -- If no row exists at all, insert one
+   INSERT INTO public.team_members (user_id, agency_id, role, is_active)
+   VALUES ('USER_ID_HERE', 'AGENCY_ID_HERE', 'admin', true);
+   ```
+
+3. **If Resolved Role ≠ 'admin':**
+   ```sql
+   -- Update role to admin
+   UPDATE public.team_members
+   SET role = 'admin'
+   WHERE user_id = 'USER_ID_HERE'
+     AND is_active = true;
+   ```
+
+4. **If Error Message Mentions Supabase Error/RLS:**
+   - Check RLS policies on `team_members` table
+   - User must be able to SELECT their own rows:
+     ```sql
+     -- Example RLS policy (adjust for your schema)
+     CREATE POLICY "Users can view their own team_members"
+     ON public.team_members
+     FOR SELECT
+     USING (auth.uid() = user_id);
+     ```
+   - Verify Supabase anon key has read access to team_members
+
+5. **If Still Denied After Database Fix:**
+   - Hard refresh browser (Ctrl+Shift+R / Cmd+Shift+R)
+   - Clear browser cache
+   - Logout and login again
+   - Check browser console for JavaScript errors
+   - Try incognito/private mode to rule out cache
+
+6. **Verify Fix Worked:**
+   - Refresh `/ops` page
+   - Diagnostics should now show:
+     - Team Members Found: ≥1
+     - Resolved Role: admin
+     - No error message
+   - Should redirect to Ops Console status page
+
+#### Issue: "Ops Console is Disabled" Message
+
+**Symptom:**
+- Admin UI shows "Ops Console is Disabled" error page
+- Message explains that `NEXT_PUBLIC_ENABLE_OPS_CONSOLE` must be set
+- Shows accepted values: `1`, `true`, `yes`, `on` (case-insensitive)
+
+**Cause:**
+- Feature flag `NEXT_PUBLIC_ENABLE_OPS_CONSOLE` is not set, OR
+- Set to a falsy value like `0`, `false`, empty string, etc.
+
+**Fix:**
+1. Go to Coolify Dashboard → pms-admin → Build Pack Variables (Environment Variables)
+2. Add or update: `NEXT_PUBLIC_ENABLE_OPS_CONSOLE` = `1`
+3. Redeploy pms-admin application
+4. Wait for deployment to complete (~2-3 minutes)
+5. Refresh browser (hard refresh: Ctrl+Shift+R / Cmd+Shift+R)
+
+**Note:** The feature flag now accepts multiple truthy values for flexibility:
+- `1` (recommended, works in all contexts)
+- `true`
+- `yes`
+- `on`
+
+All values are case-insensitive, so `TRUE`, `True`, `YES`, etc. all work.
+
+#### Issue: Still Shows Auth Loading Skeleton
+
+**Symptom:**
+- Opening `/ops` shows "Loading..." indefinitely
+- Never transitions to error page or Ops Console
+
+**Cause:**
+- Auth context not initializing properly
+- JWT token validation hanging
+
+**Fix:**
+1. Check browser console for JavaScript errors
+2. Verify JWT_SECRET is set correctly in backend
+3. Logout and login again
+4. Clear browser cache and cookies
+5. Try in incognito/private mode to rule out cache issues
+
+---
+
+### Known Limitations
+
+1. **No Real-Time Monitoring:**
+   - Status page requires manual "Refresh" button clicks
+   - No WebSocket/SSE auto-updates
+   - No alerts or notifications
+
+2. **No Historical Data:**
+   - Health checks show current state only
+   - No time-series graphs or trends
+   - No component uptime statistics
+
+3. **No Celery Worker Control:**
+   - Cannot restart workers from UI
+   - Cannot view active task queue
+   - Cannot cancel running tasks
+
+4. **No Log Streaming:**
+   - Ops Console does not stream backend/worker logs
+   - Must use Coolify Dashboard for log viewing
+
+5. **Feature Flag is Frontend-Only:**
+   - Backend API endpoints are always available (if deployed)
+   - Ops Console just gates UI access
+   - RBAC on backend still enforces admin-only access
+
+---
+
+### Related Sections
+
+- [Channel Manager API Endpoints](#channel-manager-api-endpoints) - API documentation
+- [Celery Worker Troubleshooting](#celery-worker-pms-worker-v2-start-verify-troubleshoot) - Worker issues
+- [DB DNS / Degraded Mode](#db-dns--degraded-mode) - Database connectivity
+
+---
+
+## Admin UI Authentication Verification
+
+### Overview
+
+The Admin UI (frontend) uses cookie-based SSR authentication for the Ops Console at `/ops/*`. After login, the session must be stored in HTTP cookies (not just localStorage) so that server-side components can validate access.
+
+### Verify Cookie-Based Auth (curl)
+
+These checks verify that the server login endpoint (`/auth/login`) properly sets session cookies, and that the Ops Console respects those cookies.
+
+**Prerequisites:**
+- Admin user credentials (e.g., `test1@example.com` with password `12345678`)
+- User must have `role='admin'` and `is_active=true` in `public.team_members` table
+
+#### 1. Unauthenticated Access (Expect 307 Redirect)
+
+```bash
+# Check that /ops/status redirects to login when not authenticated
+curl -sS -I https://admin.fewo.kolibri-visions.de/ops/status | sed -n '1,30p'
+
+# Expected output:
+# HTTP/2 307
+# location: /login?next=%2Fops%2Fstatus
+# ...
+```
+
+**What this verifies:**
+- Server-side layout properly checks for session cookies
+- Unauthenticated requests are redirected to `/login?next=...` (preserves original path)
+
+#### 2. Login to Get Session Cookies
+
+```bash
+# Login via server endpoint to get session cookies
+curl -sS -i -c /tmp/admin.cookies \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"test1@example.com","password":"12345678","next":"/ops/status"}' \
+  https://admin.fewo.kolibri-visions.de/auth/login | sed -n '1,60p'
+
+# Expected output:
+# HTTP/2 200
+# set-cookie: sb-<project>-auth-token=...; Path=/; ...
+# set-cookie: sb-<project>-auth-token-code-verifier=...; Path=/; ...
+# ...
+# {"success":true,"user":{"id":"...","email":"test1@example.com"},"next":"/ops/status"}
+```
+
+**What this verifies:**
+- Server login endpoint (`/auth/login`) accepts POST JSON
+- Sets Supabase session cookies (`sb-*-auth-token`)
+- Returns success response with user info and next path
+- Cookies are saved to `/tmp/admin.cookies` for subsequent requests
+
+**Troubleshooting:**
+- `401 Unauthorized`: Invalid credentials or user not found
+- `500 Internal Server Error`: Check backend logs for Supabase connection issues
+- No `set-cookie` headers: Check that `@supabase/ssr` is properly configured in route handler
+
+#### 3. Authenticated Access (Expect 200 or 307 if Not Admin)
+
+```bash
+# Access /ops/status with session cookies
+curl -sS -I -b /tmp/admin.cookies \
+  https://admin.fewo.kolibri-visions.de/ops/status | sed -n '1,30p'
+
+# Expected output (if user IS admin):
+# HTTP/2 200
+# ...
+#
+# Expected output (if user is NOT admin):
+# HTTP/2 307
+# location: /ops/status (may show Access Denied page, not redirect)
+```
+
+**What this verifies:**
+- Server-side layout reads session from cookies
+- Admin users get 200 OK (ops page renders)
+- Non-admin users see Access Denied page (no redirect loop)
+
+**Troubleshooting:**
+- `307 to /login`: Session cookies expired or invalid, middleware didn't refresh
+- `200 but user not admin`: Check `team_members` table for `role='admin'` and `is_active=true`
+
+#### 4. Logout and Re-Verify (Expect 307 Redirect)
+
+```bash
+# Logout (clears session cookies)
+curl -sS -I -b /tmp/admin.cookies \
+  https://admin.fewo.kolibri-visions.de/auth/logout | sed -n '1,40p'
+
+# Expected output:
+# HTTP/2 307
+# location: /login
+# set-cookie: sb-<project>-auth-token=; Path=/; Expires=Thu, 01 Jan 1970...
+# ...
+
+# Verify cookies are invalid - should redirect to login
+curl -sS -I -b /tmp/admin.cookies \
+  https://admin.fewo.kolibri-visions.de/ops/status | sed -n '1,30p'
+
+# Expected output:
+# HTTP/2 307
+# location: /login?next=%2Fops%2Fstatus
+```
+
+**What this verifies:**
+- Logout route (`/auth/logout`) calls `supabase.auth.signOut()` server-side
+- Session cookies are cleared (set to expired)
+- Subsequent requests to `/ops/*` redirect to login (session invalidated)
+
+**Troubleshooting:**
+- Still get 200 after logout: Session not properly cleared, check `createSupabaseRouteHandlerClient()` implementation
+- Cookies not expired: Check that route handler sets cookie expiry to past date
+
+### Common Issues
+
+**Issue**: After login, `/ops/status` still redirects to `/login`
+
+**Cause**: Session stored in localStorage only, not cookies. Server components can't read localStorage.
+
+**Fix**:
+1. Verify login page calls `/auth/login` endpoint (not direct `supabase.auth.signInWithPassword`)
+2. Check that `/auth/login` route handler uses `createSupabaseRouteHandlerClient()`
+3. Verify middleware is active for `/ops/*` routes (refreshes session cookies)
+
+---
+
+**Issue**: Login works in Channel Sync but not Ops Console
+
+**Cause**: Split auth storage - Channel Sync uses client localStorage, Ops uses SSR cookies.
+
+**Fix**: Both should use the same cookie-based auth (`/auth/login` endpoint).
+
+---
+
+**Issue**: curl shows 200 but browser shows "Loading..." forever
+
+**Cause**: Client-side hydration waiting for localStorage session, which doesn't exist.
+
+**Fix**: Remove any client-side auth checks in Ops pages. All auth should be server-side in layout.
+
+---
+
+## Additional Resources
+
+### Smoke Scripts
+
+**Location**: `/app/scripts/` (in container)
+
+The Phase 23 smoke script (`pms_phase23_smoke.sh`) provides quick confidence checks for post-deployment validation. It includes two **opt-in tests** for advanced inventory/availability validation:
+
+#### AVAIL_BLOCK_TEST (Availability Block Conflict Test)
+
+**What it does:**
+- Creates a future availability block (today+30 days, 3-day duration)
+- Verifies block appears in `/api/v1/availability` response
+- Attempts to create overlapping booking (expects 409 `inventory_overlap`)
+- Deletes the block for cleanup
+
+**Usage:**
+```bash
+# In Coolify container terminal or via docker exec
+export ENV_FILE=/root/pms_env.sh
+export AVAIL_BLOCK_TEST=true
+bash /app/scripts/pms_phase23_smoke.sh
+```
+
+**Safety:**
+- Uses future dates (30+ days out) to avoid production conflicts
+- Always cleans up (block deletion via trap, runs even on failure)
+
+#### B2B_TEST (Back-to-Back Booking Boundary Test)
+
+**What it does:**
+- Scans for a 4-day free gap in the future (today+60 to today+150)
+- Creates booking A: D → D+2 (2 nights)
+- Creates booking B: D+2 → D+4 (2 nights, check-in = A's check-out)
+- Expects both HTTP 201 (confirms end-exclusive date semantics)
+- Cancels both bookings via PATCH `status=cancelled`
+
+**Usage:**
+```bash
+# In Coolify container terminal or via docker exec
+export ENV_FILE=/root/pms_env.sh
+export B2B_TEST=true
+bash /app/scripts/pms_phase23_smoke.sh
+```
+
+**Safety:**
+- Uses far-future dates (60+ days out) to avoid production conflicts
+- Always cleans up (booking cancellation via trap, runs even on failure)
+- Uses PATCH cancel instead of DELETE (DELETE /bookings returns 405)
+
+**When to Use:**
+- After schema migrations affecting availability/inventory tables
+- After deployment of conflict detection logic changes
+- Pre-production validation before go-live
+- NOT recommended for CI/CD or frequent monitoring (creates/deletes data)
+
+**Full Documentation**: `/app/scripts/README.md` (in container)
+
+### Other Resources
+
+- **Inventory Contract** (Single Source of Truth): `/app/docs/domain/inventory.md` (date semantics, API contracts, edge cases, DB guarantees, test evidence)
+- **Inventory & Availability Rules**: `/app/docs/ops/inventory_rules.md` (conflict rules, date semantics, test examples)
+- **Modular Monolith Architecture**: `/app/docs/architecture/modules.md` (module system, registry, dependency management)
+- **Architecture Docs**: `/app/docs/architecture/` (in container)
+- **Supabase Dashboard**: Check database health, logs, network
+- **Coolify Dashboard**: Application logs, environment variables, networks
+
+---
+
+## Emergency Contacts
+
+- **Primary On-Call**: [Add contact info]
+- **Database Admin**: [Add contact info]
+- **Supabase Support**: https://supabase.com/support
+
+---
+
+## Change Log
+
+| Date | Change | Author |
+|------|--------|--------|
+| 2025-12-26 | Initial runbook creation (Phase 24) | Claude Code |
+| 2025-12-27 | Document smoke script opt-in tests (AVAIL_BLOCK_TEST, B2B_TEST) | Claude Code |
+| 2025-12-27 | Phase 30 — Inventory Final validation results (block conflict, B2B boundary, end-exclusive semantics) | Claude Code |
+| 2025-12-27 | Phase 30.5 — Inventory Contract documented (single source of truth for inventory semantics, edge cases, DB guarantees) | Claude Code |
+| 2025-12-27 | Phase 31 — Modular Monolith architecture documented (module system, registry, router aggregation) | Claude Code |
+| 2025-12-27 | Phase 31 — MODULES_ENABLED kill-switch added (ops safety, emergency fallback to explicit router mounting) | Claude Code |
+| 2025-12-27 | Phase 33B — Split api_v1 into domain modules (properties, bookings, inventory) | Claude Code |
+| 2025-12-27 | Phase 34 — Updated kill-switch docs with Phase 33B context (explicit fallback router list) | Claude Code |
+| 2025-12-27 | Phase 35 — Module mounting hardening (router dedupe guard, improved logging) | Claude Code |
+| 2025-12-27 | Phase 36 — Channel Manager module integration with feature flag (CHANNEL_MANAGER_ENABLED, default OFF) | Claude Code |
+| 2025-12-27 | Phase 36 — Redis + Celery worker setup runbook (password encoding, deployment steps, verification, troubleshooting) | Claude Code |
+| 2025-12-30 | Admin UI authentication verification - Cookie-based SSR login, curl checks for /ops/* access | Claude Code |

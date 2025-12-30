@@ -1,0 +1,641 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#3B82F6', 'primaryTextColor': '#fff', 'primaryBorderColor': '#1E40AF', 'lineColor': '#64748B', 'secondaryColor': '#10B981', 'tertiaryColor': '#F1F5F9'}}}%%
+erDiagram
+    %% =============================================================================
+    %% PMS-Core Entity Relationship Diagram
+    %% Version: 1.0.0
+    %% =============================================================================
+
+    %% =============================================================================
+    %% CORE TENANT & USER MANAGEMENT
+    %% =============================================================================
+
+    auth_users {
+        uuid id PK "Supabase Auth managed"
+        text email UK
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    tenants {
+        uuid id PK
+        text name
+        text email UK
+        text phone
+        text company_name
+        text tax_id
+        text subscription_tier "free|starter|professional|enterprise"
+        text subscription_status "active|past_due|cancelled|suspended"
+        text stripe_customer_id UK
+        text stripe_subscription_id
+        jsonb settings
+        text logo_url
+        jsonb brand_colors
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
+    }
+
+    user_tenant_roles {
+        uuid id PK
+        uuid user_id FK "auth.users(id)"
+        uuid tenant_id FK "tenants(id)"
+        text role "owner|manager|staff|viewer"
+        jsonb permissions
+        uuid invited_by FK
+        timestamptz invited_at
+        timestamptz accepted_at
+        boolean is_active
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    user_profiles {
+        uuid id PK,FK "auth.users(id)"
+        text first_name
+        text last_name
+        text display_name
+        text avatar_url
+        text phone
+        text preferred_language
+        text preferred_timezone
+        jsonb notification_preferences
+        timestamptz last_login_at
+        uuid last_active_tenant_id FK
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    %% =============================================================================
+    %% PROPERTY MANAGEMENT
+    %% =============================================================================
+
+    properties {
+        uuid id PK
+        uuid tenant_id FK "tenants(id)"
+        text name
+        text internal_name
+        text description
+        text property_type "apartment|house|villa|..."
+        int bedrooms
+        int beds
+        numeric bathrooms
+        int max_guests
+        numeric size_sqm
+        jsonb address
+        geography location "PostGIS POINT"
+        jsonb amenities
+        jsonb house_rules
+        time check_in_time
+        time check_out_time
+        text check_in_instructions
+        jsonb images
+        text virtual_tour_url
+        numeric base_price
+        text currency
+        numeric cleaning_fee
+        numeric security_deposit
+        numeric extra_guest_fee
+        int extra_guest_threshold
+        int min_stay
+        int max_stay
+        int advance_notice_days
+        int booking_window_days
+        boolean instant_book_enabled
+        numeric tax_rate
+        boolean tax_included
+        text status "draft|active|inactive|archived"
+        timestamptz listed_at
+        jsonb external_ids
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
+    }
+
+    amenity_definitions {
+        uuid id PK
+        text code UK "wifi|pool|parking|..."
+        text name_en
+        text name_de
+        text category "essentials|features|location|..."
+        text icon
+        int display_order
+        timestamptz created_at
+    }
+
+    property_images {
+        uuid id PK
+        uuid property_id FK "properties(id)"
+        text url
+        text thumbnail_url
+        text caption
+        text alt_text
+        boolean is_primary
+        int display_order
+        int width
+        int height
+        int file_size
+        text mime_type
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    %% =============================================================================
+    %% GUEST MANAGEMENT (Optional Auth)
+    %% =============================================================================
+
+    guests {
+        uuid id PK
+        uuid tenant_id FK "tenants(id)"
+        text first_name
+        text last_name
+        text email
+        text phone
+        uuid auth_user_id FK "auth.users(id) NULLABLE"
+        jsonb address
+        date date_of_birth
+        text nationality
+        text id_document_type
+        text id_document_number
+        timestamptz id_verified_at
+        text language
+        text communication_channel
+        boolean marketing_consent
+        text profile_notes
+        boolean vip_status
+        boolean blacklisted
+        text blacklist_reason
+        int total_bookings
+        numeric total_spent
+        timestamptz first_booking_at
+        timestamptz last_booking_at
+        numeric average_rating
+        text source
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
+    }
+
+    guest_invitations {
+        uuid id PK
+        uuid guest_id FK "guests(id)"
+        text token_hash UK
+        uuid invited_by FK "auth.users(id)"
+        text email
+        text status "pending|accepted|expired|revoked"
+        timestamptz expires_at
+        timestamptz sent_at
+        timestamptz accepted_at
+        timestamptz created_at
+    }
+
+    %% =============================================================================
+    %% BOOKING MANAGEMENT (Source of Truth)
+    %% =============================================================================
+
+    bookings {
+        uuid id PK
+        uuid tenant_id FK "tenants(id)"
+        uuid property_id FK "properties(id)"
+        uuid guest_id FK "guests(id)"
+        text booking_reference UK "PMS-YYYY-NNNNNN"
+        date check_in
+        date check_out
+        int num_adults
+        int num_children
+        int num_infants
+        int num_pets
+        int num_guests "GENERATED"
+        text source "direct|airbnb|booking_com|..."
+        text channel_booking_id
+        text channel_guest_id
+        text status "inquiry|pending|confirmed|..."
+        int version "Optimistic locking"
+        numeric nightly_rate
+        int num_nights "GENERATED"
+        numeric subtotal
+        numeric cleaning_fee
+        numeric service_fee
+        numeric extra_guest_fee
+        numeric discount_amount
+        text discount_code
+        numeric tax_amount
+        numeric total_price
+        text currency
+        text payment_status "pending|partial|paid|..."
+        numeric deposit_amount
+        timestamptz deposit_paid_at
+        numeric paid_amount
+        timestamptz paid_at
+        text stripe_payment_intent_id
+        text stripe_charge_id
+        text cancellation_policy
+        timestamptz cancelled_at
+        text cancelled_by
+        text cancellation_reason
+        numeric refund_amount
+        text guest_message
+        text special_requests
+        text internal_notes
+        jsonb channel_data
+        timestamptz inquiry_at
+        timestamptz confirmed_at
+        timestamptz check_in_at
+        timestamptz check_out_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    booking_status_history {
+        uuid id PK
+        uuid booking_id FK "bookings(id)"
+        text old_status
+        text new_status
+        uuid changed_by FK "auth.users(id)"
+        text change_reason
+        timestamptz created_at
+    }
+
+    booking_addons {
+        uuid id PK
+        uuid booking_id FK "bookings(id)"
+        text name
+        text description
+        int quantity
+        numeric unit_price
+        numeric total_price
+        timestamptz created_at
+    }
+
+    %% =============================================================================
+    %% CALENDAR & AVAILABILITY
+    %% =============================================================================
+
+    calendar_availability {
+        uuid id PK
+        uuid property_id FK "properties(id)"
+        date date
+        boolean available
+        text availability_status "available|booked|blocked|tentative"
+        uuid booking_id FK "bookings(id) NULLABLE"
+        numeric price
+        int min_stay
+        int max_stay
+        text block_reason
+        uuid blocked_by FK "auth.users(id)"
+        text notes
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    pricing_rules {
+        uuid id PK
+        uuid property_id FK "properties(id)"
+        text name
+        text description
+        text rule_type "seasonal|day_of_week|length_of_stay|..."
+        date start_date
+        date end_date
+        int_array days_of_week
+        int min_nights
+        int max_nights
+        int days_before_check_in_min
+        int days_before_check_in_max
+        text adjustment_type "percentage|fixed_amount|fixed_price"
+        numeric adjustment_value
+        int priority
+        boolean is_active
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    %% =============================================================================
+    %% FINANCIAL MANAGEMENT
+    %% =============================================================================
+
+    payment_transactions {
+        uuid id PK
+        uuid tenant_id FK "tenants(id)"
+        uuid booking_id FK "bookings(id)"
+        text transaction_type "payment|refund|payout|..."
+        numeric amount
+        text currency
+        text payment_method
+        text status "pending|processing|completed|..."
+        text stripe_payment_intent_id
+        text stripe_charge_id
+        text stripe_refund_id
+        text external_reference
+        text description
+        jsonb metadata
+        text failure_reason
+        text failure_code
+        timestamptz created_at
+        timestamptz completed_at
+    }
+
+    invoices {
+        uuid id PK
+        uuid tenant_id FK "tenants(id)"
+        uuid booking_id FK "bookings(id)"
+        uuid guest_id FK "guests(id)"
+        text invoice_number UK "INV-YYYY-NNNNNN"
+        text invoice_type "booking|deposit|damage|..."
+        date issue_date
+        date due_date
+        numeric subtotal
+        numeric tax_amount
+        numeric total_amount
+        text currency
+        text status "draft|sent|paid|overdue|..."
+        jsonb line_items
+        numeric paid_amount
+        timestamptz paid_at
+        text pdf_url
+        text notes
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz sent_at
+    }
+
+    %% =============================================================================
+    %% CHANNEL MANAGEMENT
+    %% =============================================================================
+
+    channel_connections {
+        uuid id PK
+        uuid tenant_id FK "tenants(id)"
+        uuid property_id FK "properties(id)"
+        text channel_type "airbnb|booking_com|expedia|..."
+        text access_token_encrypted
+        text refresh_token_encrypted
+        timestamptz token_expires_at
+        text channel_property_id
+        text channel_account_id
+        text channel_listing_url
+        boolean sync_enabled
+        text sync_direction "bidirectional|inbound_only|outbound_only"
+        boolean sync_availability
+        boolean sync_pricing
+        boolean sync_bookings
+        boolean sync_content
+        text price_adjustment_type
+        numeric price_adjustment_value
+        timestamptz last_sync_at
+        timestamptz last_successful_sync_at
+        int sync_frequency_minutes
+        text status "pending|active|paused|error|..."
+        text error_message
+        int error_count
+        timestamptz last_error_at
+        text webhook_url
+        text webhook_secret
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz connected_at
+        timestamptz disconnected_at
+    }
+
+    channel_sync_logs {
+        uuid id PK
+        uuid channel_connection_id FK "channel_connections(id)"
+        text sync_type "booking_import|availability_export|..."
+        text direction "inbound|outbound"
+        text status "started|success|partial_success|failure|..."
+        int records_processed
+        int records_created
+        int records_updated
+        int records_failed
+        int records_skipped
+        text error_message
+        jsonb error_details
+        jsonb request_data
+        jsonb response_data
+        timestamptz started_at
+        timestamptz completed_at
+        int duration_ms
+    }
+
+    channel_rate_mappings {
+        uuid id PK
+        uuid channel_connection_id FK "channel_connections(id)"
+        text pms_rate_name
+        text channel_rate_id
+        text channel_rate_name
+        boolean is_active
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    %% =============================================================================
+    %% MESSAGING & COMMUNICATION
+    %% =============================================================================
+
+    messages {
+        uuid id PK
+        uuid tenant_id FK "tenants(id)"
+        uuid booking_id FK "bookings(id)"
+        uuid guest_id FK "guests(id)"
+        uuid thread_id
+        uuid parent_message_id FK "messages(id)"
+        text subject
+        text body
+        text direction "inbound|outbound"
+        text sender_type "guest|host|system"
+        uuid sender_user_id FK "auth.users(id)"
+        text channel "direct|email|airbnb|..."
+        text channel_message_id
+        text status "draft|queued|sent|delivered|read|..."
+        timestamptz read_at
+        jsonb attachments
+        timestamptz created_at
+        timestamptz sent_at
+        timestamptz delivered_at
+    }
+
+    message_templates {
+        uuid id PK
+        uuid tenant_id FK "tenants(id)"
+        text name UK
+        text description
+        text template_type "booking_confirmation|check_in_instructions|..."
+        text subject
+        text body
+        text_array channels
+        boolean auto_send
+        text send_timing
+        boolean is_active
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    %% =============================================================================
+    %% REVIEWS & RATINGS
+    %% =============================================================================
+
+    reviews {
+        uuid id PK
+        uuid tenant_id FK "tenants(id)"
+        uuid booking_id FK,UK "bookings(id)"
+        uuid property_id FK "properties(id)"
+        uuid guest_id FK "guests(id)"
+        numeric overall_rating "1-5"
+        numeric cleanliness_rating
+        numeric accuracy_rating
+        numeric communication_rating
+        numeric location_rating
+        numeric value_rating
+        numeric checkin_rating
+        text public_comment
+        text private_feedback
+        text source "direct|airbnb|..."
+        text channel_review_id
+        text host_response
+        timestamptz host_responded_at
+        text status "pending|published|hidden|flagged"
+        text flagged_reason
+        uuid moderated_by FK
+        timestamptz moderated_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    %% =============================================================================
+    %% AUDIT & EVENT SOURCING
+    %% =============================================================================
+
+    booking_audit_log {
+        uuid id PK
+        uuid booking_id FK "bookings(id)"
+        text action "created|updated|status_changed|..."
+        jsonb old_data
+        jsonb new_data
+        text_array changed_fields
+        uuid changed_by FK "auth.users(id)"
+        text changed_by_type "user|guest|system|channel"
+        text change_reason
+        inet ip_address
+        text user_agent
+        timestamptz created_at
+    }
+
+    audit_log {
+        uuid id PK
+        uuid tenant_id FK "tenants(id)"
+        text entity_type
+        uuid entity_id
+        text action "created|updated|deleted|..."
+        jsonb old_data
+        jsonb new_data
+        uuid user_id FK "auth.users(id)"
+        inet ip_address
+        text user_agent
+        timestamptz created_at
+    }
+
+    %% =============================================================================
+    %% SYSTEM & CONFIGURATION
+    %% =============================================================================
+
+    distributed_locks {
+        text lock_key PK
+        text lock_holder
+        timestamptz acquired_at
+        timestamptz expires_at
+        jsonb metadata
+    }
+
+    background_jobs {
+        uuid id PK
+        text job_type
+        text queue
+        jsonb payload
+        text status "pending|processing|completed|..."
+        int priority
+        timestamptz scheduled_at
+        timestamptz started_at
+        timestamptz completed_at
+        int attempts
+        int max_attempts
+        text last_error
+        jsonb result
+        timestamptz created_at
+    }
+
+    system_events {
+        uuid id PK
+        text event_type
+        uuid tenant_id
+        text entity_type
+        uuid entity_id
+        jsonb payload
+        boolean processed
+        timestamptz processed_at
+        timestamptz created_at
+    }
+
+    %% =============================================================================
+    %% RELATIONSHIPS
+    %% =============================================================================
+
+    %% User & Tenant relationships
+    auth_users ||--o{ user_tenant_roles : "has many"
+    tenants ||--o{ user_tenant_roles : "has many"
+    auth_users ||--o| user_profiles : "has one"
+    user_profiles }o--o| tenants : "last active"
+
+    %% Property relationships
+    tenants ||--o{ properties : "owns"
+    properties ||--o{ property_images : "has many"
+
+    %% Guest relationships
+    tenants ||--o{ guests : "manages"
+    auth_users ||--o{ guests : "optionally linked (auth_user_id)"
+    guests ||--o{ guest_invitations : "has many"
+    auth_users ||--o{ guest_invitations : "invited_by"
+
+    %% Booking relationships
+    tenants ||--o{ bookings : "owns"
+    properties ||--o{ bookings : "has many"
+    guests ||--o{ bookings : "makes"
+    bookings ||--o{ booking_status_history : "has history"
+    bookings ||--o{ booking_addons : "has extras"
+    auth_users ||--o{ booking_status_history : "changed_by"
+
+    %% Calendar & Pricing relationships
+    properties ||--o{ calendar_availability : "has calendar"
+    bookings ||--o{ calendar_availability : "blocks dates"
+    properties ||--o{ pricing_rules : "has pricing"
+    auth_users ||--o{ calendar_availability : "blocked_by"
+
+    %% Financial relationships
+    tenants ||--o{ payment_transactions : "has payments"
+    bookings ||--o{ payment_transactions : "for booking"
+    tenants ||--o{ invoices : "has invoices"
+    bookings ||--o{ invoices : "for booking"
+    guests ||--o{ invoices : "to guest"
+
+    %% Channel relationships
+    tenants ||--o{ channel_connections : "manages"
+    properties ||--o{ channel_connections : "connected to"
+    channel_connections ||--o{ channel_sync_logs : "has logs"
+    channel_connections ||--o{ channel_rate_mappings : "has mappings"
+
+    %% Messaging relationships
+    tenants ||--o{ messages : "owns"
+    bookings ||--o{ messages : "has messages"
+    guests ||--o{ messages : "participates"
+    messages ||--o{ messages : "replies (parent_message_id)"
+    auth_users ||--o{ messages : "sent_by"
+    tenants ||--o{ message_templates : "owns"
+
+    %% Review relationships
+    tenants ||--o{ reviews : "owns"
+    bookings ||--|| reviews : "has one review"
+    properties ||--o{ reviews : "for property"
+    guests ||--o{ reviews : "by guest"
+
+    %% Audit relationships
+    bookings ||--o{ booking_audit_log : "has audit trail"
+    auth_users ||--o{ booking_audit_log : "changed_by"
+    tenants ||--o{ audit_log : "has audit trail"
+    auth_users ||--o{ audit_log : "performed_by"
