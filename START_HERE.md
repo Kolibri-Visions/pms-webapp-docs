@@ -10,6 +10,15 @@
 - **[Feature Flags](ops/feature-flags.md)** - Central reference for all feature toggles (MODULES_ENABLED, CHANNEL_MANAGER_ENABLED, etc.)
 - **[Live Status](PROJECT_STATUS_LIVE.md)** - Current staging/deploy reality (what's running now, known issues)
 
+## For Product / Planning
+
+- **[Product Backlog](product/PRODUCT_BACKLOG.md)** - 10 epics (A-J) with features and open tasks
+- **[Release Plan](product/RELEASE_PLAN.md)** - MVP → Beta → Prod-ready milestones
+- **[Changelog](product/CHANGELOG.md)** - Release history (user-facing changes)
+- **[Definition of Done](process/DEFINITION_OF_DONE.md)** - Task completion criteria (includes "docs updated after every task")
+- **[Docs Lifecycle](process/DOCS_LIFECYCLE.md)** - Deprecate → Verify → Delete workflow
+- **[Release Cadence](process/RELEASE_CADENCE.md)** - Bi-weekly releases, hotfix process
+
 ## For Developers
 
 ### Architecture
