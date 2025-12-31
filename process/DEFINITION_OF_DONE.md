@@ -63,7 +63,12 @@ All tasks (features, bugs, refactors, spikes) must meet these criteria before be
 - Ops changes → `backend/docs/ops/`
 - Product changes → `backend/docs/product/CHANGELOG.md`
 
-**Docs Lifecycle**: See [DOCS_LIFECYCLE.md](DOCS_LIFECYCLE.md) for deprecation workflow
+**Docs Sync (Required)**:
+- ✅ **Mark task Done** in `product/PRODUCT_BACKLOG.md` (update status, link to PR/commit)
+- ✅ **Update `PROJECT_STATUS_LIVE.md`** (reflect actual deployment state, flags, known issues)
+- ✅ **Update ops docs** (if relevant): `ops/runbook.md`, `testing/README.md`, `ops/feature-flags.md`
+
+See [DOCS_LIFECYCLE.md](DOCS_LIFECYCLE.md) for full workflow and deprecation process.
 
 ---
 

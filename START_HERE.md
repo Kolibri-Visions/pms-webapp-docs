@@ -19,7 +19,7 @@
 - **[Release Plan](product/RELEASE_PLAN.md)** - MVP → Beta → Prod-ready milestones
 - **[Changelog](product/CHANGELOG.md)** - Release history (user-facing changes)
 - **[Definition of Done](process/DEFINITION_OF_DONE.md)** - Task completion criteria (includes "docs updated after every task")
-- **[Docs Lifecycle](process/DOCS_LIFECYCLE.md)** - Deprecate → Verify → Delete workflow
+- **[Docs Lifecycle](process/DOCS_LIFECYCLE.md)** - Keep backlog + live status in sync, prevent doc duplication
 - **[Deprecation Map](process/DEPRECATION_MAP.md)** - Safe deletion roadmap (OLD → NEW mappings, deletion gate checklist)
 - **[Release Cadence](process/RELEASE_CADENCE.md)** - Bi-weekly releases, hotfix process
 

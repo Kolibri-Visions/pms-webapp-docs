@@ -12,6 +12,8 @@
 
 This backlog tracks the PMS-Webapp (Property Management System) product evolution from MVP to production-ready.
 
+**Planning Policy**: This is the single source of truth for planning. Never create roadmap/, tickets/, or phase*.md files (see [DOCS_LIFECYCLE.md](../process/DOCS_LIFECYCLE.md)).
+
 **Backlog Structure**: 10 Epics (A-J) → Features → Tasks
 
 **Status Legend**:
