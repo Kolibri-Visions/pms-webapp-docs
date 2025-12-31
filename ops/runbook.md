@@ -3480,6 +3480,8 @@ The Channel Sync Admin UI provides:
    - Status badges: triggered (blue), running (yellow), success (green), failed (red)
    - Click any row to view full log details in slide-in drawer
    - **Auto-load on Login:** Logs load automatically after login without requiring a sync trigger
+     - Shows "Loading logs..." indicator during auto-detection
+     - Displays error message with HTTP status if auto-detection fails (e.g., "Failed to auto-detect connection ID (HTTP 403)")
    - **Connection ID Auto-detection:** UI automatically detects connection ID using:
      - Last-used connection ID from localStorage (preferred)
      - Or first channel connection from API if no localStorage entry
