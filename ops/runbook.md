@@ -6072,7 +6072,14 @@ The Ops Console includes three main pages:
 #### 1. `/ops/status` - System Health
 
 **What it shows:**
-- Overall system status (Healthy / Degraded / Down)
+- **Overall system status banner** (Healthy / Down):
+  - **System Healthy** (green) when ALL of the following are true:
+    - `/health` endpoint returns `status: "up"`
+    - `/health/ready` endpoint returns `status: "up"`
+    - All components (db, redis, celery) have `status: "up"`
+  - **System Down** (red) when ANY check fails:
+    - Lists specific failed checks (e.g., "db component (status: down)")
+    - Example: "/health (not 'up')", "redis component (status: down)"
 - GET `/health` response with version/commit if available
 - GET `/health/ready` response with component statuses
   - Database (db)
@@ -6080,7 +6087,6 @@ The Ops Console includes three main pages:
   - Celery workers (if exposed)
   - **Component badges** display `component.status` (e.g., "ok", "healthy", "up", "down")
   - **Error messages** appear below component name if `component.error` is present (truncated to 60 chars)
-- Degraded mode clearly indicated when any component is down
 
 **Actions:**
 - **Refresh:** Manually refresh health checks
@@ -6088,6 +6094,8 @@ The Ops Console includes three main pages:
   - Timestamp
   - API base URL
   - User role (admin)
+  - **Overall status** ("healthy" or "down")
+  - **Failed checks** (list of specific failures if any)
   - `/health` response
   - `/health/ready` response
   - **NO secrets / NO environment values exposed**
@@ -6096,6 +6104,15 @@ The Ops Console includes three main pages:
 - Quick system health check after deployment
 - Verify database/Redis/worker connectivity
 - Gather diagnostics for issue reports
+
+**Troubleshooting:**
+- If banner shows "System Down", check the listed failed checks
+- Expand "Show raw JSON" on `/health` and `/health/ready` sections to see full response
+- Verify each component has `status: "up"` (not "ok", "healthy", or other values)
+- Common causes:
+  - Database connection lost → db component status ≠ "up"
+  - Redis unavailable → redis component status ≠ "up"
+  - Celery worker down → celery component status ≠ "up"
 
 #### 2. `/ops/sync` - Channel Sync Operations
 
