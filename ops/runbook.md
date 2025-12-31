@@ -3479,18 +3479,20 @@ The Channel Sync Admin UI provides:
    - Columns: Status, Platform, Sync Type, Property, Error (if failed), Duration, Started At, Finished At
    - Status badges: triggered (blue), running (yellow), success (green), failed (red)
    - Click any row to view full log details in slide-in drawer
-   - **Auto-load on Login:** Logs load automatically after login without requiring a sync trigger
-     - Shows "Loading logs..." indicator during auto-detection
-     - Displays error message with HTTP status if auto-detection fails (e.g., "Failed to auto-detect connection ID (HTTP 403)")
-   - **Connection ID Auto-detection:** UI automatically detects connection ID using:
-     - Last-used connection ID from localStorage (preferred)
-     - Or first channel connection from API if no localStorage entry
-     - Badge indicator shows **"auto-detected"** (blue) when connection ID is auto-detected
-   - **Manual Override:** Connection ID input field allows manual entry to override auto-detection
+   - **Auto-load on Login:** Logs load automatically after login **if** a last-used connection ID exists in localStorage
+     - Fast prefill: uses `localStorage.getItem("channelSync:lastConnectionId")` if present and valid
+     - Badge indicator shows **"auto-detected"** (blue) when connection ID is prefilled from localStorage
+     - If no last-used connection ID exists, logs panel shows: **"Enter Connection ID or use Auto-detect button above"**
+   - **Explicit Auto-detect Button:** Appears when Connection ID field is empty
+     - On click, fetches all connections from `/api/v1/channel-connections/?limit=50&offset=0`
+     - **If exactly 1 connection:** Sets it automatically and persists to localStorage
+     - **If multiple connections:** Shows modal selector with platform_type, property_id, platform_listing_id, status for user to choose
+     - Shows loading state ("Detecting...") and error messages with HTTP status on failure
+   - **Manual Entry:** Connection ID input field allows manual entry
      - Badge indicator shows **"manual"** (gray) when user manually edits the connection ID
-     - **"Clear" button** removes connection ID, clears localStorage, and **disables auto-detection for the current session**
-       - Auto-detect will NOT re-run until user clicks "Auto-detect" button or reloads the page
-       - **"Auto-detect" button** appears when auto-detect is disabled (after Clear) — clicking it re-enables auto-detection
+     - Valid UUIDs are automatically persisted to localStorage for future sessions
+   - **"Clear" button:** Removes connection ID, clears localStorage, and shows Auto-detect button again
+     - Displays toast: "Connection ID cleared. Use Auto-detect or enter manually."
    - **Note:** Logs are fetched via `GET /api/v1/channel-connections/{connection_id}/sync-logs`
      - Connection ID must be a valid UUID format
      - Invalid connection ID shows helpful message instead of attempting fetch
