@@ -405,12 +405,10 @@ git commit -m "docs: delete old-doc.md (replaced by new-doc.md)"
 4. `ops/migrations.md` → `database/migrations-guide.md`
 
 **Inbound Links Updated**:
-- `ops/runbook.md` (line 6535): Updated reference to `database/exclusion-constraints.md`
-- `product/reference-product-model.md` (line 291): Updated reference to `database/migrations-guide.md`
-
-**Remaining References** (in Wave 2 candidate files, will be deleted in Wave 2):
-- `roadmap/phase-1.md`: References `ops/migrations.md`
-- `tickets/phase-1.md`: References `ops/migrations.md`
+- `ops/runbook.md`: Updated reference to `database/exclusion-constraints.md`
+- `product/reference-product-model.md`: Updated reference to `database/migrations-guide.md`
+- `roadmap/phase-1.md`: Updated reference to `database/migrations-guide.md`
+- `tickets/phase-1.md`: Updated reference to `database/migrations-guide.md`
 
 **Coverage Verified**:
 - ✅ All replacement docs exist and cover topics

@@ -57,7 +57,7 @@ Lock down security (RBAC, tenant isolation), establish error handling standards,
 ### 3. Mandatory Migrations Workflow
 **Files Touched**:
 - `backend/migrations/README.md` (new file)
-- `backend/docs/ops/migrations.md` (new file)
+- `backend/docs/database/migrations-guide.md`
 
 **DoD**:
 - [ ] Document workflow: Create migration → Review → Apply → Rollback plan

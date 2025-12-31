@@ -307,7 +307,7 @@ Create database migration for agency_features table (feature flags).
 Document the migration creation, review, and deployment process.
 
 **Touch Points**:
-- `backend/docs/ops/migrations.md` (new file)
+- `backend/docs/database/migrations-guide.md`
 - `backend/migrations/README.md` (new file)
 
 **Acceptance Criteria**:
