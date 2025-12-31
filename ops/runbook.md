@@ -6092,14 +6092,23 @@ The Ops Console includes three main pages:
   - **Component badges** display `component.status` (e.g., "ok", "healthy", "up", "down")
   - **Error messages** appear below component name if `component.error` is present (truncated to 60 chars)
 
+**Endpoint Metadata:**
+Each health endpoint displays operational metrics:
+- **Last checked:** Local timestamp of last check (e.g., "3:45:23 PM")
+- **Duration:** Request round-trip time in milliseconds (e.g., "152ms")
+- **HTTP:** Response status code (e.g., "200" for success, "503" for unavailable)
+
 **Actions:**
 - **Refresh:** Manually refresh health checks
 - **Copy Diagnostics:** Copies system diagnostics to clipboard:
   - Timestamp
+  - Current URL (for context)
   - API base URL
   - User role (admin)
-  - **Overall status** ("healthy" or "down")
+  - **Overall status** ("healthy", "down", or "checking")
   - **Failed checks** (list of specific failures if any)
+  - **Endpoint metadata** (duration_ms, http_status, last_checked_at for each endpoint)
+  - **Component statuses** (summary of db/redis/celery status)
   - `/health` response
   - `/health/ready` response
   - **NO secrets / NO environment values exposed**
@@ -6110,9 +6119,14 @@ The Ops Console includes three main pages:
 - Gather diagnostics for issue reports
 
 **Troubleshooting:**
+- **"Checking system..." state:** Normal on page load/refresh (brief, < 1 second). Only red "System Down" indicates confirmed failure.
 - If banner shows "System Down", check the listed failed checks
 - Expand "Show raw JSON" on `/health` and `/health/ready` sections to see full response
 - Verify each component has `status: "up"` (not "ok", "healthy", or other values)
+- Check endpoint metadata:
+  - High duration (> 5000ms) may indicate network/database slowness
+  - HTTP status ≠ 200 indicates endpoint failure
+  - Recent "Last checked" confirms data freshness
 - Common causes:
   - Database connection lost → db component status ≠ "up"
   - Redis unavailable → redis component status ≠ "up"
