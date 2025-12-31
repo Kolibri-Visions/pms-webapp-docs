@@ -288,4 +288,4 @@ Phase 21 is successful when:
 - **Reference Product Model**: Industry-standard PMS architecture
 - **System Architecture**: `docs/architecture/system-architecture.md`
 - **Current State**: `CURRENT_STATE.md`
-- **Phase 20 Docs**: `docs/ops/inventory_availability.md`
+- **Inventory & Availability**: `docs/database/migrations-guide.md` (migration workflow, schema drift SOP)

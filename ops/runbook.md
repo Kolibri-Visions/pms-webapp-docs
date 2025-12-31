@@ -6532,7 +6532,7 @@ bash /app/scripts/pms_phase23_smoke.sh
 ### Other Resources
 
 - **Inventory Contract** (Single Source of Truth): `/app/docs/domain/inventory.md` (date semantics, API contracts, edge cases, DB guarantees, test evidence)
-- **Inventory & Availability Rules**: `/app/docs/ops/inventory_rules.md` (conflict rules, date semantics, test examples)
+- **Inventory & Availability Rules**: `/app/docs/database/exclusion-constraints.md` (conflict rules, EXCLUSION constraints, overlap prevention)
 - **Modular Monolith Architecture**: `/app/docs/architecture/modules.md` (module system, registry, dependency management)
 - **Architecture Docs**: `/app/docs/architecture/` (in container)
 - **Supabase Dashboard**: Check database health, logs, network

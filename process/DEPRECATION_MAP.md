@@ -197,9 +197,12 @@ git commit -m "docs: delete old-doc.md (replaced by new-doc.md)"
 
 **When files are deleted**, move entries here with deletion date:
 
-| Deleted Path | Replaced By | Deletion Date | Archive Tag |
-|--------------|-------------|---------------|-------------|
-| (None yet) | - | - | - |
+| Deleted Path | Replaced By | Deletion Date | Wave |
+|--------------|-------------|---------------|------|
+| `ops/availability_smoke.md` | `testing/README.md` | 2025-12-31 | Wave 1 |
+| `ops/inventory_availability.md` | `database/migrations-guide.md` | 2025-12-31 | Wave 1 |
+| `ops/inventory_rules.md` | `database/exclusion-constraints.md` | 2025-12-31 | Wave 1 |
+| `ops/migrations.md` | `database/migrations-guide.md` | 2025-12-31 | Wave 1 |
 
 ---
 
@@ -245,13 +248,15 @@ git commit -m "docs: delete old-doc.md (replaced by new-doc.md)"
 
 ---
 
-### Wave 1: Low-Risk Duplicates (Safe to Delete Immediately)
+### Wave 1: Low-Risk Duplicates (COMPLETED ✅)
 
 **Files** (4 total):
-- `ops/availability_smoke.md` → Covered by `testing/README.md`
-- `ops/inventory_availability.md` → Covered by `ops/runbook.md`
-- `ops/inventory_rules.md` → Covered by `database/exclusion-constraints.md`
-- `ops/migrations.md` → Covered by `database/migrations-guide.md`
+- ✅ `ops/availability_smoke.md` → Deleted (covered by `testing/README.md`)
+- ✅ `ops/inventory_availability.md` → Deleted (covered by `database/migrations-guide.md`)
+- ✅ `ops/inventory_rules.md` → Deleted (covered by `database/exclusion-constraints.md`)
+- ✅ `ops/migrations.md` → Deleted (covered by `database/migrations-guide.md`)
+
+**Completion Date**: 2025-12-31
 
 **Risk Level**: **LOW** - Clear duplicates, no external links, full coverage in new docs
 
@@ -259,7 +264,7 @@ git commit -m "docs: delete old-doc.md (replaced by new-doc.md)"
 - [x] Replacement docs exist and are complete
 - [x] No references in START_HERE.md
 - [x] Covered in runbook Top 5 Failure Modes
-- [ ] No broken links after deletion (run `grep -r "availability_smoke\|inventory_availability\|inventory_rules\|ops/migrations" backend/docs/`)
+- [x] No broken links after deletion (inbound links updated in runbook.md and reference-product-model.md)
 
 **Verification Steps**:
 1. Verify replacement coverage:
@@ -381,6 +386,38 @@ git commit -m "docs: delete old-doc.md (replaced by new-doc.md)"
    git rm backend/docs/architecture/phase21-modularization-plan.md
    git commit -m "docs: delete phase21-modularization-plan (covered by module-system.md)"
    ```
+
+---
+
+## Wave 1 Summary
+
+**Status**: ✅ **COMPLETED** (2025-12-31)
+
+**Results**:
+- **Deleted**: 4 files
+- **Stubbed**: 0 files
+- **Blocked**: 0 files
+
+**Deleted Files**:
+1. `ops/availability_smoke.md` → `testing/README.md`
+2. `ops/inventory_availability.md` → `database/migrations-guide.md`
+3. `ops/inventory_rules.md` → `database/exclusion-constraints.md`
+4. `ops/migrations.md` → `database/migrations-guide.md`
+
+**Inbound Links Updated**:
+- `ops/runbook.md` (line 6535): Updated reference to `database/exclusion-constraints.md`
+- `product/reference-product-model.md` (line 291): Updated reference to `database/migrations-guide.md`
+
+**Remaining References** (in Wave 2 candidate files, will be deleted in Wave 2):
+- `roadmap/phase-1.md`: References `ops/migrations.md`
+- `tickets/phase-1.md`: References `ops/migrations.md`
+
+**Coverage Verified**:
+- ✅ All replacement docs exist and cover topics
+- ✅ No broken links in active docs
+- ✅ START_HERE.md not affected
+
+**Next Steps**: Proceed with Wave 2 (32 phase/roadmap/tickets files) after 7-day team review
 
 ---
 
