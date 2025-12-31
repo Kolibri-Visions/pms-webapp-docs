@@ -3485,7 +3485,10 @@ The Channel Sync Admin UI provides:
    - **Connection ID Auto-detection:** UI automatically detects connection ID using:
      - Last-used connection ID from localStorage (preferred)
      - Or first channel connection from API if no localStorage entry
+     - Badge indicator shows **"auto-detected"** (blue) when connection ID is auto-detected
    - **Manual Override:** Connection ID input field allows manual entry to override auto-detection
+     - Badge indicator shows **"manual"** (gray) when user manually edits the connection ID
+     - "Clear" button removes connection ID and clears localStorage (resets to auto-detection on next login)
    - **Note:** Logs are fetched via `GET /api/v1/channel-connections/{connection_id}/sync-logs`
      - Connection ID must be a valid UUID format
      - Invalid connection ID shows helpful message instead of attempting fetch
@@ -3500,14 +3503,53 @@ The Channel Sync Admin UI provides:
    - **Copy JSON** button copies the parsed, pretty-printed payload (not the raw escaped string)
    - **Duration Calculation:** Shows sync duration using `started_at`/`finished_at` timestamps (preferred) or falls back to `created_at`/`updated_at` if start/finish times are missing
 
-4. **Filters:**
-   - Filter logs by status (All, Triggered, Running, Success, Failed)
+4. **Quick Filters:**
+   - **All:** Show all sync logs
+   - **Active:** Show only triggered + running logs (in-progress syncs)
+   - **Failed:** Show only failed logs
+   - Filter buttons provide one-click access to common views
    - Smart auto-refresh (only polls when active triggered/running logs exist)
 
 5. **Toast Notifications:**
    - Success feedback when sync triggered
    - Error feedback for validation failures or API errors
    - Clipboard copy confirmations
+
+6. **Troubleshooting Link:**
+   - "Troubleshooting (Runbook)" link below Sync Logs title navigates to Ops Console (`/ops`)
+   - Provides quick access to full operational documentation and runbook
+
+7. **Duration Column:**
+   - Shows elapsed time for each sync operation
+   - Calculated from `started_at` → `finished_at` (preferred) or `created_at` → `updated_at` (fallback)
+   - Format: `Xs` (seconds), `Ym Zs` (minutes/seconds), or `-` if timestamps unavailable
+   - Active syncs (triggered/running) may show `-` until completion
+
+---
+
+### Log Retention & Purge Policy
+
+**Current State:** No automatic log retention/purge implemented yet.
+
+**Recommendation:**
+- **DO NOT** delete sync logs casually — they provide audit trail for debugging
+- Logs are stored in `channel_sync_logs` table (PostgreSQL)
+- No storage limit enforced currently
+
+**Planned Feature (Not Implemented):**
+- Admin-only "Purge logs older than X days" with confirmation dialog
+- Planned retention policy: 90 days default, configurable per agency
+- See [PRODUCT_BACKLOG.md](../product/PRODUCT_BACKLOG.md) Epic D - Channel Manager
+
+**Current Workaround (Manual Purge):**
+```sql
+-- WARNING: Manual purge - use with caution
+DELETE FROM channel_sync_logs
+WHERE created_at < NOW() - INTERVAL '90 days'
+  AND status IN ('success', 'failed'); -- Keep triggered/running logs
+```
+
+**Note:** Manual purge should be coordinated with ops team and documented in changelog.
 
 ---
 
