@@ -3479,6 +3479,11 @@ The Channel Sync Admin UI provides:
    - Columns: Status, Platform, Sync Type, Property, Error (if failed), Duration, Started At, Finished At
    - Status badges: triggered (blue), running (yellow), success (green), failed (red)
    - Click any row to view full log details in slide-in drawer
+   - **Auto-load on Login:** Logs load automatically after login without requiring a sync trigger
+   - **Connection ID Auto-detection:** UI automatically detects connection ID using:
+     - Last-used connection ID from localStorage (preferred)
+     - Or first channel connection from API if no localStorage entry
+   - **Manual Override:** Connection ID input field allows manual entry to override auto-detection
    - **Note:** Logs are fetched via `GET /api/v1/channel-connections/{connection_id}/sync-logs`
      - Connection ID must be a valid UUID format
      - Invalid connection ID shows helpful message instead of attempting fetch
