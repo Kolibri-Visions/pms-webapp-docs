@@ -213,6 +213,17 @@ git commit -m "docs: delete old-doc.md (replaced by new-doc.md)"
 | `phase14-preismodell-logik.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2A |
 | `phase15-16-direct-booking-eigentuemer.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2A |
 | `phase19-preflight.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2A |
+| `phase5-backend-apis.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2B |
+| `phase6-supabase-rls.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2B |
+| `phase7-qa-security.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2B |
+| `phase7-qa-security-remediation.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2B |
+| `phase8-prd-light.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2B |
+| `phase9-release-plan.md` | `product/RELEASE_PLAN.md` | 2025-12-31 | Wave 2B |
+| `phase10a-ui-ux.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2B |
+| `phase17b-database-schema-rls.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2B |
+| `phase18a-preflight.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2B |
+| `phase18a-schema-alignment-rls-implementation.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2B |
+| `phase19-core-booking-flow-api.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2B |
 
 ---
 
@@ -463,6 +474,44 @@ git commit -m "docs: delete old-doc.md (replaced by new-doc.md)"
 - **Wave 2C**: 11 files in roadmap/ and tickets/ folders (needs START_HERE + architecture/ updates)
 
 **Next Steps**: Execute Wave 2B (clean 3 external files, delete 11 phase*.md) and Wave 2C (update navigation, delete folders)
+
+---
+
+## Wave 2B Summary
+
+**Status**: ✅ **COMPLETED** (2025-12-31)
+
+**Results**:
+- **Deleted**: 11 files
+- **Stubbed**: 0 files
+- **Blocked**: 11 files (Wave 2C pending - roadmap/ and tickets/ folders)
+
+**Deleted Files** (Root phase*.md files with minimal inbound links):
+1. `phase5-backend-apis.md` → Covered by `product/PRODUCT_BACKLOG.md`
+2. `phase6-supabase-rls.md` → Covered by `product/PRODUCT_BACKLOG.md`
+3. `phase7-qa-security.md` → Covered by `product/PRODUCT_BACKLOG.md`
+4. `phase7-qa-security-remediation.md` → Covered by `product/PRODUCT_BACKLOG.md`
+5. `phase8-prd-light.md` → Covered by `product/PRODUCT_BACKLOG.md`
+6. `phase9-release-plan.md` → Covered by `product/RELEASE_PLAN.md`
+7. `phase10a-ui-ux.md` → Covered by `product/PRODUCT_BACKLOG.md`
+8. `phase17b-database-schema-rls.md` → Covered by `product/PRODUCT_BACKLOG.md`
+9. `phase18a-preflight.md` → Covered by `product/PRODUCT_BACKLOG.md`
+10. `phase18a-schema-alignment-rls-implementation.md` → Covered by `product/PRODUCT_BACKLOG.md`
+11. `phase19-core-booking-flow-api.md` → Covered by `product/PRODUCT_BACKLOG.md`
+
+**Inbound Links Updated**:
+- `github-setup.md:399` → Updated reference from `phase9-release-plan.md` to `product/RELEASE_PLAN.md`
+- All other inbound links were internal (from other Wave 2B files, deleted together)
+
+**Coverage Verified**:
+- ✅ All content covered by `product/PRODUCT_BACKLOG.md` and `product/RELEASE_PLAN.md`
+- ✅ No broken links in active docs (grep check: "no matches")
+- ✅ START_HERE.md not affected
+
+**Remaining Wave 2 Files**:
+- **Wave 2C**: 11 files in roadmap/ and tickets/ folders (needs START_HERE + architecture/ updates before deletion)
+
+**Next Steps**: Execute Wave 2C (update START_HERE.md + architecture/*.md, delete roadmap/ and tickets/ folders)
 
 ---
 

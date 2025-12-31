@@ -396,7 +396,7 @@ Nach Abschluss des GitHub Setups:
 
 ## 9. Hilfreiche Links
 
-- **Phase 9 - Release Plan:** `docs/phase9-release-plan.md`
+- **Release Plan:** `docs/product/RELEASE_PLAN.md`
 - **Conventional Commits:** https://www.conventionalcommits.org/
 - **Trunk-Based Development:** https://trunkbaseddevelopment.com/
 - **Semantic Versioning:** https://semver.org/
