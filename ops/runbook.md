@@ -3533,27 +3533,73 @@ The Channel Sync Admin UI provides:
 
 ### Log Retention & Purge Policy
 
-**Current State:** No automatic log retention/purge implemented yet.
+**Default Retention Policy:** 30 days (recommended)
 
-**Recommendation:**
-- **DO NOT** delete sync logs casually — they provide audit trail for debugging
-- Logs are stored in `channel_sync_logs` table (PostgreSQL)
-- No storage limit enforced currently
+**Admin-Only Purge Feature:**
+- **Admin UI**: "Purge logs" button in `/channel-sync` page
+- **API Endpoint**: `POST /api/v1/channel-connections/{connection_id}/sync-logs/purge`
+- **Access**: Admin role only (403 for non-admins)
+- **Safety**: Requires typing "PURGE" to confirm (irreversible deletion)
 
-**Planned Feature (Not Implemented):**
-- Admin-only "Purge logs older than X days" with confirmation dialog
-- Planned retention policy: 90 days default, configurable per agency
-- See [PRODUCT_BACKLOG.md](../product/PRODUCT_BACKLOG.md) Epic D - Channel Manager
+**Retention Options:**
+- 7 days: Short-term cleanup for testing/debugging
+- 30 days: Recommended default for production
+- 90 days: Extended retention for audit/compliance
 
-**Current Workaround (Manual Purge):**
-```sql
--- WARNING: Manual purge - use with caution
-DELETE FROM channel_sync_logs
-WHERE created_at < NOW() - INTERVAL '90 days'
-  AND status IN ('success', 'failed'); -- Keep triggered/running logs
+**How to Purge Logs (Admin UI):**
+
+1. **Navigate to Channel Sync:**
+   - Go to: `https://admin.fewo.kolibri-visions.de/channel-sync`
+   - Select connection ID (auto-detect or manual entry)
+
+2. **Click "Purge logs" button** (upper right, next to Refresh)
+   - Only visible when valid connection ID is set
+   - Disabled for non-admin users
+
+3. **Configure Purge:**
+   - Select retention period: 7 / 30 / 90 days
+   - Type `PURGE` in confirmation field (case-sensitive)
+   - Click "Purge Logs" button
+
+4. **Verify Result:**
+   - Success toast shows number of deleted logs
+   - Logs table refreshes automatically
+   - Purge is immediate and irreversible
+
+**How to Purge Logs (curl):**
+
+See [scripts/README.md - Purge Sync Logs](#) for curl examples.
+
+```bash
+# Example: Purge logs older than 30 days
+curl -X POST "$API/api/v1/channel-connections/$CID/sync-logs/purge" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "retention_days": 30,
+    "confirm_phrase": "PURGE"
+  }'
+
+# Expected response (200):
+# {
+#   "connection_id": "abc-123...",
+#   "retention_days": 30,
+#   "cutoff": "2025-01-01T12:00:00Z",
+#   "deleted_count": 42
+# }
 ```
 
-**Note:** Manual purge should be coordinated with ops team and documented in changelog.
+**Error Responses:**
+- **400**: Invalid confirm_phrase (must be exactly "PURGE")
+- **401**: Not authenticated (missing/invalid token)
+- **403**: Forbidden (not an admin)
+- **422**: Invalid retention_days (must be 1-3650)
+
+**Safety Notes:**
+- **Irreversible**: Deleted logs cannot be recovered
+- **Scoped**: Only deletes logs for specified connection_id
+- **Audit Trail**: Lost after purge — export logs before purging if needed for compliance
+- **No Automatic Purge**: Manual trigger only (no cron/scheduled purge)
 
 ---
 
