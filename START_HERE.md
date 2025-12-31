@@ -71,8 +71,8 @@
 
 ## Additional Resources
 
-- **[Roadmap](roadmap/)** - Phase planning (phase-1 through phase-5)
-- **[Tickets](tickets/)** - Phase task breakdown
+- **[Product Backlog](product/PRODUCT_BACKLOG.md)** - 10 epics (A-J) with features and open tasks
+- **[Release Plan](product/RELEASE_PLAN.md)** - MVP → Beta → Prod-ready milestones
 - **[Direct Booking Engine](direct-booking-engine/)** - Stripe integration, email templates (future feature)
 - **[Channel Manager Docs](channel-manager/)** - Channel-specific documentation
 

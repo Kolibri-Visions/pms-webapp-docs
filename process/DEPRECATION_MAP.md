@@ -224,6 +224,17 @@ git commit -m "docs: delete old-doc.md (replaced by new-doc.md)"
 | `phase18a-preflight.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2B |
 | `phase18a-schema-alignment-rls-implementation.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2B |
 | `phase19-core-booking-flow-api.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2B |
+| `roadmap/overview.md` | `product/RELEASE_PLAN.md` | 2025-12-31 | Wave 2C |
+| `roadmap/phase-1.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2C |
+| `roadmap/phase-2.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2C |
+| `roadmap/phase-3.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2C |
+| `roadmap/phase-4.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2C |
+| `roadmap/phase-5.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2C |
+| `tickets/phase-1.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2C |
+| `tickets/phase-2.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2C |
+| `tickets/phase-3.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2C |
+| `tickets/phase-4.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2C |
+| `tickets/phase-5.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2C |
 
 ---
 
@@ -512,6 +523,47 @@ git commit -m "docs: delete old-doc.md (replaced by new-doc.md)"
 - **Wave 2C**: 11 files in roadmap/ and tickets/ folders (needs START_HERE + architecture/ updates before deletion)
 
 **Next Steps**: Execute Wave 2C (update START_HERE.md + architecture/*.md, delete roadmap/ and tickets/ folders)
+
+---
+
+## Wave 2C Summary
+
+**Status**: ✅ **COMPLETED** (2025-12-31)
+
+**Results**:
+- **Deleted**: 11 files (entire roadmap/ and tickets/ folders)
+- **Stubbed**: 0 files
+- **Blocked**: 0 files (Wave 2 fully complete)
+
+**Deleted Files** (Planning docs folders):
+1. `roadmap/overview.md` → Covered by `product/RELEASE_PLAN.md`
+2. `roadmap/phase-1.md` → Covered by `product/PRODUCT_BACKLOG.md`
+3. `roadmap/phase-2.md` → Covered by `product/PRODUCT_BACKLOG.md`
+4. `roadmap/phase-3.md` → Covered by `product/PRODUCT_BACKLOG.md`
+5. `roadmap/phase-4.md` → Covered by `product/PRODUCT_BACKLOG.md`
+6. `roadmap/phase-5.md` → Covered by `product/PRODUCT_BACKLOG.md`
+7. `tickets/phase-1.md` → Covered by `product/PRODUCT_BACKLOG.md`
+8. `tickets/phase-2.md` → Covered by `product/PRODUCT_BACKLOG.md`
+9. `tickets/phase-3.md` → Covered by `product/PRODUCT_BACKLOG.md`
+10. `tickets/phase-4.md` → Covered by `product/PRODUCT_BACKLOG.md`
+11. `tickets/phase-5.md` → Covered by `product/PRODUCT_BACKLOG.md`
+
+**Inbound Links Updated**:
+- `START_HERE.md` → Removed roadmap/ and tickets/ links, added Product Backlog and Release Plan
+- `architecture/error-taxonomy.md` → Replaced phase-1 roadmap/tickets links with Product Backlog
+- `architecture/modules-and-entitlements.md` → Replaced phase-1 roadmap/tickets links with Product Backlog, Release Plan, and Project Status
+
+**Coverage Verified**:
+- ✅ All planning content covered by `product/PRODUCT_BACKLOG.md` and `product/RELEASE_PLAN.md`
+- ✅ No broken links in active docs (grep check: "no matches")
+- ✅ START_HERE.md updated with canonical navigation
+- ✅ Architecture docs updated with canonical references
+
+**Wave 2 Complete**:
+- **Total deleted**: 32 files (10 in Wave 2A + 11 in Wave 2B + 11 in Wave 2C)
+- **All phase planning docs replaced by product backlog and release plan**
+
+**Next Steps**: Execute Wave 3 (delete `architecture/phase21-modularization-plan.md` after external audit)
 
 ---
 

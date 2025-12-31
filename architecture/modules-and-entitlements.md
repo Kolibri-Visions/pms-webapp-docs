@@ -365,6 +365,6 @@ A: Not yet. Future enhancement: feature dependency graph.
 A: Set `MODULES_ENABLED=` (empty) and redeploy, or update `agency_features.enabled = FALSE`.
 
 ## Related Documents
-- [Phase 1 Spec](../roadmap/phase-1.md) (RBAC, feature flags)
-- [Roadmap Overview](../roadmap/overview.md)
-- [Phase 1 Tickets](../tickets/phase-1.md) (P1-13: agency_features migration)
+- [Product Backlog](../product/PRODUCT_BACKLOG.md) - Epic A: Foundation & Ops (RBAC, feature flags, agency_features)
+- [Release Plan](../product/RELEASE_PLAN.md) - MVP → Beta → Prod-ready milestones
+- [Project Status](../PROJECT_STATUS_LIVE.md) - Current deployment status

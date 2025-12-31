@@ -270,8 +270,7 @@ To add a new error code:
 
 ## Related Documents
 
-- [Phase 1 Roadmap](../roadmap/phase-1.md) - RBAC, error taxonomy, ops endpoints
-- [Phase 1 Tickets](../tickets/phase-1.md) - P1-06 (error taxonomy), P1-07 (response format)
+- [Product Backlog](../product/PRODUCT_BACKLOG.md) - Epic A: Foundation & Ops (error taxonomy, RBAC, ops endpoints)
 - `app/core/exceptions.py` - Exception classes and error codes
 - `app/core/auth.py` - RBAC helpers and authentication
 
