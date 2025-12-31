@@ -3489,6 +3489,9 @@ The Channel Sync Admin UI provides:
    - Copy individual fields to clipboard (task_id, sync_log_id, etc.)
    - View error messages and retry counts
    - View complete details JSONB payload
+   - **JSON Pretty-Printing:** Details drawer automatically detects and parses JSON-encoded strings (including double-escaped JSON) and renders them as pretty-printed JSON for readability
+   - **Copy JSON** button copies the parsed, pretty-printed payload (not the raw escaped string)
+   - **Duration Calculation:** Shows sync duration using `started_at`/`finished_at` timestamps (preferred) or falls back to `created_at`/`updated_at` if start/finish times are missing
 
 4. **Filters:**
    - Filter logs by status (All, Triggered, Running, Success, Failed)
