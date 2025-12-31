@@ -6,9 +6,12 @@
 
 ## For Ops / DevOps / On-Call
 
-- **[Runbook](ops/runbook.md)** - Troubleshooting guide for production issues (DB DNS, token validation, schema drift)
+- **[Runbook](ops/runbook.md)** - Troubleshooting guide for production issues
+  - **[Top 5 Failure Modes](ops/runbook.md#top-5-failure-modes-and-fixes)** - Quick fixes for common failures (DB DNS, JWT auth, Worker/Redis, Schema drift, Smoke script pitfalls)
 - **[Feature Flags](ops/feature-flags.md)** - Central reference for all feature toggles (MODULES_ENABLED, CHANNEL_MANAGER_ENABLED, etc.)
 - **[Live Status](PROJECT_STATUS_LIVE.md)** - Current staging/deploy reality (what's running now, known issues)
+- **[Schema Drift SOP](database/migrations-guide.md#schema-drift-sop)** - Step-by-step procedure to detect and fix schema drift
+- **[Server-side Smoke Checks](testing/README.md#server-side-smoke-checks-official)** - Official smoke test sequence (health checks, JWT, booking CRUD, availability sync)
 
 ## For Product / Planning
 

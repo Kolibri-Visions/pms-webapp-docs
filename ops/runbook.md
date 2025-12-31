@@ -19,6 +19,431 @@
 
 ---
 
+## Top 5 Failure Modes (and Fixes)
+
+This section provides quick, actionable fixes for the most common production failures. Each includes symptoms, root cause, fix steps, and verification commands with explicit WHERE labels.
+
+---
+
+### 1. DB DNS / Network Disconnect → Degraded Mode
+
+**Symptoms:**
+```
+socket.gaierror: [Errno -2] Name or service not known: 'supabase-db'
+GET /health/ready → 503 {"status":"unhealthy","db":"down"}
+Logs: "Database connection pool creation FAILED"
+```
+
+**Root Cause:**
+pms-backend or pms-worker-v2 container not attached to Supabase network (`bccg4gs4o4kgsowocw08wkw4`).
+
+**Fix Steps:**
+
+1. Verify DNS resolution fails
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+docker exec pms-backend getent hosts supabase-db
+# Empty output = DNS failure
+```
+
+2. Attach container to Supabase network
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+docker network connect bccg4gs4o4kgsowocw08wkw4 pms-backend
+docker network connect bccg4gs4o4kgsowocw08wkw4 pms-worker-v2
+```
+
+3. Restart containers
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+docker restart pms-backend
+docker restart pms-worker-v2
+```
+
+**Verification:**
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+# 1. DNS resolves
+docker exec pms-backend getent hosts supabase-db
+# Expected: 172.20.0.X supabase-db
+
+# 2. DB connection works
+docker exec pms-backend python -c "import asyncpg; import asyncio; asyncio.run(asyncpg.connect('postgresql://postgres:$PASSWORD@supabase-db:5432/postgres').execute('SELECT 1'))"
+
+# 3. Health endpoint passes
+curl https://api.fewo.kolibri-visions.de/health/ready
+# Expected: {"status":"healthy","db":"up","redis":"up","celery":"up"}
+```
+
+**See Also:** [DB DNS / Degraded Mode](#db-dns--degraded-mode) (detailed section below)
+
+---
+
+### 2. JWT/Auth Failures (401 Invalid Token / 403 Not Authenticated)
+
+**Symptoms:**
+```
+POST /api/v1/bookings → 401 {"detail":"Invalid authentication token"}
+Logs: "JWT token validation failed"
+Missing TOKEN env var or TOKEN=""
+Wrong JWT_SECRET (token signature verification fails)
+Kong /auth/v1/user returns 401 without apikey header
+```
+
+**Root Cause:**
+- Missing/empty TOKEN environment variable
+- JWT_SECRET mismatch between backend and GoTrue
+- Missing `apikey` header when calling Kong-protected /auth/v1/user
+
+**Fix Steps:**
+
+1. Fetch valid JWT token
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+# Login and extract token
+curl -X POST https://sb-pms.kolibri-visions.de/auth/v1/token?grant_type=password \
+  -H "apikey: $ANON_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"$EMAIL","password":"$PASSWORD"}' | jq -r '.access_token'
+
+# Save to variable
+export TOKEN="eyJhb..."
+```
+
+2. Verify token structure
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+# Check token length (should be ~500+ chars)
+echo ${#TOKEN}
+
+# Check JWT parts (should have 3 parts: header.payload.signature)
+echo $TOKEN | tr '.' '\n' | wc -l
+# Expected: 3
+```
+
+3. Verify JWT_SECRET matches GoTrue
+
+WHERE: Coolify Dashboard > pms-backend > Environment Variables
+```
+JWT_SECRET=your-jwt-secret-here
+SUPABASE_JWT_SECRET=your-jwt-secret-here
+```
+
+WHERE: Supabase SQL Editor
+```sql
+-- Get GoTrue JWT secret
+SELECT decrypted_secret
+FROM vault.decrypted_secrets
+WHERE name = 'jwt_secret';
+```
+
+4. Test auth endpoint with apikey header
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+# Kong requires apikey header
+curl https://sb-pms.kolibri-visions.de/auth/v1/user \
+  -H "apikey: $ANON_KEY" \
+  -H "Authorization: Bearer $TOKEN"
+
+# Expected: {"id":"...","email":"...","role":"authenticated"}
+```
+
+**Verification:**
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+# Test authenticated endpoint
+curl https://api.fewo.kolibri-visions.de/api/v1/properties \
+  -H "Authorization: Bearer $TOKEN"
+
+# Expected: 200 with property list (not 401)
+```
+
+**See Also:** [Token Validation](#token-validation-apikey-header) (detailed section below)
+
+---
+
+### 3. Worker/Celery/Redis Misconfig (Connection Refused / Tasks Not Updating Logs)
+
+**Symptoms:**
+```
+Celery: ConnectionRefusedError [Errno 111] Connection refused
+GET /health/ready → 503 {"celery":"down"}
+Sync logs stuck in "triggered" or "running" (never "success"/"failed")
+Worker logs: "Cannot connect to redis://localhost:6379"
+```
+
+**Root Cause:**
+- Missing/wrong REDIS_URL, CELERY_BROKER_URL, CELERY_RESULT_BACKEND
+- Redis container not reachable from worker
+- Health check not enabled in celery.py
+
+**Fix Steps:**
+
+1. Verify Redis is reachable
+
+WHERE: Coolify Terminal (pms-worker-v2 container)
+```bash
+# Check Redis connection
+redis-cli -u $CELERY_BROKER_URL ping
+# Expected: PONG
+```
+
+2. Set correct environment variables
+
+WHERE: Coolify Dashboard > pms-worker-v2 > Environment Variables
+```
+REDIS_URL=redis://coolify-redis:6379/0
+CELERY_BROKER_URL=redis://coolify-redis:6379/0
+CELERY_RESULT_BACKEND=redis://coolify-redis:6379/1
+```
+
+3. Verify Celery worker is running
+
+WHERE: Coolify Terminal (pms-worker-v2 container)
+```bash
+# Check Celery status
+celery -A app.worker.celery_app inspect ping
+# Expected: {"celery@...": {"ok": "pong"}}
+
+# Check active tasks
+celery -A app.worker.celery_app inspect active
+```
+
+4. Check worker logs
+
+WHERE: Coolify Dashboard > pms-worker-v2 > Logs
+```
+# Should see:
+[INFO/MainProcess] Connected to redis://coolify-redis:6379/0
+[INFO/MainProcess] celery@worker ready
+```
+
+**Verification:**
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+# 1. Health check passes
+curl https://api.fewo.kolibri-visions.de/health/ready
+# Expected: {"celery":"up","redis":"up"}
+
+# 2. Trigger availability sync
+curl -X POST https://api.fewo.kolibri-visions.de/api/v1/channel-sync/trigger \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"property_id":"$PROPERTY_ID","sync_type":"availability"}'
+
+# 3. Check sync log status updates
+curl https://api.fewo.kolibri-visions.de/api/v1/channel-sync/logs/$LOG_ID \
+  -H "Authorization: Bearer $TOKEN"
+# Expected: status transitions from "triggered" → "running" → "success"
+```
+
+**See Also:** Worker troubleshooting sections below
+
+---
+
+### 4. Schema Drift / Missing Migrations (UndefinedTable/UndefinedColumn → 503)
+
+**Symptoms:**
+```
+GET /api/v1/properties → 503 {"detail":"Database schema not installed or out of date..."}
+Logs: asyncpg.exceptions.UndefinedTableError: relation "properties" does not exist
+Logs: asyncpg.exceptions.UndefinedColumnError: column "agency_id" does not exist
+```
+
+**Root Cause:**
+Deployed database schema doesn't match migration files in repo. Migrations not applied after schema changes.
+
+**Fix Steps:**
+
+1. Check what tables exist
+
+WHERE: Supabase SQL Editor
+```sql
+SELECT tablename
+FROM pg_tables
+WHERE schemaname = 'public'
+ORDER BY tablename;
+
+-- Expected: agencies, properties, bookings, inventory_ranges, etc.
+```
+
+2. Check for missing columns
+
+WHERE: Supabase SQL Editor
+```sql
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name = 'properties'
+ORDER BY ordinal_position;
+
+-- Verify key columns exist: id, agency_id, name, created_at, etc.
+```
+
+3. List migration files in repo
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+ls -1 supabase/migrations/*.sql | tail -5
+# See latest migration files
+```
+
+4. Apply migrations
+
+WHERE: Supabase SQL Editor
+```sql
+-- Copy/paste migration SQL from supabase/migrations/*.sql
+-- Execute each migration in order (oldest to newest)
+-- Use DO $$ blocks for idempotent DDL if needed:
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'properties'
+  ) THEN
+    CREATE TABLE properties (...);
+  END IF;
+END $$;
+```
+
+**Verification:**
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+# 1. Check endpoint returns 200
+curl https://api.fewo.kolibri-visions.de/api/v1/properties \
+  -H "Authorization: Bearer $TOKEN"
+# Expected: 200 with data (not 503)
+
+# 2. Verify health check passes
+curl https://api.fewo.kolibri-visions.de/health/ready
+# Expected: {"status":"healthy","db":"up"}
+```
+
+WHERE: Supabase SQL Editor
+```sql
+-- Sample query to verify schema
+SELECT p.id, p.name, p.agency_id
+FROM properties p
+LIMIT 1;
+
+-- Should return data without errors
+```
+
+**See Also:**
+- [Schema Drift](#schema-drift) (detailed section below)
+- [Migrations Guide - Schema Drift SOP](../database/migrations-guide.md#schema-drift-sop) (step-by-step SOP)
+
+---
+
+### 5. Bash Smoke Script Pitfalls (TOKEN/PID Empty, set -u Unbound Variable, 307 Redirect)
+
+**Symptoms:**
+```bash
+smoke.sh: line 42: PID: unbound variable
+smoke.sh: line 55: TOKEN: unbound variable
+curl: Expecting value: line 1 column 1 (char 0)  # Empty response
+curl: 307 Temporary Redirect (without -L flag)
+```
+
+**Root Cause:**
+- `set -u` causes script to exit if PID or TOKEN unset/empty
+- Missing `-L` flag on curl (doesn't follow redirects)
+- Invalid JSON response (HTML redirect page instead of JSON)
+
+**Fix Steps:**
+
+1. Export required variables before running script
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+# Set variables
+export BACKEND_URL="https://api.fewo.kolibri-visions.de"
+export ANON_KEY="your-anon-key"
+export EMAIL="admin@example.com"
+export PASSWORD="your-password"
+export PID="some-property-id"
+
+# Verify variables are set
+echo "BACKEND_URL: $BACKEND_URL"
+echo "PID length: ${#PID}"
+```
+
+2. Fetch and validate TOKEN
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+# Login and extract token
+TOKEN=$(curl -X POST https://sb-pms.kolibri-visions.de/auth/v1/token?grant_type=password \
+  -H "apikey: $ANON_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}" \
+  | jq -r '.access_token')
+
+# Validate token
+if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+  echo "ERROR: Failed to fetch token"
+  exit 1
+fi
+
+# Check token structure
+echo "Token length: ${#TOKEN}"
+echo "Token parts: $(echo $TOKEN | tr '.' '\n' | wc -l)"  # Should be 3
+```
+
+3. Use -L flag for curl redirects
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+# Without -L: may return 307 redirect
+curl https://api.fewo.kolibri-visions.de/health
+
+# With -L: follows redirect to final destination
+curl -L https://api.fewo.kolibri-visions.de/health
+# Expected: {"status":"ok","service":"pms-backend"}
+```
+
+4. Quick smoke checks
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+# Health check
+curl -L $BACKEND_URL/health
+# Expected: {"status":"ok"}
+
+# Readiness check
+curl -L $BACKEND_URL/health/ready
+# Expected: {"status":"healthy","db":"up","redis":"up"}
+
+# Authenticated endpoint
+curl -L $BACKEND_URL/api/v1/properties \
+  -H "Authorization: Bearer $TOKEN"
+# Expected: 200 with JSON array
+```
+
+**Verification:**
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+# Run smoke script with all variables set
+./smoke.sh
+# Expected: All checks pass, no "unbound variable" errors
+```
+
+**See Also:** [Smoke Script Pitfalls](#smoke-script-pitfalls) (detailed section below)
+
+---
+
 ## DB DNS / Degraded Mode
 
 ### Symptom

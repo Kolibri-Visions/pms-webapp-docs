@@ -139,6 +139,281 @@ backend/tests/
 
 ---
 
+### Server-side Smoke Checks (Official)
+
+**Purpose**: Minimal smoke sequence to verify critical paths after deployment.
+
+**Policy**: No local tests. Server-side only.
+
+**When to Run**:
+- After every deployment to staging/production
+- After container restart
+- After environment variable changes
+- After database migrations
+
+---
+
+#### Prerequisites
+
+**Environment Variables Required:**
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+# Set variables before running smoke checks
+export BACKEND_URL="https://api.fewo.kolibri-visions.de"
+export SUPABASE_URL="https://sb-pms.kolibri-visions.de"
+export ANON_KEY="your-anon-key-here"
+export EMAIL="admin@example.com"
+export PASSWORD="your-password"
+
+# Optional: Set property ID for booking tests
+export PROPERTY_ID="some-uuid-here"
+```
+
+**Verify variables are set:**
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+echo "BACKEND_URL: $BACKEND_URL"
+echo "ANON_KEY length: ${#ANON_KEY}"
+echo "EMAIL: $EMAIL"
+```
+
+---
+
+#### Minimal Smoke Sequence
+
+**Step 1: Health Checks**
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+# Basic health (always returns 200, even if DB down)
+curl -L $BACKEND_URL/health
+# Expected: {"status":"ok","service":"pms-backend"}
+
+# Readiness check (returns 503 if DB/Redis/Celery down)
+curl -L $BACKEND_URL/health/ready
+# Expected: {"status":"healthy","db":"up","redis":"up","celery":"up"}
+
+# If 503: Check container logs, network attachment, env vars
+```
+
+---
+
+**Step 2: Fetch JWT Token**
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+# Login and extract token
+TOKEN=$(curl -s -X POST $SUPABASE_URL/auth/v1/token?grant_type=password \
+  -H "apikey: $ANON_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}" \
+  | jq -r '.access_token')
+
+# Validate token
+if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+  echo "ERROR: Failed to fetch token"
+  exit 1
+fi
+
+# Verify token structure
+echo "Token length: ${#TOKEN}"  # Should be ~500+ chars
+echo "Token parts: $(echo $TOKEN | tr '.' '\n' | wc -l)"  # Should be 3
+
+# Export for subsequent requests
+export TOKEN
+```
+
+---
+
+**Step 3: Test Authenticated Endpoint (GET /api/v1/properties)**
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+# List properties
+curl -s -L $BACKEND_URL/api/v1/properties \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq '.'
+
+# Expected: 200 with JSON array (may be empty if no data)
+# Failure modes:
+# - 401: Invalid token (check JWT_SECRET)
+# - 403: Missing role/agency_id (check auth logic)
+# - 503: DB unavailable (check network attachment)
+```
+
+---
+
+**Step 4: Create Booking (POST /api/v1/bookings)**
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+# Create test booking
+BOOKING_ID=$(curl -s -L -X POST $BACKEND_URL/api/v1/bookings \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"property_id\": \"$PROPERTY_ID\",
+    \"check_in\": \"2025-07-01\",
+    \"check_out\": \"2025-07-05\",
+    \"guest_first_name\": \"Test\",
+    \"guest_last_name\": \"Smoke\",
+    \"guest_email\": \"smoke@example.com\",
+    \"status\": \"inquiry\"
+  }" \
+  | jq -r '.id')
+
+# Verify booking created
+if [ -z "$BOOKING_ID" ] || [ "$BOOKING_ID" = "null" ]; then
+  echo "ERROR: Failed to create booking"
+  exit 1
+fi
+
+echo "Created booking: $BOOKING_ID"
+
+# Export for subsequent steps
+export BOOKING_ID
+```
+
+---
+
+**Step 5: Confirm Booking (PATCH /api/v1/bookings/{id})**
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+# Confirm booking
+curl -s -L -X PATCH $BACKEND_URL/api/v1/bookings/$BOOKING_ID \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "confirmed"}' \
+  | jq '.'
+
+# Expected: 200 with updated booking (status="confirmed")
+```
+
+---
+
+**Step 6: Cancel Booking (DELETE /api/v1/bookings/{id} or PATCH with status=cancelled)**
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+# Cancel booking (cleanup)
+curl -s -L -X PATCH $BACKEND_URL/api/v1/bookings/$BOOKING_ID \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "cancelled"}' \
+  | jq '.'
+
+# Expected: 200 with updated booking (status="cancelled")
+
+# Alternative: Delete booking
+# curl -s -L -X DELETE $BACKEND_URL/api/v1/bookings/$BOOKING_ID \
+#   -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+**Step 7: Trigger Availability Sync (if Channel Manager enabled)**
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+# Check if Channel Manager is enabled
+if [ "$CHANNEL_MANAGER_ENABLED" = "true" ]; then
+  # Trigger sync
+  SYNC_LOG_ID=$(curl -s -L -X POST $BACKEND_URL/api/v1/channel-sync/trigger \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{
+      \"property_id\": \"$PROPERTY_ID\",
+      \"sync_type\": \"availability\"
+    }" \
+    | jq -r '.log_id')
+
+  echo "Triggered sync: $SYNC_LOG_ID"
+
+  # Wait 5 seconds for worker to process
+  sleep 5
+
+  # Check sync log status
+  curl -s -L $BACKEND_URL/api/v1/channel-sync/logs/$SYNC_LOG_ID \
+    -H "Authorization: Bearer $TOKEN" \
+    | jq '.status'
+
+  # Expected: "success" or "running"
+  # If "triggered" (stuck): Check worker logs, Redis, Celery
+else
+  echo "Channel Manager disabled, skipping sync test"
+fi
+```
+
+---
+
+#### Full Smoke Script (Combined)
+
+**Script Location (if exists):**
+- `backend/scripts/smoke.sh` (check if exists in repo)
+- `backend/tests/smoke/` (pytest smoke tests)
+
+**Run script:**
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+# Export all variables first
+export BACKEND_URL="https://api.fewo.kolibri-visions.de"
+export SUPABASE_URL="https://sb-pms.kolibri-visions.de"
+export ANON_KEY="your-anon-key"
+export EMAIL="admin@example.com"
+export PASSWORD="your-password"
+export PROPERTY_ID="some-uuid"
+
+# Run smoke script (if exists)
+./backend/scripts/smoke.sh
+
+# Or run pytest smoke tests (contributor only)
+# DATABASE_URL="postgresql://postgres:$PASSWORD@supabase-db:5432/postgres" \
+# JWT_SECRET="your-jwt-secret" \
+# python -m pytest backend/tests/smoke/ -v
+```
+
+**Common Pitfalls**: See [Runbook - Smoke Script Pitfalls](../ops/runbook.md#smoke-script-pitfalls)
+
+---
+
+#### Verification Checklist
+
+After running smoke checks, verify:
+
+- ✅ Health endpoint returns 200 (`/health`)
+- ✅ Readiness endpoint returns 200 (`/health/ready`)
+- ✅ JWT token fetched successfully (length ~500+ chars, 3 parts)
+- ✅ Properties endpoint returns 200 (`/api/v1/properties`)
+- ✅ Booking created successfully (returns booking ID)
+- ✅ Booking confirmed (status transitions to "confirmed")
+- ✅ Booking cancelled (status transitions to "cancelled")
+- ✅ Sync triggered and completed (if Channel Manager enabled)
+
+**If any check fails**: See [Runbook - Top 5 Failure Modes](../ops/runbook.md#top-5-failure-modes-and-fixes)
+
+---
+
+#### Smoke Check Schedule
+
+**When to Run:**
+- ✅ After every deployment to staging
+- ✅ After every deployment to production
+- ✅ After container restart
+- ✅ After environment variable changes
+- ✅ After database migrations
+- ✅ Before declaring deployment "successful"
+
+**Who Runs:**
+- Ops team after deployment
+- CI/CD pipeline (automated)
+- On-call engineer during incident response
+
+---
+
 ## Optional (Contributor Only): Local Test Execution
 
 **Note**: The following commands are for contributors who need to run tests locally. This is NOT part of the standard workflow.
