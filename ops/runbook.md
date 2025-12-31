@@ -3748,6 +3748,31 @@ docker exec $(docker ps -q -f name=supabase) psql -U postgres -d postgres \
 
 ---
 
+#### 7. Auto-Detect Fails with Mixed Content Error (HTTP Redirect)
+
+**Symptom:**
+- Browser console shows: `Mixed Content: The page at 'https://admin...' was loaded over HTTPS, but requested an insecure resource 'http://api...'.`
+- Auto-detect fails to load connections
+- Error message: "Failed to auto-detect connection ID (TypeError: Failed to fetch)"
+
+**Cause:**
+- API endpoint without trailing slash triggers FastAPI 307 redirect
+- Redirect downgrades from HTTPS to HTTP (proxy/load balancer issue)
+- Browser blocks the HTTP request as Mixed Content
+
+**Fix:**
+The Admin UI now uses the trailing-slash endpoint `/api/v1/channel-connections/` to avoid the redirect entirely. If you see this error:
+
+1. **Clear browser cache** and hard reload (Ctrl+Shift+R / Cmd+Shift+R)
+2. **Verify API base URL** in browser console: should be `https://api...` (not `http://`)
+3. **Check proxy/load balancer config** if the issue persists (ensure HTTPS forwarding is correct)
+
+**Technical Note:**
+- ✅ Correct: `GET /api/v1/channel-connections/?limit=50` (with trailing slash)
+- ❌ Causes redirect: `GET /api/v1/channel-connections?limit=50` (no trailing slash)
+
+---
+
 ### Environment Variables
 
 **Frontend (`pms-admin`):**
