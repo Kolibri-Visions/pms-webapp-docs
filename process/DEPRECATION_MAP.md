@@ -203,6 +203,16 @@ git commit -m "docs: delete old-doc.md (replaced by new-doc.md)"
 | `ops/inventory_availability.md` | `database/migrations-guide.md` | 2025-12-31 | Wave 1 |
 | `ops/inventory_rules.md` | `database/exclusion-constraints.md` | 2025-12-31 | Wave 1 |
 | `ops/migrations.md` | `database/migrations-guide.md` | 2025-12-31 | Wave 1 |
+| `phase5-backend-apis.index.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2A |
+| `phase7.index.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2A |
+| `phase8.index.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2A |
+| `phase9.index.md` | `product/RELEASE_PLAN.md` | 2025-12-31 | Wave 2A |
+| `phase10a.index.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2A |
+| `phase10b-10c-visual-design.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2A |
+| `phase11-13-agentur-ux-rollen.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2A |
+| `phase14-preismodell-logik.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2A |
+| `phase15-16-direct-booking-eigentuemer.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2A |
+| `phase19-preflight.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2A |
 
 ---
 
@@ -416,6 +426,43 @@ git commit -m "docs: delete old-doc.md (replaced by new-doc.md)"
 - ✅ START_HERE.md not affected
 
 **Next Steps**: Proceed with Wave 2 (32 phase/roadmap/tickets files) after 7-day team review
+
+---
+
+## Wave 2A Summary
+
+**Status**: ✅ **COMPLETED** (2025-12-31)
+
+**Results**:
+- **Deleted**: 10 files
+- **Stubbed**: 0 files
+- **Blocked**: 22 files (Wave 2B + 2C pending)
+
+**Deleted Files** (Phase index files with 0 inbound links):
+1. `phase5-backend-apis.index.md` → Covered by `product/PRODUCT_BACKLOG.md`
+2. `phase7.index.md` → Covered by `product/PRODUCT_BACKLOG.md`
+3. `phase8.index.md` → Covered by `product/PRODUCT_BACKLOG.md`
+4. `phase9.index.md` → Covered by `product/RELEASE_PLAN.md`
+5. `phase10a.index.md` → Covered by `product/PRODUCT_BACKLOG.md`
+6. `phase10b-10c-visual-design.md` → Covered by `product/PRODUCT_BACKLOG.md`
+7. `phase11-13-agentur-ux-rollen.md` → Covered by `product/PRODUCT_BACKLOG.md`
+8. `phase14-preismodell-logik.md` → Covered by `product/PRODUCT_BACKLOG.md`
+9. `phase15-16-direct-booking-eigentuemer.md` → Covered by `product/PRODUCT_BACKLOG.md`
+10. `phase19-preflight.md` → Covered by `product/PRODUCT_BACKLOG.md`
+
+**Inbound Links Updated**:
+- None required (0 inbound links for all deleted files)
+
+**Coverage Verified**:
+- ✅ All content covered by `product/PRODUCT_BACKLOG.md` and `product/RELEASE_PLAN.md`
+- ✅ No broken links in active docs
+- ✅ START_HERE.md not affected
+
+**Remaining Wave 2 Files**:
+- **Wave 2B**: 11 root phase*.md files with inbound links (needs link cleanup)
+- **Wave 2C**: 11 files in roadmap/ and tickets/ folders (needs START_HERE + architecture/ updates)
+
+**Next Steps**: Execute Wave 2B (clean 3 external files, delete 11 phase*.md) and Wave 2C (update navigation, delete folders)
 
 ---
 
