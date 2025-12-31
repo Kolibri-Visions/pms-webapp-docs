@@ -3488,7 +3488,9 @@ The Channel Sync Admin UI provides:
      - Badge indicator shows **"auto-detected"** (blue) when connection ID is auto-detected
    - **Manual Override:** Connection ID input field allows manual entry to override auto-detection
      - Badge indicator shows **"manual"** (gray) when user manually edits the connection ID
-     - "Clear" button removes connection ID and clears localStorage (resets to auto-detection on next login)
+     - **"Clear" button** removes connection ID, clears localStorage, and **disables auto-detection for the current session**
+       - Auto-detect will NOT re-run until user clicks "Auto-detect" button or reloads the page
+       - **"Auto-detect" button** appears when auto-detect is disabled (after Clear) — clicking it re-enables auto-detection
    - **Note:** Logs are fetched via `GET /api/v1/channel-connections/{connection_id}/sync-logs`
      - Connection ID must be a valid UUID format
      - Invalid connection ID shows helpful message instead of attempting fetch
