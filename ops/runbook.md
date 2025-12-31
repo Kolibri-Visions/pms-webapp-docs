@@ -3518,7 +3518,7 @@ The Channel Sync Admin UI provides:
    - Clipboard copy confirmations
 
 6. **Troubleshooting Link:**
-   - "Troubleshooting (Runbook)" link below Sync Logs title navigates to Ops Console (`/ops`)
+   - "Troubleshooting (Runbook)" link below Sync Logs title navigates directly to Ops Runbook tab (`/ops/runbook`)
    - Provides quick access to full operational documentation and runbook
 
 7. **Duration Column:**
@@ -6078,6 +6078,8 @@ The Ops Console includes three main pages:
   - Database (db)
   - Redis (if exposed)
   - Celery workers (if exposed)
+  - **Component badges** display `component.status` (e.g., "ok", "healthy", "up", "down")
+  - **Error messages** appear below component name if `component.error` is present (truncated to 60 chars)
 - Degraded mode clearly indicated when any component is down
 
 **Actions:**
