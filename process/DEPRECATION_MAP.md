@@ -203,6 +203,219 @@ git commit -m "docs: delete old-doc.md (replaced by new-doc.md)"
 
 ---
 
+## Docs Inventory
+
+**Total Files**: 91 markdown files (excluding `_staging/` snapshots)
+
+**Breakdown by Folder**:
+
+| Folder | Count | Notes |
+|--------|-------|-------|
+| **root** | 29 | Includes 21 phase*.md files, project docs, templates |
+| **architecture/** | 19 | ADRs, module system, error taxonomy, channel manager |
+| **roadmap/** | 6 | phase-1.md through phase-5.md, overview.md |
+| **ops/** | 6 | runbook, feature-flags, 4 old duplicates |
+| **tickets/** | 5 | phase-1.md through phase-5.md |
+| **channel-manager/** | 5 | Architecture, OAuth flows, monitoring, conflict resolution |
+| **product/** | 4 | PRODUCT_BACKLOG, RELEASE_PLAN, CHANGELOG, reference model |
+| **process/** | 4 | DoD, DOCS_LIFECYCLE, DEPRECATION_MAP, RELEASE_CADENCE |
+| **direct-booking-engine/** | 4 | Flow, edge cases, Stripe, email templates |
+| **database/** | 4 | migrations-guide, exclusion-constraints, data-integrity, index-strategy |
+| **frontend/** | 2 | authentication, ops-console |
+| **testing/** | 1 | README |
+| **domain/** | 1 | inventory |
+| **agents/** | 1 | agents/docs/agents/README.md |
+
+**Files Marked for Deletion** (from mapping table):
+- **21 phase*.md** files (root)
+- **6 roadmap/** files
+- **5 tickets/** files
+- **4 ops/** duplicates (availability_smoke, inventory_availability, inventory_rules, migrations)
+- **1 architecture/** old plan (phase21-modularization-plan)
+
+**Total Candidates**: 37 files
+
+---
+
+## Delete Waves
+
+**Purpose**: Phased deletion approach to minimize risk
+
+**Strategy**: Delete low-risk duplicates first, high-risk onboarding docs last
+
+---
+
+### Wave 1: Low-Risk Duplicates (Safe to Delete Immediately)
+
+**Files** (4 total):
+- `ops/availability_smoke.md` → Covered by `testing/README.md`
+- `ops/inventory_availability.md` → Covered by `ops/runbook.md`
+- `ops/inventory_rules.md` → Covered by `database/exclusion-constraints.md`
+- `ops/migrations.md` → Covered by `database/migrations-guide.md`
+
+**Risk Level**: **LOW** - Clear duplicates, no external links, full coverage in new docs
+
+**Gate Checklist**:
+- [x] Replacement docs exist and are complete
+- [x] No references in START_HERE.md
+- [x] Covered in runbook Top 5 Failure Modes
+- [ ] No broken links after deletion (run `grep -r "availability_smoke\|inventory_availability\|inventory_rules\|ops/migrations" backend/docs/`)
+
+**Verification Steps**:
+1. Verify replacement coverage:
+   - `testing/README.md` has server-side smoke checks
+   - `ops/runbook.md` has Top 5 Failure Modes
+   - `database/exclusion-constraints.md` covers overlap prevention
+   - `database/migrations-guide.md` has Schema Drift SOP
+2. Search for broken links:
+   ```bash
+   grep -r "availability_smoke\|inventory_availability\|inventory_rules" backend/docs/ --include="*.md"
+   # Expected: No results (or only from DEPRECATION_MAP.md)
+   ```
+3. Delete files (tag first):
+   ```bash
+   git tag -a docs-archive-wave1-$(date +%Y-%m-%d) -m "Archive before Wave 1 deletion"
+   git rm backend/docs/ops/availability_smoke.md
+   git rm backend/docs/ops/inventory_availability.md
+   git rm backend/docs/ops/inventory_rules.md
+   git rm backend/docs/ops/migrations.md
+   git commit -m "docs: delete Wave 1 ops duplicates (covered by runbook/testing/database)"
+   ```
+
+---
+
+### Wave 2: Medium-Risk Phase/Roadmap Docs (Delete After Team Review)
+
+**Files** (32 total):
+
+**Root phase*.md** (21 files):
+- `phase5-backend-apis.md`, `phase5-backend-apis.index.md`
+- `phase6-supabase-rls.md`
+- `phase7-qa-security.md`, `phase7-qa-security-remediation.md`, `phase7.index.md`
+- `phase8-prd-light.md`, `phase8.index.md`
+- `phase9-release-plan.md`, `phase9.index.md`
+- `phase10a-ui-ux.md`, `phase10a.index.md`
+- `phase10b-10c-visual-design.md`
+- `phase11-13-agentur-ux-rollen.md`
+- `phase14-preismodell-logik.md`
+- `phase15-16-direct-booking-eigentuemer.md`
+- `phase17b-database-schema-rls.md`
+- `phase18a-preflight.md`, `phase18a-schema-alignment-rls-implementation.md`
+- `phase19-core-booking-flow-api.md`, `phase19-preflight.md`
+
+**Roadmap folder** (6 files):
+- `roadmap/overview.md`
+- `roadmap/phase-1.md` through `roadmap/phase-5.md`
+
+**Tickets folder** (5 files):
+- `tickets/phase-1.md` through `tickets/phase-5.md`
+
+**Risk Level**: **MEDIUM** - Historical planning docs, may have external references, full coverage in `product/PRODUCT_BACKLOG.md` and `product/RELEASE_PLAN.md`
+
+**Gate Checklist**:
+- [x] `product/PRODUCT_BACKLOG.md` covers all 10 epics
+- [x] `product/RELEASE_PLAN.md` covers MVP/Beta/Prod-ready phases
+- [ ] Team notification sent (allow 7 days for objections)
+- [ ] No external wiki/confluence links to these files
+- [ ] No broken links after deletion
+
+**Verification Steps**:
+1. Search for references:
+   ```bash
+   grep -r "phase[0-9]\|roadmap/\|tickets/" backend/docs/ --include="*.md" | grep -v "DEPRECATION_MAP"
+   # Review results for any unexpected references
+   ```
+2. Post team notification:
+   ```
+   📢 Docs Cleanup Wave 2:
+   Deleting 32 old phase/roadmap/tickets docs (replaced by product/PRODUCT_BACKLOG + RELEASE_PLAN).
+   Review period: 7 days. Raise concerns before [DATE].
+   Details: backend/docs/process/DEPRECATION_MAP.md#wave-2
+   ```
+3. After 7 days, delete files:
+   ```bash
+   git tag -a docs-archive-wave2-$(date +%Y-%m-%d) -m "Archive before Wave 2 deletion"
+   git rm backend/docs/phase*.md
+   git rm -r backend/docs/roadmap/
+   git rm -r backend/docs/tickets/
+   git commit -m "docs: delete Wave 2 phase/roadmap/tickets (covered by product backlog/release plan)"
+   ```
+
+---
+
+### Wave 3: High-Risk Architecture Docs (Delete Last, After External Audit)
+
+**Files** (1 total):
+- `architecture/phase21-modularization-plan.md`
+
+**Risk Level**: **HIGH** - Architecture doc that may be referenced externally, covered by `architecture/module-system.md`
+
+**Gate Checklist**:
+- [x] `architecture/module-system.md` covers module registry
+- [ ] External references audited (GitHub issues, wiki, confluence)
+- [ ] No broken links after deletion
+- [ ] Redirect stub created (if needed)
+
+**Verification Steps**:
+1. Search GitHub issues for references:
+   ```bash
+   # Manually check GitHub issues/PRs for links to this file
+   ```
+2. Search for links:
+   ```bash
+   grep -r "phase21-modularization-plan" backend/docs/ --include="*.md"
+   # Expected: Only DEPRECATION_MAP.md
+   ```
+3. Create redirect stub (14-day notice):
+   ```markdown
+   > **MOVED**: This document has moved to [Module System Architecture](module-system.md).
+   >
+   > **Redirect Date**: YYYY-MM-DD
+   > **Old Location Removal**: YYYY-MM-DD (14 days)
+   >
+   > All module registry and graceful degradation content is now in the Module System doc.
+   ```
+4. After 14 days, delete:
+   ```bash
+   git tag -a docs-archive-wave3-$(date +%Y-%m-%d) -m "Archive before Wave 3 deletion"
+   git rm backend/docs/architecture/phase21-modularization-plan.md
+   git commit -m "docs: delete phase21-modularization-plan (covered by module-system.md)"
+   ```
+
+---
+
+## Pre-Delete Validation Checklist
+
+**Before deleting ANY file in any wave**, verify:
+
+### Coverage Verification (8 checks)
+
+- [ ] **START_HERE.md** covers all topics from old doc
+- [ ] **ops/runbook.md** has Top 5 Failure Modes section
+- [ ] **database/migrations-guide.md** has Schema Drift SOP section
+- [ ] **testing/README.md** has Server-side Smoke Checks section
+- [ ] **ops/feature-flags.md** exists and documents all flags
+- [ ] **product/PRODUCT_BACKLOG.md** exists with 10 epics
+- [ ] **process/DEFINITION_OF_DONE.md** exists with docs update rule
+- [ ] **PROJECT_STATUS_LIVE.md** is current (updated within last 30 days)
+
+### Technical Verification (3 checks)
+
+- [ ] **Mirror publish green**: GitHub Actions CI passes
+- [ ] **No broken links**: Search for references to deleted file paths
+- [ ] **Redirect stub created**: If path changed and had external links
+
+### Process Verification (2 checks)
+
+- [ ] **Git tag created**: `docs-archive-waveN-YYYY-MM-DD`
+- [ ] **Team notification**: Posted (7 days notice for Wave 2+, 14 days for Wave 3)
+
+### Post-Delete (1 check)
+
+- [ ] **Update this map**: Move deleted entry to "Deleted Files (Archive)" section
+
+---
+
 ## Related Documentation
 
 - [DOCS_LIFECYCLE.md](DOCS_LIFECYCLE.md) - Documentation aging workflow
