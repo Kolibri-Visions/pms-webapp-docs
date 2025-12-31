@@ -6072,7 +6072,10 @@ The Ops Console includes three main pages:
 #### 1. `/ops/status` - System Health
 
 **What it shows:**
-- **Overall system status banner** (Healthy / Down):
+- **Overall system status banner** (Healthy / Checking / Down):
+  - **Checking system...** (blue, spinning icon) on initial page load while health checks run
+    - This is normal and prevents false "System Down" alarms during loading
+    - Appears briefly (usually < 1 second) while fetching `/health` and `/health/ready`
   - **System Healthy** (green) when ALL of the following are true:
     - `/health` endpoint returns `status: "up"`
     - `/health/ready` endpoint returns `status: "up"`
@@ -6080,6 +6083,7 @@ The Ops Console includes three main pages:
   - **System Down** (red) when ANY check fails:
     - Lists specific failed checks (e.g., "db component (status: down)")
     - Example: "/health (not 'up')", "redis component (status: down)"
+    - **Only shows red after checks complete** (not during initial load)
 - GET `/health` response with version/commit if available
 - GET `/health/ready` response with component statuses
   - Database (db)
