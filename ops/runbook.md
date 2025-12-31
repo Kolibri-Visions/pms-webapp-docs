@@ -3595,9 +3595,18 @@ curl -X POST "$API/api/v1/channel-connections/$CID/sync-logs/purge" \
 - **403**: Forbidden (not an admin)
 - **422**: Invalid retention_days (must be 1-3650)
 
+**Purge Preview (Safety Feature):**
+- **Before Deletion**: Modal shows preview count ("Will delete: X logs")
+- **Scope Display**: Clearly shows "This connection only" with connection ID
+- **Real-time Update**: Preview refreshes when retention period changes (7/30/90 days)
+- **Safe Decision**: User sees exactly how many logs will be deleted before confirming
+- **Loading State**: Shows "Loading..." while fetching preview count
+- **Error Handling**: Displays error if preview fails (doesn't block purge if needed)
+
 **Safety Notes:**
 - **Irreversible**: Deleted logs cannot be recovered
-- **Scoped**: Only deletes logs for specified connection_id
+- **Scoped**: Only deletes logs for specified connection_id (not global)
+- **Preview First**: Always shows count before deletion (requires connection ID)
 - **Audit Trail**: Lost after purge — export logs before purging if needed for compliance
 - **No Automatic Purge**: Manual trigger only (no cron/scheduled purge)
 
