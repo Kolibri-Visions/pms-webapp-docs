@@ -1,0 +1,215 @@
+# Documentation Deprecation Map
+
+**Purpose**: Safe deletion roadmap for old/duplicate documentation
+
+**Audience**: Maintainers, documentation reviewers
+
+**Source of Truth**: This file tracks OLD → NEW mappings before any deletion
+
+---
+
+## Rules
+
+### No Deletes Until Coverage Verified
+
+- **NEVER delete** old docs without verifying replacement coverage
+- **ALWAYS check** START_HERE.md links cover all old doc topics
+- **PREFER redirect stubs** if paths change (see [DOCS_LIFECYCLE.md](DOCS_LIFECYCLE.md#migrating-docs-restructure))
+- **TAG before delete**: Create git tag `docs-archive-YYYY-MM-DD` before deletion PR
+
+### Deprecation Workflow
+
+1. Add entry to mapping table (status: `planned`)
+2. Create replacement doc (update status: `covered`)
+3. Verify coverage via deletion gate checklist
+4. Update status: `ready-to-delete`
+5. Create redirect stub if path changed
+6. Only then: delete old file
+
+---
+
+## Mapping Table
+
+### Status Legend
+
+- **planned**: Identified for deprecation, replacement not yet complete
+- **covered**: Replacement doc exists and covers all topics
+- **ready-to-delete**: Deletion gate passed, safe to delete
+
+---
+
+### Phase/Roadmap Docs → Product Backlog/Release Plan
+
+| OLD Path | NEW Path | Coverage Notes | Status | Verification |
+|----------|----------|----------------|--------|--------------|
+| `phase*.md` (root) | `product/PRODUCT_BACKLOG.md`, `product/RELEASE_PLAN.md` | All phase planning now in 10 epics (A-J) + MVP/Beta/Prod-ready milestones | **covered** | [PRODUCT_BACKLOG.md](../product/PRODUCT_BACKLOG.md), [RELEASE_PLAN.md](../product/RELEASE_PLAN.md) |
+| `roadmap/phase-1.md` through `roadmap/phase-5.md` | `product/RELEASE_PLAN.md` | Phase 0 (Foundation) through Phase 3 (Prod-Ready) mapped | **covered** | [RELEASE_PLAN.md](../product/RELEASE_PLAN.md) |
+| `tickets/phase-1.md` through `tickets/phase-5.md` | `product/PRODUCT_BACKLOG.md` (Open Tasks sections) | Task breakdown now in epic-level Open Tasks | **covered** | [PRODUCT_BACKLOG.md](../product/PRODUCT_BACKLOG.md) |
+| `roadmap/overview.md` | `product/RELEASE_PLAN.md` | Overview replaced by release phases + timeline | **covered** | [RELEASE_PLAN.md](../product/RELEASE_PLAN.md) |
+| `phase9-release-plan.md` | `product/RELEASE_PLAN.md` | Release planning consolidated | **covered** | [RELEASE_PLAN.md](../product/RELEASE_PLAN.md) |
+
+---
+
+### Ops Duplicates → Runbook/Feature Flags
+
+| OLD Path | NEW Path | Coverage Notes | Status | Verification |
+|----------|----------|----------------|--------|--------------|
+| `ops/migrations.md` | `database/migrations-guide.md` | All migration workflows + Schema Drift SOP | **covered** | [migrations-guide.md](../database/migrations-guide.md), [runbook.md - Top 5 Failure Modes](../ops/runbook.md#top-5-failure-modes-and-fixes) |
+| `ops/availability_smoke.md` | `testing/README.md` (Server-side Smoke Checks) | Availability smoke checks in official smoke sequence | **covered** | [testing/README.md](../testing/README.md#server-side-smoke-checks-official) |
+| `ops/inventory_availability.md` | `ops/runbook.md`, `database/migrations-guide.md` | Availability/inventory troubleshooting in runbook, schema in migrations guide | **covered** | [runbook.md](../ops/runbook.md), [migrations-guide.md](../database/migrations-guide.md) |
+| `ops/inventory_rules.md` | `database/exclusion-constraints.md`, `database/data-integrity.md` | EXCLUSION constraints doc covers overlap prevention rules | **covered** | [exclusion-constraints.md](../database/exclusion-constraints.md) |
+
+---
+
+### Architecture Phase Docs → Architecture/
+
+| OLD Path | NEW Path | Coverage Notes | Status | Verification |
+|----------|----------|----------------|--------|--------------|
+| `architecture/phase21-modularization-plan.md` | `architecture/module-system.md` | Module registry, graceful degradation covered | **covered** | [module-system.md](../architecture/module-system.md) |
+| `phase17b-database-schema-rls.md` | `database/migrations-guide.md`, `_staging/status-review-v3/PROJECT_STATUS.md` | RLS policies documented in status review v3 snapshot | **covered** | [migrations-guide.md](../database/migrations-guide.md), [status-review-v3](../_staging/status-review-v3/PROJECT_STATUS.md) |
+| `phase18a-preflight.md`, `phase18a-schema-alignment-rls-implementation.md` | `database/migrations-guide.md` | Schema alignment + RLS covered in migrations guide | **covered** | [migrations-guide.md](../database/migrations-guide.md) |
+| `phase19-core-booking-flow-api.md`, `phase19-preflight.md` | `product/PRODUCT_BACKLOG.md` (Epic C: Booking Lifecycle) | Core booking flow in product backlog | **covered** | [PRODUCT_BACKLOG.md - Epic C](../product/PRODUCT_BACKLOG.md#epic-c-booking-lifecycle) |
+
+---
+
+### Frontend/UX Phase Docs → Frontend/
+
+| OLD Path | NEW Path | Coverage Notes | Status | Verification |
+|----------|----------|----------------|--------|--------------|
+| `phase10a-ui-ux.md`, `phase10a.index.md` | `frontend/ops-console.md`, `frontend/authentication.md` | Frontend architecture covered in frontend/ docs | **covered** | [ops-console.md](../frontend/ops-console.md), [authentication.md](../frontend/authentication.md) |
+| `phase10b-10c-visual-design.md` | `product/PRODUCT_BACKLOG.md` (Epic F: Guest Portal, Epic G: Owner Portal) | Visual design planning in product backlog epics | **planned** | [PRODUCT_BACKLOG.md](../product/PRODUCT_BACKLOG.md) |
+| `phase11-13-agentur-ux-rollen.md` | `_staging/status-review-v3/PROJECT_STATUS.md` (RBAC section) | Agency UX + RBAC roles documented in status review | **covered** | [status-review-v3 - RBAC](../_staging/status-review-v3/PROJECT_STATUS.md#rbac-role-based-access-control) |
+
+---
+
+### Backend/API Phase Docs → Architecture/
+
+| OLD Path | NEW Path | Coverage Notes | Status | Verification |
+|----------|----------|----------------|--------|--------------|
+| `phase5-backend-apis.index.md`, `phase5-backend-apis.md` | `architecture/module-system.md`, `architecture/error-taxonomy.md` | Backend API patterns in architecture docs | **covered** | [module-system.md](../architecture/module-system.md), [error-taxonomy.md](../architecture/error-taxonomy.md) |
+| `phase6-supabase-rls.md` | `database/migrations-guide.md`, `_staging/status-review-v3/PROJECT_STATUS.md` | RLS policies documented | **covered** | [migrations-guide.md](../database/migrations-guide.md) |
+| `phase7-qa-security.md`, `phase7-qa-security-remediation.md`, `phase7.index.md` | `product/PRODUCT_BACKLOG.md` (Epic A: Stability & Security) | QA/security in Epic A | **covered** | [PRODUCT_BACKLOG.md - Epic A](../product/PRODUCT_BACKLOG.md#epic-a-stability--security) |
+| `phase8-prd-light.md`, `phase8.index.md` | `product/PRODUCT_BACKLOG.md`, `product/RELEASE_PLAN.md` | PRD covered in product docs | **covered** | [PRODUCT_BACKLOG.md](../product/PRODUCT_BACKLOG.md) |
+
+---
+
+### Other Phase Docs
+
+| OLD Path | NEW Path | Coverage Notes | Status | Verification |
+|----------|----------|----------------|--------|--------------|
+| `phase14-preismodell-logik.md` | `product/PRODUCT_BACKLOG.md` (Epic H: Finance & Accounting) | Pricing model in finance epic | **planned** | [PRODUCT_BACKLOG.md - Epic H](../product/PRODUCT_BACKLOG.md#epic-h-finance--accounting) |
+| `phase15-16-direct-booking-eigentuemer.md` | `product/PRODUCT_BACKLOG.md` (Epic E: Direct Booking, Epic G: Owner Portal) | Direct booking + owner portal epics | **planned** | [PRODUCT_BACKLOG.md](../product/PRODUCT_BACKLOG.md) |
+
+---
+
+## Discovery Needed
+
+**To Complete Mapping**: Search for the following patterns and assess coverage:
+
+1. **Environment variable docs** (scattered notes)
+   - Search: `grep -r "ENV" --include="*.md" backend/docs/`
+   - Verify: All covered by `ops/feature-flags.md` or `PROJECT_STATUS_LIVE.md`
+
+2. **Deployment/Docker notes** (scattered notes)
+   - Search: `grep -r "Dockerfile\|docker-compose\|deployment" --include="*.md" backend/docs/`
+   - Verify: All covered by `ops/runbook.md` or `PROJECT_STATUS_LIVE.md`
+
+3. **Schema/DDL snippets** (scattered SQL)
+   - Search: `grep -r "CREATE TABLE\|ALTER TABLE" --include="*.md" backend/docs/`
+   - Verify: All covered by `database/migrations-guide.md` or `database/exclusion-constraints.md`
+
+4. **Old test docs** (scattered test notes)
+   - Search: `grep -r "pytest\|test" --include="*.md" backend/docs/`
+   - Verify: All covered by `testing/README.md`
+
+---
+
+## Deletion Gate Checklist
+
+**Before deleting ANY old doc**, verify ALL of the following:
+
+### Coverage Verification
+
+- [ ] **START_HERE.md links** cover all topics from old doc
+- [ ] **Runbook** has Top 5 Failure Modes section
+- [ ] **Migrations guide** includes Schema Drift SOP
+- [ ] **Testing guide** includes official server-side smoke checks
+- [ ] **Feature flags** doc exists and is current
+- [ ] **Product backlog** + DoD + Release Plan exist
+- [ ] **PROJECT_STATUS_LIVE.md** is current
+- [ ] **Ops Console docs** exist (frontend/ops-console.md)
+- [ ] **Authentication docs** exist (frontend/authentication.md)
+
+### Technical Verification
+
+- [ ] **Mirror publish green** (GitHub Actions CI passes)
+- [ ] **No broken links** from START_HERE or other active docs to deleted file
+- [ ] **Redirect stub created** (if path changed, per [DOCS_LIFECYCLE.md](DOCS_LIFECYCLE.md#migrating-docs-restructure))
+- [ ] **Git tag created**: `docs-archive-YYYY-MM-DD` (marks pre-deletion state)
+
+### Process Verification
+
+- [ ] **Status in this map**: `ready-to-delete`
+- [ ] **Team notification**: Posted in team chat (allow 7 days for objections)
+- [ ] **Update DOCS_LIFECYCLE**: Add archived file to lifecycle tracking
+
+---
+
+## Safe Deletion Workflow
+
+**Step 1: Verify Coverage**
+- Check deletion gate checklist (all boxes ✅)
+- Review replacement docs ensure completeness
+
+**Step 2: Create Archive Tag**
+```bash
+# Create git tag before deletion
+git tag -a docs-archive-$(date +%Y-%m-%d) -m "Archive state before deleting phase docs"
+git push origin docs-archive-$(date +%Y-%m-%d)
+```
+
+**Step 3: Create Redirect Stub (if path changed)**
+
+If old path was linked externally or had deep links:
+```markdown
+> **MOVED**: This document has moved to [new location](link).
+>
+> **Redirect Date**: YYYY-MM-DD
+> **Old Location Removal**: YYYY-MM-DD (14 days)
+```
+
+**Step 4: Delete Files**
+```bash
+# Delete old doc
+git rm backend/docs/path/to/old-doc.md
+
+# Commit
+git commit -m "docs: delete old-doc.md (replaced by new-doc.md)"
+```
+
+**Step 5: Update This Map**
+- Move entry to "Deleted" section (see below)
+- Update DOCS_LIFECYCLE.md archived list
+
+---
+
+## Deleted Files (Archive)
+
+**When files are deleted**, move entries here with deletion date:
+
+| Deleted Path | Replaced By | Deletion Date | Archive Tag |
+|--------------|-------------|---------------|-------------|
+| (None yet) | - | - | - |
+
+---
+
+## Related Documentation
+
+- [DOCS_LIFECYCLE.md](DOCS_LIFECYCLE.md) - Documentation aging workflow
+- [DEFINITION_OF_DONE.md](DEFINITION_OF_DONE.md) - Includes "docs updated after every task"
+- [START_HERE.md](../START_HERE.md) - Documentation entrypoint
+
+---
+
+**Last Updated**: 2025-12-31
+**Maintained By**: Documentation Team
