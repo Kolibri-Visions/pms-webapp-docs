@@ -205,7 +205,7 @@ We are building PMS-Webapp as a **modular monolith** following a proven PMS prod
 **Goal**: Modular Monolith Scaffold (Preparation Only)
 
 **Deliverables**:
-1. **Documentation** (this doc + modular-monolith.md + phase21-plan.md)
+1. **Documentation** (this doc + modular-monolith.md + module-system.md)
 2. **Module Scaffold**: `app/modules/` structure (NOT wired)
 3. **No Functional Changes**: Additive only, no router moves
 
@@ -275,7 +275,7 @@ Dependency Rules:
 Phase 21 is successful when:
 1. ✅ Documentation exists for all 6 pillars
 2. ✅ `docs/architecture/modular-monolith.md` defines clear module boundaries
-3. ✅ `docs/architecture/phase21-modularization-plan.md` exists with step-by-step plan
+3. ✅ `docs/architecture/module-system.md` documents the module registry pattern
 4. ✅ `app/modules/` scaffold created (ModuleSpec, Registry)
 5. ✅ No existing functionality broken
 6. ✅ Tests pass (including new unit tests for registry)

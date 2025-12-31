@@ -235,6 +235,7 @@ git commit -m "docs: delete old-doc.md (replaced by new-doc.md)"
 | `tickets/phase-3.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2C |
 | `tickets/phase-4.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2C |
 | `tickets/phase-5.md` | `product/PRODUCT_BACKLOG.md` | 2025-12-31 | Wave 2C |
+| `architecture/phase21-modularization-plan.md` | `architecture/module-system.md` | 2025-12-31 | Wave 3 |
 
 ---
 
@@ -564,6 +565,39 @@ git commit -m "docs: delete old-doc.md (replaced by new-doc.md)"
 - **All phase planning docs replaced by product backlog and release plan**
 
 **Next Steps**: Execute Wave 3 (delete `architecture/phase21-modularization-plan.md` after external audit)
+
+---
+
+## Wave 3 Summary
+
+**Status**: ✅ **COMPLETED** (2025-12-31)
+
+**Results**:
+- **Deleted**: 1 file
+- **Stubbed**: 0 files
+- **Blocked**: 0 files (All cleanup waves complete)
+
+**Deleted Files** (Historical planning doc):
+1. `architecture/phase21-modularization-plan.md` → Covered by `architecture/module-system.md` + `architecture/modules-registry.md`
+
+**Inbound Links Updated**:
+- `product/reference-product-model.md` → Replaced 2 references to phase21 plan with `module-system.md`
+- `architecture/modular-monolith.md` → Replaced Phase 21 Plan reference with Module System and Module Registry
+- `architecture/modules-registry.md` → Replaced Phase 21 Plan reference with Module System
+
+**Coverage Verified**:
+- ✅ Architecture principles covered by `architecture/modular-monolith.md`
+- ✅ Module registry pattern covered by `architecture/module-system.md`
+- ✅ Registry implementation covered by `architecture/modules-registry.md`
+- ✅ No broken links in active docs (grep check: "no matches")
+
+**All Cleanup Waves Complete**:
+- **Wave 1**: 4 files (ops duplicates)
+- **Wave 2**: 32 files (phase planning docs)
+- **Wave 3**: 1 file (architecture planning doc)
+- **Total deleted**: 37 files across all waves
+
+**Documentation Modernization Complete**: All obsolete planning docs removed, canonical docs established.
 
 ---
 

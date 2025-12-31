@@ -737,6 +737,7 @@ async def test_airbnb_booking_syncs_to_core():
 ## References
 
 - **Product Model**: `docs/product/reference-product-model.md`
-- **Phase 21 Plan**: `docs/architecture/phase21-modularization-plan.md`
+- **Module System**: `docs/architecture/module-system.md` - Module registry implementation
+- **Module Registry**: `docs/architecture/modules-registry.md` - Registry pattern details
 - **System Architecture**: `docs/architecture/system-architecture.md`
 - **Channel Manager**: `backend/app/channel_manager/README.md`

@@ -325,6 +325,6 @@ These will be addressed in future phases as needed.
 ## See Also
 
 - **Modular Monolith Overview**: `modular-monolith.md`
-- **Phase 21 Plan**: `phase21-modularization-plan.md`
+- **Module System**: `module-system.md` - Module registry implementation
 - **Module Package**: `app/modules/README.md`
 - **Product Model**: `docs/product/reference-product-model.md`
