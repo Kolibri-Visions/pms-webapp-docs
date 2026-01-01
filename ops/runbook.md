@@ -5272,16 +5272,237 @@ ORDER BY created_at DESC;
 
 ---
 
-### Log Retention
+### Channel Manager — Sync Log Retention & Cleanup
 
-**Current:** No automatic deletion (logs accumulate indefinitely)
+**Purpose:** Prevent indefinite database growth by implementing periodic cleanup of old sync logs. This section provides professional retention guidelines and manual cleanup procedures.
 
-**Recommended:** Implement log rotation policy
+---
+
+#### Why Retention Matters
+
+**Database Growth:**
+- Each sync operation creates 1-3 log entries (full sync creates 3: availability, pricing, bookings)
+- High-volume properties with hourly syncs generate ~72 logs/day = ~2,160 logs/month
+- Without cleanup, logs accumulate indefinitely, consuming disk space and slowing queries
+- Example: 10 properties × 2,160 logs/month × 12 months = 259,200 log entries/year
+
+**UI Performance:**
+- Admin UI `/channel-sync` page loads all logs for selected connection (no server-side pagination)
+- Large log tables (>10,000 entries per connection) cause slow page loads and browser memory issues
+- Sync History section fetches paginated batches, but still slows with excessive data
+
+**Query Performance:**
+- Indexed queries remain fast up to ~100,000 total rows
+- Beyond 1M rows, even indexed queries may slow down
+- Regular cleanup maintains optimal performance
+
+---
+
+#### Recommended Retention Periods
+
+**Test/Staging Environments:**
+- **90 days** (3 months)
+- Sufficient for debugging recent issues
+- Keeps DB size manageable for development workflows
+
+**Production Environments:**
+- **180 days** (6 months): Standard retention for operational visibility
+- **365 days** (1 year): Extended retention for audit/compliance requirements
+- **Custom**: Adjust based on legal/regulatory requirements (e.g., GDPR, financial audits)
+
+**Factors to Consider:**
+- **Compliance Requirements:** Some industries require longer retention (e.g., 7 years for financial data)
+- **Disk Space:** Monitor Supabase storage usage and adjust retention accordingly
+- **Query Performance:** If Admin UI becomes slow, reduce retention period
+- **Debugging Needs:** Keep at least 90 days to troubleshoot recurring sync issues
+
+---
+
+#### Manual Cleanup (Supabase SQL Editor)
+
+**Access:** Supabase Dashboard → SQL Editor → New Query
+
+**IMPORTANT:** These queries delete data permanently. Always verify cutoff date before execution.
+
+**1. Delete Logs Older Than N Days**
+
 ```sql
--- Delete logs older than 90 days
-DELETE FROM channel_sync_logs
+-- Test/Staging: Delete logs older than 90 days
+DELETE FROM public.channel_sync_logs
+WHERE created_at < NOW() - INTERVAL '90 days';
+
+-- Production: Delete logs older than 180 days
+DELETE FROM public.channel_sync_logs
+WHERE created_at < NOW() - INTERVAL '180 days';
+
+-- Production (Extended): Delete logs older than 365 days
+DELETE FROM public.channel_sync_logs
+WHERE created_at < NOW() - INTERVAL '365 days';
+```
+
+**2. Preview Deletion Count (Safe Dry-Run)**
+
+Before executing DELETE, preview how many rows will be deleted:
+
+```sql
+-- Preview: Count logs older than 90 days
+SELECT COUNT(*) AS logs_to_delete,
+       MIN(created_at) AS oldest_log,
+       MAX(created_at) AS newest_affected_log
+FROM public.channel_sync_logs
 WHERE created_at < NOW() - INTERVAL '90 days';
 ```
+
+**3. Delete by Specific Cutoff Date**
+
+```sql
+-- Delete logs before specific date (e.g., before 2025-01-01)
+DELETE FROM public.channel_sync_logs
+WHERE created_at < '2025-01-01 00:00:00'::timestamptz;
+```
+
+**4. Connection-Specific Cleanup**
+
+```sql
+-- Delete old logs for specific connection only
+DELETE FROM public.channel_sync_logs
+WHERE connection_id = 'your-connection-uuid-here'
+  AND created_at < NOW() - INTERVAL '90 days';
+```
+
+**5. Advanced: Keep Last N Batches Per Connection**
+
+For connections with batch_id (full syncs), keep only the most recent N batches:
+
+```sql
+-- Keep only last 50 batches per connection, delete older batches
+WITH batches_to_keep AS (
+  SELECT DISTINCT batch_id
+  FROM public.channel_sync_logs
+  WHERE batch_id IS NOT NULL
+    AND connection_id = 'your-connection-uuid-here'
+  ORDER BY created_at DESC
+  LIMIT 50
+)
+DELETE FROM public.channel_sync_logs
+WHERE connection_id = 'your-connection-uuid-here'
+  AND batch_id IS NOT NULL
+  AND batch_id NOT IN (SELECT batch_id FROM batches_to_keep);
+```
+
+---
+
+#### Safety Notes
+
+**Critical Warnings:**
+
+1. **History Only — No Impact on Bookings/Inventory:**
+   - Deleting sync logs removes audit history only
+   - Does NOT affect current bookings, availability, or pricing data
+   - Safe to delete old logs without business impact
+
+2. **Irreversible Deletion:**
+   - Deleted logs cannot be recovered (no soft delete)
+   - Always preview with COUNT(*) before executing DELETE
+   - Consider exporting logs to CSV if long-term archival is needed
+
+3. **Run During Low-Traffic Windows:**
+   - Large deletes (>100,000 rows) can cause brief table locks
+   - Recommended: Run during off-peak hours (e.g., 2-4 AM local time)
+   - Monitor Supabase dashboard for connection pool usage during execution
+
+4. **Database Locks:**
+   - DELETE operations acquire row-level locks
+   - Concurrent sync operations may briefly slow down during cleanup
+   - Use smaller batches if full table scan is too slow (e.g., delete 1 month at a time)
+
+**Best Practices:**
+
+- **Schedule Regular Cleanup:** Run monthly or quarterly (set calendar reminder)
+- **Document Execution:** Keep log of cleanup dates and row counts in operations log
+- **Monitor Disk Usage:** Check Supabase storage metrics before/after cleanup
+- **Test First:** Run on staging environment before executing on production
+
+---
+
+#### Verification Queries
+
+**1. Check Table Size**
+
+```sql
+-- Get total row count and date range
+SELECT COUNT(*) AS total_logs,
+       MIN(created_at) AS oldest_log,
+       MAX(created_at) AS newest_log,
+       COUNT(*) FILTER (WHERE created_at < NOW() - INTERVAL '90 days') AS logs_older_than_90d,
+       COUNT(*) FILTER (WHERE created_at < NOW() - INTERVAL '180 days') AS logs_older_than_180d
+FROM public.channel_sync_logs;
+```
+
+**2. Logs Per Connection**
+
+```sql
+-- Count logs per connection (identify high-volume connections)
+SELECT connection_id,
+       COUNT(*) AS log_count,
+       MIN(created_at) AS oldest,
+       MAX(created_at) AS newest
+FROM public.channel_sync_logs
+GROUP BY connection_id
+ORDER BY log_count DESC
+LIMIT 20;
+```
+
+**3. Storage Size Estimate**
+
+```sql
+-- Estimate table size in MB (PostgreSQL)
+SELECT pg_size_pretty(pg_total_relation_size('public.channel_sync_logs')) AS total_size,
+       pg_size_pretty(pg_relation_size('public.channel_sync_logs')) AS table_size,
+       pg_size_pretty(pg_indexes_size('public.channel_sync_logs')) AS indexes_size;
+```
+
+**4. Verify Cleanup Success**
+
+Run immediately after DELETE to confirm expected row count:
+
+```sql
+-- Should show 0 logs older than retention period
+SELECT COUNT(*) AS remaining_old_logs
+FROM public.channel_sync_logs
+WHERE created_at < NOW() - INTERVAL '90 days';
+-- Expected: 0
+```
+
+---
+
+#### Automated Cleanup (Future Enhancement)
+
+**Current State:** Manual cleanup required (no automated retention policy implemented)
+
+**Future Options:**
+
+1. **Supabase Cron Job:**
+   - Use `pg_cron` extension to schedule monthly cleanup
+   - Example: Auto-delete logs older than 180 days on 1st of each month
+
+2. **Application-Level Cleanup:**
+   - Add FastAPI scheduled task to run cleanup during off-peak hours
+   - Implement configurable retention period via environment variable
+
+3. **Partitioned Tables:**
+   - Partition `channel_sync_logs` by month (e.g., `channel_sync_logs_2025_01`)
+   - Drop entire partitions for faster cleanup (avoids DELETE scan)
+
+**Tracking Issue:** Consider creating GitHub issue to track automated cleanup implementation.
+
+---
+
+**Related:**
+
+- See [Log Retention & Purge Policy](#log-retention--purge-policy) for Admin UI purge feature (connection-scoped)
+- See [Stale Sync Logs (Automatic Cleanup)](#stale-sync-logs-automatic-cleanup) for automatic status-based cleanup
+- See [Sync Logs Persistence](#sync-logs-persistence) for table schema and indexes
 
 ---
 
