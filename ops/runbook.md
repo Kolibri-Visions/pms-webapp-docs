@@ -3529,6 +3529,175 @@ curl -X POST "$API/api/v1/channel-connections/$CID/test" \
 
 ---
 
+## Admin UI – Channel Manager Operations
+
+**Purpose:** Guide for using the admin web UI to manage channel connections, test health, trigger syncs, and monitor logs.
+
+**Access:** Admin-only (requires admin role). Navigate to: `https://admin.fewo.kolibri-visions.de/connections`
+
+### Overview
+
+The Connections page provides a centralized interface for Channel Manager operations:
+- **List Connections:** View all channel connections with search/filter
+- **Test Health:** Quick inline tests or detailed test results
+- **Connection Details:** Modal view with full management capabilities
+- **Trigger Syncs:** Manual sync operations (full/availability/pricing/bookings)
+- **Monitor Logs:** Real-time sync log tracking with auto-refresh and filters
+
+### Connections List
+
+**Features:**
+- **Search box:** Filter by connection ID, platform type, or status (client-side)
+- **Table columns:** ID (copyable), Platform, Status, Last Sync, Updated
+- **Inline actions:** Test (quick toast result), Open (detailed modal)
+
+**Common Actions:**
+
+1. **Search connections:**
+   - Type in search box to filter by ID/platform/status
+   - Results update instantly (client-side filter)
+
+2. **Copy connection ID:**
+   - Click on truncated ID (e.g., "abc123...") to copy full UUID
+   - Useful for API calls or debugging
+
+3. **Quick test:**
+   - Click "Test" button for inline health check
+   - Shows toast-style alert: "✓ Connection test passed: Mock: Connection is healthy"
+   - No modal interruption
+
+4. **Open details:**
+   - Click "Open" to view full connection details modal
+   - See sync operations, logs, and advanced controls
+
+### Connection Details Modal
+
+**Sections:**
+
+#### 1. Summary
+Shows key connection fields:
+- Platform type (airbnb, booking_com, etc.)
+- Status (active, paused, inactive, error)
+- Last sync timestamp
+- Last updated timestamp
+
+#### 2. Test Connection
+- **Button:** "Run Test" - performs POST `/api/v1/channel-connections/{id}/test`
+- **Result display:**
+  - Green banner: Connection healthy (status=active in mock mode)
+  - Red banner: Connection unhealthy (status!=active or test failed)
+  - Details section: Shows `mock_mode`, `simulated`, connection status
+- **Mock mode:** If `CHANNEL_MOCK_MODE=true` (current production), response includes `mock_mode: true` flag
+
+#### 3. Trigger Sync
+- **Dropdown:** Select sync type (Full, Availability, Pricing, Bookings)
+- **Button:** "Trigger Sync" - performs POST `/api/v1/channel-connections/{id}/sync` with `{"sync_type": "..."}`
+- **Result:** Alert message "Sync triggered: started" (or error message if failed)
+- **Auto-refresh:** Logs table refreshes 1s after sync trigger to show new log entry
+
+#### 4. Sync Logs
+- **Auto-refresh toggle:** Default ON, refreshes every 10 seconds while modal open
+- **Filters:**
+  - Status: All / Triggered / Running / Success / Failed
+  - Sync Type: All / Full / Availability / Pricing / Bookings
+- **Table columns:**
+  - Time (created_at timestamp)
+  - Type (operation_type or sync_type)
+  - Status (color-coded badges: green=success, red=failed, blue=running, gray=triggered)
+  - Error (first 50 chars, truncated)
+  - Actions: "Details" button opens full log JSON modal
+- **Details modal:** Shows complete log object in formatted JSON (error details, retry count, task ID, metadata)
+
+### API Endpoints Used
+
+**List connections:**
+```
+GET /api/v1/channel-connections/
+Response: JSON array of connection objects (not wrapped in {items:...})
+```
+
+**Test connection:**
+```
+POST /api/v1/channel-connections/{id}/test
+Request: {}
+Response: {healthy: bool, message: str, details: {...}}
+```
+
+**Trigger sync:**
+```
+POST /api/v1/channel-connections/{id}/sync
+Request: {sync_type: "full"|"availability"|"pricing"|"bookings"}
+Response: {status: "triggered"|"started", ...}
+```
+
+**Fetch sync logs:**
+```
+GET /api/v1/channel-connections/{id}/sync-logs?limit=50&offset=0
+Response: Array or {logs: [...]} depending on backend version
+UI handles both formats defensively
+```
+
+### Common Errors
+
+| Error | Symptom | UI Behavior | Fix |
+|-------|---------|-------------|-----|
+| 401 Unauthorized | Token expired | Error banner: "Unauthorized - please log in again" | Re-login via `/login` |
+| 403 Forbidden | Non-admin user | Error banner: "Forbidden - admin access required" | Use admin account or check RLS policies |
+| 404 Connection not found | Connection ID invalid or deleted | Test/sync fails with "Connection not found" | Verify connection exists with `deleted_at IS NULL` |
+| 405 Method Not Allowed | Using GET on /test | Backend returns 405 | UI uses POST (correct), only applies to curl errors |
+| 503 Service Unavailable | DB schema missing columns | Error banner: "Service unavailable - database may need migrations" | Apply migration 20260101030000 (see [Schema Drift](#channel-manager---channel_connections-schema-drift)) |
+| Empty logs array | No sync operations run yet | Logs table shows "No logs found" | Trigger a sync or wait for scheduled sync |
+
+### Troubleshooting
+
+**Connections list empty:**
+1. Check if backend returns 200: Open browser DevTools → Network tab → Refresh page
+2. If 200 but empty array: No connections seeded in database (expected in fresh deployments)
+3. Solution: Create connection via API (see [Channel Connections Management](../scripts/README.md#channel-connections-management-curl-examples))
+
+**Test always shows "unhealthy":**
+1. Check if mock mode enabled: Backend env `CHANNEL_MOCK_MODE=true`
+2. Check connection status: Only `status='active'` returns healthy in mock mode
+3. If status='paused', test returns: `healthy: false, message: "Mock: Connection status is paused"`
+
+**Sync trigger does nothing:**
+1. Check browser console for errors (F12 → Console tab)
+2. Verify alert message appears (if not, POST /sync may have failed)
+3. Check sync logs table for new entry (should appear within 1-2s)
+4. If no log entry: Backend may not support /sync endpoint or Celery worker offline
+
+**Auto-refresh not working:**
+1. Verify toggle is ON (checkbox should be checked)
+2. Open browser console to see if fetch errors occur every 10s
+3. If errors: Backend /sync-logs endpoint may be failing (check HTTP status)
+
+**Logs show cryptic field names:**
+1. UI expects fields: `id`, `created_at`, `status`, `operation_type`/`sync_type`, `error`
+2. If backend uses different field names, logs may display "N/A"
+3. Click "Details" to see raw log JSON and identify actual field names
+
+### Navigation Path
+
+**From login:**
+1. Log in as admin user at `/login`
+2. Admin layout auto-loads with navigation tabs: Status | Runbook | Connections | Sync
+3. Click "Connections" tab
+4. See connections list and search box
+
+**Direct URL:**
+- `https://admin.fewo.kolibri-visions.de/connections`
+- Requires admin authentication (layout enforces server-side check)
+- Non-admins redirected to `/channel-sync`
+
+### Related Sections
+
+- [Channel Manager - Schema Drift](#channel-manager---channel_connections-schema-drift) - Fix 503 schema errors
+- [Mock Mode for Channel Providers](#mock-mode-for-channel-providers) - Mock mode configuration
+- [Channel Manager API Endpoints](#channel-manager-api-endpoints) - Complete API reference
+- [Channel Connections Management (curl examples)](../scripts/README.md#channel-connections-management-curl-examples) - Server-side testing
+
+---
+
 ## Channel Manager API Endpoints
 
 **Purpose:** Complete reference for Channel Manager API endpoints with request/response examples.
