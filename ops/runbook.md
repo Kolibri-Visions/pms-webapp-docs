@@ -3626,14 +3626,23 @@ bash backend/scripts/pms_channel_seed_connection.sh \
   --platform-type airbnb
 ```
 
-**3. Reset connection and purge sync logs:**
+**3. Reset connection and clear sync logs:**
 ```bash
-# Purge logs with confirmation prompt
-bash backend/scripts/pms_channel_seed_connection.sh --purge-logs
+# Reset (clear logs) with confirmation prompt
+bash backend/scripts/pms_channel_seed_connection.sh --reset
 
-# Purge logs without confirmation (automation)
+# Reset without confirmation (automation)
+bash backend/scripts/pms_channel_seed_connection.sh --reset --yes
+
+# Legacy: --purge-logs still works (alias for --reset)
 bash backend/scripts/pms_channel_seed_connection.sh --purge-logs --yes
 ```
+
+**What does --reset do?**
+- Deletes all `channel_sync_logs` entries for the seeded connection
+- Useful for testing full sync operations in UI without old log clutter
+- Connection itself remains (only logs are cleared)
+- Requires confirmation unless `--yes` flag is used
 
 **4. Seed inactive/error connection for testing:**
 ```bash
@@ -3656,8 +3665,9 @@ bash backend/scripts/pms_channel_seed_connection.sh \
 | `--metadata <json>` | Platform metadata JSON | `{}` |
 | `--db-container <name>` | **NEW:** Explicit DB container name (overrides auto-detect) | Auto-detect |
 | `--print-cid` | Print seeded connection ID only (for scripting) | - |
-| `--purge-logs` | Purge channel_sync_logs for this connection | - |
-| `--yes` | Skip confirmation prompts (use with --purge-logs) | - |
+| `--reset` | Clear channel_sync_logs for this connection (alias: `--purge-logs`) | - |
+| `--seed` | No-op flag (script always seeds, for CLI consistency) | - |
+| `--yes` | Skip confirmation prompts (use with `--reset`) | - |
 
 ### Idempotent Behavior
 
@@ -3736,7 +3746,7 @@ The script validates inputs before execution:
 **Auto-confirm for automation:**
 ```bash
 # Use --yes flag to skip confirmation
-bash backend/scripts/pms_channel_seed_connection.sh --purge-logs --yes
+bash backend/scripts/pms_channel_seed_connection.sh --reset --yes
 # ✓ Purged 42 sync logs (--yes flag)
 ```
 
@@ -3806,7 +3816,7 @@ bash backend/scripts/pms_channel_sync_poll.sh \
 bash backend/scripts/pms_channel_seed_connection.sh \
   --channel airbnb \
   --status inactive \
-  --purge-logs \
+  --reset \
   --yes
 ```
 
