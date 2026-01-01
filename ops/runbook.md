@@ -3676,6 +3676,13 @@ UI handles both formats defensively
 2. If backend uses different field names, logs may display "N/A"
 3. Click "Details" to see raw log JSON and identify actual field names
 
+**Input text not visible (white-on-white):**
+1. Symptom: Search input, dropdown selections, or modal summary text appears invisible
+2. Cause: Browser cache serving old CSS or stale build
+3. Fix: Hard refresh (Ctrl+F5 or Cmd+Shift+R), clear browser cache, verify latest deploy
+4. Verify: Check SOURCE_COMMIT in backend logs matches latest git commit
+5. Note: UI now enforces explicit text colors (text-gray-900) to prevent this issue
+
 ### Navigation Path
 
 **From login:**
