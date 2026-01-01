@@ -9176,7 +9176,7 @@ docker logs pms-worker-v2 2>&1 | grep "Task.*failed"
 - ❌ **Don't**: Open batch details for old/completed batches expecting updates (polling won't start)
 - ❌ **Don't**: Keep multiple batch detail modals open simultaneously (only one can be open at a time)
 
-### 5. Troubleshooting Live Updates
+### 5. Troubleshooting Auto-Refresh & Live Updates
 
 **Problem:** "Live" badge doesn't appear for running batch
 
@@ -9186,36 +9186,47 @@ docker logs pms-worker-v2 2>&1 | grep "Task.*failed"
 - Batch detail loaded before operations started (rare race condition)
 
 **Solution:**
-- Close and reopen batch detail modal to refresh data
+- Use manual Refresh button to fetch latest data
 - Verify batch is actually running via API: `curl .../sync-batches/{batch_id}`
 
-**Problem:** Polling doesn't stop after batch completes
+**Problem:** Auto-refresh not updating "Last refreshed" timestamp
 
 **Possible Causes:**
-- Browser tab backgrounded (intervals may be throttled but not stopped)
-- React state not updating (rare, indicates component issue)
+- Auto-refresh toggle is OFF (unchecked)
+- Network error preventing API calls (check browser console)
+- Interval cleared unexpectedly (browser throttling, component error)
 
 **Solution:**
-- Close batch detail modal manually
-- Refresh page if polling persists after 60 seconds
-- Check browser console for errors
+1. Verify "Auto refresh" checkbox is checked in modal header
+2. Check browser console for API errors (401/403/503)
+3. Try manual Refresh button to verify API connectivity
+4. If manual refresh works but auto-refresh doesn't: close and reopen modal
+5. If issue persists: hard refresh page (Ctrl+F5 / Cmd+Shift+R)
 
-**Problem:** "Last updated" timestamp doesn't change
+**Problem:** Auto-refresh updates too slowly for running batch
 
-**Possible Causes:**
-- Polling stopped (max 60s elapsed or batch completed)
-- Network error (check browser console)
-- API endpoint returning same data (batch hasn't changed)
+**Expected Behavior:**
+- Running batches: 3-second interval
+- Completed batches: 10-second interval
+
+**Debugging Steps:**
+1. Check batch status in Batch Summary (should show "running" for 3s interval)
+2. Verify operations list has triggered/running items
+3. If batch shows "success" but has running operations: data inconsistency, use manual Refresh
+
+**Problem:** Auto-refresh doesn't stop when toggled OFF
 
 **Solution:**
-- Normal if batch completed (polling stops automatically)
-- If batch still running: close modal, check API health, reopen modal
+- Expected: Interval clears immediately when unchecking toggle
+- If "Last refreshed" keeps updating: component state issue, close and reopen modal
+- Check browser console for React errors
 
 **Related:**
 
 - See [Admin UI - Sync History Integration](#admin-ui---sync-history-integration) for batch list view
 - See [Batch Status Aggregation](#batch-status-aggregation) for batch detail API endpoint
-- Frontend code: `/frontend/app/connections/page.tsx` (refreshBatchDetail, auto-polling useEffect)
+- See [Admin UI - Batch Details Refresh Semantics](#admin-ui---batch-details-refresh-semantics) for timestamp meanings
+- Frontend code: `/frontend/app/connections/page.tsx` (refreshBatchDetail, auto-refresh useEffect, toggle state)
 
 ---
 
@@ -9292,20 +9303,30 @@ Two distinct timestamps with clear labels:
 - Updates both batch data and "Last refreshed" timestamp
 - Works for both running and completed batches
 
-### 4. Auto-Refresh Behavior (Fixed)
+### 4. Auto-Refresh Behavior
 
-**Running Batches:**
-- Auto-polls every 3 seconds for up to 60 seconds (20 polls max)
-- Updates "Last refreshed" on each poll
+**Auto-Refresh Toggle:**
+- **Location:** Modal header (between Refresh button and Close button)
+- **Default:** ON (checked)
+- **Appearance:** Checkbox with "Auto refresh" label
+- **Behavior:** User can toggle auto-refresh ON/OFF at any time
 
-**Completed Batches:**
-- Does ONE refresh after 5 seconds to prove refresh mechanism works
-- Then stops polling
-- Manual refresh button remains available
+**Refresh Intervals (when toggle ON):**
+- **Running Batches:** Auto-refreshes every 3 seconds
+  - Batch status is "running" OR any operations are in "triggered"/"running" status
+- **Completed Batches:** Auto-refreshes every 10 seconds
+  - All operations completed (success/failed)
 
-**Key Fix:**
-- Effect dependency changed to prevent re-running on every data update
-- Result: "Last refreshed" updates while modal stays open (no need to close/reopen)
+**Stable Interval Architecture:**
+- Interval set exactly once when modal opens with toggle ON
+- Runs continuously until modal closes or toggle turned OFF
+- Updates "Last refreshed" timestamp on each automatic refresh
+- Interval ID stored in ref for reliable cleanup
+
+**Cleanup:**
+- Interval cleared when modal closes
+- Interval cleared when toggle turned OFF
+- Auto-refresh resets to ON (default) when opening a new batch
 
 ### 5. Timestamp Semantics Table
 
