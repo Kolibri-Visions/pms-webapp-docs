@@ -7920,6 +7920,164 @@ bash /app/scripts/pms_phase23_smoke.sh
 
 ---
 
+## Full Sync Batching (batch_id)
+
+**Purpose:** Full Sync operations trigger 3 concurrent tasks (availability_update, pricing_update, bookings_sync) grouped by a shared `batch_id` for easier tracking and verification.
+
+**Migration:** `supabase/migrations/20260101150000_add_batch_id_to_channel_sync_logs.sql`
+
+### How It Works
+
+When triggering a Full Sync via:
+```bash
+curl -X POST https://api.fewo.kolibri-visions.de/api/v1/channel-connections/{connection_id}/sync \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"sync_type": "full"}'
+```
+
+**Response includes batch_id:**
+```json
+{
+  "status": "triggered",
+  "message": "Manual full sync triggered successfully",
+  "task_ids": ["task_1", "task_2", "task_3"],
+  "batch_id": "70bce471-d82a-4cd9-8ad3-8c9f2e5f4a11"
+}
+```
+
+All 3 operations (availability_update, pricing_update, bookings_sync) share the same `batch_id`.
+
+### Verification via API
+
+**List all sync logs (includes batch_id):**
+```bash
+curl https://api.fewo.kolibri-visions.de/api/v1/channel-connections/{connection_id}/sync-logs \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+**Expected response:**
+```json
+{
+  "connection_id": "...",
+  "logs": [
+    {
+      "id": "...",
+      "operation_type": "availability_update",
+      "status": "success",
+      "batch_id": "70bce471-d82a-4cd9-8ad3-8c9f2e5f4a11",
+      "created_at": "2026-01-01T12:00:00Z",
+      "task_id": "..."
+    },
+    {
+      "id": "...",
+      "operation_type": "pricing_update",
+      "status": "success",
+      "batch_id": "70bce471-d82a-4cd9-8ad3-8c9f2e5f4a11",
+      "created_at": "2026-01-01T12:00:00Z",
+      "task_id": "..."
+    },
+    {
+      "id": "...",
+      "operation_type": "bookings_sync",
+      "status": "success",
+      "batch_id": "70bce471-d82a-4cd9-8ad3-8c9f2e5f4a11",
+      "created_at": "2026-01-01T12:00:00Z",
+      "task_id": "..."
+    }
+  ]
+}
+```
+
+**Filter logs by batch_id:**
+```bash
+curl "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/{connection_id}/sync-logs?batch_id=70bce471-d82a-4cd9-8ad3-8c9f2e5f4a11" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+### Verification via Database
+
+**Count operations per batch:**
+```sql
+SELECT
+  batch_id,
+  COUNT(*) as operation_count,
+  ARRAY_AGG(DISTINCT operation_type ORDER BY operation_type) as operations,
+  ARRAY_AGG(DISTINCT status ORDER BY status) as statuses,
+  MIN(created_at) as first_created,
+  MAX(created_at) as last_created
+FROM channel_sync_logs
+WHERE batch_id IS NOT NULL
+GROUP BY batch_id
+ORDER BY first_created DESC
+LIMIT 10;
+```
+
+**Expected output for Full Sync:**
+```
+              batch_id              | operation_count |                   operations                   | statuses | first_created | last_created
+------------------------------------+-----------------+------------------------------------------------+----------+---------------+--------------
+ 70bce471-d82a-4cd9-8ad3-8c9f2e5f4a11 |               3 | {availability_update,bookings_sync,pricing_update} | {success}| 2026-01-01... | 2026-01-01...
+```
+
+**Find incomplete batches (not all 3 operations succeeded):**
+```sql
+SELECT
+  batch_id,
+  COUNT(*) as total_ops,
+  COUNT(*) FILTER (WHERE status = 'success') as success_count,
+  COUNT(*) FILTER (WHERE status = 'failed') as failed_count,
+  ARRAY_AGG(operation_type || ':' || status) as op_statuses
+FROM channel_sync_logs
+WHERE batch_id IS NOT NULL
+GROUP BY batch_id
+HAVING COUNT(*) FILTER (WHERE status = 'success') < 3
+ORDER BY MAX(created_at) DESC
+LIMIT 10;
+```
+
+### UI Display
+
+The Admin UI (`/connections` page) automatically groups Full Sync operations by `batch_id`:
+
+- **Batched logs** appear as collapsible cards showing all 3 operations
+- **Unbatched logs** (manual single operations) appear in standard table format
+- Click batch header to expand/collapse operation details
+- Each operation shows status badge (success/failed/running)
+
+### Troubleshooting
+
+**Problem:** API `/sync-logs` does not include `batch_id` field
+
+**Diagnosis:**
+```bash
+# Check if migration applied
+docker exec -it pms-db psql -U postgres -d postgres \
+  -c "\d channel_sync_logs" | grep batch_id
+```
+
+**Expected:** `batch_id | uuid |`
+
+**If missing:**
+```bash
+# Apply migration
+docker exec -i pms-db psql -U postgres -d postgres \
+  < supabase/migrations/20260101150000_add_batch_id_to_channel_sync_logs.sql
+```
+
+**Restart API after migration:**
+```bash
+docker restart pms-api
+```
+
+**Problem:** Old logs show `batch_id: null` in API response
+
+**Cause:** Logs created before migration have `NULL` batch_id (expected, backward compatible)
+
+**Verification:** Only logs created after migration + restart will have batch_id populated
+
+---
+
 ## Emergency Contacts
 
 - **Primary On-Call**: [Add contact info]
@@ -7944,3 +8102,4 @@ bash /app/scripts/pms_phase23_smoke.sh
 | 2025-12-27 | Phase 36 — Channel Manager module integration with feature flag (CHANNEL_MANAGER_ENABLED, default OFF) | Claude Code |
 | 2025-12-27 | Phase 36 — Redis + Celery worker setup runbook (password encoding, deployment steps, verification, troubleshooting) | Claude Code |
 | 2025-12-30 | Admin UI authentication verification - Cookie-based SSR login, curl checks for /ops/* access | Claude Code |
+| 2026-01-01 | Full Sync batching (batch_id) - Group 3 operations, API exposure, UI grouping, verification queries | Claude Code |
