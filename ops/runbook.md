@@ -3191,6 +3191,130 @@ curl https://api.your-domain.com/api/v1/channel-connections/{id}/sync-logs \
 
 ---
 
+## Mock Mode for Channel Providers
+
+**Purpose:** Test Channel Manager endpoints without making real API calls to external platforms (Airbnb, Booking.com, etc.).
+
+### Overview
+
+Mock mode allows you to test connection health and sync operations without requiring actual platform credentials or API connectivity. This is useful for:
+
+- **Development:** Testing Channel Manager logic without external dependencies
+- **CI/CD:** Running integration tests without platform API keys
+- **Staging:** Validating deployment before configuring real connections
+- **Debugging:** Isolating issues from external API failures
+
+### Configuration
+
+**Environment Variable:** `CHANNEL_MOCK_MODE`
+
+**Default:** `false` (real API calls)
+
+**Enable Mock Mode:**
+```bash
+# In .env or Coolify environment variables
+CHANNEL_MOCK_MODE=true
+```
+
+**Disable Mock Mode (Production):**
+```bash
+CHANNEL_MOCK_MODE=false
+```
+
+### Behavior
+
+#### Test Connection Endpoint
+
+**Endpoint:** `POST /api/v1/channel-connections/{connection_id}/test`
+
+**Mock Mode Enabled (`CHANNEL_MOCK_MODE=true`):**
+- Returns simulated health response without calling external platform APIs
+- Health status based on connection's current `status` field:
+  - `active` → `healthy=true`
+  - `paused` / `inactive` → `healthy=false`
+- Response includes `mock_mode=true` flag in details
+
+**Mock Mode Disabled (Default):**
+- Calls actual platform API for real health check
+- Returns genuine connection status from external service
+
+**Example Mock Response (200):**
+```json
+{
+  "connection_id": "abc-123-456-...",
+  "platform_type": "airbnb",
+  "healthy": true,
+  "message": "Mock: Connection is healthy",
+  "details": {
+    "mock_mode": true,
+    "simulated": true,
+    "connection_status": "active",
+    "note": "This is a simulated response. Set CHANNEL_MOCK_MODE=false for real API calls."
+  }
+}
+```
+
+**Example Mock Response (Inactive Connection):**
+```json
+{
+  "connection_id": "def-456-789-...",
+  "platform_type": "booking_com",
+  "healthy": false,
+  "message": "Mock: Connection status is paused",
+  "details": {
+    "mock_mode": true,
+    "simulated": true,
+    "connection_status": "paused",
+    "note": "This is a simulated response. Set CHANNEL_MOCK_MODE=false for real API calls."
+  }
+}
+```
+
+### Verification
+
+**Check if Mock Mode is Active:**
+
+WHERE: Coolify Terminal (pms-backend)
+```bash
+# Check environment variable
+echo $CHANNEL_MOCK_MODE
+
+# Test a connection and look for mock_mode flag
+curl -X POST "$API/api/v1/channel-connections/$CID/test" \
+  -H "Authorization: Bearer $TOKEN" | jq '.details.mock_mode'
+# Expected: true (if mock mode enabled)
+```
+
+**Enable Mock Mode in Coolify:**
+1. Navigate to: Coolify → Applications → pms-backend → Environment Variables
+2. Add/Update: `CHANNEL_MOCK_MODE=true`
+3. Restart backend: `docker restart pms-backend`
+
+### Safety Considerations
+
+**Production Deployment:**
+- **ALWAYS** set `CHANNEL_MOCK_MODE=false` (or omit entirely) in production
+- Mock mode is intended for testing/staging environments only
+- Real sync operations will fail if mock mode is enabled (no actual API calls made)
+
+**Audit Trail:**
+- All mock responses include `mock_mode=true` flag for transparency
+- Sync logs will reflect simulated operations (check `details.mock_mode`)
+
+### Limitations
+
+**Current Implementation (Phase C1):**
+- Mock mode ONLY affects `/test` endpoint
+- Sync operations (`/api/availability/sync`) are NOT yet mocked
+- CRUD endpoints (`POST`, `GET`, `PUT`, `DELETE` connections) operate normally regardless of mock mode
+
+**Planned Future Enhancements:**
+- Mock sync operations (availability/pricing updates)
+- Configurable mock data (success/failure scenarios)
+- Per-platform mock behavior customization
+
+---
+
 ## Channel Manager API Endpoints
 
 **Purpose:** Complete reference for Channel Manager API endpoints with request/response examples.
