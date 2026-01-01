@@ -8664,6 +8664,258 @@ fi
 
 ---
 
+## List Sync Batches
+
+**Purpose:** List recent sync batches for a connection with pagination and optional status filtering. Used by Admin UI "Sync history" page.
+
+**Endpoint:**
+```
+GET /api/v1/channel-connections/{connection_id}/sync-batches
+```
+
+**Query Parameters:**
+- `limit` (int, default: 50, max: 200): Number of batches to return
+- `offset` (int, default: 0): Offset for pagination
+- `status` (optional string): Filter by batch status
+  - Omit or `any`: Return all batches regardless of status
+  - `running`: Return batches where any operation is triggered or running (and none failed)
+  - `failed`: Return batches where any operation failed
+  - `success`: Return batches where all operations are success (and none failed/running/triggered)
+
+**Sorting:**
+- Newest first by `updated_at_max` (most recently updated batch)
+- Falls back to `created_at_min` for batches with no updates
+
+**Use Cases:**
+
+- **Admin UI:** Display sync history with pagination
+- **Monitoring:** Find recent failed batches for alerting
+- **Debugging:** Track sync operations over time
+- **Dashboards:** Show sync success rate and trends
+
+**Request Examples:**
+
+```bash
+# Production - List first 20 batches
+curl -k -sS https://api.fewo.kolibri-visions.de/api/v1/channel-connections/abc-123-def-456/sync-batches?limit=20&offset=0 \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq .
+
+# Production - List only failed batches
+curl -k -sS https://api.fewo.kolibri-visions.de/api/v1/channel-connections/abc-123-def-456/sync-batches?status=failed \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq .
+
+# Production - Pagination (second page, 50 items per page)
+curl -k -sS https://api.fewo.kolibri-visions.de/api/v1/channel-connections/abc-123-def-456/sync-batches?limit=50&offset=50 \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq .
+
+# Local (via Supabase auth)
+TOKEN=$(curl -sX POST "$SB_URL/auth/v1/token?grant_type=password" \
+  -H "apikey: $ANON_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@example.com","password":"password"}' \
+  | jq -r '.access_token')
+
+curl -sS "$API/api/v1/channel-connections/$CID/sync-batches?status=running" \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq .
+```
+
+**Response Example:**
+
+```json
+{
+  "items": [
+    {
+      "batch_id": "70bce471-d82a-4cd9-8ad3-8c9f2e5f4a11",
+      "connection_id": "abc-123-def-456",
+      "batch_status": "success",
+      "status_counts": {
+        "triggered": 0,
+        "running": 0,
+        "success": 3,
+        "failed": 0,
+        "other": 0
+      },
+      "created_at_min": "2026-01-01T12:00:00Z",
+      "updated_at_max": "2026-01-01T12:05:30Z",
+      "operations": [
+        {
+          "operation_type": "availability_update",
+          "status": "success",
+          "updated_at": "2026-01-01T12:03:15Z"
+        },
+        {
+          "operation_type": "pricing_update",
+          "status": "success",
+          "updated_at": "2026-01-01T12:04:20Z"
+        },
+        {
+          "operation_type": "bookings_sync",
+          "status": "success",
+          "updated_at": "2026-01-01T12:05:30Z"
+        }
+      ]
+    },
+    {
+      "batch_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "connection_id": "abc-123-def-456",
+      "batch_status": "failed",
+      "status_counts": {
+        "triggered": 0,
+        "running": 0,
+        "success": 2,
+        "failed": 1,
+        "other": 0
+      },
+      "created_at_min": "2026-01-01T10:00:00Z",
+      "updated_at_max": "2026-01-01T10:08:45Z",
+      "operations": [
+        {
+          "operation_type": "availability_update",
+          "status": "success",
+          "updated_at": "2026-01-01T10:03:20Z"
+        },
+        {
+          "operation_type": "pricing_update",
+          "status": "failed",
+          "updated_at": "2026-01-01T10:05:15Z"
+        },
+        {
+          "operation_type": "bookings_sync",
+          "status": "success",
+          "updated_at": "2026-01-01T10:08:45Z"
+        }
+      ]
+    }
+  ],
+  "limit": 50,
+  "offset": 0
+}
+```
+
+**Status Filter Mapping:**
+
+| Filter Value | SQL Logic | Description |
+|--------------|-----------|-------------|
+| Omit or `any` | No filter applied | Return all batches |
+| `running` | `failed_count = 0 AND (running_count > 0 OR triggered_count > 0)` | At least one operation in progress, none failed |
+| `failed` | `failed_count > 0` | At least one operation failed |
+| `success` | `failed_count = 0 AND running_count = 0 AND triggered_count = 0 AND success_count = total_count AND total_count > 0` | All operations succeeded |
+
+**Performance:**
+
+- **Single SQL query** with CTEs (batch_aggregation + operations_per_batch)
+- **Efficient aggregation** using `COUNT(*) FILTER (WHERE ...)` and `json_agg()`
+- **Status filter in SQL** (WHERE clause on derived batch_status)
+- **Scoped by connection_id** (prevents cross-tenant leaks)
+- **Indexed columns:** `batch_id`, `connection_id`, `status`, `created_at`, `updated_at`
+
+**Error Responses:**
+
+```bash
+# 400 - Invalid status parameter
+{
+  "error": "invalid_status",
+  "message": "Status must be one of: any, running, failed, success (got 'invalid')"
+}
+
+# 503 - Schema not installed
+{
+  "error": "service_unavailable",
+  "message": "Channel sync logs schema not installed..."
+}
+
+# 401 - Not authenticated
+{
+  "detail": "Not authenticated"
+}
+```
+
+**Monitoring Examples:**
+
+```bash
+# Count total batches (all statuses)
+curl -sS "$API/api/v1/channel-connections/$CID/sync-batches?limit=200" \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq '.items | length'
+
+# Find recent failed batches (last 10)
+curl -sS "$API/api/v1/channel-connections/$CID/sync-batches?status=failed&limit=10" \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq '.items[] | {batch_id, created_at_min, failed_count: .status_counts.failed}'
+
+# Check if any batches are currently running
+RUNNING_COUNT=$(curl -sS "$API/api/v1/channel-connections/$CID/sync-batches?status=running&limit=1" \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq '.items | length')
+
+if [[ "$RUNNING_COUNT" -gt 0 ]]; then
+  echo "⏳ Sync operations in progress"
+else
+  echo "✅ No active syncs"
+fi
+
+# Pagination example - fetch all batches (handling large result sets)
+OFFSET=0
+LIMIT=50
+while true; do
+  RESPONSE=$(curl -sS "$API/api/v1/channel-connections/$CID/sync-batches?limit=$LIMIT&offset=$OFFSET" \
+    -H "Authorization: Bearer $TOKEN")
+
+  COUNT=$(echo "$RESPONSE" | jq '.items | length')
+
+  if [[ "$COUNT" -eq 0 ]]; then
+    break
+  fi
+
+  echo "$RESPONSE" | jq -c '.items[]'
+
+  OFFSET=$((OFFSET + LIMIT))
+done
+```
+
+**Use in Admin UI:**
+
+```javascript
+// Fetch recent batches with status filter
+const fetchBatches = async (connectionId, status = 'any', limit = 50, offset = 0) => {
+  const params = new URLSearchParams({ limit, offset });
+  if (status !== 'any') {
+    params.append('status', status);
+  }
+
+  const response = await fetch(
+    `/api/v1/channel-connections/${connectionId}/sync-batches?${params}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+
+  return await response.json();
+};
+
+// Display batches with pagination
+const { items: batches, limit, offset } = await fetchBatches(connectionId, 'failed');
+
+batches.forEach(batch => {
+  console.log(`Batch ${batch.batch_id}: ${batch.batch_status}`);
+  console.log(`  Operations: ${batch.operations.length}`);
+  console.log(`  Success: ${batch.status_counts.success}, Failed: ${batch.status_counts.failed}`);
+});
+
+// Infinite scroll / pagination
+const nextPage = await fetchBatches(connectionId, 'any', limit, offset + limit);
+```
+
+**Related:**
+
+- See [Batch Status Aggregation](#batch-status-aggregation) for single batch status details
+- See [Full Sync Batching (batch_id)](#full-sync-batching-batch_id) for batch grouping concept
+- See [GET /sync-logs](#get-sync-logs) for individual log entries
+
+---
+
 ## Emergency Contacts
 
 - **Primary On-Call**: [Add contact info]
