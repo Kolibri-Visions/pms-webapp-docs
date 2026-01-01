@@ -4411,7 +4411,7 @@ curl "$API/api/v1/channel-connections/$CID/sync-logs?limit=10" \
 When clicking "Test" button (inline in connections table):
 1. Button shows "Testing..." while API call is in progress
 2. On success/failure, notification banner appears at top of connections page
-3. Banner auto-dismisses after 5 seconds or click X to close manually
+3. Banner auto-dismisses after 10 seconds or click X to close manually
 4. Success example: "Connection test passed: Mock: Connection is healthy (Mock Mode - see runbook for production setup)"
 5. Failure example: "Test failed: Connection timeout" or "Connection test failed: Invalid credentials"
 6. If `error_code` is present (e.g., CREDENTIALS_MISSING), it's shown in the detailed test result modal, not the inline toast
@@ -4421,12 +4421,61 @@ When clicking "Test" button (inline in connections table):
 - **Modal test ("Run Test" button in connection details):** Test result displays below button in modal with full details including badges
 - Both locations use same notification system (green for success, red for error)
 
+**Common Error Messages:**
+
+The Admin UI displays user-friendly error messages instead of technical errors. Here's what they mean and how to resolve them:
+
+**Network Errors:**
+- **"Network error (API not reachable). Check your connection, VPN, or firewall."**
+  - **Meaning:** Browser cannot reach the API endpoint (typically "Failed to fetch" from browser)
+  - **Common Causes:**
+    - Internet connection lost
+    - VPN blocking API domain
+    - Corporate firewall/proxy blocking requests
+    - CORS policy blocking cross-origin requests
+    - Ad blocker or browser extension interfering
+    - API server is down (check `/ops/status` page)
+  - **Action:**
+    - Check internet connection
+    - Disable VPN temporarily and retry
+    - Try different network (e.g., mobile hotspot)
+    - Check browser console for CORS/network errors
+    - Verify API is reachable: `curl https://api.fewo.kolibri-visions.de/health`
+    - Contact IT if corporate firewall is blocking
+
+- **"You appear to be offline. Check your internet connection."**
+  - **Meaning:** Browser detects no network connectivity (navigator.onLine = false)
+  - **Action:** Reconnect to Wi-Fi/Ethernet and retry
+
+**Authentication & Authorization Errors:**
+- **"Session expired. Please reload and log in again."** (HTTP 401)
+  - **Meaning:** JWT token expired or invalid
+  - **Action:** Refresh page (F5) and log in again with valid credentials
+
+- **"Not authorized to perform this action."** (HTTP 403)
+  - **Meaning:** User lacks permission for the operation
+  - **Action:** Contact admin to grant required role/permissions
+
+**Service Availability Errors:**
+- **"Service temporarily unavailable. Try again shortly."** (HTTP 503)
+  - **Meaning:** Backend API is temporarily down (database error, maintenance, etc.)
+  - **Action:**
+    - Wait 30-60 seconds and retry
+    - Check `/ops/status` page for component health
+    - Check Coolify logs if persistent: `docker logs pms-backend`
+    - See [Quick Smoke Test](#quick-smoke-5-minutes) for diagnostics
+
+**Other Errors:**
+- **"Unexpected error occurred"**
+  - **Meaning:** Unknown error type (not network, not HTTP)
+  - **Action:** Check browser console for details, report to developers
+
 **Why No Browser Alerts:**
 Browser popups (window.alert/confirm/prompt) are blocking and interrupt workflow. In-app notifications provide better UX:
 - Non-blocking: User can continue working
 - Consistent styling: Matches app design
 - Context-aware: Stays within the application UI
-- Auto-dismiss: Reduces manual clicks
+- Auto-dismiss: Reduces manual clicks (10 seconds)
 
 ### Overview
 
