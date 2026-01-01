@@ -7142,6 +7142,126 @@ When deploying a new worker version:
 
 ---
 
+### Stale Sync Logs (Automatic Cleanup)
+
+**Purpose:** Understand automatic cleanup of stale sync logs to maintain UI cleanliness.
+
+**What Are Stale Logs?**
+
+Sync logs stuck in `triggered` or `running` status for longer than the threshold (default: 60 minutes).
+
+**Common Causes:**
+
+- **Worker restart:** Celery worker restarted mid-task (deployment, crash, OOM kill)
+- **DB disconnect:** Worker lost database connection during task execution
+- **Redis disconnect:** Worker lost Redis connection (broker/result backend)
+- **Task timeout:** Task exceeded Celery soft/hard time limits
+- **Manual intervention:** Task manually revoked/terminated in Celery
+
+**Automatic Cleanup Behavior:**
+
+On every sync trigger (POST `/api/v1/channel-connections/{id}/sync`), the system:
+1. Identifies logs for that connection older than `SYNC_LOG_STALE_MINUTES`
+2. Marks them as `status='failed'`
+3. Sets `error` field to: "Marked stale (no update for X minutes). Likely worker restart or lost DB connection."
+4. Updates `updated_at` timestamp
+
+**Configuration:**
+
+```bash
+# Environment variable (optional, defaults to 60)
+SYNC_LOG_STALE_MINUTES=60
+
+# Default: 60 minutes
+# Increase if tasks legitimately take longer (e.g., large full syncs)
+# Decrease for faster UI cleanup (not recommended < 30 minutes)
+```
+
+**Verification (Supabase SQL Editor):**
+
+```sql
+-- Check for currently stale logs (before cleanup)
+SELECT
+  id,
+  connection_id,
+  operation_type,
+  status,
+  created_at,
+  updated_at,
+  NOW() - COALESCE(updated_at, created_at) AS age,
+  error
+FROM channel_sync_logs
+WHERE
+  status IN ('triggered', 'running')
+  AND COALESCE(updated_at, created_at) < NOW() - INTERVAL '60 minutes'
+ORDER BY created_at DESC
+LIMIT 20;
+
+-- Check recently auto-cleaned logs
+SELECT
+  id,
+  connection_id,
+  operation_type,
+  status,
+  error,
+  updated_at
+FROM channel_sync_logs
+WHERE
+  status = 'failed'
+  AND error LIKE 'Marked stale%'
+ORDER BY updated_at DESC
+LIMIT 20;
+```
+
+**Troubleshooting:**
+
+If stale logs occur frequently:
+
+1. **Check worker logs** for crashes or OOM kills:
+   ```bash
+   # Coolify: pms-worker-v2 → Logs
+   # Look for: "Worker shutdown", "MemoryError", "Killed"
+   docker logs pms-worker-v2 | grep -i "error\|killed\|shutdown" | tail -50
+   ```
+
+2. **Check worker health** (should be running):
+   ```bash
+   docker ps | grep pms-worker-v2
+   ```
+
+3. **Verify Redis connection** (worker needs Redis for task queue):
+   ```bash
+   # From worker container
+   docker exec pms-worker-v2 redis-cli -h redis-host PING
+   # Expected: PONG
+   ```
+
+4. **Check Celery worker concurrency** (may be overloaded):
+   ```bash
+   # Coolify env: CELERY_WORKER_CONCURRENCY
+   # Default: 4 (increase if tasks timeout frequently)
+   ```
+
+5. **Review task timeouts** (may be too aggressive):
+   ```python
+   # In celery.py or task definition
+   soft_time_limit = 300  # 5 minutes
+   time_limit = 600       # 10 minutes hard limit
+   ```
+
+**When to Investigate:**
+
+- **Occasional stale logs (< 5% of syncs):** Normal after deployments/restarts
+- **Frequent stale logs (> 10% of syncs):** Worker stability issue - investigate logs
+- **All syncs stale:** Worker offline or not processing tasks - check deployment
+
+**Related:**
+
+- See [Celery Worker Singleton](#celery-worker-singleton-important) for worker management
+- See [Worker Logs](#worker-logs) for debugging task failures
+
+---
+
 ### Troubleshooting Sync Log Issues
 
 #### Issue: Sync Logs Not Persisting
