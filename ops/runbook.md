@@ -3966,8 +3966,36 @@ Response: {healthy: bool, message: str, details: {...}}
 ```
 POST /api/v1/channel-connections/{id}/sync
 Request: {sync_type: "full"|"availability"|"pricing"|"bookings"}
-Response: {status: "triggered"|"started", ...}
+Response: {status: "triggered", message: "...", task_ids: ["celery-task-id-1", ...]}
 ```
+
+**IMPORTANT:** Response ALWAYS includes `task_ids` array (not `task_id`). Backend triggers Celery tasks and creates sync log entries.
+
+### Sync Type → Operation Type Mapping
+
+When you trigger a sync via UI or API, the backend creates sync log entries with specific `operation_type` values:
+
+| sync_type (Request) | operation_type (Logs) | Direction | Description |
+|---------------------|----------------------|-----------|-------------|
+| `availability` | `availability_update` | outbound | Push availability to platform |
+| `pricing` | `pricing_update` | outbound | Push pricing to platform |
+| `bookings` | `bookings_sync` | inbound | Import bookings from platform |
+| `full` | `availability_update` + `pricing_update` + `bookings_sync` | both | Triggers all three syncs (3 log entries) |
+
+**Key Points:**
+- `full` creates **3 separate log entries** (one per operation type)
+- Each log entry has a unique `task_id` from Celery
+- Filter by "Type" in UI to see specific operation types
+- Poll script validates `operation_type` matches requested `sync_type` (prevents false positives)
+
+**Troubleshooting:**
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| Bookings sync shows "success" but wrong operation_type | Backend not emitting bookings logs (old version) | Update to commit `d4434cf` or later |
+| Full sync shows only `availability_update` | Backend not triggering all tasks | Update to commit `d4434cf` or later |
+| Poll script reports "success" for wrong type | Old poll script (no type validation) | Update to latest `pms_channel_sync_poll.sh` |
+| No `task_ids` in sync response | Backend error or old version | Check backend logs, verify migration applied |
 
 **Fetch sync logs:**
 ```
