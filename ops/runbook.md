@@ -8916,6 +8916,118 @@ const nextPage = await fetchBatches(connectionId, 'any', limit, offset + limit);
 
 ---
 
+## Admin UI - Sync History Integration
+
+**Purpose:** The Admin UI provides a user-friendly interface for viewing and managing channel sync history using the batch list and batch detail endpoints.
+
+**Location:** `/connections` page → Connection Details modal → **Sync History** section
+
+**Features:**
+
+1. **Batch List View:**
+   - Displays recent sync batches in a paginated table
+   - Status filter dropdown (Any, Running, Failed, Success)
+   - Table columns:
+     - **Updated**: Most recent update timestamp (updated_at_max)
+     - **Status**: Visual badge (green/red/blue/gray) indicating batch_status
+     - **Counts**: Icon-based summary (✓ success, ✗ failed, ⟳ running, ⋯ triggered)
+     - **Operations**: Emoji indicators for operation types (📅 availability, 💰 pricing, 🔄 bookings)
+     - **Batch ID**: Truncated UUID with copy button
+   - Pagination: Previous/Next buttons (20 batches per page)
+
+2. **Batch Detail Modal:**
+   - Click any batch row to open detailed view
+   - Nested modal (z-60) overlays connection details modal
+   - Sections:
+     - **Batch Summary**: Status, created/updated timestamps, total operations
+     - **Status Breakdown**: Visual grid showing counts for each status
+     - **Operations List**: Individual operations with status badges and timestamps
+     - **Troubleshooting Hint**: Yellow warning box for failed batches with runbook reference
+
+**API Integration:**
+
+```javascript
+// Fetch batch list
+GET /api/v1/channel-connections/{connectionId}/sync-batches?limit=20&offset=0&status=any
+
+// Fetch batch detail
+GET /api/v1/channel-connections/{connectionId}/sync-batches/{batchId}
+```
+
+**Auto-Refresh Behavior:**
+
+- Batch list refreshes when:
+  - Connection details modal is opened
+  - Status filter is changed
+  - Pagination buttons are clicked
+- No auto-polling for batch list (user must manually refresh)
+- Batch detail loaded on-demand when row is clicked
+
+**Error Handling:**
+
+| Error | UI Behavior |
+|-------|-------------|
+| 401/403 | Modal remains open, error logged to console (no user-facing alert) |
+| 503 (DB schema drift) | Empty batch list, error logged to console |
+| Network error | Empty batch list, error logged to console |
+
+**User Flow Example:**
+
+1. Admin opens connection details for connection `abc-123-def-456`
+2. Scrolls to **Sync History** section (below Sync Logs)
+3. Selects "Failed" from status filter dropdown → Only failed batches shown
+4. Clicks a batch row → Batch detail modal opens
+5. Reviews status breakdown → Sees 2/3 operations succeeded, 1 failed
+6. Reads troubleshooting hint → "Check worker logs / runbook.md"
+7. Closes batch detail modal → Returns to batch list
+8. Clicks "Next" → Loads next 20 batches (offset=20)
+
+**Production Access:**
+
+- **URL**: `https://fewo.kolibri-visions.de/connections`
+- **Auth**: Requires valid JWT token (admin role recommended for full access)
+- **Browser Console**: Check network tab for API requests/responses if batches don't load
+
+**Troubleshooting:**
+
+**Problem:** Batch list is empty despite recent syncs
+
+**Possible Causes:**
+- No batches match current status filter (try "Any")
+- All batches are on later pages (click "Next")
+- Database schema drift (check API response in network tab for 503 errors)
+- Connection has no sync history (batches only created after batch_id feature deployed)
+
+**Solution:**
+```bash
+# Check if batches exist via API
+curl -sS "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/$CID/sync-batches?status=any&limit=100" \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq '.items | length'
+
+# Expected: > 0 if batches exist
+```
+
+**Problem:** Batch detail modal shows "Loading batch details..." indefinitely
+
+**Possible Causes:**
+- 404 error (batch_id not found or doesn't belong to connection_id)
+- 503 error (DB schema drift)
+- Network timeout
+
+**Solution:**
+- Check browser console for errors
+- Verify batch_id exists: `curl ... /sync-batches/{batch_id}` via API
+- Check backend logs for database connection issues
+
+**Related:**
+
+- See [List Sync Batches](#list-sync-batches) for API endpoint documentation
+- See [Batch Status Aggregation](#batch-status-aggregation) for single batch detail endpoint
+- Frontend code: `/frontend/app/connections/page.tsx`
+
+---
+
 ## Emergency Contacts
 
 - **Primary On-Call**: [Add contact info]
