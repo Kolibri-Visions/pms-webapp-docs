@@ -8575,6 +8575,60 @@ The `batch_status` field is derived from status counts:
 
 **Priority:** Failed > Running > Success > Unknown
 
+**Status Semantics: Queued vs. Triggered**
+
+**Queued Status:**
+
+Operations with `status = 'queued'` are **counted under the "Triggered" bucket** in `status_counts.triggered`. This ensures correct batch status when the Celery worker is offline or overloaded.
+
+| Individual Status | Bucket in status_counts | Meaning |
+|-------------------|------------------------|---------|
+| `triggered` | `triggered` | Sync task created, waiting for worker pickup |
+| `queued` | `triggered` | Task enqueued in Celery, worker not processing yet |
+| `running` | `running` | Worker actively processing task |
+| `success` | `success` | Task completed successfully |
+| `failed` | `failed` | Task failed (exhausted retries or unrecoverable error) |
+| Other | `other` | Unknown/unexpected status (should not occur) |
+
+**Why Queued = Triggered:**
+
+- **Semantically:** Both `queued` and `triggered` represent "in-progress but not yet running"
+- **User Expectation:** Users expect batch_status="running" when sync is triggered, even if worker is offline
+- **Prior Bug:** When worker was stopped, `queued` counted as `other`, causing batch_status="unknown" (misleading)
+
+**Reproduction Steps (Worker Offline Scenario):**
+
+1. **Stop worker:** `docker stop pms-worker-v2` (or systemctl stop)
+2. **Trigger full sync:** POST `/api/v1/channel-connections/{id}/sync?sync_type=full`
+   - API returns 200 with batch_id
+   - 3 operations created with status="queued" (Celery task enqueued but not picked up)
+3. **Check batch status:** GET `/api/v1/channel-connections/{id}/sync-batches/{batch_id}`
+   - **Expected:** `batch_status="running"`, `status_counts.triggered=3` (queued counted as triggered)
+   - **Before fix:** `batch_status="unknown"`, `status_counts.other=3` (misleading)
+4. **Start worker:** `docker start pms-worker-v2`
+   - Worker picks up queued tasks
+   - Operations transition: `queued` → `running` → `success`/`failed`
+5. **Final check:** Batch status becomes `success` (if all ops succeed) or `failed` (if any fail)
+
+**SQL Implementation:**
+
+```sql
+-- Triggered count includes both triggered and queued
+COUNT(*) FILTER (WHERE status IN ('triggered', 'queued')) AS triggered_count
+
+-- Other count excludes queued
+COUNT(*) FILTER (WHERE status NOT IN ('triggered', 'queued', 'running', 'success', 'failed')) AS other_count
+
+-- Batch status derivation treats triggered>0 as running
+CASE
+  WHEN COUNT(*) FILTER (WHERE status = 'failed') > 0 THEN 'failed'
+  WHEN COUNT(*) FILTER (WHERE status = 'running') > 0
+    OR COUNT(*) FILTER (WHERE status IN ('triggered', 'queued')) > 0 THEN 'running'
+  WHEN COUNT(*) FILTER (WHERE status = 'success') = COUNT(*) AND COUNT(*) > 0 THEN 'success'
+  ELSE 'unknown'
+END AS batch_status
+```
+
 **Use in Admin UI:**
 
 ```javascript
