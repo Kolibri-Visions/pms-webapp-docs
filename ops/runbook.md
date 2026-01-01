@@ -5279,6 +5279,65 @@ curl -X POST https://api.your-domain.com/api/availability/sync \
 }
 ```
 
+**Query Parameters:**
+
+- `skip_connection_test` (boolean, default: `false`) - Skip external platform connection test (dev/mock mode only)
+
+**Mock Mode / Development:**
+
+When `skip_connection_test=true`:
+- ✅ Skips OAuth validation and platform API health checks
+- ✅ Allows creating connections for unsupported platforms (e.g., `booking_com`)
+- ✅ Skips initial sync trigger
+- ⚠️ Platform tokens are still encrypted and stored (but not validated)
+- ⚠️ Backend logs warning: "Creating connection in MOCK MODE"
+
+**Example - Create Connection in Mock Mode:**
+```bash
+curl -X POST "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/?skip_connection_test=true" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "property_id": "property-uuid",
+    "platform_type": "booking_com",
+    "platform_listing_id": "mock_booking_123",
+    "access_token": "mock_access_token",
+    "refresh_token": "mock_refresh_token",
+    "platform_metadata": {"mock_mode": true}
+  }'
+```
+
+**Example - Production (with validation):**
+```bash
+# Default behavior - validates tokens and tests connection
+curl -X POST "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "property_id": "property-uuid",
+    "platform_type": "airbnb",
+    "platform_listing_id": "airbnb-listing-123",
+    "access_token": "real-oauth-access-token",
+    "refresh_token": "real-oauth-refresh-token",
+    "platform_metadata": {"listing_id": "123"}
+  }'
+```
+
+**Common Errors (when skip_connection_test=false):**
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `400 Platform booking_com not yet supported` | Platform adapter not implemented | Use `skip_connection_test=true` for development |
+| `400 Connection test failed: verify your OAuth tokens` | Invalid tokens or OAuth flow incomplete | Complete OAuth flow first, or use skip flag for testing |
+| `400 Connection test failed: [platform error]` | Platform API rejected request | Check token validity, permissions, and platform status |
+
+**Admin UI:**
+
+The Admin UI's "New Connection" modal includes a checkbox:
+- ✅ **"Mock mode (skip connection test)"** - Default: ON
+- When checked: Passes `skip_connection_test=true` to the API
+- Allows creating connections without valid OAuth tokens for development/testing
+
 ---
 
 ## Admin UI - Channel Sync
