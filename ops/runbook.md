@@ -3941,7 +3941,10 @@ Shows key connection fields:
 #### 3. Trigger Sync
 - **Dropdown:** Select sync type (Full, Availability, Pricing, Bookings)
 - **Button:** "Trigger Sync" - performs POST `/api/v1/channel-connections/{id}/sync` with `{"sync_type": "..."}`
-- **Result:** Alert message "Sync triggered: started" (or error message if failed)
+- **Result:** In-app notification (non-blocking inline banner, auto-clears after 5s):
+  - **Success:** Green banner showing "Sync gestartet: {sync_type}" with clickable batch_id (if Full Sync)
+  - **Error:** Red banner showing "Fehler beim Starten (HTTP {status}): {detail}" (or generic error message)
+  - **Dismiss:** Click X button to close notification manually
 - **Auto-refresh:** Logs table refreshes 1s after sync trigger to show new log entry
 
 #### 4. Sync Logs
@@ -4039,9 +4042,10 @@ UI handles both formats defensively
 
 **Sync trigger does nothing:**
 1. Check browser console for errors (F12 → Console tab)
-2. Verify alert message appears (if not, POST /sync may have failed)
-3. Check sync logs table for new entry (should appear within 1-2s)
-4. If no log entry: Backend may not support /sync endpoint or Celery worker offline
+2. Verify in-app notification appears (green success banner or red error banner below the Trigger Sync button)
+3. If no notification: POST /sync may have failed silently (check Network tab for API response)
+4. Check sync logs table for new entry (should appear within 1-2s)
+5. If no log entry: Backend may not support /sync endpoint or Celery worker offline
 
 **Auto-refresh not working:**
 1. Verify toggle is ON (checkbox should be checked)
@@ -4663,10 +4667,11 @@ The Channel Sync Admin UI provides:
    - Filter buttons provide one-click access to common views
    - Smart auto-refresh (only polls when active triggered/running logs exist)
 
-5. **Toast Notifications:**
-   - Success feedback when sync triggered
-   - Error feedback for validation failures or API errors
-   - Clipboard copy confirmations
+5. **In-App Notifications:**
+   - **Sync Trigger:** Inline green/red banner (auto-clears after 5s)
+     - Success: "Sync gestartet: {sync_type}" with clickable batch_id
+     - Error: "Fehler beim Starten (HTTP {status}): {detail}"
+   - **Clipboard:** Browser-native alert for copy confirmations (unchanged)
 
 6. **Troubleshooting Link:**
    - "Troubleshooting (Runbook)" link below Sync Logs title navigates directly to Ops Runbook tab (`/ops/runbook`)
