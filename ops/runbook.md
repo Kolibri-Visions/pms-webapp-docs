@@ -5338,6 +5338,76 @@ The Admin UI's "New Connection" modal includes a checkbox:
 - When checked: Passes `skip_connection_test=true` to the API
 - Allows creating connections without valid OAuth tokens for development/testing
 
+**Database Persistence:**
+
+Channel connections are persisted in PostgreSQL:
+- **Table:** `channel_connections`
+- **Migration:** `supabase/migrations/20260102000000_add_property_fields_to_channel_connections.sql`
+- **Key columns:** `id`, `agency_id`, `property_id`, `platform_type`, `platform_listing_id`, `status`, `platform_metadata`, `access_token_encrypted`, `refresh_token_encrypted`
+- **Soft delete:** Rows marked with `deleted_at` timestamp instead of hard deletion
+
+**List Endpoint:**
+
+GET `/api/v1/channel-connections/` returns JSON array of all connections:
+```json
+[
+  {
+    "id": "connection-uuid",
+    "tenant_id": "agency-uuid",
+    "property_id": "property-uuid",
+    "platform_type": "booking_com",
+    "platform_listing_id": "mock_booking_123",
+    "status": "active",
+    "platform_metadata": {"mock_mode": true},
+    "last_sync_at": null,
+    "created_at": "2026-01-02T10:00:00Z",
+    "updated_at": "2026-01-02T10:00:00Z"
+  }
+]
+```
+
+**Troubleshooting - List Returns Only Stub:**
+
+If GET `/api/v1/channel-connections/` returns only hardcoded stub data (single airbnb entry with fixed UUIDs):
+1. **WHERE:** HOST-SERVER-TERMINAL - Check deployed commit
+   ```bash
+   docker exec pms-backend env | grep SOURCE_COMMIT
+   ```
+2. **WHERE:** HOST-SERVER-TERMINAL - Verify API schema has skip_connection_test param
+   ```bash
+   curl -s https://api.fewo.kolibri-visions.de/openapi.json | jq '.paths."/api/v1/channel-connections/".post.parameters'
+   # Should show skip_connection_test query parameter
+   ```
+3. **If old build:** Redeploy from main branch (commit c097acd or later)
+4. **WHERE:** SUPABASE-SQL-EDITOR - Verify schema migration applied
+   ```sql
+   SELECT column_name, data_type
+   FROM information_schema.columns
+   WHERE table_name = 'channel_connections'
+   AND column_name IN ('property_id', 'platform_listing_id');
+   -- Should return both columns
+   ```
+5. **If schema missing:** Apply migration (see below)
+
+**Applying Schema Migration:**
+
+**WHERE:** SUPABASE-SQL-EDITOR (Supabase Dashboard → SQL Editor)
+```sql
+-- Run migration: 20260102000000_add_property_fields_to_channel_connections.sql
+-- This adds property_id and platform_listing_id columns
+-- Copy-paste migration file contents here or use Supabase CLI
+```
+
+**WHERE:** HOST-SERVER-TERMINAL (Alternative: Supabase CLI)
+```bash
+supabase migration up --file supabase/migrations/20260102000000_add_property_fields_to_channel_connections.sql
+```
+
+**Expected Result After Fix:**
+- Created connections appear in list immediately
+- No hardcoded stub data
+- Empty array `[]` when no connections exist
+
 ---
 
 ## Admin UI - Channel Sync
