@@ -8040,10 +8040,37 @@ LIMIT 10;
 
 The Admin UI (`/connections` page) automatically groups Full Sync operations by `batch_id`:
 
-- **Batched logs** appear as collapsible cards showing all 3 operations
-- **Unbatched logs** (manual single operations) appear in standard table format
-- Click batch header to expand/collapse operation details
-- Each operation shows status badge (success/failed/running)
+**Batch Header Features:**
+- **Collapsible indigo card** with expand/collapse arrow icon
+- **Overall batch status badge** (Success/Failed/Running/Pending):
+  - Green "Success" = all 3 operations succeeded
+  - Red "Failed" = any operation failed
+  - Blue "Running" = operations in progress
+  - Gray "Pending" = operations queued/triggered
+- **Batch ID display** with copy button (click to copy full UUID)
+  - Shows shortened ID: `70bce471...`
+  - Copies full UUID on click
+- **Timestamp** from newest operation
+- **Operation count** with filter indicator (e.g., "2 operations (filtered)" if filters active)
+- **Operation badges** showing each operation with status-coded color:
+  - Full labels without truncation (e.g., "availability update", "pricing update", "bookings sync")
+  - Color matches status (green/red/blue/gray)
+
+**Expanded Batch View:**
+- Click batch header to expand/collapse
+- Shows table with: Operation, Status, Error, Actions
+- "Details" button opens log details modal
+- Expansion state preserved across auto-refresh
+
+**Filtering Behavior:**
+- Filters (status/type) work with batched logs
+- Batch visible if ANY operation matches filter
+- Shows only matching operations inside batch
+- Displays "(filtered)" indicator if fewer than 3 operations shown
+
+**Unbatched Logs:**
+- Logs without `batch_id` (old logs, manual single operations) appear in standard flat table
+- Backward compatible with pre-migration logs
 
 ### Troubleshooting
 
