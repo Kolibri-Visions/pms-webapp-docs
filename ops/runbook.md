@@ -3775,6 +3775,34 @@ GOOGLE_HOTELS_PARTNER_ID=your_partner_id
 3. Verify `healthy=true` and `mock_mode=false` in response
 4. If `healthy=false`, check error_code and message for next steps
 
+### Admin UI Indicator
+
+The Admin UI (Connections page) automatically detects and displays Mock Mode status when testing connections.
+
+**Visual Indicators:**
+
+**Mock Mode Enabled:**
+- Blue "Mock Mode (Simulated)" badge displayed above test result
+- Explanatory text: "This response is simulated. For production set CHANNEL_MOCK_MODE=false."
+- Link to this runbook section for configuration details
+
+**Credentials Missing (Production Mode):**
+- Yellow "Not Configured" badge displayed
+- Lists required environment variables for the platform
+- Link to Production Readiness section above
+
+**How It Works:**
+- UI checks `details.mock_mode` or `details.simulated` flags in test response
+- UI checks `error_code` field for CREDENTIALS_MISSING status
+- No manual configuration needed - indicators appear automatically based on backend response
+
+**Example:**
+1. Navigate to Admin UI → Connections
+2. Click "Open" on any connection
+3. Click "Run Test"
+4. If mock mode is enabled, you'll see the blue badge immediately
+5. If credentials are missing, you'll see the yellow badge with required env vars
+
 ### Limitations
 
 **Current Implementation (Phase C1):**
