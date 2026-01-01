@@ -3526,6 +3526,311 @@ curl -X POST "$API/api/v1/channel-connections/$CID/test" \
 
 - [Mock Mode for Channel Providers](#mock-mode-for-channel-providers) - Mock mode configuration
 - [Channel Manager API Endpoints](#channel-manager-api-endpoints) - Complete API reference
+- [Seeding Test Connections](#seeding-test-connections) - Automated seeding via script
+
+---
+
+## Seeding Test Connections
+
+**Purpose:** Quickly seed or reset channel connections for testing without manual SQL Editor operations.
+
+**Script:** `backend/scripts/pms_channel_seed_connection.sh`
+
+**Why Use This Script:**
+- **Idempotent:** Safe to run multiple times (uses `ON CONFLICT DO UPDATE`)
+- **Auto-pick agency:** No manual UUID lookup required
+- **Validation:** UUID and JSON validation before INSERT
+- **Clean state:** Optional purge of sync logs with confirmation
+- **Automation-ready:** `--print-cid` flag for scripting/CI/CD
+
+### Quick Start
+
+**Basic usage (auto-pick agency, default airbnb):**
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+# Export database connection
+export DATABASE_URL="postgresql://postgres:your-password@supabase-db:5432/postgres"
+
+# Seed connection
+bash backend/scripts/pms_channel_seed_connection.sh
+
+# Expected output:
+# ✅ CHANNEL CONNECTION SEEDED
+# Connection ID:   abc-123-def-456...
+# Agency ID:       agency-uuid-789...
+# Channel:         airbnb
+# Platform Type:   airbnb
+# Status:          active
+```
+
+**Scripting mode (automation):**
+```bash
+# Export connection ID for use in other scripts
+export CID=$(bash backend/scripts/pms_channel_seed_connection.sh --print-cid)
+
+# Use with sync poll script
+bash backend/scripts/pms_channel_sync_poll.sh --cid $CID --sync-type availability
+```
+
+### Common Use Cases
+
+**1. Seed booking.com connection:**
+```bash
+bash backend/scripts/pms_channel_seed_connection.sh \
+  --channel booking_com \
+  --platform-type booking_com \
+  --platform-listing-id booking_12345678
+```
+
+**2. Seed with explicit agency and property:**
+```bash
+# Get agency ID first
+export AGENCY_ID=$(psql "$DATABASE_URL" -t -c "SELECT id FROM agencies LIMIT 1;" | xargs)
+
+# Get property ID
+export PROPERTY_ID=$(psql "$DATABASE_URL" -t -c "SELECT id FROM properties LIMIT 1;" | xargs)
+
+# Seed connection
+bash backend/scripts/pms_channel_seed_connection.sh \
+  --agency-id $AGENCY_ID \
+  --property-id $PROPERTY_ID \
+  --channel airbnb \
+  --platform-type airbnb
+```
+
+**3. Reset connection and purge sync logs:**
+```bash
+# Purge logs with confirmation prompt
+bash backend/scripts/pms_channel_seed_connection.sh --purge-logs
+
+# Purge logs without confirmation (automation)
+bash backend/scripts/pms_channel_seed_connection.sh --purge-logs --yes
+```
+
+**4. Seed inactive/error connection for testing:**
+```bash
+bash backend/scripts/pms_channel_seed_connection.sh \
+  --status error \
+  --metadata '{"listing_id": "test_123", "error_reason": "auth_failed"}'
+```
+
+### Script Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--agency-id <uuid>` | Agency ID (auto-picks first if not provided) | Auto-pick |
+| `--channel <string>` | Channel name | `airbnb` |
+| `--platform-type <string>` | Platform type | `airbnb` |
+| `--status <status>` | Status: active/inactive/paused/disabled/error | `active` |
+| `--tenant-id <uuid>` | Tenant ID (optional, if column exists) | - |
+| `--property-id <uuid>` | Property ID (optional, if column exists) | - |
+| `--platform-listing-id <str>` | Platform listing ID | `airbnb_listing_789` |
+| `--metadata <json>` | Platform metadata JSON | `{}` |
+| `--print-cid` | Print seeded connection ID only (for scripting) | - |
+| `--purge-logs` | Purge channel_sync_logs for this connection | - |
+| `--yes` | Skip confirmation prompts (use with --purge-logs) | - |
+
+### Idempotent Behavior
+
+**Conflict Key:** `(agency_id, channel)` — One connection per agency per channel
+
+**First Run (INSERT):**
+```sql
+-- Creates new connection
+INSERT INTO channel_connections (...) VALUES (...);
+```
+
+**Subsequent Runs (UPDATE):**
+```sql
+-- Updates existing connection
+ON CONFLICT (agency_id, channel)
+DO UPDATE SET
+  platform_type = EXCLUDED.platform_type,
+  status = EXCLUDED.status,
+  platform_metadata = EXCLUDED.platform_metadata,
+  deleted_at = NULL,  -- Revives soft-deleted connections
+  updated_at = NOW();
+```
+
+**Safe to run repeatedly:**
+- No duplicate connections created
+- Existing connections updated to match new parameters
+- Soft-deleted connections (`deleted_at IS NOT NULL`) are revived
+
+### Environment Variables
+
+**Required:**
+- `DATABASE_URL` or `SUPABASE_DB_URL` — PostgreSQL connection string
+
+**Optional:**
+- `ENV_FILE` — Path to environment file (default: `/root/pms_env.sh`)
+
+**Example env file (`/root/pms_env.sh`):**
+```bash
+export DATABASE_URL="postgresql://postgres:your-password@supabase-db:5432/postgres"
+export SUPABASE_DB_URL="$DATABASE_URL"  # Alias
+```
+
+### Validation
+
+The script validates inputs before execution:
+
+**UUID validation:**
+```bash
+# Regex pattern: [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
+# Validates: --agency-id, --tenant-id, --property-id
+```
+
+**JSON validation:**
+```bash
+# Uses python3 to validate --metadata JSON
+# Example valid: '{"listing_id":"123","host_id":"abc"}'
+# Example invalid: '{listing_id:123}'  # Missing quotes
+```
+
+**Status validation:**
+```bash
+# Allowed values: active, inactive, paused, disabled, error
+# Example valid: --status active
+# Example invalid: --status ACTIVE  # Case-sensitive
+```
+
+### Log Purge Safety
+
+**Preview before deletion:**
+```bash
+# Script shows count of logs before confirmation
+⚠️  Found 42 sync logs for connection abc-123-456...
+⚠️  Delete all sync logs for this connection? [y/N]
+```
+
+**Auto-confirm for automation:**
+```bash
+# Use --yes flag to skip confirmation
+bash backend/scripts/pms_channel_seed_connection.sh --purge-logs --yes
+# ✓ Purged 42 sync logs (--yes flag)
+```
+
+**Scope:** Only purges logs for the seeded connection (not global)
+
+### Common Errors
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `DATABASE_URL not set` | Missing env var | Export `DATABASE_URL` or `SUPABASE_DB_URL` |
+| `Invalid UUID format` | Malformed UUID | Check UUID format (lowercase, hyphens) |
+| `Invalid JSON for --metadata` | Malformed JSON | Use double quotes: `'{"key":"value"}'` |
+| `Invalid status` | Wrong status value | Use: active/inactive/paused/disabled/error |
+| `No agencies found` | Empty agencies table | Create agency first or use explicit `--agency-id` |
+| `Failed to seed connection` | SQL error | Check database logs, verify schema exists |
+
+### Integration with Other Scripts
+
+**Use with sync poll script:**
+```bash
+# 1. Seed connection and capture ID
+export CID=$(bash backend/scripts/pms_channel_seed_connection.sh --print-cid)
+
+# 2. Trigger availability sync and poll for completion
+bash backend/scripts/pms_channel_sync_poll.sh --cid $CID --sync-type availability
+
+# Expected flow:
+# ✅ CHANNEL CONNECTION SEEDED (Connection ID: abc-123...)
+# ℹ️  Fetching JWT token...
+# ✅ SYNC COMPLETED SUCCESSFULLY (Status: success)
+```
+
+**CI/CD pipeline example:**
+```bash
+#!/bin/bash
+set -euo pipefail
+
+# Setup
+export DATABASE_URL="postgresql://..."
+export SB_URL="https://..."
+export ANON_KEY="..."
+export EMAIL="test@example.com"
+export PASSWORD="..."
+
+# Seed test connection
+CID=$(bash backend/scripts/pms_channel_seed_connection.sh \
+  --channel airbnb \
+  --status active \
+  --print-cid \
+  --yes)
+
+echo "Seeded connection: $CID"
+
+# Run smoke test
+bash backend/scripts/pms_channel_sync_poll.sh \
+  --cid $CID \
+  --sync-type availability \
+  --poll-limit 30
+
+# Cleanup (optional)
+bash backend/scripts/pms_channel_seed_connection.sh \
+  --channel airbnb \
+  --status inactive \
+  --purge-logs \
+  --yes
+```
+
+### Next Steps After Seeding
+
+**Test connection health:**
+```bash
+# Via UI
+https://admin.fewo.kolibri-visions.de/connections
+
+# Via API
+curl -X POST "$API/api/v1/channel-connections/$CID/test" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+**Trigger sync:**
+```bash
+# Via script (recommended)
+bash backend/scripts/pms_channel_sync_poll.sh --cid $CID --sync-type availability
+
+# Via API
+curl -X POST "$API/api/v1/channel-connections/$CID/sync" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"sync_type":"availability"}'
+```
+
+**Monitor logs:**
+```bash
+# Via script
+bash backend/scripts/pms_channel_sync_poll.sh --cid $CID
+
+# Via API
+curl "$API/api/v1/channel-connections/$CID/sync-logs?limit=10" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### When to Use
+
+✅ **Use this script when:**
+- Setting up test connections for development
+- Resetting connection state after schema changes
+- Automating connection setup in CI/CD pipelines
+- Testing Channel Manager sync operations
+- Creating connections without UI access
+
+❌ **Don't use this script when:**
+- Setting up production connections (use Admin UI instead)
+- Updating OAuth credentials (use Admin UI or encrypted SQL)
+- Bulk operations (use migration scripts instead)
+- Managing multiple connections at once (use batch SQL instead)
+
+### Related Sections
+
+- [Channel Manager - Schema Drift](#channel-manager---channel_connections-schema-drift) - Fix missing columns
+- [pms_channel_sync_poll.sh](../scripts/README.md#pms_channel_sync_pollsh) - Trigger and poll syncs
+- [Channel Connections Management](../scripts/README.md#channel-connections-management-curl-examples) - curl API examples
+- [Admin UI – Channel Manager Operations](#admin-ui--channel-manager-operations) - Web UI guide
 
 ---
 
