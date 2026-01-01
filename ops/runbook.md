@@ -3690,6 +3690,14 @@ UI handles both formats defensively
 4. Verify: JSON should appear in dark text (slate-900) on light background (slate-50) with border
 5. Note: UI now enforces readable code block styles (bg-slate-50, text-slate-900, border)
 
+**Text/JSON white-on-white across admin UI (Inputs/Modals/JSON blocks):**
+1. Symptom: Multiple UI elements show invisible white text (search inputs, modal content, JSON viewers in /connections and /ops/status)
+2. Root Cause: System Dark Mode preference triggers `globals.css` media query that sets body text to white (--foreground-rgb: 255,255,255)
+3. Components affected: Search inputs, Connection Details modal summary, Log Details JSON, /ops/status raw JSON blocks
+4. Fix: Deploy frontend with explicit text-slate-900 classes on all inputs/modals/pre elements, then hard refresh
+5. Verify: All mentioned components should display dark text clearly in both Light and Dark system modes
+6. Technical Note: UI components now use explicit text-slate-900 (not inherited color) to override globals.css dark mode defaults
+
 ### Navigation Path
 
 **From login:**
