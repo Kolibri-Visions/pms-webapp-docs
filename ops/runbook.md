@@ -9219,6 +9219,108 @@ docker logs pms-worker-v2 2>&1 | grep "Task.*failed"
 
 ---
 
+## Admin UI - Batch Details Refresh Semantics
+
+**Purpose:** Clarify timestamp meanings and refresh behavior in Batch Details modal to avoid confusion between data timestamps and UI refresh times.
+
+**Problem (Fixed):**
+
+Previously, the Batch Details modal showed "Last updated" in the header, which was ambiguous:
+- Did it mean when the data was last updated on the server (updated_at_max)?
+- Or when the UI last fetched the data (local refresh time)?
+
+The header timestamp didn't update while the modal stayed open, requiring users to close and reopen to see refresh updates.
+
+**Solution:**
+
+Two distinct timestamps with clear labels:
+
+### 1. Data Updated At (Server Timestamp)
+
+**Location:** Batch Summary section
+
+**Label:** "Data Updated At"
+
+**Value:** `updated_at_max` from API response (most recent operation update in the batch)
+
+**Format:** Full date/time (e.g., "1/1/2026, 2:23:45 PM")
+
+**Meaning:** When the batch data was last modified on the server
+
+**Updates:** Only changes when backend operations complete/update
+
+### 2. Last Refreshed (UI Timestamp)
+
+**Location:** Modal header (below Batch ID)
+
+**Label:** "Last refreshed"
+
+**Value:** Local browser time of last successful API fetch
+
+**Format:** Time only (e.g., "14:23:45")
+
+**Meaning:** When the UI last successfully fetched fresh data from the server
+
+**Updates:** Changes on every refresh (auto-poll or manual button click)
+
+**Visual Example:**
+
+```
+┌────────────────────────────────────────────────────┐
+│ Batch Details  [🔵 Live]          [Refresh]  [×]  │
+│ Batch ID: 70bce471-... │ Last refreshed: 14:23:45 │ ← UI refresh time
+├────────────────────────────────────────────────────┤
+│ Batch Summary                                      │
+│ Created At: 1/1/2026, 2:20:00 PM                   │
+│ Data Updated At: 1/1/2026, 2:23:45 PM              │ ← Server data timestamp
+│ Total Operations: 3                                │
+└────────────────────────────────────────────────────┘
+```
+
+### 3. Manual Refresh Button
+
+**Location:** Modal header (between title and close button)
+
+**Appearance:** Indigo button with refresh icon
+
+**States:**
+- Normal: "Refresh" with circular arrow icon
+- Loading: "Refreshing..." with spinning icon (disabled)
+
+**Behavior:**
+- Click → Immediately calls `GET /sync-batches/{batch_id}`
+- Updates both batch data and "Last refreshed" timestamp
+- Works for both running and completed batches
+
+### 4. Auto-Refresh Behavior (Fixed)
+
+**Running Batches:**
+- Auto-polls every 3 seconds for up to 60 seconds (20 polls max)
+- Updates "Last refreshed" on each poll
+
+**Completed Batches:**
+- Does ONE refresh after 5 seconds to prove refresh mechanism works
+- Then stops polling
+- Manual refresh button remains available
+
+**Key Fix:**
+- Effect dependency changed to prevent re-running on every data update
+- Result: "Last refreshed" updates while modal stays open (no need to close/reopen)
+
+### 5. Timestamp Semantics Table
+
+| Timestamp | Location | Label | Source | Format | Updates When |
+|-----------|----------|-------|--------|--------|--------------|
+| Server | Summary | "Data Updated At" | `updated_at_max` | Full datetime | Backend operation updates |
+| Client | Header | "Last refreshed" | `new Date()` | Time only | Every API fetch |
+
+**Related:**
+
+- See [Admin UI - Batch Details & Live Status](#admin-ui---batch-details--live-status) for auto-polling behavior
+- Frontend code: `/frontend/app/connections/page.tsx` (refreshBatchDetail, polling useEffect, manual refresh button)
+
+---
+
 ## Emergency Contacts
 
 - **Primary On-Call**: [Add contact info]
