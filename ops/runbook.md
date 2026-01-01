@@ -6900,6 +6900,53 @@ docker logs --since 10m coolify-proxy 2>&1 \
 - `up`: Component healthy
 - `down`: Component unavailable
 
+#### HEAD Support for Health Endpoints
+
+Both `/health` and `/health/ready` support **HEAD** requests for lightweight monitoring.
+
+**Purpose:** External monitors (uptime checkers, load balancers) can use HEAD to check status without fetching response body.
+
+**Behavior:**
+- Returns same HTTP status code as GET (200 when healthy, 503 when unhealthy)
+- Empty response body (no JSON payload)
+- Same logic as GET endpoints (checks DB/Redis/Celery based on feature flags)
+
+**Examples:**
+
+```bash
+# HEAD request to /health (always returns 200)
+curl -k -I https://api.fewo.kolibri-visions.de/health
+
+# HEAD request to /health/ready (returns 200 when up, 503 when down)
+curl -k -I https://api.fewo.kolibri-visions.de/health/ready
+
+# Compare with GET (includes response body)
+curl -k https://api.fewo.kolibri-visions.de/health/ready
+```
+
+**Expected Responses:**
+
+```bash
+# HEAD /health (liveness - always 200)
+HTTP/2 200
+content-length: 0
+
+# HEAD /health/ready (readiness - 200 when healthy)
+HTTP/2 200
+content-length: 0
+
+# HEAD /health/ready (readiness - 503 when DB down)
+HTTP/2 503
+content-length: 0
+```
+
+**Troubleshooting:**
+
+If HEAD returns **405 Method Not Allowed** with `Allow: GET` header:
+- You are running an older backend version without HEAD support
+- Update to commit `62d7c80` or later for HEAD support
+- Workaround: Use GET instead (less efficient for monitors)
+
 ---
 
 ### Monitoring Strategy
