@@ -256,6 +256,22 @@ WHERE created_at < NOW() - INTERVAL '90 days';
 
 See [Channel Manager — Sync Log Retention & Cleanup](#channel-manager--sync-log-retention--cleanup) for full cleanup procedures and safety notes.
 
+**Monthly Code Quality Check:**
+
+Run regression guard to verify no browser popups (alert/confirm/prompt) were reintroduced:
+
+```bash
+# WHERE: LOCAL-DEV-TERMINAL (in repo root)
+bash frontend/scripts/check_no_browser_popups.sh
+```
+
+**Expected Output:**
+```
+✅ OK: No browser popups (alert/confirm/prompt) found in frontend/
+```
+
+If popups detected, see [Regression Guard](#regression-guard) section for remediation steps.
+
 ---
 
 **Checklist Complete** ✅
@@ -4476,6 +4492,52 @@ Browser popups (window.alert/confirm/prompt) are blocking and interrupt workflow
 - Consistent styling: Matches app design
 - Context-aware: Stays within the application UI
 - Auto-dismiss: Reduces manual clicks (10 seconds)
+
+**Regression Guard:**
+
+To prevent accidental reintroduction of browser popups, the codebase includes automated checks:
+
+**ESLint Rule:**
+The frontend has ESLint configured with `"no-alert": "error"` (`.eslintrc.json`). This prevents:
+- `alert()` / `window.alert()`
+- `confirm()` / `window.confirm()`
+- `prompt()` / `window.prompt()`
+
+If ESLint detects a browser popup during development:
+1. Remove the popup call
+2. Replace with in-app notification banner (see examples above)
+3. Use the existing notification system (`setNotification()` pattern)
+
+**Manual Check Script:**
+Run the regression guard script to verify no browser popups exist:
+
+```bash
+bash frontend/scripts/check_no_browser_popups.sh
+```
+
+**Expected Output (Clean):**
+```
+Checking frontend/ for browser popups (alert/confirm/prompt)...
+Repo root: /Users/.../PMS-Webapp
+
+✅ OK: No browser popups (alert/confirm/prompt) found in frontend/
+```
+
+**If Popups Found:**
+```
+❌ FAILED: Browser popups detected!
+
+frontend/app/connections/page.tsx:142:        alert("Test failed!");
+
+Action required:
+  - Replace alert() with in-app notification banners/toasts
+  - Replace confirm() with in-app confirmation dialogs
+  - Replace prompt() with in-app input forms
+  - See backend/docs/ops/runbook.md for guidance
+```
+
+**Monthly Maintenance:**
+Run `check_no_browser_popups.sh` as part of monthly code quality checks (see [Daily Ops Checklist](#daily-ops-checklist) for automation).
 
 ### Overview
 
