@@ -4557,20 +4557,35 @@ The Connections page provides a centralized interface for Channel Manager operat
 
 **Common Actions:**
 
-1. **Search connections:**
+1. **Create new connection:**
+   - Click "New Connection" button (indigo, next to Refresh)
+   - Opens modal form with fields:
+     - **Property:** Select from dropdown (loads via API)
+     - **Platform:** airbnb, booking_com, expedia, fewo_direkt, google
+     - **Platform Listing ID:** Text input (default: `mock_<platform>_<timestamp>`)
+     - **Access Token:** Text input (default: `mock_access_token`)
+     - **Refresh Token:** Optional (default: `mock_refresh_token`)
+     - **Platform Metadata:** JSON textarea (default: `{"mock_mode": true}`)
+   - **Mock Mode Support:** In mock mode, mock tokens are accepted (no real OAuth required)
+   - Click "Create Connection" to submit POST `/api/v1/channel-connections/`
+   - On success: modal closes, success toast appears, list refreshes
+   - On error: shows friendly error message (e.g., "Not allowed: need admin or manager role")
+   - **Requirements:** Admin or Manager role
+
+2. **Search connections:**
    - Type in search box to filter by ID/platform/status
    - Results update instantly (client-side filter)
 
-2. **Copy connection ID:**
+3. **Copy connection ID:**
    - Click on truncated ID (e.g., "abc123...") to copy full UUID
    - Useful for API calls or debugging
 
-3. **Quick test:**
+4. **Quick test:**
    - Click "Test" button for inline health check
    - Shows in-app notification: "Connection test passed: Mock: Connection is healthy (Mock Mode - see runbook for production setup)"
-   - Non-blocking, auto-dismisses after 5 seconds
+   - Non-blocking, auto-dismisses after 10 seconds
 
-4. **Open details:**
+5. **Open details:**
    - Click "Open" to view full connection details modal
    - See sync operations, logs, and advanced controls
 
