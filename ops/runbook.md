@@ -3536,12 +3536,21 @@ curl -X POST "$API/api/v1/channel-connections/$CID/test" \
 
 **Script:** `backend/scripts/pms_channel_seed_connection.sh`
 
+**Key Feature: NO psql required on host** - uses `docker exec` in Supabase DB container automatically.
+
 **Why Use This Script:**
+- **No psql required:** Runs via `docker exec` in supabase-db-* container (auto-detects)
 - **Idempotent:** Safe to run multiple times (uses `ON CONFLICT DO UPDATE`)
 - **Auto-pick agency:** No manual UUID lookup required
 - **Validation:** UUID and JSON validation before INSERT
 - **Clean state:** Optional purge of sync logs with confirmation
 - **Automation-ready:** `--print-cid` flag for scripting/CI/CD
+- **No secrets in output:** Passwords redacted in logs
+
+**Requirements:**
+- `docker` command on host (for docker exec into DB container)
+- `python3` (for JSON validation)
+- **NO psql required** on host (runs inside container)
 
 ### Quick Start
 
@@ -3549,16 +3558,21 @@ curl -X POST "$API/api/v1/channel-connections/$CID/test" \
 
 WHERE: HOST-SERVER-TERMINAL
 ```bash
-# Export database connection
-export DATABASE_URL="postgresql://postgres:your-password@supabase-db:5432/postgres"
+# NO DATABASE_URL needed - script auto-detects DB container and reads credentials
 
-# Seed connection
+# Seed connection (auto-detects supabase-db-* container)
 bash backend/scripts/pms_channel_seed_connection.sh
 
 # Expected output:
+# ℹ️  Auto-detecting Supabase DB container...
+# ℹ️  ✓ Auto-detected DB container: supabase-db-bccg4gs4o4kgsowocw08wkw4
+# ℹ️  Reading DB credentials from container...
+# ℹ️  ✓ DB credentials loaded (user: postgres, db: postgres)
+# ℹ️  No --agency-id provided, auto-picking first agency from database...
+# ℹ️  ✓ Auto-picked agency: abc-123-def-456...
 # ✅ CHANNEL CONNECTION SEEDED
-# Connection ID:   abc-123-def-456...
-# Agency ID:       agency-uuid-789...
+# Connection ID:   xyz-789-ghi-012...
+# Agency ID:       abc-123-def-456...
 # Channel:         airbnb
 # Platform Type:   airbnb
 # Status:          active
@@ -3566,11 +3580,21 @@ bash backend/scripts/pms_channel_seed_connection.sh
 
 **Scripting mode (automation):**
 ```bash
-# Export connection ID for use in other scripts
+# Export connection ID for use in other scripts (no output except CID)
 export CID=$(bash backend/scripts/pms_channel_seed_connection.sh --print-cid)
 
 # Use with sync poll script
 bash backend/scripts/pms_channel_sync_poll.sh --cid $CID --sync-type availability
+```
+
+**Explicit DB container (if multiple containers exist):**
+```bash
+# Via flag
+bash backend/scripts/pms_channel_seed_connection.sh --db-container supabase-db-xyz123
+
+# Via ENV
+export SUPABASE_DB_CONTAINER=supabase-db-xyz123
+bash backend/scripts/pms_channel_seed_connection.sh
 ```
 
 ### Common Use Cases
@@ -3585,16 +3609,19 @@ bash backend/scripts/pms_channel_seed_connection.sh \
 
 **2. Seed with explicit agency and property:**
 ```bash
-# Get agency ID first
-export AGENCY_ID=$(psql "$DATABASE_URL" -t -c "SELECT id FROM agencies LIMIT 1;" | xargs)
+# Option A: Let script auto-pick agency (recommended)
+bash backend/scripts/pms_channel_seed_connection.sh \
+  --channel airbnb \
+  --platform-type airbnb
 
-# Get property ID
-export PROPERTY_ID=$(psql "$DATABASE_URL" -t -c "SELECT id FROM properties LIMIT 1;" | xargs)
+# Option B: Get agency ID manually first (if you need a specific agency)
+# Note: Script uses docker exec internally, no local psql needed
+export AGENCY_ID=$(bash backend/scripts/pms_channel_seed_connection.sh --print-cid --channel temp 2>&1 | grep "Auto-picked agency" | awk '{print $NF}')
 
-# Seed connection
+# Then seed with explicit IDs
 bash backend/scripts/pms_channel_seed_connection.sh \
   --agency-id $AGENCY_ID \
-  --property-id $PROPERTY_ID \
+  --property-id <your-property-uuid> \
   --channel airbnb \
   --platform-type airbnb
 ```
@@ -3627,6 +3654,7 @@ bash backend/scripts/pms_channel_seed_connection.sh \
 | `--property-id <uuid>` | Property ID (optional, if column exists) | - |
 | `--platform-listing-id <str>` | Platform listing ID | `airbnb_listing_789` |
 | `--metadata <json>` | Platform metadata JSON | `{}` |
+| `--db-container <name>` | **NEW:** Explicit DB container name (overrides auto-detect) | Auto-detect |
 | `--print-cid` | Print seeded connection ID only (for scripting) | - |
 | `--purge-logs` | Purge channel_sync_logs for this connection | - |
 | `--yes` | Skip confirmation prompts (use with --purge-logs) | - |
@@ -3718,7 +3746,13 @@ bash backend/scripts/pms_channel_seed_connection.sh --purge-logs --yes
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| `DATABASE_URL not set` | Missing env var | Export `DATABASE_URL` or `SUPABASE_DB_URL` |
+| `Required command not found: psql` | Old version of script (pre docker exec) | Update script to latest version |
+| `docker command not found` | Docker not installed on host | Install docker: `apt-get install docker.io` |
+| `No supabase-db-* container found` | Supabase DB not running | Start Supabase: `docker ps \| grep supabase` |
+| `Multiple supabase-db-* containers found` | Multiple DB containers running | Use `--db-container <name>` or `export SUPABASE_DB_CONTAINER=<name>` |
+| `Container 'xyz' not found or not running` | Wrong container name | Check: `docker ps \| grep supabase-db` |
+| `Failed to read POSTGRES_* env vars` | Container missing DB env vars | Verify container has POSTGRES_USER, POSTGRES_DB, POSTGRES_PASSWORD |
+| `Incomplete DB credentials from container` | Partial env vars in container | Check: `docker exec <container> env \| grep POSTGRES` |
 | `Invalid UUID format` | Malformed UUID | Check UUID format (lowercase, hyphens) |
 | `Invalid JSON for --metadata` | Malformed JSON | Use double quotes: `'{"key":"value"}'` |
 | `Invalid status` | Wrong status value | Use: active/inactive/paused/disabled/error |
