@@ -3979,10 +3979,15 @@ Response: {healthy: bool, message: str, details: {...}}
 ```
 POST /api/v1/channel-connections/{id}/sync
 Request: {sync_type: "full"|"availability"|"pricing"|"bookings"}
-Response: {status: "triggered", message: "...", task_ids: ["celery-task-id-1", ...]}
+Response: {
+  status: "triggered",
+  message: "...",
+  task_ids: ["celery-task-id-1", ...],
+  batch_id: "uuid" (only for full sync, groups 3 operations)
+}
 ```
 
-**IMPORTANT:** Response ALWAYS includes `task_ids` array (not `task_id`). Backend triggers Celery tasks and creates sync log entries.
+**IMPORTANT:** Response ALWAYS includes `task_ids` array (not `task_id`). Full sync also returns `batch_id` to group the 3 operations (availability_update, pricing_update, bookings_sync). Backend triggers Celery tasks and creates sync log entries.
 
 ### Sync Type → Operation Type Mapping
 
@@ -5044,7 +5049,7 @@ The Admin UI now uses the trailing-slash endpoint `/api/v1/channel-connections/`
 
 **Frontend Logs:**
 - Browser console (F12) shows API request/response
-- Toast notifications show success/error feedback
+- Inline banner notifications show sync trigger success/error (auto-clears after 5s)
 
 **Backend Logs:**
 - Coolify Dashboard → pms-backend → Logs
@@ -8122,16 +8127,16 @@ docker restart pms-api
 
 | Date | Change | Author |
 |------|--------|--------|
-| 2025-12-26 | Initial runbook creation (Phase 24) | Claude Code |
-| 2025-12-27 | Document smoke script opt-in tests (AVAIL_BLOCK_TEST, B2B_TEST) | Claude Code |
-| 2025-12-27 | Phase 30 — Inventory Final validation results (block conflict, B2B boundary, end-exclusive semantics) | Claude Code |
-| 2025-12-27 | Phase 30.5 — Inventory Contract documented (single source of truth for inventory semantics, edge cases, DB guarantees) | Claude Code |
-| 2025-12-27 | Phase 31 — Modular Monolith architecture documented (module system, registry, router aggregation) | Claude Code |
-| 2025-12-27 | Phase 31 — MODULES_ENABLED kill-switch added (ops safety, emergency fallback to explicit router mounting) | Claude Code |
-| 2025-12-27 | Phase 33B — Split api_v1 into domain modules (properties, bookings, inventory) | Claude Code |
-| 2025-12-27 | Phase 34 — Updated kill-switch docs with Phase 33B context (explicit fallback router list) | Claude Code |
-| 2025-12-27 | Phase 35 — Module mounting hardening (router dedupe guard, improved logging) | Claude Code |
-| 2025-12-27 | Phase 36 — Channel Manager module integration with feature flag (CHANNEL_MANAGER_ENABLED, default OFF) | Claude Code |
-| 2025-12-27 | Phase 36 — Redis + Celery worker setup runbook (password encoding, deployment steps, verification, troubleshooting) | Claude Code |
-| 2025-12-30 | Admin UI authentication verification - Cookie-based SSR login, curl checks for /ops/* access | Claude Code |
-| 2026-01-01 | Full Sync batching (batch_id) - Group 3 operations, API exposure, UI grouping, verification queries | Claude Code |
+| 2025-12-26 | Initial runbook creation (Phase 24) | System |
+| 2025-12-27 | Document smoke script opt-in tests (AVAIL_BLOCK_TEST, B2B_TEST) | System |
+| 2025-12-27 | Phase 30 — Inventory Final validation results (block conflict, B2B boundary, end-exclusive semantics) | System |
+| 2025-12-27 | Phase 30.5 — Inventory Contract documented (single source of truth for inventory semantics, edge cases, DB guarantees) | System |
+| 2025-12-27 | Phase 31 — Modular Monolith architecture documented (module system, registry, router aggregation) | System |
+| 2025-12-27 | Phase 31 — MODULES_ENABLED kill-switch added (ops safety, emergency fallback to explicit router mounting) | System |
+| 2025-12-27 | Phase 33B — Split api_v1 into domain modules (properties, bookings, inventory) | System |
+| 2025-12-27 | Phase 34 — Updated kill-switch docs with Phase 33B context (explicit fallback router list) | System |
+| 2025-12-27 | Phase 35 — Module mounting hardening (router dedupe guard, improved logging) | System |
+| 2025-12-27 | Phase 36 — Channel Manager module integration with feature flag (CHANNEL_MANAGER_ENABLED, default OFF) | System |
+| 2025-12-27 | Phase 36 — Redis + Celery worker setup runbook (password encoding, deployment steps, verification, troubleshooting) | System |
+| 2025-12-30 | Admin UI authentication verification - Cookie-based SSR login, curl checks for /ops/* access | System |
+| 2026-01-01 | Full Sync batching (batch_id) - Group 3 operations, API exposure, UI grouping, verification queries | System |
