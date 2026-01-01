@@ -3553,6 +3553,228 @@ curl -X POST "$API/api/v1/channel-connections/$CID/test" \
 - All mock responses include `mock_mode=true` flag for transparency
 - Sync logs will reflect simulated operations (check `details.mock_mode`)
 
+### Error Codes and Messages
+
+When a connection test fails (mock or real mode), the response includes an `error_code` field for programmatic handling:
+
+#### `CREDENTIALS_MISSING`
+
+**Meaning:** Integration is enabled but platform-specific credentials are not configured.
+
+**Example Response:**
+```json
+{
+  "connection_id": "abc-123-456-...",
+  "platform_type": "booking_com",
+  "healthy": false,
+  "message": "Booking.com credentials not configured. Add BOOKING_COM_API_KEY and BOOKING_COM_SECRET to environment.",
+  "details": {
+    "error_code": "CREDENTIALS_MISSING",
+    "required_env_vars": ["BOOKING_COM_API_KEY", "BOOKING_COM_SECRET"],
+    "mock_mode": false
+  }
+}
+```
+
+**Action Required:**
+1. Add missing environment variables to Coolify (pms-backend)
+2. Restart backend container
+3. Re-test connection
+
+#### `INTEGRATION_DISABLED`
+
+**Meaning:** Platform integration is not implemented or is disabled in the current deployment.
+
+**Example Response:**
+```json
+{
+  "connection_id": "def-456-789-...",
+  "platform_type": "expedia",
+  "healthy": false,
+  "message": "Expedia integration is disabled. Contact support to enable.",
+  "details": {
+    "error_code": "INTEGRATION_DISABLED",
+    "mock_mode": false
+  }
+}
+```
+
+**Action Required:**
+- Contact platform vendor or system administrator
+- Enable integration via feature flag or code deployment
+
+#### `CONNECTION_INACTIVE`
+
+**Meaning:** Connection exists but is paused or inactive (not an error, but expected behavior).
+
+**Example Response:**
+```json
+{
+  "connection_id": "ghi-789-012-...",
+  "platform_type": "airbnb",
+  "healthy": false,
+  "message": "Connection is paused",
+  "details": {
+    "error_code": "CONNECTION_INACTIVE",
+    "connection_status": "paused",
+    "mock_mode": true
+  }
+}
+```
+
+**Action Required:**
+- Update connection status to `active` via Admin UI or API
+- Re-test connection
+
+### Mock Mode Platform Responses
+
+When `CHANNEL_MOCK_MODE=true`, test connection returns platform-specific mock data:
+
+#### Airbnb (Mock)
+```json
+{
+  "connection_id": "...",
+  "platform_type": "airbnb",
+  "healthy": true,
+  "message": "Mock: Connection is healthy",
+  "details": {
+    "mock_mode": true,
+    "simulated": true,
+    "connection_status": "active",
+    "remote_account_id": "mock_airbnb_host_123456",
+    "remote_listing_id": "mock_listing_987654",
+    "capabilities": ["availability_sync", "pricing_sync", "booking_retrieval"],
+    "note": "This is a simulated response. Set CHANNEL_MOCK_MODE=false for real API calls."
+  }
+}
+```
+
+#### Booking.com (Mock)
+```json
+{
+  "connection_id": "...",
+  "platform_type": "booking_com",
+  "healthy": true,
+  "message": "Mock: Connection is healthy",
+  "details": {
+    "mock_mode": true,
+    "simulated": true,
+    "connection_status": "active",
+    "remote_account_id": "mock_booking_hotel_789012",
+    "remote_listing_id": "mock_property_345678",
+    "capabilities": ["availability_sync", "pricing_sync", "booking_retrieval", "channel_manager"],
+    "note": "This is a simulated response. Set CHANNEL_MOCK_MODE=false for real API calls."
+  }
+}
+```
+
+#### Expedia (Mock)
+```json
+{
+  "connection_id": "...",
+  "platform_type": "expedia",
+  "healthy": true,
+  "message": "Mock: Connection is healthy",
+  "details": {
+    "mock_mode": true,
+    "simulated": true,
+    "connection_status": "active",
+    "remote_account_id": "mock_expedia_partner_456789",
+    "remote_listing_id": "mock_vrbo_listing_234567",
+    "capabilities": ["availability_sync", "pricing_sync", "booking_retrieval"],
+    "note": "This is a simulated response. Set CHANNEL_MOCK_MODE=false for real API calls."
+  }
+}
+```
+
+#### FeWo-direkt (Mock)
+```json
+{
+  "connection_id": "...",
+  "platform_type": "fewo_direkt",
+  "healthy": true,
+  "message": "Mock: Connection is healthy",
+  "details": {
+    "mock_mode": true,
+    "simulated": true,
+    "connection_status": "active",
+    "remote_account_id": "mock_fewo_owner_654321",
+    "remote_listing_id": "mock_fewo_property_876543",
+    "capabilities": ["availability_sync", "pricing_sync"],
+    "note": "This is a simulated response. Set CHANNEL_MOCK_MODE=false for real API calls."
+  }
+}
+```
+
+#### Google (Mock)
+```json
+{
+  "connection_id": "...",
+  "platform_type": "google",
+  "healthy": true,
+  "message": "Mock: Connection is healthy",
+  "details": {
+    "mock_mode": true,
+    "simulated": true,
+    "connection_status": "active",
+    "remote_account_id": "mock_google_hotel_112233",
+    "remote_listing_id": "mock_google_listing_998877",
+    "capabilities": ["availability_sync", "pricing_sync"],
+    "note": "This is a simulated response. Set CHANNEL_MOCK_MODE=false for real API calls."
+  }
+}
+```
+
+### Production Readiness
+
+To go production-ready (disable mock mode and enable real platform integrations), configure the following environment variables:
+
+#### Required for All Platforms
+```bash
+# Disable mock mode
+CHANNEL_MOCK_MODE=false
+```
+
+#### Platform-Specific Credentials
+
+**Airbnb:**
+```bash
+AIRBNB_API_KEY=your_airbnb_api_key
+AIRBNB_API_SECRET=your_airbnb_secret
+```
+
+**Booking.com:**
+```bash
+BOOKING_COM_API_KEY=your_booking_api_key
+BOOKING_COM_SECRET=your_booking_secret
+BOOKING_COM_HOTEL_ID=your_hotel_id
+```
+
+**Expedia:**
+```bash
+EXPEDIA_API_KEY=your_expedia_key
+EXPEDIA_API_SECRET=your_expedia_secret
+EXPEDIA_PARTNER_ID=your_partner_id
+```
+
+**FeWo-direkt:**
+```bash
+FEWO_DIREKT_API_KEY=your_fewo_key
+FEWO_DIREKT_SECRET=your_fewo_secret
+```
+
+**Google Vacation Rentals:**
+```bash
+GOOGLE_HOTELS_API_KEY=your_google_key
+GOOGLE_HOTELS_PARTNER_ID=your_partner_id
+```
+
+**After Adding Credentials:**
+1. Restart backend: `docker restart pms-backend`
+2. Test connection via Admin UI or API: `POST /api/v1/channel-connections/{id}/test`
+3. Verify `healthy=true` and `mock_mode=false` in response
+4. If `healthy=false`, check error_code and message for next steps
+
 ### Limitations
 
 **Current Implementation (Phase C1):**
