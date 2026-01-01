@@ -6970,6 +6970,178 @@ watch -n 30 'curl -s https://api.your-domain.com/api/v1/channel-connections/{id}
 
 ---
 
+### HEAD vs GET for Health Monitoring
+
+**Purpose:** Understand when to use HEAD (status-only) vs GET (JSON body) for health checks.
+
+**Use Cases:**
+
+- **HEAD (Status-Only):**
+  - Uptime monitors, load balancers, Kubernetes probes
+  - Lightweight checks (no response body parsing)
+  - Returns HTTP status code + headers only
+  - Same logic as GET, but no JSON payload
+
+- **GET (JSON Body):**
+  - Debugging, troubleshooting, manual checks
+  - Full component status details (DB, Redis, Celery)
+  - Useful for identifying which component failed
+
+**Production Examples:**
+
+```bash
+# HEAD /health (liveness - always 200, no body)
+curl -k -sS -I https://api.fewo.kolibri-visions.de/health
+
+# Expected output:
+HTTP/2 200
+content-type: application/json
+content-length: 0
+
+# HEAD /health/ready (readiness - 200 when up, 503 when down, no body)
+curl -k -sS -I https://api.fewo.kolibri-visions.de/health/ready
+
+# Expected output when healthy:
+HTTP/2 200
+content-type: application/json
+content-length: 0
+
+# Expected output when degraded (DB down):
+HTTP/2 503
+content-type: application/json
+content-length: 0
+
+# GET /health/ready (readiness - returns JSON body for debugging)
+curl -k -sS https://api.fewo.kolibri-visions.de/health/ready
+
+# Expected output when healthy:
+{
+  "status": "up",
+  "components": {
+    "db": {"status": "up", "checked_at": "2026-01-01T12:00:00Z"},
+    "redis": {"status": "up", "details": {"skipped": true}},
+    "celery": {"status": "up", "details": {"skipped": true}}
+  },
+  "checked_at": "2026-01-01T12:00:00Z"
+}
+
+# Expected output when degraded (DB down):
+{
+  "status": "down",
+  "components": {
+    "db": {"status": "down", "error": "connection refused", "checked_at": "..."},
+    "redis": {"status": "up", "details": {"skipped": true}},
+    "celery": {"status": "up", "details": {"skipped": true}}
+  },
+  "checked_at": "2026-01-01T12:00:00Z"
+}
+```
+
+**Key Points:**
+
+- HEAD and GET return the **same HTTP status code** (200 or 503)
+- HEAD has **no response body** (content-length: 0)
+- GET includes **full JSON payload** with component details
+- `/health` (liveness) always returns 200 (application is running)
+- `/health/ready` (readiness) returns 503 if DB is down (mandatory dependency)
+- Redis and Celery are optional (controlled by `ENABLE_REDIS_HEALTHCHECK` and `ENABLE_CELERY_HEALTHCHECK`)
+
+**When to Use:**
+
+| Scenario | Method | Endpoint | Why |
+|----------|--------|----------|-----|
+| Uptime monitoring | HEAD | `/health/ready` | Lightweight, status-only |
+| Load balancer probe | HEAD | `/health/ready` | Fast, no body parsing |
+| K8s liveness probe | HEAD | `/health` | Minimal overhead |
+| K8s readiness probe | HEAD | `/health/ready` | Status-only check |
+| Debugging failed health | GET | `/health/ready` | See which component failed |
+| Manual verification | GET | `/health/ready` | Human-readable JSON |
+
+---
+
+### Celery Worker Singleton (Important)
+
+**Rule:** Only **ONE** Celery worker service must be active at any time.
+
+**Current Worker:** `pms-worker-v2` (Coolify app)
+
+**Why This Matters:**
+
+Running multiple Celery workers simultaneously causes:
+- **Duplicate sync tasks:** Same sync operation executed multiple times
+- **Duplicate log entries:** Multiple workers writing to `channel_sync_logs`
+- **Inconsistent batch status:** Race conditions when updating sync log status
+- **Resource waste:** Unnecessary DB/Redis connections
+
+**Symptoms of Violation:**
+
+- Sync logs show duplicate entries with different `task_id` for the same operation
+- Batch status shows inconsistent results (some ops "success", others "running" for same batch)
+- Channel sync operations trigger 2-3x expected tasks
+- Worker logs show multiple workers picking up same task
+
+**Verification (HOST-SERVER-TERMINAL):**
+
+```bash
+# Check running workers
+docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' | egrep -i 'pms-worker' || true
+
+# Expected output (ONLY ONE worker running):
+pms-worker-v2    Up 2 hours    ghcr.io/...
+
+# Check all workers (including stopped)
+docker ps -a --format 'table {{.Names}}\t{{.Status}}' | egrep -i 'pms-worker' || true
+
+# Expected output:
+pms-worker-v2    Up 2 hours
+pms-worker       Exited (0) 3 days ago     <- OLD, should stay stopped
+
+# If multiple workers are running (BAD):
+pms-worker-v2    Up 2 hours
+pms-worker       Up 5 minutes              <- PROBLEM! Stop this immediately
+```
+
+**Remediation:**
+
+If multiple workers are running:
+
+```bash
+# 1. Stop the old worker immediately
+docker stop pms-worker
+
+# 2. Verify only pms-worker-v2 is running
+docker ps | grep pms-worker
+
+# 3. In Coolify:
+#    - Navigate to old worker app (pms-worker)
+#    - Click "Stop" or "Disable"
+#    - Ensure "Auto Deploy" is OFF
+#    - This prevents it from restarting on deploy
+```
+
+**Coolify Configuration:**
+
+1. **Active Worker:** `pms-worker-v2`
+   - Status: Running
+   - Auto Deploy: ON
+   - Health Check: Enabled
+
+2. **Old Workers:** `pms-worker` (if exists)
+   - Status: Stopped/Disabled
+   - Auto Deploy: **OFF** (critical - prevents accidental restart)
+   - Action: Archive or delete if no longer needed
+
+**Deployment Best Practice:**
+
+When deploying a new worker version:
+1. Stop old worker first
+2. Deploy new worker
+3. Verify new worker is running (docker ps)
+4. Disable auto-deploy on old worker in Coolify
+5. Test sync operations (check for duplicates)
+
+---
+
 ### Troubleshooting Sync Log Issues
 
 #### Issue: Sync Logs Not Persisting
