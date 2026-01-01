@@ -7121,6 +7121,47 @@ docker logs --since 10m coolify-proxy 2>&1 \
 - `up`: Component healthy
 - `down`: Component unavailable
 
+**Single-Worker Enforcement (Celery):**
+
+When `ENABLE_CELERY_HEALTHCHECK=true`, the readiness check enforces the single-worker rule for Channel Manager:
+
+- **Expected:** Exactly 1 active Celery worker (pms-worker-v2)
+- **If Multiple Workers Detected:** `celery` component returns `status: "down"` with error message
+- **Error Message Includes:**
+  - Worker count (expected: 1, found: N)
+  - Worker names (e.g., "celery@pms-worker-v2-abc123, celery@pms-worker-old-xyz789")
+  - Fix instructions (stop extra workers)
+
+**Why Single-Worker Rule:**
+- Multiple workers cause duplicate sync tasks (same operation executed 2-3x)
+- Race conditions when updating sync log status
+- Duplicate log entries in `channel_sync_logs` table
+- Inconsistent batch status (some ops "success", others "running" for same batch)
+
+**Fix Multiple Workers:**
+
+```bash
+# Check running workers (HOST-SERVER-TERMINAL)
+docker ps | grep pms-worker
+
+# Expected output: Only pms-worker-v2 should be listed
+# 1a2b3c4d5e6f   ghcr.io/your-org/pms-worker-v2:main   ...   pms-worker-v2
+
+# If multiple workers found:
+docker stop <old_worker_container_id>
+
+# Verify only one worker remains
+docker ps | grep pms-worker
+
+# Verify health check passes
+curl -s https://api.fewo.kolibri-visions.de/health/ready | jq '.components.celery'
+# Expected: {"status": "up", "details": {"workers": ["celery@pms-worker-v2-..."]}}
+```
+
+**Related:**
+- See [Single Worker Rule](#single-worker-rule-critical) for deployment guidelines
+- See [Duplicate Sync Tasks](#duplicate-sync-tasks) for troubleshooting duplicate tasks
+
 #### HEAD Support for Health Endpoints
 
 Both `/health` and `/health/ready` support **HEAD** requests for lightweight monitoring.
