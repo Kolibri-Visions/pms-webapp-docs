@@ -4386,6 +4386,34 @@ curl "$API/api/v1/channel-connections/$CID/sync-logs?limit=10" \
 
 **Access:** Admin-only (requires admin role). Navigate to: `https://admin.fewo.kolibri-visions.de/connections`
 
+### UI Notifications
+
+**Important:** The Admin UI uses in-app notifications exclusively. No browser alerts (alert/confirm/prompt) are used.
+
+**Notification System:**
+- All feedback is shown via non-blocking in-app banners/toasts
+- Success messages: Green banner with auto-dismiss (5 seconds)
+- Error messages: Red banner with auto-dismiss (5 seconds)
+- Manual dismiss: Click X button to close immediately
+- Notifications appear at top of page (Connections page) or below page header (System Status page)
+
+**Examples:**
+- "Connection test passed: Mock: Connection is healthy (Mock Mode - see runbook for production setup)"
+- "Connection status updated to paused"
+- "Diagnostics copied to clipboard"
+- "Failed to update status: Network error"
+
+**Affected Pages:**
+- `/connections` - Connection management and testing
+- `/ops/status` - System health diagnostics
+
+**Why No Browser Alerts:**
+Browser popups (window.alert/confirm/prompt) are blocking and interrupt workflow. In-app notifications provide better UX:
+- Non-blocking: User can continue working
+- Consistent styling: Matches app design
+- Context-aware: Stays within the application UI
+- Auto-dismiss: Reduces manual clicks
+
 ### Overview
 
 The Connections page provides a centralized interface for Channel Manager operations:
@@ -4414,8 +4442,8 @@ The Connections page provides a centralized interface for Channel Manager operat
 
 3. **Quick test:**
    - Click "Test" button for inline health check
-   - Shows toast-style alert: "✓ Connection test passed: Mock: Connection is healthy"
-   - No modal interruption
+   - Shows in-app notification: "Connection test passed: Mock: Connection is healthy (Mock Mode - see runbook for production setup)"
+   - Non-blocking, auto-dismisses after 5 seconds
 
 4. **Open details:**
    - Click "Open" to view full connection details modal
