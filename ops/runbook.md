@@ -3683,6 +3683,13 @@ UI handles both formats defensively
 4. Verify: Check SOURCE_COMMIT in backend logs matches latest git commit
 5. Note: UI now enforces explicit text colors (text-gray-900) to prevent this issue
 
+**Log Details JSON text invisible/too light:**
+1. Symptom: Clicking "Details" in Sync Logs shows JSON modal, but text appears white/faint (only readable when highlighted)
+2. Cause: Browser cache serving old CSS without explicit code block styles
+3. Fix: Hard refresh (Ctrl+F5 or Cmd+Shift+R), clear browser cache, ensure latest deploy
+4. Verify: JSON should appear in dark text (slate-900) on light background (slate-50) with border
+5. Note: UI now enforces readable code block styles (bg-slate-50, text-slate-900, border)
+
 ### Navigation Path
 
 **From login:**
