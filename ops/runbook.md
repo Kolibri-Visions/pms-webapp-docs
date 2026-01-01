@@ -9028,6 +9028,197 @@ curl -sS "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/$CID/sy
 
 ---
 
+## Admin UI - Batch Details & Live Status
+
+**Purpose:** Enhanced batch detail view with real-time updates for running batches and quick access from log details.
+
+**Features:**
+
+### 1. Live Status Updates
+
+When viewing a batch that is currently running:
+
+- **Auto-Polling**: Batch details refresh every 3 seconds automatically
+- **Live Indicator**: Blue "Live" badge with pulsing dot appears in header
+- **Last Updated**: Timestamp shows when data was last refreshed
+- **Auto-Stop**: Polling stops automatically when:
+  - Batch status becomes `success`, `failed`, or `unknown`
+  - All operations complete (no triggered/running operations)
+  - Maximum polling time reached (60 seconds / 20 polls)
+
+**Visual Cues:**
+
+```
+┌─────────────────────────────────────────────────┐
+│ Batch Details  [🔵 Live]                        │
+│ Batch ID: 70bce471-... │ Last updated: 14:23:45 │
+└─────────────────────────────────────────────────┘
+```
+
+**When Polling Is Active:**
+
+- Running batches (batch_status = "running")
+- Batches with triggered or running operations (counts.triggered + counts.running > 0)
+
+**Implementation Details:**
+
+```typescript
+// Polling logic (frontend)
+useEffect(() => {
+  if (!selectedBatchDetail) return;
+
+  const isRunning = selectedBatchDetail.batch_status === "running" ||
+                   (selectedBatchDetail.status_counts.triggered +
+                    selectedBatchDetail.status_counts.running) > 0;
+
+  if (!isRunning) return;
+
+  // Poll every 3s for up to 60s (20 polls max)
+  const interval = setInterval(() => {
+    refreshBatchDetail();
+  }, 3000);
+
+  return () => clearInterval(interval);
+}, [selectedBatchDetail]);
+```
+
+### 2. Open Batch from Log Details
+
+Users can navigate from individual log entries to the full batch view:
+
+**Location:** Log Details modal → Summary section
+
+**When Visible:** Only when log entry has a `batch_id` field
+
+**Behavior:**
+1. Log Details modal shows "Batch ID" field in summary
+2. "Open Batch Details →" button appears below summary
+3. Click button → Log Details modal closes, Batch Details modal opens
+4. Full batch status, operations list, and counts displayed
+
+**Use Case Example:**
+
+```
+User Flow:
+1. Admin clicks "Details" on a log entry in Sync Logs
+2. Sees batch_id: "70bce471-d82a-4cd9-8ad3-8c9f2e5f4a11"
+3. Clicks "Open Batch Details →" button
+4. Batch Details modal opens showing:
+   - All 3 operations in the batch
+   - Overall batch status (e.g., 2/3 success, 1 failed)
+   - Status breakdown chart
+   - If running: Live indicator + auto-refresh
+```
+
+**Button Appearance:**
+
+```html
+┌────────────────────────────────┐
+│ Operation Type: availability   │
+│ Status: success                │
+│ Batch ID: 70bce471-...         │
+│                                │
+│      [Open Batch Details →]   │
+└────────────────────────────────┘
+```
+
+### 3. Failed Batch Guidance
+
+When viewing a batch with failed operations:
+
+**Yellow Warning Box:**
+```
+⚠️ Troubleshooting
+This batch has failed operations. Check worker logs for detailed error messages.
+See backend/docs/ops/runbook.md for common issues and solutions.
+```
+
+**Where to Check Logs:**
+
+```bash
+# Production worker logs (Docker)
+docker logs pms-worker-v2 --tail 100 --follow
+
+# Filter for specific batch
+docker logs pms-worker-v2 2>&1 | grep "70bce471-d82a-4cd9-8ad3-8c9f2e5f4a11"
+
+# Check Celery task failures
+docker logs pms-worker-v2 2>&1 | grep "Task.*failed"
+```
+
+**Common Failure Patterns:**
+
+| Error Pattern | Likely Cause | Runbook Section |
+|---------------|-------------|-----------------|
+| `Database unavailable` | DB connection pool exhausted or DNS failure | [DB DNS / Degraded Mode](#db-dns--degraded-mode) |
+| `Schema drift` | channel_sync_logs table missing or constraint out of date | [Schema Drift](#schema-drift) |
+| `Channel adapter error` | External API timeout or rate limit | Check platform-specific sections |
+| `Task timeout` | Operation exceeded soft/hard time limits | [Celery Configuration](#celery-configuration) |
+
+### 4. Performance Characteristics
+
+**Polling Overhead:**
+
+- **Network**: 1 API request every 3 seconds (max 20 requests)
+- **Backend**: No additional load (read-only query, indexed columns)
+- **Browser**: Minimal CPU/memory (React state updates only)
+
+**Automatic Cleanup:**
+
+- Polling stops when batch completes → no infinite loops
+- Modal close clears polling interval → no background requests
+- Last updated timestamp prevents stale data confusion
+
+**Best Practices:**
+
+- ✅ **Do**: Let polling run for active batches (provides real-time feedback)
+- ✅ **Do**: Close batch detail modal when done (stops polling immediately)
+- ❌ **Don't**: Open batch details for old/completed batches expecting updates (polling won't start)
+- ❌ **Don't**: Keep multiple batch detail modals open simultaneously (only one can be open at a time)
+
+### 5. Troubleshooting Live Updates
+
+**Problem:** "Live" badge doesn't appear for running batch
+
+**Possible Causes:**
+- Batch status is not "running" (check batch_status field)
+- All operations already completed (counts.triggered + counts.running = 0)
+- Batch detail loaded before operations started (rare race condition)
+
+**Solution:**
+- Close and reopen batch detail modal to refresh data
+- Verify batch is actually running via API: `curl .../sync-batches/{batch_id}`
+
+**Problem:** Polling doesn't stop after batch completes
+
+**Possible Causes:**
+- Browser tab backgrounded (intervals may be throttled but not stopped)
+- React state not updating (rare, indicates component issue)
+
+**Solution:**
+- Close batch detail modal manually
+- Refresh page if polling persists after 60 seconds
+- Check browser console for errors
+
+**Problem:** "Last updated" timestamp doesn't change
+
+**Possible Causes:**
+- Polling stopped (max 60s elapsed or batch completed)
+- Network error (check browser console)
+- API endpoint returning same data (batch hasn't changed)
+
+**Solution:**
+- Normal if batch completed (polling stops automatically)
+- If batch still running: close modal, check API health, reopen modal
+
+**Related:**
+
+- See [Admin UI - Sync History Integration](#admin-ui---sync-history-integration) for batch list view
+- See [Batch Status Aggregation](#batch-status-aggregation) for batch detail API endpoint
+- Frontend code: `/frontend/app/connections/page.tsx` (refreshBatchDetail, auto-polling useEffect)
+
+---
+
 ## Emergency Contacts
 
 - **Primary On-Call**: [Add contact info]
