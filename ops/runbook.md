@@ -6826,6 +6826,64 @@ docker exec pms-worker celery -A app.channel_manager.core.sync_engine:celery_app
 
 ---
 
+#### Issue: Bookings Sync Logs Missing (HTTP 503 on Constraint Violation)
+
+**Symptom:**
+- POST `/channel-connections/{id}/sync` with `sync_type=bookings` returns HTTP 503
+- API returns: "Database schema out of date: channel_sync_logs.operation_type constraint blocks 'bookings'"
+- OR: Task executes successfully but no logs appear (silent failure)
+- Worker logs: "DB constraint violation creating sync log" or "No sync log found for task_id=..."
+
+**Root Cause:**
+The `channel_sync_logs.operation_type` CHECK constraint doesn't allow `bookings_sync` (only allows `bookings_import`), but backend code uses `operation_type='bookings_sync'` when triggering bookings imports.
+
+**Diagnosis:**
+```bash
+# Check current constraint definition
+docker exec $(docker ps -q -f name=supabase-db) psql -U postgres -d postgres -c \
+  "SELECT pg_get_constraintdef(oid) FROM pg_constraint
+   WHERE conrelid = 'public.channel_sync_logs'::regclass
+   AND conname = 'channel_sync_logs_operation_type_check';"
+
+# Expected (before fix): Shows only 'bookings_import' (missing 'bookings_sync')
+# Expected (after fix):  Shows both 'bookings_import' and 'bookings_sync' + pattern matching
+```
+
+**Solution:**
+```bash
+# Apply migration to fix constraint
+cd /path/to/pms-webapp
+supabase migration up --file supabase/migrations/20260101140000_fix_channel_sync_logs_operation_type_check.sql
+
+# Verify constraint updated
+docker exec $(docker ps -q -f name=supabase-db) psql -U postgres -d postgres -c \
+  "SELECT pg_get_constraintdef(oid) FROM pg_constraint
+   WHERE conrelid = 'public.channel_sync_logs'::regclass
+   AND conname = 'channel_sync_logs_operation_type_check';"
+
+# Test bookings sync
+bash backend/scripts/pms_channel_sync_poll.sh --sync-type bookings --poll-limit 30
+
+# Expected: Sync succeeds, logs show operation_type=bookings_sync
+```
+
+**Migration Details:**
+- **File:** `supabase/migrations/20260101140000_fix_channel_sync_logs_operation_type_check.sql`
+- **Action:** Drops old constraint and recreates with:
+  - Explicit support for `bookings_sync` and `bookings_import`
+  - Pattern matching for future-proofing: `booking%` and `bookings%`
+- **Idempotent:** Safe to run multiple times (uses `IF EXISTS` checks)
+
+**Backend Behavior After Fix:**
+- **Before migration:** API returns HTTP 503 with actionable error message (fail-fast)
+- **After migration:** API returns HTTP 200, Celery task executes, logs are created
+
+**Related Files:**
+- `backend/app/services/channel_sync_log_service.py` (catches CheckViolationError and re-raises)
+- `backend/app/api/routers/channel_connections.py` (returns 503 on constraint violations)
+
+---
+
 ### Alert Thresholds
 
 **Recommended Alert Rules:**
