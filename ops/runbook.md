@@ -4076,6 +4076,178 @@ UI handles both formats defensively
 6. Technical Note: JsonViewer component uses explicit bg-slate-50/text-slate-900 (not inherited color) to override globals.css dark mode defaults
 7. Pages using JsonViewer: /ops/status (health + ready raw JSON), /connections (Log Details modal + test result details)
 
+---
+
+## Full Sync Operations (Channel Manager)
+
+**Purpose:** Understand and validate full sync behavior, which triggers ALL Channel Manager operations concurrently.
+
+### What is Full Sync?
+
+Full sync (`sync_type=full`) triggers **three concurrent Celery tasks**:
+1. **Availability Sync** (`availability_update`) - Syncs property availability/calendar
+2. **Pricing Sync** (`pricing_update`) - Syncs rates and pricing rules
+3. **Bookings Sync** (`bookings_sync` or `bookings_import`) - Imports platform bookings
+
+In **mock mode** (development/testing), all three operations return instant mock success. In **production mode**, tasks make real API calls to external platforms (Airbnb, Booking.com, etc.).
+
+### Validation (Full Sync Success Criteria)
+
+Full sync is **only successful** when:
+- ✅ ALL three operation types are present in `channel_sync_logs`
+- ✅ ALL three have `status='success'`
+- ✅ All logs created AFTER trigger timestamp (no old logs)
+
+**Partial success is treated as failure:**
+- ❌ If only `availability_update` + `pricing_update` appear → **NOT complete**
+- ❌ If any operation has `status='failed'` → **Entire sync failed**
+- ❌ If bookings task is `triggered` but stuck → **Incomplete** (wait or timeout)
+
+### How to Validate Full Sync
+
+**1. Via Script (Recommended):**
+```bash
+# Trigger full sync and wait for all operations
+bash backend/scripts/pms_channel_sync_poll.sh \
+  --sync-type full \
+  --poll-limit 30 \
+  --poll-interval 2
+
+# Expected output:
+# ℹ️  Found operations: [availability_update, bookings_sync, pricing_update] (need: [availability_update, pricing_update, bookings_sync])
+# ✅ SYNC COMPLETED SUCCESSFULLY
+# Operation Summary:
+#   Operation Type            Status          Task ID
+#   ------------------------- --------------- ----------------------------------------
+#   availability_update       success         abc-123...
+#   bookings_sync             success         def-456...
+#   pricing_update            success         ghi-789...
+```
+
+**2. Via UI:**
+```
+1. Navigate to: https://admin.fewo.kolibri-visions.de/connections
+2. Click "Sync" button → Select "Full Sync"
+3. Wait for sync to complete (alert shows "Sync triggered successfully")
+4. Check "Sync Logs" table → Should show 3 recent entries:
+   - availability_update (success)
+   - pricing_update (success)
+   - bookings_sync (success)
+```
+
+**3. Via Database:**
+```sql
+-- Check last 5 sync logs for connection
+SELECT
+  operation_type,
+  status,
+  created_at,
+  task_id,
+  error
+FROM channel_sync_logs
+WHERE connection_id = '<your-connection-uuid>'
+ORDER BY created_at DESC
+LIMIT 5;
+
+-- Expected (after full sync):
+-- availability_update | success | 2026-01-01 12:00:01 | abc-123 | NULL
+-- pricing_update      | success | 2026-01-01 12:00:01 | def-456 | NULL
+-- bookings_sync       | success | 2026-01-01 12:00:02 | ghi-789 | NULL
+```
+
+### Troubleshooting Full Sync
+
+**Issue: Poll script exits early (no "Found operations:" output)**
+
+**Symptoms:**
+- Script prints "Poll attempt 1/20..." and "GET /sync-logs => HTTP 200, XXXX bytes"
+- Then terminates immediately (exit=0) WITHOUT printing operation summary
+
+**Root Cause (Fixed in Commit TBD):**
+- Fragile string injection in Python parser caused silent failures
+- Empty POLL_RESULT led to false "all_success" condition
+
+**Fix:**
+```bash
+# Ensure you have the latest poll script
+git pull origin main
+bash backend/scripts/pms_channel_sync_poll.sh --sync-type full --poll-limit 30
+```
+
+**Verification:**
+- Script should now print: `ℹ️  Found operations: [...]` on EVERY poll
+- If missing: Check `/tmp/pms_poll_*.{json,txt}` for write errors
+
+---
+
+**Issue: Only 1 or 2 operations appear (missing bookings_sync)**
+
+**Symptoms:**
+- Script finds `availability_update` + `pricing_update` only
+- Missing `bookings_sync` or `bookings_import`
+
+**Diagnosis:**
+```sql
+-- Check if bookings task was created
+SELECT operation_type, status, created_at, error
+FROM channel_sync_logs
+WHERE connection_id = '<cid>'
+  AND operation_type IN ('bookings_sync', 'bookings_import')
+ORDER BY created_at DESC
+LIMIT 1;
+```
+
+**Possible Causes:**
+1. **Backend not triggering bookings task:** Update to commit `d4434cf` or later
+2. **Celery worker offline:** Check `docker ps | grep celery` and verify worker is running
+3. **Bookings task failed:** Check worker logs: `docker logs <celery-container> | grep bookings`
+4. **DB constraint blocks bookings_sync:** Check for error: `channel_sync_logs_operation_type_check` violation
+   - Fix: Apply migration `20260101140000_fix_channel_sync_logs_operation_type_check.sql`
+
+---
+
+**Issue: Full sync succeeds in UI but script says "not complete"**
+
+**Symptom:**
+- UI shows all 3 logs with status=success
+- Poll script continues waiting or times out
+
+**Diagnosis:**
+```bash
+# Check trigger timestamp vs log timestamps
+TRIGGER_TS=$(date +%s)
+echo "Trigger timestamp: $TRIGGER_TS"
+
+# In DB, check created_at (must be AFTER trigger)
+SELECT operation_type,
+       EXTRACT(EPOCH FROM created_at) as log_ts
+FROM channel_sync_logs
+WHERE connection_id = '<cid>'
+ORDER BY created_at DESC
+LIMIT 3;
+```
+
+**Possible Cause:**
+- Script is filtering out OLD logs (created before trigger timestamp)
+- Full sync might have triggered tasks, but logs existed from previous sync
+
+**Fix:**
+- Clear old logs before triggering full sync:
+```bash
+bash backend/scripts/pms_channel_seed_connection.sh --reset --yes
+bash backend/scripts/pms_channel_sync_poll.sh --sync-type full
+```
+
+---
+
+### See Also
+
+- [pms_channel_sync_poll.sh Documentation](../scripts/README.md#pms_channel_sync_pollsh) - Full script reference
+- [Channel Manager Sync Logs Migration](#channel-manager-sync-logs-migration) - DB schema for logs
+- [Celery Worker Troubleshooting](#celery-worker-pms-worker-v2-start-verify-troubleshoot) - Worker issues
+
+---
+
 ### Navigation Path
 
 **From login:**
