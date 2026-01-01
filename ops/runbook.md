@@ -8454,6 +8454,216 @@ docker restart pms-api
 
 ---
 
+## Batch Status Aggregation
+
+**Purpose:** Query aggregated batch status for monitoring and UI display without fetching individual log entries.
+
+**Endpoint:**
+```
+GET /api/v1/channel-connections/{connection_id}/sync-batches/{batch_id}
+```
+
+**Use Cases:**
+
+- **Admin UI:** Display batch progress card with overall status badge (green/red/blue)
+- **Monitoring:** Quick health check for batch completion without parsing logs
+- **Debugging:** Identify which operation(s) in a batch failed
+- **Dashboards:** Show batch completion rate (success vs. failed)
+
+**Request Example:**
+
+```bash
+# Production
+curl -k -sS https://api.fewo.kolibri-visions.de/api/v1/channel-connections/abc-123-def-456/sync-batches/70bce471-d82a-4cd9-8ad3-8c9f2e5f4a11 \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq .
+
+# Local (via Supabase auth)
+TOKEN=$(curl -sX POST "$SB_URL/auth/v1/token?grant_type=password" \
+  -H "apikey: $ANON_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@example.com","password":"password"}' \
+  | jq -r '.access_token')
+
+curl -sS "$API/api/v1/channel-connections/$CID/sync-batches/$BATCH_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq .
+```
+
+**Response Example (Success):**
+
+```json
+{
+  "batch_id": "70bce471-d82a-4cd9-8ad3-8c9f2e5f4a11",
+  "connection_id": "abc-123-def-456",
+  "batch_status": "success",
+  "status_counts": {
+    "triggered": 0,
+    "running": 0,
+    "success": 3,
+    "failed": 0,
+    "other": 0
+  },
+  "created_at_min": "2026-01-01T12:00:00Z",
+  "updated_at_max": "2026-01-01T12:05:30Z",
+  "operations": [
+    {
+      "operation_type": "availability_update",
+      "status": "success",
+      "updated_at": "2026-01-01T12:03:15Z"
+    },
+    {
+      "operation_type": "pricing_update",
+      "status": "success",
+      "updated_at": "2026-01-01T12:04:20Z"
+    },
+    {
+      "operation_type": "bookings_sync",
+      "status": "success",
+      "updated_at": "2026-01-01T12:05:30Z"
+    }
+  ]
+}
+```
+
+**Response Example (Failed):**
+
+```json
+{
+  "batch_id": "70bce471-d82a-4cd9-8ad3-8c9f2e5f4a11",
+  "connection_id": "abc-123-def-456",
+  "batch_status": "failed",
+  "status_counts": {
+    "triggered": 0,
+    "running": 0,
+    "success": 2,
+    "failed": 1,
+    "other": 0
+  },
+  "created_at_min": "2026-01-01T12:00:00Z",
+  "updated_at_max": "2026-01-01T12:05:30Z",
+  "operations": [
+    {
+      "operation_type": "availability_update",
+      "status": "success",
+      "updated_at": "2026-01-01T12:03:15Z"
+    },
+    {
+      "operation_type": "pricing_update",
+      "status": "failed",
+      "updated_at": "2026-01-01T12:04:20Z"
+    },
+    {
+      "operation_type": "bookings_sync",
+      "status": "success",
+      "updated_at": "2026-01-01T12:05:30Z"
+    }
+  ]
+}
+```
+
+**Batch Status Logic:**
+
+The `batch_status` field is derived from status counts:
+
+| Condition | batch_status | Meaning |
+|-----------|--------------|---------|
+| `failed > 0` | `failed` | At least one operation failed (batch incomplete) |
+| `running > 0` OR `triggered > 0` | `running` | Operations still in progress (no failures yet) |
+| `success == total` AND `total > 0` | `success` | All operations completed successfully |
+| None of above | `unknown` | No operations found or unexpected state |
+
+**Priority:** Failed > Running > Success > Unknown
+
+**Use in Admin UI:**
+
+```javascript
+// Fetch batch status
+const response = await fetch(
+  `/api/v1/channel-connections/${connectionId}/sync-batches/${batchId}`,
+  { headers: { Authorization: `Bearer ${token}` } }
+);
+const batch = await response.json();
+
+// Display badge based on batch_status
+const badgeColor = {
+  success: 'green',
+  failed: 'red',
+  running: 'blue',
+  unknown: 'gray'
+}[batch.batch_status];
+
+// Show progress: "2/3 operations completed"
+const completed = batch.status_counts.success + batch.status_counts.failed;
+const total = Object.values(batch.status_counts).reduce((a, b) => a + b, 0);
+```
+
+**Performance:**
+
+- **Single SQL query** with CTEs (batch_aggregation + operations_list)
+- **Efficient aggregation** using `COUNT(*) FILTER (WHERE ...)` (PostgreSQL 9.4+)
+- **Scoped by connection_id** (prevents cross-tenant leaks)
+- **Indexed columns:** `batch_id`, `connection_id`, `status`, `created_at`
+
+**Error Responses:**
+
+```bash
+# 404 - Batch not found
+{
+  "error": "batch_not_found",
+  "message": "No sync operations found for batch_id=... and connection_id=..."
+}
+
+# 503 - Schema not installed
+{
+  "error": "service_unavailable",
+  "message": "Channel sync logs schema not installed..."
+}
+
+# 401 - Not authenticated
+{
+  "detail": "Not authenticated"
+}
+```
+
+**Monitoring Examples:**
+
+```bash
+# Check if batch completed successfully
+BATCH_STATUS=$(curl -sS "$API/api/v1/channel-connections/$CID/sync-batches/$BATCH_ID" \
+  -H "Authorization: Bearer $TOKEN" | jq -r '.batch_status')
+
+if [[ "$BATCH_STATUS" == "success" ]]; then
+  echo "✅ Batch completed successfully"
+  exit 0
+elif [[ "$BATCH_STATUS" == "failed" ]]; then
+  echo "❌ Batch failed - check logs"
+  exit 1
+elif [[ "$BATCH_STATUS" == "running" ]]; then
+  echo "⏳ Batch still in progress"
+  exit 2
+else
+  echo "❓ Unknown batch status"
+  exit 3
+fi
+
+# Get failed operations count
+FAILED_COUNT=$(curl -sS "$API/api/v1/channel-connections/$CID/sync-batches/$BATCH_ID" \
+  -H "Authorization: Bearer $TOKEN" | jq -r '.status_counts.failed')
+
+if [[ "$FAILED_COUNT" -gt 0 ]]; then
+  echo "⚠️  $FAILED_COUNT operation(s) failed in batch"
+fi
+```
+
+**Related:**
+
+- See [Full Sync Batching (batch_id)](#full-sync-batching-batch_id) for batch grouping concept
+- See [GET /sync-logs](#get-sync-logs) for individual log entries
+- See [Admin UI - Channel Manager Operations](#admin-ui--channel-manager-operations) for UI usage
+
+---
+
 ## Emergency Contacts
 
 - **Primary On-Call**: [Add contact info]
