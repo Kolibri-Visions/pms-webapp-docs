@@ -3712,6 +3712,70 @@ UI handles both formats defensively
 - Requires admin authentication (layout enforces server-side check)
 - Non-admins redirected to `/channel-sync`
 
+### Robust Sync Trigger + Polling (HOST-SERVER-TERMINAL)
+
+**Purpose:** Production-grade script for triggering channel syncs and waiting for completion with robust error handling.
+
+**Script:** `backend/scripts/pms_channel_sync_poll.sh`
+
+**Why Use This Instead of curl:**
+- **Auto-recovery:** Never crashes on empty responses (SSH disconnects, network drops)
+- **Invalid JSON handling:** Shows first 200 bytes for debugging, continues polling
+- **Redirect support:** Follows 307/302 redirects automatically with `curl -L`
+- **Exit codes:** Clean 0/1/2 exit codes for automation
+- **Polling:** Waits for completion (success/failed) instead of fire-and-forget
+
+**Common Failure Modes This Handles:**
+1. **Empty response due to disconnect:**
+   - Symptom: `JSONDecodeError` when parsing empty body from `curl`
+   - Old behavior: Script crashes with Python traceback
+   - New behavior: Prints `⚠️ Empty response (bytes=0), retrying...` and continues
+
+2. **JSONDecodeError when parsing empty body:**
+   - Symptom: `jq` or `python -m json.tool` fails on partial/corrupt JSON
+   - Old behavior: Script exits with error
+   - New behavior: Shows first 200 bytes preview, continues polling
+
+3. **Redirect chain without -L:**
+   - Symptom: `/api/v1/channel-connections/` returns HTTP 307, no data
+   - Old behavior: Script tries to parse redirect HTML as JSON
+   - New behavior: Uses `curl -L` to follow redirects automatically
+
+**Quick Start:**
+```bash
+# On HOST-SERVER-TERMINAL
+source /root/pms_env.sh
+bash /app/scripts/pms_channel_sync_poll.sh
+```
+
+**Example Usage:**
+```bash
+# Auto-pick first connection, trigger availability sync
+bash scripts/pms_channel_sync_poll.sh
+
+# Explicit connection ID, pricing sync
+bash scripts/pms_channel_sync_poll.sh --cid abc-123-456 --sync-type pricing
+
+# Longer polling for slow syncs (30 attempts, 3s interval)
+bash scripts/pms_channel_sync_poll.sh --poll-limit 30 --poll-interval 3
+```
+
+**Exit Codes:**
+- `0` - Sync completed successfully
+- `1` - Sync failed (check error message in output)
+- `2` - Sync task not found after polling limit (worker offline or queue stuck)
+
+**Troubleshooting:**
+
+**Exit code 2 (task not found):**
+1. Check Celery worker is running: `docker ps | grep pms-worker`
+2. Check Redis is accessible: `docker logs pms-worker | grep -i redis`
+3. Increase `--poll-limit` if sync takes longer than 40s (20 attempts × 2s default)
+
+**See Also:**
+- [Script Documentation](../scripts/README.md#pms_channel_sync_pollsh) - Full script reference with all options
+- [Channel Manager Sync (curl examples)](../scripts/README.md#channel-manager-sync-curl-examples) - Manual curl commands for debugging
+
 ### Related Sections
 
 - [Channel Manager - Schema Drift](#channel-manager---channel_connections-schema-drift) - Fix 503 schema errors
