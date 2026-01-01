@@ -3741,6 +3741,12 @@ UI handles both formats defensively
    - Old behavior: Script tries to parse redirect HTML as JSON
    - New behavior: Uses `curl -L` to follow redirects automatically
 
+4. **Transient 502 during deploy/proxy restart:**
+   - Symptom: Auto-pick list call returns HTTP 502 (11 bytes) during deploy or proxy hiccup
+   - Old behavior: Script exits immediately with "Failed to list connections (HTTP 502)"
+   - New behavior: Retries up to 5 times with exponential backoff (1s, 2s, 3s, 5s, 8s), prints `⚠️ Transient 502 error (deploy/proxy hiccup), retrying...`
+   - Alternative: Pass `--cid` explicitly to bypass auto-pick entirely
+
 **Quick Start:**
 ```bash
 # On HOST-SERVER-TERMINAL
