@@ -3315,6 +3315,220 @@ curl -X POST "$API/api/v1/channel-connections/$CID/test" \
 
 ---
 
+## Channel Manager - channel_connections Schema Drift
+
+**Purpose:** Diagnose and fix missing table/columns that cause 500/503 errors when calling Channel Manager endpoints.
+
+### Symptoms
+
+**HTTP 500 Internal Server Error:**
+```json
+{
+  "detail": "Failed to simulate connection test: column \"platform_type\" does not exist"
+}
+```
+
+**HTTP 503 Service Unavailable (after hardening):**
+```json
+{
+  "detail": "Database schema not installed/out of date. Missing column in channel_connections: column \"status\" does not exist. Run Supabase migrations: supabase/migrations/20260101030000_channel_connections_schema_upgrade.sql"
+}
+```
+
+**HTTP 404 Not Found:**
+```
+Connection not found
+```
+This occurs when schema exists but no test row seeded (expected in fresh deployments).
+
+**HTTP 405 Method Not Allowed:**
+```
+Method Not Allowed
+```
+The `/test` endpoint is **POST**, not GET. Use `curl -X POST`.
+
+### Root Cause
+
+The `channel_connections` table was created in migration `20250101000002_channels_and_financials.sql` but is missing columns expected by backend code:
+
+**Missing columns:**
+- `platform_type` (backend queries this instead of `channel`)
+- `status` (used for health check simulation in mock mode)
+- `platform_metadata` (JSONB for connection details)
+- `deleted_at` (soft delete filtering with `WHERE deleted_at IS NULL`)
+
+**Original schema** only had: `id`, `agency_id`, `channel`, `is_active`, etc.
+
+### Verification
+
+**Check if table exists:**
+
+WHERE: Supabase SQL Editor or HOST-SERVER-TERMINAL (psql)
+```sql
+SELECT to_regclass('public.channel_connections');
+-- Expected: 'channel_connections' (if exists) or NULL (if missing)
+```
+
+**Check for missing columns:**
+
+```sql
+SELECT column_name, data_type, is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name = 'channel_connections'
+ORDER BY ordinal_position;
+
+-- Expected columns:
+-- id, agency_id, channel, platform_type, status, platform_metadata, deleted_at
+```
+
+**Check if columns are missing (quick):**
+```sql
+SELECT
+  EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='channel_connections' AND column_name='platform_type') AS has_platform_type,
+  EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='channel_connections' AND column_name='status') AS has_status,
+  EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='channel_connections' AND column_name='platform_metadata') AS has_platform_metadata,
+  EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='channel_connections' AND column_name='deleted_at') AS has_deleted_at;
+
+-- Expected: all true (t, t, t, t)
+-- If any false, schema drift detected
+```
+
+### Fix: Apply Migration
+
+**Migration File:**
+```
+supabase/migrations/20260101030000_channel_connections_schema_upgrade.sql
+```
+
+**What it does:**
+- Adds `platform_type`, `status`, `platform_metadata`, `deleted_at` columns (idempotent)
+- Backfills `platform_type` from existing `channel` column
+- Backfills `status` from existing `is_active` (true → 'active', false → 'inactive')
+- Adds check constraints for valid enum values
+- Adds indexes for performance
+
+**Apply via Supabase CLI:**
+
+WHERE: Local development machine (with Supabase CLI installed)
+```bash
+cd /path/to/PMS-Webapp
+supabase db push
+
+# Or apply single migration:
+supabase migration up --file supabase/migrations/20260101030000_channel_connections_schema_upgrade.sql
+```
+
+**Apply via Supabase Dashboard:**
+
+1. Navigate to: Supabase Dashboard → SQL Editor
+2. Copy contents of `20260101030000_channel_connections_schema_upgrade.sql`
+3. Paste and execute (safe: idempotent, will skip if columns exist)
+
+**Apply via psql (HOST-SERVER-TERMINAL):**
+
+```bash
+# SSH to host server
+cd /app/supabase/migrations
+psql "$DATABASE_URL" < 20260101030000_channel_connections_schema_upgrade.sql
+```
+
+### Seed Test Row (Optional)
+
+**For testing /test endpoint, seed a row:**
+
+WHERE: Supabase SQL Editor or psql
+```sql
+INSERT INTO channel_connections (
+  agency_id,
+  channel,
+  platform_type,
+  status,
+  platform_metadata
+) VALUES (
+  (SELECT id FROM agencies LIMIT 1),  -- Use existing agency
+  'airbnb',
+  'airbnb',
+  'active',
+  '{"listing_id": "12345678", "host_id": "host_abc"}'::jsonb
+)
+ON CONFLICT (agency_id, channel) DO NOTHING;
+
+-- Get the connection ID for testing:
+SELECT id, agency_id, platform_type, status
+FROM channel_connections
+WHERE deleted_at IS NULL;
+```
+
+**Verify seed:**
+```bash
+# In backend logs or via API
+curl -X POST "$API/api/v1/channel-connections/$CID/test" \
+  -H "Authorization: Bearer $TOKEN"
+
+# Expected (mock mode): {"healthy": true, "details": {"mock_mode": true, ...}}
+```
+
+### Mock Mode Behavior
+
+**When `CHANNEL_MOCK_MODE=true`:**
+
+**Schema exists + row exists:**
+- Returns simulated health check based on `status` column
+- `healthy=true` if `status='active'`, `healthy=false` otherwise
+- Response includes `"mock_mode": true` flag
+
+**Schema missing (before hardening):**
+- HTTP 500 with cryptic error message
+- No actionable guidance
+
+**Schema missing (after hardening - Phase C1):**
+- HTTP 503 with clear migration guidance
+- Error message points to specific migration file
+- Prevents confusing 500 errors
+
+**Row missing (404):**
+- Expected in fresh deployments (no seed data)
+- Fix: Insert a test row (see seed snippet above)
+- OR: Create connection via POST `/api/v1/channel-connections/` endpoint
+
+### Common Errors
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| 500 "column platform_type does not exist" | Schema drift (old migration) | Apply 20260101030000 migration |
+| 503 "Missing column in channel_connections" | Schema drift (after hardening) | Apply 20260101030000 migration |
+| 404 "Connection not found" | No rows in table | Seed test row or create via API |
+| 405 "Method Not Allowed" | Using GET instead of POST | Use `curl -X POST` |
+| 401 "Unauthorized" | Missing/invalid JWT token | Fetch token via auth endpoint |
+
+### Expected Response (Mock Mode)
+
+**Success (200):**
+```json
+{
+  "connection_id": "abc-123-456-...",
+  "platform_type": "airbnb",
+  "healthy": true,
+  "message": "Mock: Connection is healthy",
+  "details": {
+    "mock_mode": true,
+    "simulated": true,
+    "connection_status": "active",
+    "note": "This is a simulated response. Set CHANNEL_MOCK_MODE=false for real API calls."
+  }
+}
+```
+
+**Note:** `/test` endpoint is **POST**, not GET. Using GET returns HTTP 405.
+
+### Related Sections
+
+- [Mock Mode for Channel Providers](#mock-mode-for-channel-providers) - Mock mode configuration
+- [Channel Manager API Endpoints](#channel-manager-api-endpoints) - Complete API reference
+
+---
+
 ## Channel Manager API Endpoints
 
 **Purpose:** Complete reference for Channel Manager API endpoints with request/response examples.
