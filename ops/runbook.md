@@ -4407,6 +4407,20 @@ curl "$API/api/v1/channel-connections/$CID/sync-logs?limit=10" \
 - `/connections` - Connection management and testing
 - `/ops/status` - System health diagnostics
 
+**Test Connection Feedback:**
+When clicking "Test" button (inline in connections table):
+1. Button shows "Testing..." while API call is in progress
+2. On success/failure, notification banner appears at top of connections page
+3. Banner auto-dismisses after 5 seconds or click X to close manually
+4. Success example: "Connection test passed: Mock: Connection is healthy (Mock Mode - see runbook for production setup)"
+5. Failure example: "Test failed: Connection timeout" or "Connection test failed: Invalid credentials"
+6. If `error_code` is present (e.g., CREDENTIALS_MISSING), it's shown in the detailed test result modal, not the inline toast
+
+**Where to Look for Feedback:**
+- **Inline test (table row "Test" button):** Notification banner appears at top of main page above search box
+- **Modal test ("Run Test" button in connection details):** Test result displays below button in modal with full details including badges
+- Both locations use same notification system (green for success, red for error)
+
 **Why No Browser Alerts:**
 Browser popups (window.alert/confirm/prompt) are blocking and interrupt workflow. In-app notifications provide better UX:
 - Non-blocking: User can continue working
