@@ -5803,6 +5803,37 @@ curl -sX GET "$API/api/v1/channel-connections/$CID/sync-logs?limit=10&offset=0" 
   ```
 - **Related:** See [backend/scripts/README.md](../../scripts/README.md#troubleshooting) for PATH bootstrap details
 
+**Channel Manager module not mounted - /api/v1/channel-connections returns 404**
+- **Symptom:** Requests to `/api/v1/channel-connections` return 404 even though `CHANNEL_MANAGER_ENABLED=true`
+- **Cause:** Channel Manager module failed to import due to `ImportError: cannot import name 'Json' from 'asyncpg'`
+- **Logs show:**
+  ```
+  Channel Manager module enabled via CHANNEL_MANAGER_ENABLED=true
+  Channel Manager module not available: cannot import name 'Json' from 'asyncpg' (/opt/venv/lib/python3.12/site-packages/asyncpg/__init__.py)
+  ```
+- **Root cause:** asyncpg version incompatibility - some versions don't export `Json` at top level
+- **Fix:** Latest deploy includes compatibility shim (`backend/app/core/pg_json.py`) that:
+  - Tries `from asyncpg.types import Json` (most common)
+  - Falls back to `from asyncpg import Json` (older versions)
+  - Falls back to native dict (asyncpg auto-converts dicts to jsonb)
+- **Verification (endpoints work once module mounts):**
+  ```bash
+  # Check OpenAPI includes channel-connections routes
+  curl -s https://api.fewo.kolibri-visions.de/openapi.json | grep -o '/api/v1/channel-connections' | head -1
+  # Expected: /api/v1/channel-connections
+
+  # Check endpoint works
+  curl -i https://api.fewo.kolibri-visions.de/api/v1/channel-connections -H "Authorization: Bearer $TOKEN"
+  # Expected: HTTP 200 with JSON array (not 404)
+  ```
+- **Check module is mounted:**
+  ```bash
+  # Inside pms-backend container
+  docker exec pms-backend bash -c 'curl -s localhost:8000/openapi.json | python3 -c "import sys, json; routes = [p for p in json.load(sys.stdin)[\"paths\"].keys()]; print(f\"TOTAL_ROUTES={len(routes)}\"); print(f\"CHANNEL_ROUTES={len([r for r in routes if \"channel\" in r])}\");"'
+  # Expected: CHANNEL_ROUTES > 0 (should show routes like /api/v1/channel-connections, /api/v1/channel-connections/{connection_id}, etc.)
+  ```
+- **Related:** See `backend/app/core/pg_json.py` for compatibility implementation
+
 **GET /channel-connections returns HTTP 500 (ResponseValidationError)**
 - **Cause:** Backend response validation fails when `property_id` is `null` (legacy rows)
 - **Symptom:** `"detail": "Response validation error", "errors": [{"loc": ["property_id"], "msg": "none is not an allowed value"}]`
