@@ -5408,6 +5408,45 @@ supabase migration up --file supabase/migrations/20260102000000_add_property_fie
 - No hardcoded stub data
 - Empty array `[]` when no connections exist
 
+**Troubleshooting - List Returns HTTP 500:**
+
+If GET `/api/v1/channel-connections/` returns HTTP 500 and breaks Admin UI:
+1. **WHERE:** HOST-SERVER-TERMINAL - Check backend logs for ResponseValidationError
+   ```bash
+   docker logs pms-backend --tail 100 | grep -i "ResponseValidationError\|property_id"
+   # Look for: loc=('response', 0, 'property_id') msg='UUID input should be a string/bytes/UUID' input=None
+   ```
+2. **Root Cause:** Legacy connection rows have `property_id = null` but response model expected non-null UUID
+3. **Fix:** Deploy includes:
+   - Response model accepts `Optional[UUID]` for property_id
+   - Per-row validation skips invalid rows instead of crashing entire endpoint
+4. **WHERE:** HOST-SERVER-TERMINAL - Verify fix deployed
+   ```bash
+   docker exec pms-backend env | grep SOURCE_COMMIT
+   # Should be commit 4c28afd or later
+   ```
+5. **If old build:** Redeploy from main branch (commit 4c28afd or later)
+6. **Expected Result:**
+   - GET returns HTTP 200 with array (may exclude legacy rows with validation errors)
+   - Backend logs warnings for skipped rows but endpoint stays up
+   - Admin UI Connections page loads successfully
+
+**Admin UI - Properties Fetch 422:**
+
+If Admin UI shows 422 error when fetching properties:
+- **Cause:** Frontend requested `limit=200` but backend validation rejects high limits
+- **Fix:** Deployed frontend uses safe limit=100
+- **Verify:** Check browser DevTools → Network → `/api/v1/properties` request shows `?limit=100`
+
+**Mock Mode Behavior:**
+
+When creating connections with `skip_connection_test=true`:
+- ✅ Skips OAuth validation and platform API health checks
+- ✅ Allows unsupported platforms (e.g., booking_com)
+- ✅ Persists to database immediately
+- ✅ Skips initial sync trigger
+- ⚠️ Tokens still encrypted before storage (but not validated)
+
 ---
 
 ## Admin UI - Channel Sync
