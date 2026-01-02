@@ -5751,6 +5751,16 @@ curl -sX GET "$API/api/v1/channel-connections/$CID/sync-logs?limit=10&offset=0" 
 - **Fix:** Latest deploy removes `disabled` attribute (commit `f446745` or later)
 - **Workaround:** Select any platform, save, then edit to change platform
 
+**Failed to fetch connections (HTTP 404) in Admin UI**
+- **Symptom:** Connections page shows error, browser console shows `GET .../channel-connections/ -> 404 Not Found`
+- **Cause:** Frontend using wrong URL with trailing slash (e.g., `/api/v1/channel-connections/` instead of `/api/v1/channel-connections`)
+- **Fix:** Latest deploy removes trailing slashes from collection endpoints (commit after `33e1357`)
+- **Verify endpoint works:** `curl -i "$API/api/v1/channel-connections" -H "Authorization: Bearer $TOKEN"`
+  - Expected: HTTP 200 with JSON array of connections
+  - Wrong: `curl "$API/api/v1/channel-connections/"` → HTTP 404
+- **Root cause:** FastAPI routes `/channel-connections` and `/channel-connections/` as different endpoints
+- **Prevention:** Use `buildApiUrl()` helper in frontend for consistent URL construction
+
 **Properties dropdown empty in New Connection modal**
 - **Cause:** API returns `{items: [...]}` but frontend expects plain array, OR filtering by agency_id returns empty
 - **Fix:** Frontend parses `data.items || data.properties || data` (handles all response formats)
