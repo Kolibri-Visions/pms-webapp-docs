@@ -5794,6 +5794,53 @@ curl -X POST "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/$CI
 curl -X POST "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/$CID/sync"
 ```
 
+**Troubleshooting curl Verification:**
+
+If you encounter issues when verifying channel-connections endpoints via curl:
+
+**Issue: 307 Redirect with Empty Body**
+```bash
+# Symptom: curl returns 307 and empty response
+curl "https://api.fewo.kolibri-visions.de/api/v1/channel-connections?limit=5"
+
+# Fix 1: Add trailing slash before query params
+curl "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/?limit=5"
+
+# Fix 2: Use -L flag to follow redirects automatically
+curl -L "https://api.fewo.kolibri-visions.de/api/v1/channel-connections?limit=5"
+```
+
+**Issue: 401 "Token has expired" or 403 "Not authenticated"**
+```bash
+# Symptom: curl returns 401 Unauthorized or 403 Forbidden
+
+# Fix 1: Ensure environment variables are loaded
+source /root/pms_env.sh
+
+# Fix 2: Verify SB_URL is set (required for token refresh)
+echo $SB_URL
+# Expected: https://supabase-kong-url (not empty)
+
+# Fix 3: Refresh JWT token
+curl -X POST "$SB_URL/auth/v1/token?grant_type=password" \
+  -H "Content-Type: application/json" \
+  -H "apikey: $SB_ANON_KEY" \
+  -d "{\"email\":\"admin@example.com\",\"password\":\"your-password\"}" \
+  | jq -r '.access_token'
+
+# Fix 4: Use refreshed token
+TOKEN=$(curl -X POST "$SB_URL/auth/v1/token?grant_type=password" \
+  -H "Content-Type: application/json" \
+  -H "apikey: $SB_ANON_KEY" \
+  -d "{\"email\":\"admin@example.com\",\"password\":\"your-password\"}" \
+  | jq -r '.access_token')
+
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/?limit=5"
+```
+
+**Common Pitfall:** In new SSH sessions, environment variables (SB_URL, SB_ANON_KEY) are not loaded automatically. Always run `source /root/pms_env.sh` first.
+
 ---
 
 ## Backoffice Console — Connections (E2E Check)
