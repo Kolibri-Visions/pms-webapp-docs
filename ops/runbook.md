@@ -5438,6 +5438,41 @@ If Admin UI shows 422 error when fetching properties:
 - **Fix:** Deployed frontend uses safe limit=100
 - **Verify:** Check browser DevTools → Network → `/api/v1/properties` request shows `?limit=100`
 
+**Admin UI - Property Dropdown Empty:**
+
+If New Connection modal shows empty Property dropdown despite 200 response:
+1. **WHERE:** BROWSER - Check DevTools → Network → `/api/v1/properties` response format
+   - **Expected:** `{items: [...], total: 16, limit: 100, offset: 0, has_more: false}`
+   - **Issue:** Properties endpoint returns paginated object, not array
+2. **Root Cause:** Frontend expected array but API returns `{items: [...]}`
+3. **Fix:** Deployed frontend parses response correctly:
+   ```typescript
+   const items = Array.isArray(data) ? data : (data.items || data.properties || []);
+   ```
+4. **Expected Result:**
+   - Dropdown shows all properties with readable labels
+   - Loading state: "Loading properties..." (disabled)
+   - Error state: "No properties available" (red background)
+   - Success state: "Property Name (internal_name) - 12345678"
+
+**Multi-Tenant Filtering (Channel Connections):**
+
+Channel connections list is filtered by agency_id for tenant isolation:
+- **Backend:** GET `/api/v1/channel-connections/` uses `get_current_agency_id` dependency
+- **Filter:** `WHERE agency_id = $1 AND deleted_at IS NULL`
+- **Result:** Each tenant only sees their own connections
+- **Security:** Prevents cross-tenant data leaks
+
+If booking_com connection created via API doesn't appear in UI:
+1. **WHERE:** HOST-SERVER-TERMINAL - Verify connection was created for correct agency
+   ```bash
+   # Check connection's agency_id matches user's agency
+   curl -s "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/" \
+     -H "Authorization: Bearer $TOKEN" | jq '.[] | {id, agency_id, platform_type}'
+   ```
+2. **Verify:** Created connection's `agency_id` matches property's `agency_id`
+3. **Expected:** Backend derives `agency_id` from property, not from hardcoded values
+
 **Mock Mode Behavior:**
 
 When creating connections with `skip_connection_test=true`:
