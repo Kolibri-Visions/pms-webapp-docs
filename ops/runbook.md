@@ -10331,35 +10331,43 @@ User Flow:
 
 ### 3. Back Navigation from Batch to Log
 
-**Purpose:** Return to the original log entry after viewing batch details.
+**Purpose:** Seamless back navigation from Batch Details to Log Details modal.
 
-**Location:** Batch Details modal → Header (left side)
+**Location:** Batch Details modal → Header (left side, icon-only button)
 
 **When Visible:** Only when batch was opened from a log entry (not standalone)
 
 **Behavior:**
-1. Batch Details header shows "← Back to Log" button on left side
-2. Click button → Batch Details closes, Log Details reopens with the same log
-3. Navigation preserves the exact log entry that opened the batch
-4. If batch was opened standalone (e.g., from sync history), no back button appears
+1. Batch Details header shows left arrow icon (←) button on left side (no text label)
+2. Click arrow → Batch Details closes, Log Details remains visible underneath
+3. Log Details shows the exact same log that opened the batch
+4. If batch was opened standalone (e.g., from sync history), no back arrow appears
+
+**Modal Stack:**
+- Log Details remains open in background (z-index 60) when Batch Details opens
+- Batch Details renders on top (z-index 70) with darker overlay
+- Back arrow simply closes Batch Details layer, revealing Log Details underneath
+- No re-fetching or state restoration needed - log modal stays in memory
 
 **User Flow Example:**
 
 ```
 Navigation Path:
 1. Connections → Open → Sync Logs → Click "Details" on a log entry
-2. Log Details opens → Shows batch_id
-3. Click "Open Batch Details →" → Batch Details opens
-4. View batch operations and status
-5. Click "← Back to Log" → Returns to original Log Details
-6. Can continue reviewing log or close modal
+2. Log Details modal opens (z-60)
+3. Click "Open Batch Details →" → Batch Details overlays on top (z-70)
+4. Log Details remains open underneath (not closed)
+5. Click [←] arrow icon → Batch Details closes
+6. Log Details is immediately visible with same content
+7. Close Log Details → returns to Connection Details
 ```
 
 **Visual Appearance:**
 
 ```html
 ┌──────────────────────────────────────────────────┐
-│ [← Back to Log]  Batch Details  [🔵 Live]  [×]  │
+│ [←]  Batch Details  [🔵 Live]  [×]               │
+│      (icon only - no text)                       │
 │ Batch ID: 70bce471-... │ Last updated: 14:23:45  │
 └──────────────────────────────────────────────────┘
 ```
@@ -10370,16 +10378,19 @@ Navigation Path:
 2. Navigate to Sync Logs table
 3. Click "Details" on any log entry with a batch_id
 4. In Log Details, click "Open Batch Details →"
-5. Verify: Batch Details shows "← Back to Log" button (top left)
-6. Click "← Back to Log"
-7. Verify: Log Details reopens with same log content
-8. Alternative: Click "X" in Batch Details → closes without reopening log
+5. Verify: Batch Details shows [←] arrow icon (top left, no text)
+6. Click the arrow icon
+7. Verify: Batch Details closes, Log Details is visible immediately
+8. Verify: Same log content as before (no re-fetch)
+9. Alternative: Click "X" in Batch Details → closes batch, reveals log
 
 **Implementation Notes:**
 
-- Source log ID stored in frontend state when navigating from log to batch
-- Back button conditionally rendered based on presence of source log ID
-- Escape key and X button still work as normal close actions
+- Modal stack approach: both modals coexist in state
+- Log Details NOT closed when opening Batch Details
+- Source log ID tracked for conditional rendering of back arrow
+- aria-label="Back to log" for accessibility (screen readers)
+- Escape key and X button work as normal close actions
 - Navigation is purely UI state-based (no URL routing)
 
 ### 4. Failed Batch Guidance
