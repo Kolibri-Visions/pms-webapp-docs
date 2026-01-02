@@ -6368,6 +6368,51 @@ The Channel Sync Admin UI provides:
 
 ---
 
+### Sync Trigger Payload Architecture
+
+**Important:** The sync page sends two distinct IDs to the API:
+
+1. **property_id (REQUIRED):**
+   - The actual property UUID from the "Property" dropdown
+   - Always sent in POST `/api/v1/availability/sync` request body
+   - Example: `"property_id": "6da0f8d2-677f-4182-a06c-db155f43704a"`
+
+2. **connection_id (OPTIONAL):**
+   - The channel connection UUID (auto-detected or user-entered)
+   - Only sent if a connection is selected
+   - Example: `"connection_id": "abc-123-def-456"`
+   - Omitted from payload if empty
+
+**Example Request Body:**
+```json
+{
+  "sync_type": "availability",
+  "platform": "booking_com",
+  "property_id": "6da0f8d2-677f-4182-a06c-db155f43704a",
+  "connection_id": "abc-123-def-456",
+  "manual_trigger": true
+}
+```
+
+**State Management:**
+- UI maintains separate state variables: `propertyId` and `connectionId`
+- After sync trigger, `connectionId` is NOT overwritten from API response
+- This prevents confusion where API might return `property_id` in the response
+
+**Property ID Display (No 404 Calls):**
+- Sync page does NOT call `GET /api/v1/channel-connections/{id}` to fetch connection details
+- Instead, uses cached connections list from auto-detect (`GET /api/v1/channel-connections/?limit=100&offset=0`)
+- Property ID extracted from:
+  1. Log details/metadata (`log.details.property_id`)
+  2. Cached connections list (lookup by `connection_id`)
+- This avoids 404 errors when connection_id is invalid or missing
+
+**Trailing Slash Requirement:**
+- List endpoint MUST use trailing slash before query params: `/api/v1/channel-connections/?limit=100`
+- Without trailing slash: `/api/v1/channel-connections?limit=100` → 307 redirect → fails
+
+---
+
 ### Log Retention & Purge Policy
 
 **Default Retention Policy:** 30 days (recommended)
