@@ -5819,6 +5819,146 @@ curl -sX GET "$API/api/v1/channel-connections/$CID/sync-logs?limit=10&offset=0" 
 
 ---
 
+## Connections → Property Mapping
+
+**Purpose:** Map channel connections to PMS properties and fix legacy unmapped connections.
+
+**Context:**
+- Each channel connection should be mapped to a specific PMS property via `property_id`
+- Legacy connections may have `property_id = null` (created before multi-property support)
+- Unmapped connections have limited functionality - property mapping is required for full features
+
+### UI Features
+
+#### Connections List
+
+**Property Column:**
+- Shows mapped property name (from `/api/v1/properties`)
+- Falls back to truncated `property_id` if name not resolvable
+- Displays **"Unmapped"** badge (yellow) if `property_id` is null
+
+#### Connection Details Modal
+
+**Property Mapping Section:**
+
+**When Mapped (`property_id` exists):**
+- Displays property name
+- Shows full property ID with copy-to-clipboard icon
+- Shows platform listing ID with copy-to-clipboard icon (if available)
+- "Change Property" link to reassign
+
+**When Unmapped (`property_id` is null):**
+- Prominent yellow warning banner:
+  - "No Property Assigned"
+  - "This is a legacy connection without a mapped property. Assign a property to enable full functionality."
+- **"Assign Property"** button (yellow, primary action)
+
+#### Assign Property Modal
+
+**Workflow:**
+1. Click "Assign Property" button (for unmapped) or "Change Property" link (for mapped)
+2. Modal opens with property dropdown
+3. Select property from list (fetched from `/api/v1/properties`)
+4. Click "Assign Property" to save
+5. Modal closes, connection details refresh
+6. Connections list updates to show property name
+
+**Validation:**
+- "Assign Property" button disabled until property selected
+- Shows "Assigning..." during save operation
+- Success toast: "Property assigned successfully"
+- Error toast: "Failed to assign property: [error message]"
+
+### API Endpoint
+
+**Update Connection (Partial Update):**
+
+```bash
+# PATCH or PUT /api/v1/channel-connections/{connection_id}
+# Endpoint supports partial updates - only provide fields to update
+
+# Example: Assign property to legacy connection
+export CID="connection-uuid"
+export PID="property-uuid"
+
+curl -X PUT "$API/api/v1/channel-connections/$CID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"property_id\": \"$PID\"}"
+
+# Expected response (200):
+# {
+#   "id": "connection-uuid",
+#   "tenant_id": "agency-uuid",
+#   "property_id": "property-uuid",  // Now mapped
+#   "platform_type": "booking_com",
+#   "platform_listing_id": "test_booking_123",
+#   "status": "active",
+#   "platform_metadata": {...},
+#   "last_sync_at": null,
+#   "created_at": "2026-01-02T...",
+#   "updated_at": "2026-01-02T..."  // Updated timestamp
+# }
+```
+
+**Supported Update Fields:**
+- `property_id` (UUID or null) - Map/unmap connection to property
+- `platform_listing_id` (string or null) - Platform-specific listing identifier
+- `platform_metadata` (object or null) - Platform-specific configuration
+- `status` (string) - Connection status (active, paused, error)
+
+**RBAC:** Admin and Manager roles only
+
+**Tenant Scoping:**
+- Backend enforces agency_id filtering via `get_current_agency_id` dependency
+- Users can only update connections belonging to their agency
+
+### Troubleshooting
+
+**Property dropdown empty in Assign Property modal**
+- **Cause:** No properties exist for the agency, or properties fetch failed
+- **Fix:**
+  1. Verify `/api/v1/properties?limit=100` returns data
+  2. Check user's agency has properties created
+  3. Check browser console for fetch errors
+- **Workaround:** Create property first via Properties page
+
+**"Failed to assign property: 404"**
+- **Cause:** Property ID does not exist or user doesn't have access to it
+- **Fix:** Ensure property UUID is correct and belongs to same agency
+- **Verify:** `curl "$API/api/v1/properties" -H "Authorization: Bearer $TOKEN"`
+
+**"Failed to assign property: 403"**
+- **Cause:** User lacks admin/manager role
+- **Fix:** Verify role in token: `jwt_decode($TOKEN) | jq .role`
+- **Expected:** Role should be "admin" or "manager", not "staff"
+
+**Connection still shows "Unmapped" after assignment**
+- **Cause:** Frontend cache not refreshed
+- **Fix:**
+  1. Close and reopen Connection Details modal
+  2. Hard refresh page (Cmd+Shift+R / Ctrl+Shift+F5)
+  3. Check backend actually updated: `curl "$API/api/v1/channel-connections/$CID" -H "Authorization: Bearer $TOKEN"`
+
+**PUT request returns 500 (database error)**
+- **Cause:** Database connection pool not available in service layer, or UPDATE query failed
+- **Fix:** Check backend logs for asyncpg errors
+- **Verify service:** Ensure `ChannelConnectionService.update_connection()` has DB connection
+- **Check migration:** Ensure `property_id` column exists and is nullable
+
+**Legacy connections with property_id=null cause validation errors**
+- **Symptom:** GET `/channel-connections` returns 500 for some connections
+- **Fix:** Already handled via per-row validation (skips invalid rows)
+- **Long-term:** Assign properties to all legacy connections via UI or bulk script
+
+### Related Documentation
+
+- [Backoffice Console — Connections (E2E Check)](#backoffice-console--connections-e2e-check) - Full E2E workflow
+- [Admin UI – Channel Manager Operations](#admin-ui--channel-manager-operations) - API endpoints
+- Database Migration: `supabase/migrations/20260102000000_add_property_fields_to_channel_connections.sql`
+
+---
+
 ## Admin UI - Channel Sync
 
 **Purpose:** Web-based admin interface for triggering and monitoring channel sync operations.
