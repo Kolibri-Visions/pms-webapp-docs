@@ -5547,6 +5547,278 @@ When opening the New Connection modal in Admin UI:
 
 ---
 
+## Backoffice Console — Connections (E2E Check)
+
+**Purpose:** End-to-end verification of Channel Connections management in the Admin UI (Backoffice Console).
+
+**URL:** `https://admin.fewo.kolibri-visions.de/connections`
+
+**RBAC:** Admin and Manager roles only
+
+### UI Flow (Step-by-Step)
+
+**1. Create New Connection**
+
+1. Navigate to Connections page
+2. Click "New Connection" button
+3. **Verify:** Platform dropdown is **NOT preselected** (shows "Select a platform..." placeholder)
+   - This is intentional UX - user must explicitly choose platform
+   - Submit button disabled until platform selected
+4. Select Property from dropdown
+5. Select Platform (e.g., `booking_com`)
+6. **For dev/staging:** Check "Skip connection test (Mock mode)" checkbox
+   - This bypasses real API calls during connection creation
+   - Backend accepts `?skip_connection_test=true` query parameter
+7. Fill Platform Listing ID (e.g., `test_booking_123`)
+8. Click "Create Connection"
+9. **Expected:** New connection row appears in table
+
+**2. Test Connection Health**
+
+1. Find the newly created connection in the table
+2. Click "Test" button (inline action)
+3. **Expected (Mock Mode):**
+   - Green notification: "Connection test passed: Mock: Connection is healthy (Mock Mode - see runbook for production setup)"
+   - Badge shows "Mock Mode (Simulated)"
+4. **Expected (Real Mode):**
+   - Green notification if healthy, red if failed
+   - No mock mode badge
+
+**3. Trigger Sync & Monitor Logs**
+
+1. Click "Open" on the connection row
+2. In Connection Details modal, select "Availability" from sync type dropdown
+3. Click "Trigger Sync"
+4. **Expected:**
+   - Green notification: "Sync gestartet: availability"
+   - Sync Logs section shows new log entry with status "triggered" or "running"
+5. Wait ~5-10 seconds (auto-refresh enabled by default)
+6. **Expected:** Log status changes to "success" (green badge)
+
+**4. View Batch History**
+
+1. Scroll to "Batch History" section in Connection Details modal
+2. **Expected:** Recent batch appears with:
+   - Batch ID (truncated, click to copy full UUID)
+   - Status badge (green for success)
+   - Operation counts (e.g., "1/1 success")
+   - Timestamp
+
+**5. Navigate Batch Details**
+
+1. Click on a batch row in Batch History table
+2. **Expected:** Batch Details modal opens (z-index 70, on top of Connection Details)
+3. **Verify:** Back arrow (←) visible in header (icon-only, no text)
+4. Click back arrow
+5. **Expected:** Returns to Connection Details modal (Batch Details closes)
+
+**6. Log Details → Batch Details Navigation**
+
+1. In Sync Logs section, click "Details" on any batched log entry
+2. **Expected:** Log Details modal opens
+3. If log has a `batch_id`, "Open Batch Details →" button appears
+4. Click "Open Batch Details →"
+5. **Expected:** Batch Details modal opens on top (Log Details stays in background)
+6. Click back arrow ←
+7. **Expected:** Returns to Log Details modal (same log entry, Batch Details closes)
+8. Close Log Details modal (X button)
+9. **Expected:** Returns to Connection Details
+
+### API Flow (HOST-SERVER-TERMINAL)
+
+**Prerequisites:**
+```bash
+# Export credentials
+export API="https://api.fewo.kolibri-visions.de"
+export SB_URL="https://sb-pms.kolibri-visions.de"
+export ANON_KEY="your-anon-key"
+export EMAIL="admin@example.com"
+export PASSWORD="your-password"
+
+# Fetch JWT token
+export TOKEN=$(curl -sX POST "$SB_URL/auth/v1/token?grant_type=password" \
+  -H "apikey: $ANON_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}" | \
+  python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
+```
+
+**1. Create Connection (Skip Connection Test)**
+
+```bash
+# Get first property ID
+export PID=$(curl -sX GET "$API/api/v1/properties?limit=1" \
+  -H "Authorization: Bearer $TOKEN" | \
+  python3 -c 'import sys,json; data=json.load(sys.stdin); print(data["items"][0]["id"] if "items" in data and len(data["items"]) > 0 else "")')
+
+# Create connection with skip_connection_test=true (for dev/mock mode)
+curl -X POST "$API/api/v1/channel-connections?skip_connection_test=true" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"property_id\": \"$PID\",
+    \"platform_type\": \"booking_com\",
+    \"platform_listing_id\": \"test_booking_e2e_$(date +%s)\",
+    \"status\": \"active\"
+  }"
+
+# Expected response (201):
+# {
+#   "id": "new-connection-uuid",
+#   "property_id": "...",
+#   "platform_type": "booking_com",
+#   "status": "active",
+#   "created_at": "2026-01-02T..."
+# }
+```
+
+**2. List Connections**
+
+```bash
+# List all connections
+curl -sX GET "$API/api/v1/channel-connections" \
+  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+
+# IMPORTANT: Response is a JSON ARRAY (not wrapped in {items:...})
+# Example:
+# [
+#   {
+#     "id": "abc-123",
+#     "property_id": "prop-456",  // May be null for legacy rows
+#     "platform_type": "booking_com",
+#     "status": "active",
+#     ...
+#   },
+#   {
+#     "id": "legacy-airbnb",
+#     "property_id": null,  // Legacy row without property_id
+#     "platform_type": "airbnb",
+#     ...
+#   }
+# ]
+```
+
+**3. Test Connection**
+
+```bash
+# Save connection ID
+export CID="new-connection-uuid"
+
+# Test connection health
+curl -X POST "$API/api/v1/channel-connections/$CID/test" \
+  -H "Authorization: Bearer $TOKEN"
+
+# Expected (Mock Mode):
+# {
+#   "healthy": true,
+#   "message": "Mock: Connection is healthy",
+#   "details": {"mock_mode": true, "simulated": true, ...}
+# }
+```
+
+**4. Trigger Sync**
+
+```bash
+# Trigger availability sync
+curl -X POST "$API/api/v1/channel-connections/$CID/sync" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"sync_type": "availability"}'
+
+# Expected response (200):
+# {
+#   "status": "triggered",
+#   "message": "Availability sync triggered",
+#   "task_ids": ["celery-task-uuid"],
+#   "batch_id": "batch-uuid"  // For full sync only
+# }
+```
+
+**5. Fetch Sync Logs**
+
+```bash
+# Get sync logs for connection
+curl -sX GET "$API/api/v1/channel-connections/$CID/sync-logs?limit=10&offset=0" \
+  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+
+# Response may be array or {logs: [...]} (admin UI handles both)
+```
+
+### Troubleshooting
+
+**Platform dropdown empty / "Select a platform..." not showing**
+- **Cause:** Platform select has `disabled` attribute on placeholder option (browser compatibility issue)
+- **Fix:** Latest deploy removes `disabled` attribute (commit `f446745` or later)
+- **Workaround:** Select any platform, save, then edit to change platform
+
+**Properties dropdown empty in New Connection modal**
+- **Cause:** API returns `{items: [...]}` but frontend expects plain array, OR filtering by agency_id returns empty
+- **Fix:** Frontend parses `data.items || data.properties || data` (handles all response formats)
+- **Verify API:** `curl "$API/api/v1/properties?limit=10" -H "Authorization: Bearer $TOKEN"`
+  - Should return `{items: [...], total: N}`
+- **Check role:** Ensure user has access to properties (admin/manager role, correct agency_id)
+
+**GET /channel-connections returns HTTP 500 (ResponseValidationError)**
+- **Cause:** Backend response validation fails when `property_id` is `null` (legacy rows)
+- **Symptom:** `"detail": "Response validation error", "errors": [{"loc": ["property_id"], "msg": "none is not an allowed value"}]`
+- **Fix:** Latest deploy includes tolerant response validation (per-row validation, skips invalid rows)
+- **Verify migration:** Ensure DB has `property_id uuid NULL` (nullable column)
+  ```sql
+  -- In Supabase SQL Editor
+  SELECT column_name, is_nullable, data_type
+  FROM information_schema.columns
+  WHERE table_name = 'channel_connections'
+    AND column_name IN ('property_id', 'platform_listing_id');
+
+  -- Expected: Both columns nullable (is_nullable = 'YES')
+  ```
+- **DB Hotfix (if needed):**
+  ```sql
+  -- Add columns if missing (idempotent)
+  ALTER TABLE public.channel_connections
+  ADD COLUMN IF NOT EXISTS property_id uuid NULL REFERENCES properties(id) ON DELETE CASCADE;
+
+  ALTER TABLE public.channel_connections
+  ADD COLUMN IF NOT EXISTS platform_listing_id text NULL;
+  ```
+
+**Token expired (401 Unauthorized)**
+- **Cause:** JWT tokens expire after ~1 hour (Supabase default)
+- **Fix:** Re-fetch token using Prerequisites command above
+- **Automation:** Use `pms_phase23_smoke.sh` or `pms_channel_sync_poll.sh` (auto-fetches token)
+
+**Back arrow missing in Batch Details**
+- **Cause:** Old deploy (before commit `f446745`)
+- **Fix:** Back arrow now always visible (context-aware tooltip)
+- **Verify:** Check `frontend/app/connections/page.tsx:1667-1677` for unconditional back button
+
+**Sync logs empty / "No logs found"**
+- **Cause:** Auto-refresh disabled, OR sync not triggered yet, OR agency_id filtering issue
+- **Fix:**
+  1. Enable "Auto-refresh (10s)" toggle in Connection Details modal
+  2. Wait ~10 seconds after triggering sync
+  3. Click "Trigger Sync" again to create a new log entry
+- **Verify API:** `curl "$API/api/v1/channel-connections/$CID/sync-logs?limit=10" -H "Authorization: Bearer $TOKEN"`
+
+**Batch Details modal doesn't close when clicking back arrow**
+- **Cause:** JavaScript error in console (check browser DevTools)
+- **Fix:** Hard refresh page (Cmd+Shift+R / Ctrl+Shift+F5)
+- **Check:** Modal stack z-index conflict (Log Details z-[60], Batch Details z-[70])
+
+**Connection test shows "Connection test failed: Invalid credentials"**
+- **Cause:** Real mode enabled (`CHANNEL_MOCK_MODE=false`) but no credentials configured
+- **Fix (Dev):** Enable mock mode: `export CHANNEL_MOCK_MODE=true` in backend container
+- **Fix (Prod):** Add platform-specific credentials (see [Production Readiness](runbook.md#production-readiness))
+
+### Related Documentation
+
+- [Admin UI – Channel Manager Operations](#admin-ui--channel-manager-operations) - API endpoints and UI features
+- [UX Features](#ux-features) - New Connection modal and Batch Details navigation details
+- [Channel Manager Connection Testing](../scripts/README.md#channel-manager-connection-testing) - curl examples
+- [Mock Mode for Channel Providers](#mock-mode-for-channel-providers) - Dev/staging mock mode setup
+
+---
+
 ## Admin UI - Channel Sync
 
 **Purpose:** Web-based admin interface for triggering and monitoring channel sync operations.
