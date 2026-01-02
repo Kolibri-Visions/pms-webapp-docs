@@ -5547,6 +5547,255 @@ When opening the New Connection modal in Admin UI:
 
 ---
 
+### GET /api/v1/channel-connections/{connection_id}
+
+**Purpose:** Get details for a specific channel connection
+
+**RBAC:** Requires valid JWT
+
+**Success Response (200):**
+```json
+{
+  "id": "connection-uuid",
+  "tenant_id": "agency-uuid",
+  "property_id": "property-uuid",
+  "platform_type": "airbnb",
+  "platform_listing_id": "airbnb-listing-123",
+  "status": "active",
+  "platform_metadata": {"listing_id": "123"},
+  "last_sync_at": "2025-12-28T10:00:00Z",
+  "created_at": "2025-12-01T00:00:00Z",
+  "updated_at": "2025-12-28T10:00:00Z"
+}
+```
+
+**Error Response (404):**
+```json
+{
+  "detail": "Connection not found"
+}
+```
+
+**Example:**
+```bash
+curl -X GET "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/$CID" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+### POST /api/v1/channel-connections/{connection_id}/test
+
+**Purpose:** Test if a channel connection is healthy (validates OAuth tokens and platform API connectivity)
+
+**RBAC:** Requires valid JWT
+
+**Request Body:**
+```json
+{}
+```
+
+**Success Response (200):**
+```json
+{
+  "connection_id": "connection-uuid",
+  "platform_type": "airbnb",
+  "healthy": true,
+  "message": "Connection is healthy",
+  "details": {
+    "platform_listing_id": "airbnb-listing-123",
+    "last_sync_at": "2025-12-28T10:00:00Z"
+  }
+}
+```
+
+**Failed Health Check (200 with healthy=false):**
+```json
+{
+  "connection_id": "connection-uuid",
+  "platform_type": "airbnb",
+  "healthy": false,
+  "message": "Connection test failed",
+  "details": {}
+}
+```
+
+**Error Response (404):**
+```json
+{
+  "connection_id": "connection-uuid",
+  "platform_type": "unknown",
+  "healthy": false,
+  "message": "Connection not found",
+  "details": {}
+}
+```
+
+**Example:**
+```bash
+curl -X POST "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/$CID/test" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+---
+
+### GET /api/v1/channel-connections/{connection_id}/sync-batches
+
+**Purpose:** List recent sync batches for a connection (aggregated status for batch operations)
+
+**RBAC:** Requires valid JWT
+
+**Query Parameters:**
+- `limit` (optional): Number of batches to return (max 200, default 50)
+- `offset` (optional): Pagination offset (default 0)
+- `status` (optional): Filter by batch status: `any`, `running`, `success`, `failed` (default `any`)
+
+**Success Response (200):**
+```json
+[
+  {
+    "batch_id": "batch-uuid",
+    "connection_id": "connection-uuid",
+    "batch_status": "success",
+    "status_counts": {
+      "triggered": 0,
+      "running": 0,
+      "success": 3,
+      "failed": 0,
+      "other": 0
+    },
+    "created_at_min": "2025-12-28T10:00:00Z",
+    "updated_at_max": "2025-12-28T10:00:15Z",
+    "operations": [
+      {
+        "operation_type": "availability_update",
+        "status": "success",
+        "updated_at": "2025-12-28T10:00:05Z"
+      },
+      {
+        "operation_type": "pricing_update",
+        "status": "success",
+        "updated_at": "2025-12-28T10:00:10Z"
+      },
+      {
+        "operation_type": "bookings_sync",
+        "status": "success",
+        "updated_at": "2025-12-28T10:00:15Z"
+      }
+    ]
+  }
+]
+```
+
+**Example:**
+```bash
+# List recent batches
+curl -s "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/$CID/sync-batches?limit=10&status=any" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+**Batch Status Values:**
+- `running`: At least one operation still in progress (triggered/queued/running)
+- `success`: All operations completed successfully
+- `failed`: At least one operation failed
+- `unknown`: No operations or unexpected state
+
+---
+
+### GET /api/v1/channel-connections/{connection_id}/sync-batches/{batch_id}
+
+**Purpose:** Get detailed status for a specific sync batch (for polling until completion)
+
+**RBAC:** Requires valid JWT
+
+**Success Response (200):**
+```json
+{
+  "batch_id": "batch-uuid",
+  "connection_id": "connection-uuid",
+  "batch_status": "success",
+  "status_counts": {
+    "triggered": 0,
+    "running": 0,
+    "success": 3,
+    "failed": 0,
+    "other": 0
+  },
+  "created_at_min": "2025-12-28T10:00:00Z",
+  "updated_at_max": "2025-12-28T10:00:15Z",
+  "operations": [
+    {
+      "operation_type": "availability_update",
+      "status": "success",
+      "updated_at": "2025-12-28T10:00:05Z"
+    }
+  ]
+}
+```
+
+**Error Response (404):**
+```json
+{
+  "error": "batch_not_found",
+  "message": "Batch not found or does not belong to this connection"
+}
+```
+
+**Example - Polling Pattern:**
+```bash
+# 1. Trigger sync and capture batch_id
+RESPONSE=$(curl -s -X POST "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/$CID/sync" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"sync_type":"full"}')
+
+BATCH_ID=$(echo "$RESPONSE" | jq -r '.batch_id')
+echo "Triggered batch: $BATCH_ID"
+
+# 2. Poll batch status until completion
+while true; do
+  BATCH_STATUS=$(curl -s "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/$CID/sync-batches/$BATCH_ID" \
+    -H "Authorization: Bearer $TOKEN" | jq -r '.batch_status')
+
+  echo "Batch status: $BATCH_STATUS"
+
+  if [[ "$BATCH_STATUS" != "running" ]]; then
+    echo "Batch finished: $BATCH_STATUS"
+    break
+  fi
+
+  sleep 1
+done
+```
+
+**Note on Trailing Slash:**
+
+⚠️ **IMPORTANT:** The list endpoint (`GET /api/v1/channel-connections/`) requires a trailing slash when using query parameters to avoid HTTP 307 redirects:
+
+```bash
+# ✅ CORRECT - Trailing slash before query params
+curl "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/?limit=5&offset=0"
+
+# ❌ WRONG - No trailing slash causes 307 redirect
+curl "https://api.fewo.kolibri-visions.de/api/v1/channel-connections?limit=5&offset=0"
+```
+
+**Why:** FastAPI treats `/channel-connections` and `/channel-connections/` as different routes. The list endpoint is registered with trailing slash.
+
+**Fix:** Frontend uses `buildApiUrl()` helper to ensure consistent URL construction.
+
+**Detail/Sync/Test Endpoints:** Do NOT use trailing slash (no query params needed):
+```bash
+# ✅ CORRECT - No trailing slash for detail/action endpoints
+curl "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/$CID"
+curl -X POST "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/$CID/test"
+curl -X POST "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/$CID/sync"
+```
+
+---
+
 ## Backoffice Console — Connections (E2E Check)
 
 **Purpose:** End-to-end verification of Channel Connections management in the Admin UI (Backoffice Console).
