@@ -6437,6 +6437,10 @@ The Channel Sync Admin UI provides:
      - Success: "Sync gestartet: {sync_type}" with clickable batch_id
      - Error: "Fehler beim Starten (HTTP {status}): {detail}"
    - **Clipboard:** Browser-native alert for copy confirmations (unchanged)
+   - **Success Message Fields:**
+     - **Full Sync:** Displays "Batch ID: {uuid} (N tasks)" with copy buttons for batch_id and individual task_ids (first 3 shown, rest collapsed)
+     - **Single Sync (Availability/Pricing):** Displays "Task ID: {uuid}" or "N tasks queued" depending on response format
+     - No empty/undefined fields shown (dynamic display based on response shape)
 
 6. **Troubleshooting Link:**
    - "Troubleshooting (Runbook)" link below Sync Logs title navigates directly to Ops Runbook tab (`/ops/runbook`)
