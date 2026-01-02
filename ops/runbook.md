@@ -10492,6 +10492,25 @@ docker logs pms-worker-v2 2>&1 | grep "Task.*failed"
 - If "Last refreshed" keeps updating: component state issue, close and reopen modal
 - Check browser console for React errors
 
+**Problem:** Modal flickers/resizes during auto-refresh
+
+**Root Cause:**
+- UI was clearing data arrays (setLogs([]) / setHistory([])) before re-fetching
+- Caused layout collapse → modal shrinks → data loads → modal expands
+- Loading states (logsLoading / syncHistoryLoading) replaced content with "Loading..." text
+
+**Solution (Implemented):**
+- **Stale-while-revalidate pattern:** Keep existing data visible during refresh
+- Separate loading states: `logsRefreshing` / `syncHistoryRefreshing` for auto-refresh vs `logsLoading` / `syncHistoryLoading` for initial load
+- Stable layout heights: Added `min-h-[200px]` to content containers
+- Errors during refresh don't clear existing data (graceful degradation)
+- Only show "Loading..." on initial load, not on refresh
+
+**Implementation:**
+- `fetchSyncLogs(connectionId, isRefresh)` - auto-refresh calls with isRefresh=true
+- `fetchSyncHistory(connectionId, isRefresh)` - auto-refresh calls with isRefresh=true
+- Frontend code: `/frontend/app/connections/page.tsx:399-437` (fetchSyncLogs), `page.tsx:516-554` (fetchSyncHistory)
+
 **Related:**
 
 - See [Admin UI - Sync History Integration](#admin-ui---sync-history-integration) for batch list view
