@@ -5768,6 +5768,41 @@ curl -sX GET "$API/api/v1/channel-connections/$CID/sync-logs?limit=10&offset=0" 
   - Should return `{items: [...], total: N}`
 - **Check role:** Ensure user has access to properties (admin/manager role, correct agency_id)
 
+**curl: command not found / sed: command not found (smoke/monitoring scripts)**
+- **Symptom:** Scripts fail before making requests: `curl: command not found` or `sed: command not found`
+- **Cause:** PATH missing `/usr/bin` and `/bin` in minimal shells (cron, Coolify exec, non-interactive)
+- **Commands exist at:** `/usr/bin/curl`, `/usr/bin/sed` but aren't found due to broken PATH
+- **Fix (immediate):**
+  ```bash
+  # Export PATH before running script
+  export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  bash backend/scripts/pms_phase23_smoke.sh
+  ```
+- **Fix (permanent):** Latest deploy includes automatic PATH bootstrap in:
+  - `backend/scripts/pms_smoke_common.sh` (sourced by all smoke scripts)
+  - `backend/scripts/pms_channel_seed_connection.sh` (standalone script)
+  - Docker exec calls include `-e PATH="..."` for container execution
+- **Verification (endpoints work once PATH is fixed):**
+  ```bash
+  # External endpoints
+  curl -I https://api.fewo.kolibri-visions.de/health  # Expect: 200
+
+  # Internal endpoints (from container)
+  curl -I /health/ready    # Expect: 200
+  curl -I /openapi.json    # Expect: 200
+  curl -I /docs            # Expect: 200
+  ```
+- **Debug:**
+  ```bash
+  # Check if commands exist
+  command -v curl  # Should show: /usr/bin/curl
+  command -v sed   # Should show: /usr/bin/sed
+
+  # Check current PATH
+  echo $PATH       # Should include: /usr/bin:/bin
+  ```
+- **Related:** See [backend/scripts/README.md](../../scripts/README.md#troubleshooting) for PATH bootstrap details
+
 **GET /channel-connections returns HTTP 500 (ResponseValidationError)**
 - **Cause:** Backend response validation fails when `property_id` is `null` (legacy rows)
 - **Symptom:** `"detail": "Response validation error", "errors": [{"loc": ["property_id"], "msg": "none is not an allowed value"}]`
