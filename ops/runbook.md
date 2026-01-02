@@ -6681,28 +6681,51 @@ docker exec $(docker ps -q -f name=supabase) psql -U postgres -d postgres \
 
 ---
 
-#### 7. Auto-Detect Fails with Mixed Content Error (HTTP Redirect)
+#### 7. Admin UI Shows "Failed to fetch connections" (Mixed Content)
 
 **Symptom:**
 - Browser console shows: `Mixed Content: The page at 'https://admin...' was loaded over HTTPS, but requested an insecure resource 'http://api...'.`
+- Connections page shows "Failed to fetch connections" error
 - Auto-detect fails to load connections
 - Error message: "Failed to auto-detect connection ID (TypeError: Failed to fetch)"
 
 **Cause:**
+- Frontend environment variable `NEXT_PUBLIC_API_BASE` set to HTTP instead of HTTPS
 - API endpoint without trailing slash triggers FastAPI 307 redirect
 - Redirect downgrades from HTTPS to HTTP (proxy/load balancer issue)
 - Browser blocks the HTTP request as Mixed Content
 
-**Fix:**
-The Admin UI now uses the trailing-slash endpoint `/api/v1/channel-connections/` to avoid the redirect entirely. If you see this error:
+**Fix 1: Set Frontend API Base to HTTPS**
 
-1. **Clear browser cache** and hard reload (Ctrl+Shift+R / Cmd+Shift+R)
-2. **Verify API base URL** in browser console: should be `https://api...` (not `http://`)
-3. **Check proxy/load balancer config** if the issue persists (ensure HTTPS forwarding is correct)
+Ensure `NEXT_PUBLIC_API_BASE` uses HTTPS in deployment environment:
+
+```bash
+# In Coolify/deployment environment variables
+NEXT_PUBLIC_API_BASE=https://api.fewo.kolibri-visions.de
+```
+
+**Fix 2: Automatic HTTPS Upgrade (Built-in Protection)**
+
+The frontend now automatically upgrades HTTP to HTTPS when:
+- Frontend loaded via HTTPS (`window.location.protocol === 'https:'`)
+- API base URL starts with `http://`
+- Console warning appears: `[api-client] Upgrading HTTP API base to HTTPS to avoid mixed content`
+
+This prevents mixed content errors even if `NEXT_PUBLIC_API_BASE` is misconfigured.
+
+**Fix 3: Redeploy Frontend**
+
+If the issue persists after setting env var:
+
+1. **Redeploy frontend** to rebuild with new environment variable
+2. **Clear browser cache** and hard reload (Ctrl+Shift+R / Cmd+Shift+R)
+3. **Verify API base URL** in browser console: should be `https://api...` (not `http://`)
+4. **Check proxy/load balancer config** if the issue persists (ensure HTTPS forwarding is correct)
 
 **Technical Note:**
-- ✅ Correct: `GET /api/v1/channel-connections/?limit=50` (with trailing slash)
+- ✅ Correct: `GET /api/v1/channel-connections/?limit=50` (with trailing slash, HTTPS)
 - ❌ Causes redirect: `GET /api/v1/channel-connections?limit=50` (no trailing slash)
+- ❌ Blocked by browser: `GET http://api...` (HTTP from HTTPS page)
 
 ---
 
