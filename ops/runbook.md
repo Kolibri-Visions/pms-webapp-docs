@@ -4630,6 +4630,51 @@ Shows key connection fields:
   - Actions: "Details" button opens full log JSON modal
 - **Details modal:** Shows complete log object in formatted JSON (error details, retry count, task ID, metadata)
 
+### UX Features
+
+#### New Connection Modal
+
+**Platform Selection:**
+- Platform dropdown starts **unselected** (shows placeholder: "Select a platform...")
+- User **must explicitly choose** a platform before submitting
+- Property dropdown also starts unselected (default behavior)
+- Submit button is disabled until both property and platform are selected
+
+**Validation:**
+- Backend requires both `property_id` and `platform_type`
+- Frontend validates before submission to prevent errors
+
+**Design Rationale:**
+- Prevents accidental default selections
+- Ensures deliberate platform choice
+- Reduces user errors from auto-selected platforms
+
+#### Batch Details Navigation
+
+**Back Arrow Behavior:**
+- Batch Details modal always shows icon-only back arrow (left arrow, no text)
+- **If opened from Log Details:** Back arrow returns to Log Details modal (same log entry)
+- **If opened directly from Batch History table:** Back arrow closes Batch Details and returns to Connection Details
+- Tooltip dynamically shows "Back to log details" or "Back to connection" based on context
+
+**Implementation:**
+- Modal stack approach: Log Details (z-index 60) and Batch Details (z-index 70) can coexist
+- When navigating Log Details → Batch Details, Log Details stays open in background
+- Back arrow simply closes Batch Details, revealing whatever was underneath
+- Source context is tracked via `sourceLogId` state for tooltip accuracy
+
+**User Flow:**
+```
+Connection Details
+  → Open Log Details
+    → Click "Open Batch Details →" button
+      → Batch Details opens on top (Log Details still in state)
+      → Click back arrow ←
+        → Returns to Log Details (same log entry)
+        → Click X to close Log Details
+          → Returns to Connection Details
+```
+
 ### API Endpoints Used
 
 **List connections:**
