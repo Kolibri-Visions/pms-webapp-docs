@@ -6315,10 +6315,13 @@ The Channel Sync Admin UI provides:
      - Badge indicator shows **"auto-detected"** (blue) when connection ID is prefilled from localStorage
      - If no last-used connection ID exists, logs panel shows: **"Enter Connection ID or use Auto-detect button above"**
    - **Explicit Auto-detect Button:** Appears when Connection ID field is empty
-     - On click, fetches all connections from `/api/v1/channel-connections/?limit=50&offset=0`
-     - **If exactly 1 connection:** Sets it automatically and persists to localStorage
-     - **If multiple connections:** Shows modal selector with platform_type, property_id, platform_listing_id, status for user to choose
+     - On click, fetches all connections from `/api/v1/channel-connections/?limit=100&offset=0`
+     - **Smart Matching:** Filters connections by `platform_type` + `property_id` (if both Platform and Property are selected)
+     - **If exactly 1 match:** Sets connection.id automatically and persists to localStorage
+     - **If 0 matches:** Shows error message with platform and property info
+     - **If multiple matches:** Shows modal selector with platform_type, property_id, platform_listing_id, status for user to choose
      - Shows loading state ("Detecting...") and error messages with HTTP status on failure
+     - **Important:** Auto-detection sets the actual `connection.id` from the matched connection object, NOT the property_id
    - **Manual Entry:** Connection ID input field allows manual entry
      - Badge indicator shows **"manual"** (gray) when user manually edits the connection ID
      - Valid UUIDs are automatically persisted to localStorage for future sessions
@@ -6334,6 +6337,8 @@ The Channel Sync Admin UI provides:
    - Copy individual fields to clipboard (task_id, sync_log_id, etc.)
    - View error messages and retry counts
    - View complete details JSONB payload
+   - **Connection & Property IDs:** Shows both Connection ID (from log) and Property ID (from connection details)
+   - **Null Timestamp Handling:** Started At / Finished At show "—" when null (instead of "01.01.1970")
    - **JSON Pretty-Printing:** Details drawer automatically detects and parses JSON-encoded strings (including double-escaped JSON) and renders them as pretty-printed JSON for readability
    - **Copy JSON** button copies the parsed, pretty-printed payload (not the raw escaped string)
    - **Duration Calculation:** Shows sync duration using `started_at`/`finished_at` timestamps (preferred) or falls back to `created_at`/`updated_at` if start/finish times are missing
