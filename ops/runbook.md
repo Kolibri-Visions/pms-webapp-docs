@@ -5482,6 +5482,24 @@ When creating connections with `skip_connection_test=true`:
 - ✅ Skips initial sync trigger
 - ⚠️ Tokens still encrypted before storage (but not validated)
 
+**Backoffice Console → New Connection:**
+
+When opening the New Connection modal in Admin UI:
+- **Property:** Empty by default - user must select from dropdown
+- **Platform:** Empty by default - user must explicitly select (no preselection)
+- **Intentional Design:** Forces user to make conscious choice rather than defaulting to Airbnb
+- **Mock Mode:** After platform selection, mock values are auto-suggested:
+  - `platform_listing_id`: `mock_{platform}_{timestamp}`
+  - `access_token`: `mock_access_token`
+  - `refresh_token`: `mock_refresh_token`
+- **Validation:** "Create Connection" button disabled until both Property and Platform selected
+
+**Expected Behavior:**
+1. Open modal → both Property and Platform show placeholder text
+2. Select Property → dropdown populated from `/api/v1/properties?limit=100`
+3. Select Platform → `platform_listing_id` auto-populated with `mock_{platform}_{timestamp}`
+4. Fill remaining fields → click "Create Connection"
+
 ---
 
 ## Admin UI - Channel Sync
