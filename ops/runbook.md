@@ -6294,16 +6294,51 @@ curl -X PUT "$API/api/v1/channel-connections/$CID" \
 
 ---
 
+### Sync Types
+
+The Channel Sync Admin UI supports three sync types, each using different API endpoints:
+
+**1. Availability Sync**
+- **Endpoint:** `POST /api/v1/availability/sync`
+- **Purpose:** Sync availability calendar only
+- **Required Fields:** platform, property_id
+- **Optional Fields:** connection_id (auto-detected), start_date, end_date
+
+**2. Pricing Sync**
+- **Endpoint:** `POST /api/v1/availability/sync`
+- **Purpose:** Sync pricing information only
+- **Required Fields:** platform, property_id
+- **Optional Fields:** connection_id (auto-detected), start_date, end_date
+
+**3. Full Sync**
+- **Endpoint:** `POST /api/v1/channel-connections/{connection_id}/sync`
+- **Purpose:** Complete sync (availability + pricing + bookings)
+- **Required Fields:** connection_id (must be valid UUID)
+- **Optional Fields:** start_date, end_date
+- **Response:** Returns `batch_id` and `task_ids` array for tracking multiple concurrent operations
+
+**Key Differences:**
+- **Availability/Pricing:** Use property-scoped endpoint, connection_id is optional
+- **Full:** Uses connection-scoped endpoint, connection_id is REQUIRED
+- **Full sync** triggers orchestrated backend flow handling all sync types simultaneously
+- **Connection ID vs Property ID:**
+  - `connection_id` → channel_connections table (platform linkage UUID)
+  - `property_id` → properties table (actual property UUID)
+  - Full sync operates at connection level, not property level
+
+---
+
 ### Features
 
 The Channel Sync Admin UI provides:
 
 1. **Trigger Sync Operations:**
-   - Select sync type (availability or pricing)
+   - Select sync type (availability, pricing, or full)
    - Select platform (airbnb, booking_com, expedia, fewo_direkt, google)
    - Select property from dropdown
-   - Optional: Choose specific channel connection
+   - Optional: Choose specific channel connection (REQUIRED for full sync)
    - Optional: Set custom date range (default: today → +90 days)
+   - Full sync automatically resolves connection_id if platform + property selected
 
 2. **View Sync Logs:**
    - Real-time table of recent sync operations
