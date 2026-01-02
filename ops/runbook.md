@@ -6411,6 +6411,38 @@ The Channel Sync Admin UI provides:
 - List endpoint MUST use trailing slash before query params: `/api/v1/channel-connections/?limit=100`
 - Without trailing slash: `/api/v1/channel-connections?limit=100` → 307 redirect → fails
 
+**API Response Shape:**
+- `GET /api/v1/channel-connections/` can return two formats:
+  1. Direct array: `[{id, property_id, platform_type, ...}, ...]`
+  2. Paginated object: `{items: [...], total: N, ...}`
+- Frontend normalizes both: `const connections = Array.isArray(res) ? res : res.items ?? []`
+- Prioritize `items` key if present, fallback to array check
+
+**DevTools Verification:**
+To verify sync trigger includes `connection_id`:
+1. Open DevTools → Network tab
+2. Select Platform + Property in Admin UI
+3. Click "Trigger Sync"
+4. Find POST request to `/api/v1/availability/sync`
+5. Check Payload tab - should include:
+   ```json
+   {
+     "sync_type": "availability",
+     "platform": "booking_com",
+     "property_id": "6da0f8d2-677f-4182-a06c-db155f43704a",
+     "connection_id": "c1df8491-197a-4881-aec6-18e4297f5f79",
+     "manual_trigger": true
+   }
+   ```
+6. If `connection_id` is missing: cache not populated or no matching connection
+
+**Auto-Resolution Logic:**
+- On page load, Admin UI fetches `/api/v1/channel-connections/?limit=100` and caches results
+- At sync trigger, if `connection_id` field is empty:
+  - Searches cache for match: `platform_type === platform && property_id === propertyId`
+  - If exactly 1 match: includes `connection.id` in payload automatically
+  - If 0 or multiple matches: omits `connection_id` from payload
+
 ---
 
 ### Log Retention & Purge Policy
