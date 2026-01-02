@@ -6729,6 +6729,66 @@ If the issue persists after setting env var:
 
 ---
 
+#### 8. Redirect Location is http:// (Mixed Content from Backend)
+
+**Symptom:**
+- Browser console shows: `Mixed Content: ... requested an insecure resource 'http://api...'.`
+- API redirect (307) uses `http://` instead of `https://` in Location header
+- Request to `https://api.../channel-connections?limit=1` redirects to `http://api.../channel-connections/?limit=1`
+
+**Cause:**
+- FastAPI/Starlette generates redirect without trusting X-Forwarded-Proto header
+- Reverse proxy (Traefik/Coolify) sets `X-Forwarded-Proto: https` but backend ignores it
+- Backend sees scheme=http from internal connection, builds http:// redirect Location
+- Browser blocks the HTTP redirect as mixed content
+
+**Verification:**
+```bash
+# Test redirect Location header
+curl -k -sS -D - -o /dev/null "https://api.fewo.kolibri-visions.de/api/v1/channel-connections?limit=1&offset=0" | sed -n '1,30p'
+
+# Expected BEFORE fix: location: http://api.fewo.kolibri-visions.de/...
+# Expected AFTER fix:  location: https://api.fewo.kolibri-visions.de/...
+```
+
+**Fix: Enable Proxy Header Trust**
+
+The backend now trusts X-Forwarded-Proto by default via `ForwardedProtoMiddleware`.
+
+**Environment Variable (Backend):**
+```bash
+# Default: true (recommended for production behind reverse proxy)
+TRUST_PROXY_HEADERS=true
+```
+
+**How It Works:**
+1. Middleware reads `X-Forwarded-Proto` header from Traefik/Nginx
+2. Sets `scope["scheme"]` to "https" (instead of "http")
+3. FastAPI redirect Location header uses https://
+4. Browser accepts redirect (no mixed content error)
+
+**Startup Log Verification:**
+```bash
+# Check backend logs for middleware initialization
+docker logs pms-backend --tail 50 | grep TRUST_PROXY_HEADERS
+
+# Expected output:
+# TRUST_PROXY_HEADERS=true → trusting X-Forwarded-Proto for scheme
+```
+
+**Disable (Not Recommended):**
+```bash
+# Only disable if NOT behind reverse proxy (direct HTTPS termination)
+TRUST_PROXY_HEADERS=false
+```
+
+**Related:**
+- Frontend already upgrades HTTP to HTTPS (automatic protection)
+- Backend middleware ensures redirects stay HTTPS
+- Both protections work together for complete mixed-content prevention
+
+---
+
 ### Environment Variables
 
 **Frontend (`pms-admin`):**
