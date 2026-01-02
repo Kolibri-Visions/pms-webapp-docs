@@ -6970,6 +6970,194 @@ TRUST_PROXY_HEADERS=false
 
 ---
 
+#### 9. Connections Last Sync shows "Never" (NULL last_sync_at)
+
+**Symptom:**
+- Admin UI Connections page shows "Last Sync: Never" despite successful sync logs existing
+- `channel_connections.last_sync_at` column remains NULL in database
+- Sync logs exist with `status='success'` but connection timestamp not updated
+
+**Causes:**
+
+**A. Sync log updates not triggering connection touch**
+- Worker successfully completes sync task but `update_log_by_task_id` not called
+- Log status updated manually/directly without using service layer
+- Worker crashed before calling update method
+
+**B. Auto-update logic not running (code version mismatch)**
+- Deployed code doesn't include auto-update logic in `update_log_by_task_id`
+- Service layer bypassed (direct SQL UPDATE on channel_sync_logs)
+
+**C. Database permissions issue**
+- Worker has SELECT on `channel_sync_logs` but not UPDATE on `channel_connections`
+- RLS policy blocks UPDATE on `channel_connections` for service role
+
+**D. Connection deleted or soft-deleted**
+- `channel_connections.deleted_at IS NOT NULL` blocks update
+- Connection ID from log doesn't match any active connection
+
+**Verification:**
+
+```bash
+# 1. Check if sync logs exist with status=success
+docker exec $(docker ps -q -f name=supabase) psql -U postgres -d postgres -c "
+  SELECT id, connection_id, operation_type, status, created_at, updated_at
+  FROM channel_sync_logs
+  WHERE status = 'success'
+  ORDER BY updated_at DESC
+  LIMIT 5;
+"
+
+# 2. Check if corresponding connections have NULL last_sync_at
+docker exec $(docker ps -q -f name=supabase) psql -U postgres -d postgres -c "
+  SELECT c.id, c.platform_type, c.last_sync_at, c.updated_at, c.deleted_at
+  FROM channel_connections c
+  WHERE c.id IN (
+    SELECT DISTINCT connection_id
+    FROM channel_sync_logs
+    WHERE status = 'success'
+  )
+  ORDER BY c.updated_at DESC
+  LIMIT 5;
+"
+
+# Expected: last_sync_at should NOT be NULL if success logs exist
+
+# 3. Check tenant_id in sync logs (should not be NULL)
+docker exec $(docker ps -q -f name=supabase) psql -U postgres -d postgres -c "
+  SELECT connection_id, tenant_id, COUNT(*) as log_count
+  FROM channel_sync_logs
+  GROUP BY connection_id, tenant_id
+  ORDER BY log_count DESC
+  LIMIT 10;
+"
+
+# Expected: tenant_id should match connection's agency_id (not NULL)
+```
+
+**Fix 1: Manual Backfill (Immediate Fix)**
+
+If production connections have NULL `last_sync_at` but success logs exist, backfill from logs:
+
+```sql
+-- Backfill last_sync_at from most recent successful sync log
+UPDATE channel_connections c
+SET
+  last_sync_at = (
+    SELECT MAX(updated_at)
+    FROM channel_sync_logs
+    WHERE connection_id = c.id
+      AND status = 'success'
+  ),
+  updated_at = NOW()
+WHERE c.deleted_at IS NULL
+  AND c.last_sync_at IS NULL
+  AND EXISTS (
+    SELECT 1
+    FROM channel_sync_logs
+    WHERE connection_id = c.id
+      AND status = 'success'
+  );
+
+-- Verify backfill
+SELECT id, platform_type, last_sync_at, updated_at
+FROM channel_connections
+WHERE deleted_at IS NULL
+  AND last_sync_at IS NOT NULL
+ORDER BY last_sync_at DESC
+LIMIT 10;
+```
+
+**Fix 2: Verify Code Deployment**
+
+Ensure latest code with auto-update logic is deployed:
+
+```bash
+# Check deployed commit hash
+docker exec pms-backend env | grep SOURCE_COMMIT
+
+# Expected: Latest commit with auto-update logic
+# Commit should include:
+# - channel_sync_log_service.py: update_log_by_task_id updates connection.last_sync_at on success
+# - channel_connection_service.py: list_connections has COALESCE fallback for last_sync_at
+
+# Check backend logs for auto-update messages
+docker logs pms-backend --tail 100 | grep "Updated connection.*last_sync_at"
+
+# Expected on successful sync:
+# "Updated connection <uuid> last_sync_at due to log <log_id> transitioning to success"
+```
+
+**Fix 3: Redeploy Backend + Worker**
+
+If code is out of date:
+
+```bash
+# 1. Pull latest main
+git checkout main
+git pull origin main
+
+# 2. Verify changes
+git log --oneline --grep="last_sync_at" -5
+
+# 3. Redeploy via Coolify
+# Navigate to Coolify Dashboard → pms-backend → Redeploy
+# Navigate to Coolify Dashboard → pms-worker-v2 → Redeploy
+
+# 4. Wait for containers to restart (30-60s)
+
+# 5. Verify deployment
+docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' | grep -E 'pms-backend|pms-worker'
+
+# 6. Trigger test sync and verify last_sync_at updates
+```
+
+**Fix 4: Check Database Permissions**
+
+Verify service role can UPDATE channel_connections:
+
+```sql
+-- Test UPDATE as service role (anon JWT)
+BEGIN;
+
+UPDATE channel_connections
+SET last_sync_at = NOW(), updated_at = NOW()
+WHERE id = '<test-connection-uuid>'
+  AND deleted_at IS NULL;
+
+-- If ERROR: Check RLS policies
+SELECT tablename, policyname, permissive, roles, cmd, qual
+FROM pg_policies
+WHERE tablename = 'channel_connections'
+  AND cmd = 'UPDATE';
+
+ROLLBACK;
+```
+
+**Expected Behavior (After Fix):**
+
+1. When sync log transitions to `status='success'`:
+   - Service calls `update_log_by_task_id(task_id, status='success')`
+   - Service updates log row in `channel_sync_logs`
+   - Service automatically updates `channel_connections.last_sync_at = NOW()`
+   - Backend logs: "Updated connection <uuid> last_sync_at due to log <log_id> transitioning to success"
+
+2. When `list_connections` is called:
+   - If `channel_connections.last_sync_at IS NULL`:
+     - Query uses COALESCE to fallback to `MAX(updated_at) FROM channel_sync_logs WHERE status='success'`
+     - API returns computed timestamp (not NULL)
+   - If `channel_connections.last_sync_at IS NOT NULL`:
+     - Query returns actual column value
+
+3. Admin UI Connections page shows accurate "Last Sync" timestamp
+
+**Related Sections:**
+- [Admin UI - Channel Sync](#admin-ui---channel-sync)
+- [Sync Logs Persistence](#sync-logs-persistence)
+- [Channel Manager Error Handling & Retry Logic](#channel-manager-error-handling--retry-logic)
+
+---
+
 ### Environment Variables
 
 **Frontend (`pms-admin`):**
