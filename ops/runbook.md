@@ -6480,6 +6480,70 @@ To verify sync trigger includes `connection_id`:
 
 ---
 
+### Channel Connections: Last Sync Semantics
+
+**last_sync_at Persistence:**
+
+The `last_sync_at` field in channel_connections is updated in TWO places:
+
+1. **On Sync Trigger** (Immediate):
+   - When manual sync is triggered via API (`POST /api/v1/availability/sync` or `POST /api/v1/channel-connections/{id}/sync`)
+   - Sets `last_sync_at = NOW()` immediately when sync is queued
+   - Updates `updated_at = NOW()` as well
+   - Best-effort operation (logs warning if fails, doesn't block sync)
+
+2. **On Sync Success** (Completion):
+   - When Celery worker marks sync log as "success"
+   - Sets `last_sync_at = NOW()` (finish time)
+   - Updates `updated_at = NOW()` as well
+   - Best-effort operation (logs warning if fails, doesn't affect task result)
+
+**Why Two Updates?**
+- First update: Shows sync was attempted (user sees "Last Sync: moments ago" in UI)
+- Second update: Confirms sync completed successfully (reflects actual sync finish time)
+- If worker crashes, first timestamp remains (shows attempted, not succeeded)
+
+**Debugging Last Sync:**
+
+Check connection's `last_sync_at` via API:
+```bash
+# List all connections with last_sync_at
+curl -X GET "$API/api/v1/channel-connections/?limit=100" \
+  -H "Authorization: Bearer $TOKEN" | jq '.[] | {id, platform_type, property_id, last_sync_at, updated_at}'
+
+# Expected output:
+# {
+#   "id": "c1df8491-197a-4881-aec6-18e4297f5f79",
+#   "platform_type": "booking_com",
+#   "property_id": "6da0f8d2-677f-4182-a06c-db155f43704a",
+#   "last_sync_at": "2026-01-02T12:45:30.123456Z",  # <-- Should be non-null after sync
+#   "updated_at": "2026-01-02T12:45:30.123456Z"
+# }
+```
+
+Check directly in database (optional):
+```sql
+-- Connect to Supabase/Postgres
+SELECT id, platform_type, property_id, last_sync_at, updated_at
+FROM channel_connections
+WHERE deleted_at IS NULL
+ORDER BY updated_at DESC LIMIT 10;
+```
+
+**Troubleshooting:**
+
+If `last_sync_at` remains `null` after running sync:
+1. Check worker logs for warnings: `grep "Failed to touch connection" worker.log`
+2. Verify database permissions (UPDATE on channel_connections table)
+3. Verify connection_id is valid UUID (not property_id mistakenly)
+4. Check if connection was soft-deleted (`deleted_at IS NOT NULL`)
+
+If last_sync_at shows trigger time but not finish time:
+- Worker may have crashed before updating (check Celery worker status)
+- Check sync logs for task status: `GET /api/v1/channel-connections/{id}/sync-logs`
+
+---
+
 ### Log Retention & Purge Policy
 
 **Default Retention Policy:** 30 days (recommended)
