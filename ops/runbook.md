@@ -12680,15 +12680,103 @@ All operations in the batch share the same `batch_id`.
 - Closing batch modal clears any active toasts (`setToast(null)`)
 - Toast lifecycle follows standard rules (6s auto-dismiss, cleared on navigation)
 
-**Backend Endpoint:**
+**Backend Endpoints:**
+
+**1. List Recent Batches (Discovery):**
+```bash
+GET /api/v1/channel-connections/{connection_id}/sync-batches?limit=5&offset=0
 ```
+
+**Example curl:**
+```bash
+curl -L -X GET "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/{CID}/sync-batches?limit=5&offset=0" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Accept: application/json"
+```
+
+**Response:** Array of batch summaries with `batch_id`, `batch_status`, `status_counts`, `operations` (detailed)
+
+**2. Get Batch Details (Detailed Operations):**
+```bash
+GET /api/v1/channel-connections/{connection_id}/sync-batches/{batch_id}
+```
+
+**Example curl:**
+```bash
+curl -L -X GET "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/{CID}/sync-batches/{BATCH_ID}" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Accept: application/json"
+```
+
+**Response Fields (per operation):**
+- `operation_type`: availability_update | pricing_update | bookings_sync
+- `status`: triggered | running | success | failed
+- `direction`: outbound | inbound
+- `task_id`: Celery task UUID (nullable)
+- `error`: Error message string (nullable, present only if status=failed)
+- `duration_ms`: Duration in milliseconds (nullable, null if started_at/finished_at not available)
+- `updated_at`: Timestamp of last update
+- `log_id`: Sync log UUID (for UI "View Error" drawer)
+
+**Response Example:**
+```json
+{
+  "batch_id": "64c93985-f61b-4b95-856c-dae0baf35efc",
+  "connection_id": "abc-123-def-456",
+  "batch_status": "success",
+  "status_counts": {
+    "triggered": 0,
+    "running": 0,
+    "success": 3,
+    "failed": 0,
+    "other": 0
+  },
+  "created_at_min": "2026-01-03T10:00:00Z",
+  "updated_at_max": "2026-01-03T10:05:00Z",
+  "operations": [
+    {
+      "operation_type": "availability_update",
+      "status": "success",
+      "direction": "outbound",
+      "task_id": "550e8400-e29b-41d4-a716-446655440001",
+      "error": null,
+      "duration_ms": null,
+      "updated_at": "2026-01-03T10:03:00Z",
+      "log_id": "log-uuid-001"
+    },
+    {
+      "operation_type": "pricing_update",
+      "status": "success",
+      "direction": "outbound",
+      "task_id": "550e8400-e29b-41d4-a716-446655440002",
+      "error": null,
+      "duration_ms": null,
+      "updated_at": "2026-01-03T10:04:00Z",
+      "log_id": "log-uuid-002"
+    },
+    {
+      "operation_type": "bookings_sync",
+      "status": "success",
+      "direction": "inbound",
+      "task_id": "550e8400-e29b-41d4-a716-446655440003",
+      "error": null,
+      "duration_ms": null,
+      "updated_at": "2026-01-03T10:05:00Z",
+      "log_id": "log-uuid-003"
+    }
+  ]
+}
+```
+
+**Alternative Endpoint (Logs-based):**
+```bash
 GET /api/v1/channel-connections/{connection_id}/sync-logs?batch_id={batch_id}&limit=100
 ```
 
 **Response:** Standard sync-logs response with `logs` array filtered to the specified batch_id
 
 **Use Case:**
-Operators can track the progress of all 3 operations in a Full Sync batch from a single view, quickly identifying which operation succeeded/failed and drilling into errors via the detail drawer.
+Operators can track the progress of all 3 operations in a Full Sync batch from a single view, quickly identifying which operation succeeded/failed and drilling into errors via the detail drawer. The `/sync-batches/{batch_id}` endpoint provides detailed per-operation fields (direction, task_id, error, duration_ms) in a single API call.
 
 ---
 
