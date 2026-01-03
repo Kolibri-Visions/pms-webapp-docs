@@ -6700,6 +6700,105 @@ To verify sync trigger includes `connection_id`:
 
 ---
 
+### API Response Shapes (Normalized)
+
+**POST `/api/v1/channel-connections/{connection_id}/sync` Response:**
+
+The sync trigger endpoint returns a consistent response shape with all required fields:
+
+```json
+{
+  "status": "triggered",
+  "message": "Manual full sync triggered successfully",
+  "connection_id": "c1df8491-197a-4881-aec6-18e4297f5f79",
+  "sync_type": "full",
+  "task_ids": [
+    "abc-123-task-1",
+    "abc-123-task-2",
+    "abc-123-task-3"
+  ],
+  "batch_id": "550e8400-e29b-41d4-a716-446655440000",
+  "created_log_ids": [
+    "log-uuid-1",
+    "log-uuid-2",
+    "log-uuid-3"
+  ]
+}
+```
+
+**Field Guarantees:**
+- `status`: Always present (string: "triggered" or "error")
+- `message`: Always present (human-readable description)
+- `connection_id`: **Always present** (UUID, echoed from request)
+- `sync_type`: **Always present** (string: "availability"|"pricing"|"bookings"|"full")
+- `task_ids`: **Always array** (never single string, may be empty on error)
+- `batch_id`: Nullable UUID (present for full sync, null for single-type syncs)
+- `created_log_ids`: Nullable array of UUIDs (sync log entry IDs, null if creation failed)
+
+**GET `/api/v1/channel-connections/{connection_id}/sync-logs` Response:**
+
+The sync logs endpoint returns logs with normalized `details` field:
+
+```json
+{
+  "connection_id": "c1df8491-197a-4881-aec6-18e4297f5f79",
+  "logs": [
+    {
+      "id": "log-uuid-1",
+      "connection_id": "c1df8491-197a-4881-aec6-18e4297f5f79",
+      "operation_type": "availability_update",
+      "direction": "outbound",
+      "status": "success",
+      "details": [
+        "{\"sync_type\": \"full\", \"manual_trigger\": true}",
+        "{\"property_id\": \"6da0f8d2-677f-4182-a06c-db155f43704a\"}"
+      ],
+      "error": null,
+      "task_id": "abc-123-task-1",
+      "batch_id": "550e8400-e29b-41d4-a716-446655440000",
+      "created_at": "2026-01-02T12:45:30.123456Z",
+      "updated_at": "2026-01-02T12:45:35.654321Z"
+    }
+  ],
+  "limit": 50,
+  "offset": 0
+}
+```
+
+**Details Field Normalization:**
+
+The `details` field is **always** an array of JSON-encoded strings:
+- Database stores JSONB (dict/list/str/null)
+- API normalizes on read to array[str] for consistent UI rendering
+- Normalization rules:
+  - `null` → `[]` (empty array)
+  - `string` → `[string]` (wrap in array)
+  - `dict` → `[json.dumps(dict)]` (serialize and wrap)
+  - `list` → normalize each element to string (already in array format)
+
+**Error Response Format:**
+
+Endpoints return structured error responses with `error_code` and `hint`:
+
+```json
+{
+  "detail": {
+    "error": "not_found",
+    "message": "Connection not found",
+    "error_code": "NOT_FOUND",
+    "hint": "Verify connection_id via GET /api/v1/channel-connections/?limit=100"
+  }
+}
+```
+
+**Common Error Codes:**
+- `NOT_FOUND`: Resource not found (404)
+- `SERVICE_UNAVAILABLE`: Database or external service unavailable (503)
+- `INVALID_STATUS`: Invalid status parameter (400)
+- `CONNECTION_INACTIVE`: Connection not active (health check failed)
+
+---
+
 ### Channel Connections: Last Sync Semantics
 
 **last_sync_at Persistence:**
