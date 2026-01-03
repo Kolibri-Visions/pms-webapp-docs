@@ -2548,6 +2548,14 @@ Verify modal displays data correctly by clicking "View Details" on any sync batc
      - Errors clear properly on retry
    - Location: All fetch operations
 
+2. **Search Field Text Visibility**
+   - Test: Click into Sync Logs search field and type text
+   - Expected:
+     - Typed text is clearly visible (not white on white or invisible)
+     - Works in both light mode and dark mode
+     - Placeholder text remains readable
+   - Location: Sync Logs search input
+
 **RBAC Alignment:**
 
 - Purge logs action requires **admin** role (aligned with sync trigger permissions)
