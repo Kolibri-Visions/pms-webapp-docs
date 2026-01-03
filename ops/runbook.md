@@ -11443,6 +11443,9 @@ If concurrency test shows "free window" (ranges=[]) but ALL requests get 409:
 \i supabase/migrations/20260103140000_fix_bookings_exclusion_inquiry_non_blocking.sql
 ```
 
+**Known Issue (Fixed):**
+If migration 20260103140000 fails with syntax error near `||` (ERROR 42601), ensure you have the fixed version that uses a single dollar-quoted string literal for `COMMENT ON CONSTRAINT` instead of concatenated strings. This was fixed in commit 82ffc27 (initial) and refined in a follow-up commit to remove string concatenation operators.
+
 ---
 
 ## Ops Console (Admin UI)
