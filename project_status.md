@@ -160,22 +160,32 @@ This document tracks the current state of the PMS-Webapp project, including comp
   - GET /api/v1/availability showed inquiry bookings as "free" (ranges=[])
   - POST /api/v1/bookings treated inquiry bookings as blocking (returned 409)
   - Concurrency script auto-window mode picked "free" windows with inquiry bookings, got all 409s (false fails)
-- ✅ **Fix Applied:**
+- ✅ **Fix Applied (Phase 1 - Status Exclusion):**
   - Updated `BookingService.check_availability()` to exclude inquiry from blocking statuses (line 1565)
-  - Non-blocking statuses now: cancelled, declined, no_show, inquiry
+  - Non-blocking statuses: cancelled, declined, no_show, inquiry
   - Blocking statuses: confirmed, pending, checked_in, checked_out
-  - Inventory constraint (`inventory_ranges.inventory_ranges_no_overlap`) remains final guard
+- ✅ **Fix Applied (Phase 2 - inventory_ranges Source of Truth):**
+  - Replaced bookings table query with `inventory_ranges` query in `check_availability()` (line 1567)
+  - Both availability API and booking creation now use same source: `inventory_ranges` with `state='active'`
+  - Inquiry bookings do NOT create `inventory_ranges` entries (non-blocking by design)
+  - Confirmed/pending bookings and blocks create active `inventory_ranges` entries (blocking)
+  - Ensures perfect consistency: if availability shows free, booking creation succeeds (no false 409s)
+  - Exclusion constraint on `inventory_ranges` provides final race-safe guard
+- ✅ **Testing:**
+  - Added unit test: `test_inquiry_booking_does_not_block_confirmed_booking()`
+  - Verifies confirmed booking succeeds even when inquiry overlaps (inventory_ranges has no conflict)
 - ✅ **Script Improvements:**
   - Extended auto-window search from 3 to 7 windows (+1, +7, +14, +21, +30, +45, +60 days)
   - Improved diagnostic messages for 0 successes + all 409s scenario
   - Fallback increased to +90 days (from +60)
 - ✅ **Documentation:**
-  - Runbook: Added "Inquiry Bookings Policy (Non-Blocking)" section
-  - Scripts README: Updated free window auto-detection behavior
-  - Documented inventory_ranges uses source_id (not booking_id/block_id columns)
+  - Runbook: Added "Source of Truth for Availability" and troubleshooting sections
+  - Scripts README: Updated common issues with "Free Window but All 409" guidance
+  - Documented inventory_ranges architecture (source_id, kind, state fields)
 - ✅ **Expected Behavior:**
   - Inquiry bookings do NOT block availability checks or booking creation
-  - Concurrency script robust to inquiry-blocked windows (auto-searches multiple windows)
+  - Perfect API consistency: availability free → booking creation succeeds
+  - Concurrency script robust to inquiry-blocked windows
 
 **What's Next:**
 - Edge cases validation:

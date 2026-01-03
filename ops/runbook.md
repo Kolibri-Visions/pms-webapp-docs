@@ -11003,6 +11003,47 @@ As of 2026-01-03, inquiry bookings (`status='inquiry'`) are **non-blocking** for
 - No `booking_id` or `block_id` columns exist in `inventory_ranges`
 - API responses may present `booking_id`/`block_id` derived from `source_id` + `kind` for client convenience
 
+**Source of Truth for Availability (2026-01-03 Update):**
+
+Both availability API and booking creation now use `inventory_ranges` as the **single source of truth** for overlap detection:
+
+- **Availability API**: Queries `inventory_ranges` with `state='active'` to return blocked ranges
+- **Booking Creation**: `check_availability()` queries `inventory_ranges` (not bookings table) to detect conflicts
+- **Consistency**: This ensures both APIs treat inquiry bookings identically (non-blocking)
+- **How It Works**:
+  - Inquiry bookings: Created in `bookings` table but do NOT create `inventory_ranges` entries
+  - Confirmed bookings: Create both `bookings` entry AND `inventory_ranges` entry with `state='active'`
+  - Blocks: Create `availability_blocks` entry AND `inventory_ranges` entry with `state='active'`
+  - Exclusion constraint on `inventory_ranges` provides race-safe overlap protection
+
+**Troubleshooting: "Free Window" but All 409s:**
+
+If availability API shows a window as free (`ranges=[]`) but booking creation returns 409 for all requests:
+
+1. Check for inquiry bookings overlapping the window:
+   ```sql
+   SELECT id, status, check_in, check_out
+   FROM bookings
+   WHERE property_id = 'your-property-uuid'
+     AND status = 'inquiry'
+     AND daterange(check_in, check_out, '[)') && daterange('2026-01-10', '2026-01-12', '[)');
+   ```
+
+2. Verify inquiry bookings do NOT have `inventory_ranges` entries:
+   ```sql
+   SELECT ir.*
+   FROM inventory_ranges ir
+   JOIN bookings b ON ir.source_id = b.id
+   WHERE b.status = 'inquiry'
+     AND ir.state = 'active';
+   -- Should return 0 rows (inquiry should not create active ranges)
+   ```
+
+3. If inquiry bookings ARE blocking (incorrect behavior):
+   - Verify backend code uses `inventory_ranges` query in `check_availability()`
+   - Check for stale code that queries `bookings` table directly
+   - Ensure migration created `inventory_ranges` properly
+
 #### Issue: HTTP 409 with `conflict_type=inventory_overlap`
 
 **Symptom:**
