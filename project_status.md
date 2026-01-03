@@ -170,6 +170,7 @@ This document tracks the current state of the PMS-Webapp project, including comp
 - ✅ Branding API mounted via module system (MODULES_ENABLED=true)
 - Created branding module (backend/app/modules/branding.py) following domain module pattern
 - Auto-registered in bootstrap.py for seamless integration
+- Import fix: Removed invalid User import from app.core.auth; use dict type for current_user
 - Verified by openapi.json paths and module mounting logs
 
 **Phase B (Future - Client-Facing):**

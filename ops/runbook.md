@@ -2731,6 +2731,40 @@ curl -i https://your-domain.com/api/v1/branding
 # Expected: HTTP 401 Unauthorized (no token) or HTTP 200 OK (with Authorization header)
 ```
 
+**Issue:** /api/v1/branding returns 404 and openapi.json lacks branding paths
+
+**Symptom:**
+- Migration applied successfully, table and policies exist
+- openapi.json does not contain /api/v1/branding paths
+- Endpoint returns 404
+- Container logs show: "Branding module not available: cannot import name 'User' from 'app.core.auth'"
+
+**Cause:**
+- ImportError in branding router prevents module from loading
+- Invalid import: `from app.core.auth import User` (User does not exist in app.core.auth)
+- get_current_user returns dict, not User object
+
+**Solution:**
+- Fixed branding.py to remove invalid User import
+- Changed type annotations to use dict instead of non-existent User class
+- Changed current_user.agency_id to current_user["agency_id"] (dict access)
+- Redeploy to apply changes
+
+**Verification:**
+```bash
+# Check container logs for successful module mounting (after redeploy)
+docker logs pms-backend 2>&1 | grep -i "mounting.*branding"
+# Expected: "Mounting 6 module(s): ['core_pms', 'inventory', 'properties', 'bookings', 'branding', ...]"
+
+# Verify openapi.json contains branding paths
+curl -s https://your-domain.com/openapi.json | grep -o '"/api/v1/branding"'
+# Expected: "/api/v1/branding"
+
+# Test endpoint (should return 401 without token)
+curl -i https://your-domain.com/api/v1/branding
+# Expected: HTTP 401 Unauthorized (NOT 404)
+```
+
 ---
 
 ## Redis + Celery Worker Setup (Channel Manager)
