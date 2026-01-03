@@ -2662,6 +2662,22 @@ curl -L -X PUT "$API/api/v1/branding" \
 - CSS variables not injected (check :root styles in DevTools elements tab)
 - Cache issue: Hard refresh (Cmd+Shift+R / Ctrl+Shift+R)
 
+**Issue:** Migration pending but table already exists (ERROR: idx_tenant_branding_tenant already exists)
+
+**Symptom:**
+- Table `tenant_branding` exists
+- Index `idx_tenant_branding_tenant` exists
+- Policies missing (Policies: (none))
+- Migration `20260103150000_create_tenant_branding.sql` not tracked in `pms_schema_migrations`
+
+**Solution:**
+- Partial apply state detected (table + index created but policies failed)
+- Migration has been patched for full idempotency (v2026-01-03)
+- Re-run migration via: `bash backend/scripts/ops/apply_supabase_migrations.sh --apply`
+- DO NOT manually INSERT into `pms_schema_migrations` (runner tracks automatically on success)
+- Verify completion: `bash backend/scripts/ops/apply_supabase_migrations.sh --status` (should show 0 pending)
+- Verify policies: `\d+ tenant_branding` in psql (should show 3 policies: select, insert, update)
+
 ---
 
 ## Redis + Celery Worker Setup (Channel Manager)

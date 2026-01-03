@@ -153,6 +153,13 @@ This document tracks the current state of the PMS-Webapp project, including comp
 - `backend/docs/ux/theming_branding.md` - Complete theming docs
 - `backend/docs/ops/runbook.md` - Verification steps (line 2568+)
 
+**Idempotency Fix (2026-01-03):**
+- ✅ Migration `20260103150000_create_tenant_branding.sql` patched for full idempotency after partial PROD apply
+- Issue: Initial apply failed at index creation (already exists), leaving policies uninstalled
+- Fix: Added `IF NOT EXISTS` for index, DO blocks with pg_policies/pg_trigger checks for policies/trigger, BEGIN/COMMIT transaction
+- Safe to re-run on partial state, fresh DB, or fully migrated DB
+- Pending user apply in PROD (see runbook troubleshooting section)
+
 **Phase B (Future - Client-Facing):**
 - Frontend theme provider (load branding on app start, inject CSS variables)
 - Branding settings UI (admin page for logo/color picker)
