@@ -11369,6 +11369,80 @@ bash scripts/pms_booking_concurrency_test.sh
 # Inquiry bookings in the window will NOT cause all-409s
 ```
 
+**Database Constraint Fix (2026-01-03 Follow-up):**
+
+**Second Production Bug Discovered:**
+
+After the initial OCCUPYING_STATUSES fix, another issue was found:
+
+**Symptom:**
+- Availability API shows window as free (0 inventory_ranges)
+- Inquiry booking exists overlapping the window
+- ALL concurrent booking requests return 409 (0 successes)
+- Backend logs show: `ExclusionViolationError: "no_double_bookings"`
+
+**Root Cause:**
+- The `bookings` table has its own exclusion constraint `no_double_bookings`
+- Original constraint: `WHERE (status NOT IN ('cancelled', 'declined', 'no_show'))`
+- This incorrectly included 'inquiry' in the blocking set
+- When trying to INSERT a confirmed booking, the constraint blocked it due to overlapping inquiry
+
+**Fix Applied (Migration 20260103140000):**
+- Dropped old `no_double_bookings` constraint
+- Recreated with positive filter: `WHERE (status IN ('pending', 'confirmed', 'checked_in'))`
+- Now inquiry bookings do NOT trigger this database-level constraint
+- Aligns with OCCUPYING_STATUSES and inventory_ranges policy
+
+**Diagnostic Logging Added:**
+- Enhanced `booking_service.py` ExclusionViolationError handler (line 731-760)
+- Now logs which constraint triggered the 409:
+  - `bookings.no_double_bookings` → overlapping pending/confirmed/checked_in booking
+  - `inventory_ranges.inventory_ranges_no_overlap` → overlapping active inventory_range
+  - Includes property_id, dates, status, and error details for admin debugging
+
+**Troubleshooting: Availability Free but All 409s**
+
+If concurrency test shows "free window" (ranges=[]) but ALL requests get 409:
+
+1. **Check for inquiry bookings in window:**
+   ```sql
+   SELECT id, status, check_in, check_out
+   FROM bookings
+   WHERE property_id = 'YOUR-PROPERTY-ID'
+     AND status = 'inquiry'
+     AND daterange(check_in, check_out, '[)') && daterange('2026-01-10', '2026-01-12', '[)');
+   ```
+
+2. **Verify no active inventory_ranges exist:**
+   ```sql
+   SELECT *
+   FROM inventory_ranges
+   WHERE property_id = 'YOUR-PROPERTY-ID'
+     AND state = 'active'
+     AND daterange(start_date, end_date, '[)') && daterange('2026-01-10', '2026-01-12', '[)');
+   ```
+   Expected: 0 rows (inquiry doesn't create ranges)
+
+3. **Check database constraint:**
+   ```sql
+   SELECT conname, pg_get_constraintdef(oid)
+   FROM pg_constraint
+   WHERE conname = 'no_double_bookings' AND conrelid = 'bookings'::regclass;
+   ```
+   Expected: `WHERE (status IN ('pending', 'confirmed', 'checked_in'))`
+   If shows `WHERE (status NOT IN (...))` with inquiry not excluded → apply migration 20260103140000
+
+4. **Check backend logs for constraint name:**
+   - Look for `ExclusionViolationError` in logs
+   - If "no_double_bookings" appears → database constraint issue (apply migration)
+   - If "inventory_ranges" appears → inventory_ranges conflict (unexpected if API says free)
+
+**Migration Path:**
+```sql
+-- Apply fix (run via Supabase migration runner or psql)
+\i supabase/migrations/20260103140000_fix_bookings_exclusion_inquiry_non_blocking.sql
+```
+
 ---
 
 ## Ops Console (Admin UI)

@@ -187,6 +187,25 @@ This document tracks the current state of the PMS-Webapp project, including comp
   - Perfect API consistency: availability free → booking creation succeeds
   - Concurrency script robust to inquiry-blocked windows
 
+**Database Constraint Fix (2026-01-03 Follow-up):**
+- ❗ **Second Production Bug:** After OCCUPYING_STATUSES fix, inquiry still blocked at DB level
+  - Symptom: Availability showed free (0 inventory_ranges), but ALL booking requests got 409
+  - Root cause: `bookings.no_double_bookings` exclusion constraint had `WHERE (status NOT IN ('cancelled', 'declined', 'no_show'))` which included inquiry
+  - When trying to INSERT confirmed booking, constraint blocked due to overlapping inquiry
+- ✅ **Fix Applied (Migration 20260103140000):**
+  - Dropped old `no_double_bookings` constraint
+  - Recreated with positive filter: `WHERE (status IN ('pending', 'confirmed', 'checked_in'))`
+  - Inquiry bookings now excluded from database-level overlap check
+  - Aligns with OCCUPYING_STATUSES and inventory_ranges policy
+- ✅ **Diagnostic Logging Enhanced:**
+  - Added detailed ExclusionViolationError handling in `booking_service.py:731-760`
+  - Logs which constraint triggered 409: bookings.no_double_bookings vs inventory_ranges.inventory_ranges_no_overlap
+  - Includes property_id, dates, status, and conflicting booking details
+- ✅ **Regression Test Added:**
+  - `test_bookings_exclusion_constraint_allows_inquiry_overlap()` in `test_booking_deadlock.py`
+  - Verifies inquiry can be created, then confirmed booking overlaps inquiry (succeeds), then second confirmed fails
+  - Tests database constraint behavior at unit level
+
 **What's Next:**
 - Edge cases validation:
   - Back-to-back bookings (end-exclusive semantics)
@@ -217,7 +236,7 @@ This document tracks the current state of the PMS-Webapp project, including comp
 ### Current Schema Version
 
 - Supabase migrations: Up-to-date
-- Last migration: `20260103123000_ensure_guests_booking_timeline_columns.sql`
+- Last migration: `20260103140000_fix_bookings_exclusion_inquiry_non_blocking.sql`
 
 ### Recent Schema Changes
 
