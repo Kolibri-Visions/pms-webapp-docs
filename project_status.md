@@ -62,6 +62,44 @@ This document tracks the current state of the PMS-Webapp project, including comp
 - Fixed `list_batch_statuses()` to include all required fields
 - Response validation errors resolved
 
+**Batch Details API Endpoints (Verified 2026-01-03):**
+- ✅ `GET /api/v1/channel-connections/{connection_id}/sync-batches` - List batches with pagination, status filtering
+- ✅ `GET /api/v1/channel-connections/{connection_id}/sync-batches/{batch_id}` - Batch details with operations breakdown
+- ✅ Response model: `BatchStatusResponse` with batch_id, batch_status, status_counts, operations array
+- ✅ Batch status logic: failed (any op failed), running (any triggered/running), success (all success)
+- ✅ Operations include: operation_type, status, direction, task_id, error, duration_ms, log_id
+- ✅ Smoke test script: `backend/scripts/pms_sync_batch_details_smoke.sh`
+- ✅ Runbook section: "Verify Sync Batch Details (PROD)" with curl examples
+
+**Expected Fields:**
+```json
+{
+  "batch_id": "uuid",
+  "connection_id": "uuid",
+  "batch_status": "failed|running|success|unknown",
+  "status_counts": {
+    "triggered": 0,
+    "running": 0,
+    "success": 2,
+    "failed": 0
+  },
+  "created_at_min": "2026-01-03T...",
+  "updated_at_max": "2026-01-03T...",
+  "operations": [
+    {
+      "operation_type": "availability",
+      "status": "success",
+      "direction": "outbound",
+      "task_id": "celery-task-uuid",
+      "error": null,
+      "duration_ms": 1234,
+      "updated_at": "2026-01-03T...",
+      "log_id": "uuid"
+    }
+  ]
+}
+```
+
 ## Current Phase
 
 ### Phase 21: Inventory/Availability Production Hardening 🟡

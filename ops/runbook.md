@@ -2379,6 +2379,92 @@ curl http://localhost:8000/docs
 
 ---
 
+### Verify Sync Batch Details (PROD)
+
+**Purpose:** Verify channel manager sync batch API endpoints are working correctly in production.
+
+**Prerequisites:**
+- Channel Manager enabled (`CHANNEL_MANAGER_ENABLED=true`)
+- Valid Bearer TOKEN (JWT)
+- At least one channel connection exists (CID = connection UUID)
+- At least one sync batch has been created (trigger sync via Admin UI or API)
+
+**EXECUTION LOCATION:** HOST-SERVER-TERMINAL
+
+**Manual Verification Commands:**
+
+```bash
+# 1. List sync batches for a connection (paginated)
+export API="https://api.fewo.kolibri-visions.de"
+export TOKEN="your-jwt-token"
+export CID="your-connection-uuid"
+
+curl -L -H "Authorization: Bearer $TOKEN" \
+  "$API/api/v1/channel-connections/$CID/sync-batches?limit=10&offset=0" | python3 -m json.tool
+
+# Expected: HTTP 200 with JSON response containing "items" array
+# Each item: batch_id, batch_status, status_counts, created_at_min, operations array
+
+# 2. Get details for a specific batch
+export BATCH_ID="batch-uuid-from-above"
+
+curl -L -H "Authorization: Bearer $TOKEN" \
+  "$API/api/v1/channel-connections/$CID/sync-batches/$BATCH_ID" | python3 -m json.tool
+
+# Expected: HTTP 200 with JSON response containing:
+# - batch_id
+# - connection_id
+# - batch_status (failed/running/success/unknown)
+# - status_counts (triggered, running, success, failed)
+# - created_at_min, updated_at_max
+# - operations: array of BatchOperation (operation_type, status, direction, task_id, error, duration_ms, log_id)
+```
+
+**Automated Smoke Test:**
+
+Use the smoke test script for quick verification:
+
+```bash
+# Run smoke test (auto-picks first batch if BATCH_ID not set)
+export API="https://api.fewo.kolibri-visions.de"
+export TOKEN="your-jwt-token"
+export CID="your-connection-uuid"
+
+bash backend/scripts/pms_sync_batch_details_smoke.sh
+
+# Expected output:
+# ✓ List batches returned HTTP 200
+# ✓ Get batch details returned HTTP 200
+# Summary: All endpoints verified successfully
+```
+
+**Common Issues:**
+
+- **No batches found:** Trigger a sync operation first via Admin UI (`/channel-sync` page) or API (`POST /api/v1/channel-connections/{id}/sync`)
+- **HTTP 404 on batch details:** Batch may have been deleted or batch_id is incorrect
+- **HTTP 401:** TOKEN expired or invalid (re-fetch from Supabase auth)
+- **HTTP 503:** Database schema not installed or out of date (run migration: `20251227000000_create_channel_sync_logs.sql`)
+- **HTTP 307 redirects:** Use `-L` flag with curl to follow redirects
+
+**Batch Status Logic:**
+
+- **failed**: Any operation has status='failed'
+- **running**: Any operation has status='triggered' or 'running' (and none failed)
+- **success**: All operations have status='success'
+- **unknown**: No operations found or other states
+
+**Admin UI Integration:**
+
+The "Batch Details Modal" in Admin UI (`/channel-sync` page) uses these endpoints to display:
+- Batch ID and overall status
+- Operation breakdown with statuses, durations, errors
+- Task IDs (Celery task UUIDs)
+- Direction indicators (→ outbound, ← inbound)
+
+Verify modal displays data correctly by clicking "View Details" on any sync batch row.
+
+---
+
 ## Redis + Celery Worker Setup (Channel Manager)
 
 **Purpose:** Configure Redis and Celery worker for Channel Manager background sync operations.
