@@ -11130,6 +11130,73 @@ bash scripts/pms_phase23_smoke.sh  # Auto-fetches token
 
 ---
 
+### Booking Concurrency Deadlocks
+
+**Symptom:**
+- POST `/api/v1/bookings` returns HTTP 503 (not 500!) with message "Database deadlock detected. Please retry your request."
+- Multiple concurrent booking requests for the same property may trigger PostgreSQL deadlock errors
+
+**Root Cause:**
+
+Under high concurrency, multiple booking requests for the same property can trigger PostgreSQL deadlocks due to:
+1. Exclusion constraint checks (`bookings.no_double_bookings`)
+2. Foreign key constraint checks (property_id, guest_id)
+3. Multiple transactions acquiring locks in different orders
+
+**Prevention (Implemented):**
+
+The application prevents deadlocks using a two-layer approach:
+
+1. **Advisory Lock Serialization** (`booking_service.py:470-475`)
+   - Each booking transaction acquires a PostgreSQL advisory lock scoped to the property ID
+   - Lock is transaction-scoped (automatically released on commit/rollback)
+   - Serializes concurrent bookings for the same property (no deadlocks)
+
+2. **Automatic Retry with Exponential Backoff** (`booking_service.py:84-121`)
+   - If deadlock still occurs (rare edge case), automatically retries up to 3 times
+   - Exponential backoff: 100ms, 200ms between attempts
+   - Only deadlocks are retried; other errors propagate immediately
+
+3. **Error Mapping** (`bookings.py:288-298`)
+   - If all retries exhausted, maps deadlock to HTTP 503 (not 500!)
+   - Client-friendly message: "Database deadlock detected. Please retry your request."
+   - Prevents 500 errors from reaching clients
+
+**Expected Behavior:**
+
+- Under normal load: Advisory lock prevents deadlocks entirely
+- Under extreme load: Deadlocks auto-retry and succeed on retry
+- Worst case (all retries exhausted): HTTP 503 with retry-friendly message
+
+**Verification:**
+
+Test concurrent booking behavior using the concurrency smoke script:
+```bash
+# Fire 10 parallel booking requests for the same property/dates
+export ENV_FILE=/root/pms_env.sh
+bash scripts/pms_booking_concurrency_test.sh
+
+# Expected result:
+# - Exactly 1 success (HTTP 201)
+# - All others: HTTP 409 inventory_overlap (NOT 503 deadlock)
+```
+
+**Troubleshooting:**
+
+If you see HTTP 503 deadlock errors in production:
+1. Check if concurrency script passes (validates advisory lock works)
+2. Check backend logs for "Deadlock detected after 3 attempts" errors
+3. If deadlocks persist despite retries, increase retry attempts or backoff in `booking_service.py`
+4. Consider property-level rate limiting if single property receives extreme concurrency
+
+**Code Locations:**
+- Advisory lock: `backend/app/services/booking_service.py:470-475`
+- Retry wrapper: `backend/app/services/booking_service.py:84-121`
+- Route error handler: `backend/app/api/routes/bookings.py:288-298`
+- Unit tests: `backend/tests/unit/test_booking_deadlock.py`
+
+---
+
 ## Ops Console (Admin UI)
 
 **Purpose:** Optional web-based operations console for system diagnostics and monitoring.

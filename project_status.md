@@ -114,6 +114,31 @@ This document tracks the current state of the PMS-Webapp project, including comp
   - Usage examples and output samples
   - Production workflow steps
 
+**Completed in Phase 21B (Booking Concurrency Hardening):**
+- ✅ Advisory lock serialization for concurrent bookings
+  - Transaction-scoped PostgreSQL advisory locks per property_id
+  - Prevents deadlocks from exclusion constraint checks
+  - Located in `booking_service.py:470-475`
+- ✅ Deadlock retry wrapper with exponential backoff
+  - Automatic retry up to 3 attempts (100ms, 200ms backoff)
+  - Only retries deadlocks, other errors propagate immediately
+  - Located in `booking_service.py:84-121`
+- ✅ Route-level error mapping (503, not 500)
+  - Maps exhausted deadlock retries to HTTP 503
+  - Client-friendly message: "Database deadlock detected. Please retry your request."
+  - Located in `bookings.py:288-298`
+- ✅ Concurrency script auto-finds free date windows
+  - Queries availability API to find free windows (+1, +7, +14 days)
+  - Fallback to +60 days if all attempts fail
+  - Prevents test failures from existing bookings
+- ✅ Unit tests for deadlock handling
+  - Tests retry logic, exponential backoff, error propagation
+  - Located in `tests/unit/test_booking_deadlock.py`
+- ✅ Documentation updates
+  - Runbook section: "Booking Concurrency Deadlocks"
+  - Scripts README: Free window auto-detection
+  - Project status: Phase 21B completion
+
 **What's Next:**
 - Edge cases validation:
   - Back-to-back bookings (end-exclusive semantics)
