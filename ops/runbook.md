@@ -11446,6 +11446,49 @@ If concurrency test shows "free window" (ranges=[]) but ALL requests get 409:
 **Known Issue (Fixed):**
 If migration 20260103140000 fails with syntax error near `||` (ERROR 42601), ensure you have the fixed version that uses a single dollar-quoted string literal for `COMMENT ON CONSTRAINT` instead of concatenated strings. This was fixed in commit 82ffc27 (initial) and refined in a follow-up commit to remove string concatenation operators.
 
+**Applying Supabase Migrations in Production (Host Terminal):**
+
+Production migrations must be applied from the host server terminal with proper credentials:
+
+```bash
+# Prerequisites:
+# - DATABASE_URL must be set to Supabase Postgres connection string
+# - User must be supabase_admin (table owner) for ALTER TABLE operations
+# - Run from repo root directory
+
+# 1. Check migration status (shows applied vs pending)
+bash backend/scripts/ops/apply_supabase_migrations.sh --status
+
+# 2. Apply pending migrations (requires confirmation)
+export CONFIRM_PROD=1
+bash backend/scripts/ops/apply_supabase_migrations.sh
+
+# 3. Verify constraint was updated correctly
+psql "$DATABASE_URL" -c "SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint WHERE conname='no_double_bookings' AND conrelid='bookings'::regclass;"
+```
+
+**Expected verification output:**
+```
+WHERE (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'checked_in'::text]))
+```
+
+**Common Pitfalls:**
+
+1. **psql connects to local socket instead of Supabase:**
+   - Symptom: Connection succeeds but queries show wrong database
+   - Fix: Ensure `DATABASE_URL` is exported in current shell session
+   - Verify: `echo $DATABASE_URL` should show full connection string
+
+2. **User is not table owner:**
+   - Symptom: `ERROR: must be owner of table bookings`
+   - Fix: Use `supabase_admin` role, not `postgres` or `anon`
+   - Connection string must include: `?user=supabase_admin`
+
+3. **Running SQL in Supabase SQL Editor:**
+   - Limitation: Supabase SQL Editor does NOT support psql meta-commands (`\i`, `\set`)
+   - Limitation: Parameter placeholders like `:pid` only work in psql CLI
+   - Fix: Always run migrations from host terminal via psql or migration runner script
+
 ---
 
 ## Ops Console (Admin UI)
