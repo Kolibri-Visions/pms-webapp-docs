@@ -118,7 +118,7 @@ This document tracks the current state of the PMS-Webapp project, including comp
 - ✅ Advisory lock serialization for concurrent bookings
   - Transaction-scoped PostgreSQL advisory locks per property_id
   - Prevents deadlocks from exclusion constraint checks
-  - Located in `booking_service.py:470-475`
+  - Located in `booking_service.py:510-520` (updated after hotfix)
 - ✅ Deadlock retry wrapper with exponential backoff
   - Automatic retry up to 3 attempts (100ms, 200ms backoff)
   - Only retries deadlocks, other errors propagate immediately
@@ -138,6 +138,22 @@ This document tracks the current state of the PMS-Webapp project, including comp
   - Runbook section: "Booking Concurrency Deadlocks"
   - Scripts README: Free window auto-detection
   - Project status: Phase 21B completion
+
+**Production Hotfix (2026-01-03) - Phase 21B Follow-up:**
+- ❗ **Bug:** NameError in advisory lock code (property_id not defined)
+  - Symptom: POST /api/v1/bookings returned HTTP 500 for all requests
+  - Root cause: Advisory lock referenced property_id before extraction from booking_data
+  - Impact: All booking creation broken in production
+- ✅ **Fix Applied:**
+  - Added property_id extraction before transaction start (line 511)
+  - Advisory lock now uses correctly extracted property_id
+  - Transaction scope preserved (xact lock, auto-released)
+- ✅ **Verification:**
+  - Added unit test: `test_advisory_lock_uses_property_id_from_request()`
+  - Expected behavior restored: 1x201 + 9x409 on concurrency test
+- ✅ **Documentation:**
+  - Runbook: Added "Hotfix Note (2026-01-03)" section
+  - Project status: This entry
 
 **What's Next:**
 - Edge cases validation:

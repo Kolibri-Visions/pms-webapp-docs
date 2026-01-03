@@ -11190,10 +11190,36 @@ If you see HTTP 503 deadlock errors in production:
 4. Consider property-level rate limiting if single property receives extreme concurrency
 
 **Code Locations:**
-- Advisory lock: `backend/app/services/booking_service.py:470-475`
+- Advisory lock: `backend/app/services/booking_service.py:510-520`
 - Retry wrapper: `backend/app/services/booking_service.py:84-121`
 - Route error handler: `backend/app/api/routes/bookings.py:288-298`
 - Unit tests: `backend/tests/unit/test_booking_deadlock.py`
+
+**Hotfix Note (2026-01-03):**
+
+After initial deployment of advisory lock serialization, a production bug was discovered:
+
+**Symptom:**
+- POST `/api/v1/bookings` returned HTTP 500 for all valid requests
+- Backend logs showed: `NameError: name 'property_id' is not defined` at line ~516
+
+**Root Cause:**
+- Advisory lock code referenced `property_id` variable before it was defined
+- The variable needed to be extracted from `booking_data["property_id"]` before use
+
+**Fix Applied:**
+- Added `property_id = to_uuid(booking_data["property_id"])` before transaction start (line 511)
+- Advisory lock now correctly uses the extracted property_id for lock key
+- Lock still executes inside transaction (xact lock, auto-released on commit/rollback)
+
+**Expected Behavior Restored:**
+- Single booking for free window → HTTP 201
+- Concurrent requests (10 parallel, same property/dates) → 1x201, 9x409 inventory_overlap
+- Deadlock (if retries exhausted) → HTTP 503 with retry message (not 500)
+
+**Verification:**
+- Concurrency smoke script: `bash scripts/pms_booking_concurrency_test.sh`
+- Unit test added: `test_advisory_lock_uses_property_id_from_request()`
 
 ---
 
