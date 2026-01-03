@@ -12711,12 +12711,14 @@ curl -L -X GET "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/{
 **Response Fields (per operation):**
 - `operation_type`: availability_update | pricing_update | bookings_sync
 - `status`: triggered | running | success | failed
-- `direction`: outbound | inbound
+- `direction`: outbound | inbound (derived from operation_type if NULL: availability_update/pricing_update → outbound, bookings_sync → inbound)
 - `task_id`: Celery task UUID (nullable)
 - `error`: Error message string (nullable, present only if status=failed)
 - `duration_ms`: Duration in milliseconds (nullable, null if started_at/finished_at not available)
 - `updated_at`: Timestamp of last update
 - `log_id`: Sync log UUID (for UI "View Error" drawer)
+
+**Note:** Both list (`GET /sync-batches`) and details (`GET /sync-batches/{batch_id}`) endpoints return operations with all fields above. The list endpoint aggregates all logs per batch, while the details endpoint shows a single batch.
 
 **Response Example:**
 ```json
