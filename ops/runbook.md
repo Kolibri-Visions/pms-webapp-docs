@@ -12640,6 +12640,58 @@ Each connection row in the table provides inline quick actions:
 
 ---
 
+### Sync History (Batches)
+
+The Connections page includes a "Sync History" section that displays recent sync batches for the selected connection.
+
+**Data Source:**
+- Endpoint: `GET /api/v1/channel-connections/{connection_id}/sync-batches?limit={N}&offset={M}&status={filter}`
+- Returns: List of batches with operations, status counts, and timestamps
+
+**UI Features:**
+
+1. **Batch Table Columns:**
+   - **Updated:** Most recent timestamp (updated_at_max or created_at_min)
+   - **Status:** Batch status badge (success/failed/running/unknown)
+   - **Counts:** Visual summary of operation statuses (✓ success, ✗ failed, ⟳ running, ⋯ triggered)
+   - **Operations:** Pills showing operation types with direction indicators (📅 → for availability_update outbound, 💰 → for pricing_update outbound, 🔄 ← for bookings_sync inbound)
+   - **Batch ID:** Truncated ID with click-to-copy functionality
+
+2. **Status Filter Dropdown:**
+   - **Options:** All Status | Running | Failed | Success
+   - **Behavior:** Updates `?status=` query parameter
+   - **"All Status"**: Omits status param (shows all batches)
+   - **Other values**: Filters batches by batch_status field
+
+3. **Pagination Controls:**
+   - **Buttons:** Previous / Next
+   - **Default limit:** 50 batches per page
+   - **Offset tracking:** Advances by limit value on each page change
+   - **Display:** Shows "Showing X - Y" range indicator
+
+4. **Batch Detail Modal:**
+   - **Trigger:** Click any batch row in the table
+   - **Action:** Fetches `GET /sync-batches/{batch_id}` for detailed operations
+   - **Displays:** Batch summary, status breakdown, operations list with direction/task_id/error fields
+   - **Auto-refresh:** Optional polling checkbox for running batches
+   - **Back navigation:** Returns to connection details or log details (if opened from log)
+
+**Direction Display:**
+- **Outbound (→):** availability_update, pricing_update (PMS → Channel Manager)
+- **Inbound (←):** bookings_sync (Channel Manager → PMS)
+- Derived from operation_type if DB field is NULL (defensive fallback)
+
+**Empty State:**
+- Message: "No batches found" when items array is empty
+- Occurs when: No sync operations triggered yet, or filter excludes all batches
+
+**Error Handling:**
+- Inline error banner for API failures
+- Graceful degradation: Does not crash the page
+- Retry button available via manual refresh
+
+---
+
 ### Batch Details (Full Sync)
 
 When a Full Sync is triggered (sync_type=full), the backend creates a batch containing 3 operations:
