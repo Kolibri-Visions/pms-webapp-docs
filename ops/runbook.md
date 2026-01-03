@@ -9333,6 +9333,51 @@ docker exec pms-backend git rev-parse HEAD
 **Cause:** Schema conflict or missing dependency
 **Solution:** Rollback deployment, fix migration, redeploy
 
+**Issue:** pms-admin (frontend) build fails in Coolify/Nixpacks
+
+**Symptom:**
+- Coolify deployment shows `npm run build` failing with webpack/TypeScript compile error
+- Build log shows: "the name `X` is defined multiple times" (e.g., `copyToClipboard`)
+- Error import trace points to Next.js page file (e.g., `./app/channel-sync/page.tsx`)
+- Build exits with code 1
+
+**Common Causes:**
+1. **Duplicate function declarations** in a single file (TypeScript/webpack cannot resolve)
+   - Example: `const copyToClipboard = ...` defined twice in same component
+   - Often happens when merging features or copy-pasting helper functions
+2. **Import conflicts** or circular dependencies
+3. **Type errors** that fail strict TypeScript compilation
+
+**Solution:**
+1. **Check build logs** in Coolify → pms-admin → Deployments → Build Logs
+2. **Identify duplicate declaration:**
+   ```bash
+   # Search for duplicate in the file mentioned in error trace
+   grep -n "const copyToClipboard" frontend/app/channel-sync/page.tsx
+   # Expected: Should show only ONE definition
+   ```
+3. **Fix locally:**
+   - Open the problematic file
+   - Find all instances of the duplicate function/const
+   - Keep ONE definition (preferably the most robust one with fallbacks)
+   - Update all call sites to use consistent signature
+   - Remove the duplicate(s)
+4. **Commit and push:**
+   ```bash
+   git add frontend/app/channel-sync/page.tsx
+   git commit -m "admin-ui: fix duplicate function declaration"
+   git push origin main
+   ```
+5. **Redeploy** via Coolify → pms-admin → Redeploy
+6. **Verify build succeeds** (watch build logs until "Build successful")
+
+**Note:** `$NIXPACKS_PATH` UndefinedVar warnings in build logs are usually **non-fatal**. Build failures are typically due to TypeScript/webpack compile errors (duplicate declarations, type mismatches, import errors).
+
+**Prevention:**
+- Before adding helper functions, search the file to check if they already exist
+- Use consistent naming conventions to avoid collisions
+- Run `npm run build` locally before pushing (if possible)
+
 ---
 
 ### TLS: Admin Subdomain Shows TRAEFIK DEFAULT CERT (Let's Encrypt Missing)
