@@ -6425,11 +6425,14 @@ The Channel Sync Admin UI provides:
    - **Copy JSON** button copies the parsed, pretty-printed payload (not the raw escaped string)
    - **Duration Calculation:** Shows sync duration using `started_at`/`finished_at` timestamps (preferred) or falls back to `created_at`/`updated_at` if start/finish times are missing
 
-4. **Quick Filters:**
-   - **All:** Show all sync logs
-   - **Active:** Show only triggered + running logs (in-progress syncs)
-   - **Failed:** Show only failed logs
-   - Filter buttons provide one-click access to common views
+4. **Filters & Search:**
+   - **Status Filter:** All / Triggered / Running / Success / Failed / Active (triggered+running)
+   - **Operation Type Filter:** All / availability_update / pricing_update / bookings_sync
+   - **Direction Filter:** All / outbound / inbound
+   - **Search Input:** Free-text search across batch_id, task_id, log_id, connection_id, property_id
+   - **Copy Buttons:** Click 📋 icons in table and drawer to copy IDs (Log ID, Connection ID, Property ID, Task ID, Batch ID) to clipboard
+   - **Sorting:** Logs always sorted by created_at (newest first)
+   - Filter buttons and search provide fine-grained access to specific sync operations
    - Smart auto-refresh (only polls when active triggered/running logs exist)
 
 5. **In-App Notifications:**
