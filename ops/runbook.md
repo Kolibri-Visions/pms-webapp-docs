@@ -2467,6 +2467,95 @@ Verify modal displays data correctly by clicking "View Details" on any sync batc
 
 ---
 
+### Channel Sync Console UX Verification Checklist
+
+**Purpose:** Verify Channel Sync Console (`/channel-sync` page) handles errors, empty states, and destructive actions correctly.
+
+**EXECUTION LOCATION:** WEB-BROWSER (Admin UI)
+
+**Prerequisites:**
+- Admin user logged in
+- At least one channel connection configured
+
+**Error State Verification:**
+
+1. **401 Unauthorized (Session Expired)**
+   - Test: Clear session token or wait for expiration, refresh page
+   - Expected: "Session expired. Redirecting to login..." message, automatic redirect to /auth/logout
+   - Applies to: Sync Logs list, Batch Details modal
+
+2. **403 Forbidden (Access Denied)**
+   - Test: Try accessing as non-admin user (if RBAC enforced at API level)
+   - Expected: "Access denied. You don't have permission to view sync logs." (or batch details)
+   - Applies to: Sync Logs list, Batch Details modal
+
+3. **404 Not Found**
+   - Test: Delete connection or batch, then try to fetch
+   - Expected: "Connection not found. It may have been deleted." (logs) or "Batch not found. It may have been deleted or purged." (batch details)
+   - Applies to: Sync Logs list, Batch Details modal
+
+4. **503 Service Unavailable**
+   - Test: Stop backend service temporarily
+   - Expected: "Service temporarily unavailable. Please try again shortly."
+   - Applies to: Sync Logs list, Batch Details modal
+
+**Empty State Verification:**
+
+1. **No Sync Logs Yet**
+   - Test: Select connection with no sync history
+   - Expected: "No sync logs yet" with hint "Trigger a manual sync or wait for automatic sync to create logs"
+   - Location: Main Sync Logs table
+
+2. **No Matching Search Results**
+   - Test: Enter search query that matches no logs
+   - Expected: "No logs match your search."
+   - Location: Main Sync Logs table
+
+3. **No Failed Logs**
+   - Test: Filter by status=failed when no failures exist
+   - Expected: "No failed logs yet. (Note: invalid requests (422) do not create logs.)"
+   - Location: Main Sync Logs table
+
+**Destructive Actions Verification:**
+
+1. **Purge Logs Confirmation**
+   - Test: Click "Purge Logs" button (admin only)
+   - Expected:
+     - Modal opens with purge preview (shows count to be deleted)
+     - Requires typing "PURGE" exactly (case-sensitive)
+     - "Purge" button disabled until phrase entered correctly
+     - Button disabled while purge in-flight (shows loading state)
+     - Error displayed if confirm phrase incorrect
+   - Location: Purge modal (triggered from admin controls)
+
+**Copy Helpers Verification:**
+
+1. **curl Commands Use Safe Placeholders**
+   - Test: Click "📋 Copy 'List Logs' curl" or "📋 Copy 'Trigger Sync' curl"
+   - Expected:
+     - Copied command includes placeholders: `$CID`, `$TOKEN`, `$PROPERTY_UUID`
+     - NO actual tokens embedded (prevents accidental secret exposure)
+     - Command is syntactically valid bash with placeholders
+   - Location: API Helpers section
+
+**Loading States Verification:**
+
+1. **Spinners and Disabled Buttons**
+   - Test: Trigger sync, open batch details modal, purge logs
+   - Expected:
+     - Loading spinners visible during fetch
+     - Buttons disabled during in-flight requests (no double-click triggers)
+     - Errors clear properly on retry
+   - Location: All fetch operations
+
+**RBAC Alignment:**
+
+- Purge logs action requires **admin** role (aligned with sync trigger permissions)
+- Non-admin users should NOT see "Purge Logs" button or link
+- Admin UI gracefully degrades for non-admin users (403 errors handled)
+
+---
+
 ## Redis + Celery Worker Setup (Channel Manager)
 
 **Purpose:** Configure Redis and Celery worker for Channel Manager background sync operations.

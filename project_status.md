@@ -101,6 +101,30 @@ This document tracks the current state of the PMS-Webapp project, including comp
 }
 ```
 
+### Channel Sync Console UX/Operability Hardening 🟡
+
+**Date Started:** 2026-01-03
+**Status:** Implemented (Pending User Verification after Deploy)
+
+**Changes:**
+- ✅ **Error state handling**: Added 403 Forbidden and 404 Not Found error messages for fetchLogs and fetchBatchDetails (previously only 401/503)
+  - 401: "Session expired. Redirecting to login..." (auto-redirects)
+  - 403: "Access denied. You don't have permission to view sync logs/batch details."
+  - 404: "Connection not found. It may have been deleted." / "Batch not found. It may have been deleted or purged."
+  - 503: "Service temporarily unavailable. Please try again shortly."
+- ✅ **Empty state improvements**: "No sync logs yet" now includes actionable hint: "Trigger a manual sync or wait for automatic sync to create logs"
+- ✅ **Purge logs safety**: Confirmation already present (requires typing "PURGE", button disabled while in-flight, admin-only)
+- ✅ **Copy helpers verified**: curl commands use safe placeholders ($CID, $TOKEN, $PROPERTY_UUID) - no embedded secrets
+- ✅ **Runbook checklist**: Added "Channel Sync Console UX Verification Checklist" section with systematic test steps for errors, empty states, destructive actions, copy helpers, loading states, and RBAC
+
+**Files Changed:**
+- `frontend/app/channel-sync/page.tsx` - Error handling and empty state improvements
+- `backend/docs/ops/runbook.md` - UX verification checklist (line 2470+)
+
+**Verification:**
+- Deploy to staging/prod and follow runbook checklist: backend/docs/ops/runbook.md#channel-sync-console-ux-verification-checklist
+- Expected: All error states display actionable messages, empty states provide guidance, purge requires confirmation, copy helpers never leak secrets
+
 ## Current Phase
 
 ### Phase 21: Inventory/Availability Production Hardening 🟡
