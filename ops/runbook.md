@@ -12206,6 +12206,324 @@ Two distinct timestamps with clear labels:
 
 ---
 
+## Admin UI — Channel Manager (Connections + Sync Logs)
+
+**Purpose:** Backoffice Console UI for managing channel connections, viewing sync logs, and triggering sync operations.
+
+**URL:** `https://admin.fewo.kolibri-visions.de/connections`
+
+**RBAC:** Admin and Manager roles only
+
+---
+
+### Overview
+
+The Connections page provides a comprehensive interface for:
+1. **Viewing channel connections** - Table of all configured platform connections
+2. **Viewing sync logs** - Per-connection sync operation history with search and filters
+3. **Triggering syncs** - Manual sync triggers (availability, pricing, bookings, full)
+4. **Monitoring status** - Real-time status badges, error messages, and auto-refresh
+5. **Batch tracking** - Grouped view of Full Sync operations with batch_id
+
+---
+
+### API Endpoints Used
+
+The Admin UI consumes the following Channel Manager API endpoints:
+
+#### 1. List Connections
+```
+GET /api/v1/channel-connections/?limit=50&offset=0
+```
+
+**Response Shape:** Array
+```json
+[
+  {
+    "id": "uuid",
+    "tenant_id": "uuid",
+    "property_id": "uuid",
+    "platform_type": "airbnb|booking_com|expedia|fewo_direkt|google",
+    "platform_listing_id": "string",
+    "status": "active|inactive|error",
+    "platform_metadata": {},
+    "last_sync_at": "2025-01-03T12:00:00Z" | null,
+    "created_at": "2025-01-03T10:00:00Z",
+    "updated_at": "2025-01-03T12:00:00Z"
+  }
+]
+```
+
+**curl Example:**
+```bash
+curl -L -X GET "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/?limit=50&offset=0" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Accept: application/json"
+```
+
+**Notes:**
+- Returns **array directly** (not wrapped in object)
+- UI uses `normalizeConnections()` helper to handle both array and object responses
+- Trailing slash + query params required to avoid 307 redirects
+
+#### 2. Get Sync Logs
+```
+GET /api/v1/channel-connections/{connection_id}/sync-logs?limit=50&offset=0
+```
+
+**Response Shape:** Object with `logs` array
+```json
+{
+  "connection_id": "uuid",
+  "logs": [
+    {
+      "id": "uuid",
+      "connection_id": "uuid",
+      "operation_type": "availability_update|pricing_update|bookings_sync",
+      "direction": "outbound|inbound",
+      "status": "triggered|running|success|failed",
+      "details": ["<json-string>", "<json-string>"] | {},
+      "error": null | "error message",
+      "task_id": "celery-task-uuid",
+      "batch_id": "batch-uuid" | null,
+      "created_at": "2025-01-03T12:00:00Z",
+      "updated_at": "2025-01-03T12:05:00Z"
+    }
+  ],
+  "limit": 50,
+  "offset": 0,
+  "batch_id": null
+}
+```
+
+**curl Example:**
+```bash
+CID="your-connection-uuid"
+curl -L -X GET "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/$CID/sync-logs?limit=50&offset=0" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Accept: application/json"
+```
+
+**Notes:**
+- Returns **object** with `logs` array (not array directly)
+- UI uses `normalizeLogs()` helper to extract array from `data.logs || data.items || data.data`
+- `details` field can be:
+  - Array of JSON strings: `["{\\"key\\": \\"value\\"}"]`
+  - Already parsed object: `{"key": "value"}`
+  - UI uses `parseLogDetails()` to safely parse JSON strings
+
+#### 3. Trigger Sync
+```
+POST /api/v1/channel-connections/{connection_id}/sync
+```
+
+**Request Body:**
+```json
+{
+  "sync_type": "availability|pricing|bookings|full"
+}
+```
+
+**Response Shape:**
+```json
+{
+  "status": "triggered",
+  "message": "Sync triggered successfully",
+  "task_ids": ["task-uuid-1", "task-uuid-2", "task-uuid-3"],
+  "batch_id": "batch-uuid"
+}
+```
+
+**curl Example:**
+```bash
+CID="your-connection-uuid"
+curl -L -X POST "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/$CID/sync" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"sync_type": "availability"}'
+```
+
+**Notes:**
+- Full sync returns `batch_id` + `task_ids` array (3 operations)
+- Single sync (availability/pricing) may return single `task_id` or array
+- UI displays batch_id with copy button for easy tracking
+
+---
+
+### UI Features
+
+#### Connections Table
+- **Columns:** Platform, Property ID, Status, Last Sync, Updated At
+- **Search:** Client-side search by ID, platform, or status
+- **Actions:**
+  - **View Logs** - Opens detail modal with sync logs for that connection
+  - **Trigger Sync** - Dropdown selector (availability, pricing, bookings, full)
+
+#### Sync Logs Panel (in Connection Detail Modal)
+- **Search:** Free-text search across all log fields:
+  - IDs: id, task_id, batch_id, connection_id
+  - Fields: operation_type, status, direction, error
+  - Details: JSON-stringified details
+  - Timestamps: created_at, updated_at
+- **Filters:**
+  - Status: All / Triggered / Running / Success / Failed
+  - Sync Type: All / Full / Availability / Pricing / Bookings
+- **Sorting:** Newest first (created_at DESC)
+- **Batch Grouping:** Full Sync operations grouped by `batch_id` in collapsible indigo cards
+- **Auto-Refresh:**
+  - Logs: 10 seconds (when checkbox enabled)
+  - Batch logs: 3 seconds (when batch is active)
+- **Detail Drawer:** Click any log row to view:
+  - Parsed details JSON (pretty-printed)
+  - Error messages (if failed)
+  - Full log record (expandable)
+
+#### Polling After Trigger
+When user triggers a sync:
+1. API returns `batch_id` and `task_ids`
+2. UI displays notification banner with batch_id (copy button)
+3. UI starts polling sync logs endpoint every 3 seconds for up to 60 seconds
+4. Matches logs by:
+   - `batch_id` (for Full Sync)
+   - Any `task_id` in returned array
+5. Highlights matching rows in logs table
+6. Stops polling when all matching logs reach terminal status (`success` or `failed`) OR timeout
+
+---
+
+### Manual Verification with curl
+
+#### Step 1: List all connections
+```bash
+export TOKEN="your-jwt-token"
+export API="https://api.fewo.kolibri-visions.de"
+
+curl -L -X GET "$API/api/v1/channel-connections/?limit=50&offset=0" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Accept: application/json" | jq
+```
+
+**Expected:** Array of connection objects
+
+#### Step 2: Get sync logs for a connection
+```bash
+CID="connection-uuid-from-step-1"
+
+curl -L -X GET "$API/api/v1/channel-connections/$CID/sync-logs?limit=50&offset=0" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Accept: application/json" | jq
+```
+
+**Expected:** Object with `logs` array
+
+#### Step 3: Trigger a sync
+```bash
+curl -L -X POST "$API/api/v1/channel-connections/$CID/sync" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"sync_type": "availability"}' | jq
+```
+
+**Expected:** Object with `status`, `task_ids`, `batch_id`
+
+#### Step 4: Poll logs to verify sync created log entries
+```bash
+# Wait 2-3 seconds, then fetch logs again
+sleep 3
+curl -L -X GET "$API/api/v1/channel-connections/$CID/sync-logs?limit=50&offset=0" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Accept: application/json" | jq '.logs[] | select(.batch_id == "batch-uuid-from-step-3")'
+```
+
+**Expected:** Log entries with matching `batch_id` or `task_id`
+
+---
+
+### Response Shape Handling (Resilience)
+
+The UI uses normalization helpers to handle API response variations:
+
+```typescript
+// Handle connections endpoint (array response)
+function normalizeConnections(data: any): any[] {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === "object") {
+    return data.connections || data.data || data.items || [];
+  }
+  return [];
+}
+
+// Handle sync logs endpoint (object with logs array)
+function normalizeLogs(data: any): any[] {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === "object") {
+    return data.logs || data.items || data.data || [];
+  }
+  return [];
+}
+
+// Parse details field (can be JSON string, array of strings, or object)
+function parseLogDetails(details: any): any {
+  if (!details) return null;
+  if (typeof details === 'object' && !Array.isArray(details)) return details;
+
+  // Array of JSON strings
+  if (Array.isArray(details)) {
+    return details.map(item =>
+      typeof item === 'string' ? JSON.parse(item) : item
+    );
+  }
+
+  // Single JSON string
+  if (typeof details === 'string') {
+    try { return JSON.parse(details); }
+    catch (e) { return details; }
+  }
+
+  return details;
+}
+```
+
+**Why this matters:**
+- Connections endpoint returns **array directly**
+- Sync logs endpoint returns **object with `logs` array**
+- Details field can be **JSON string, array of strings, or already parsed**
+- Normalization prevents crashes when API shape changes
+
+---
+
+### Troubleshooting
+
+#### No connections shown
+**Check:**
+1. User has admin/manager role (403 if insufficient permissions)
+2. Database migrations applied (`channel_connections` table exists)
+3. Browser console for API errors
+4. curl command works (test token validity)
+
+#### Sync logs empty after trigger
+**Check:**
+1. Celery worker is running (`docker ps | grep celery`)
+2. Redis is accessible (`redis-cli ping`)
+3. Check sync log status in DB: `SELECT * FROM channel_sync_logs WHERE batch_id = 'your-batch-id'`
+4. Worker logs for errors: `docker logs pms-celery-worker`
+
+#### Polling doesn't find new logs
+**Check:**
+1. `batch_id` or `task_id` matches between trigger response and log entries
+2. Auto-refresh checkbox is enabled
+3. Logs endpoint returns matching entries (test with curl)
+4. Browser network tab shows polling requests every 3s
+
+#### Error: "Failed to fetch connections (HTTP 503)"
+**Fix:** Database schema out of date, run migrations:
+```bash
+cd supabase/migrations
+supabase db push
+```
+
+---
+
 ## Change Log
 
 | Date | Change | Author |
