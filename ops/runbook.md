@@ -7684,27 +7684,42 @@ Flexible metadata storage, varies by operation:
 ### Status Lifecycle
 
 ```
-triggered → queued → running → success
-                              ↘ failed
-                              ↘ cancelled
+triggered → running → success
+                   ↘ failed
+                   ↘ cancelled
 ```
 
 **Status Descriptions:**
 
-| Status | Description | Updated By |
-|--------|-------------|------------|
-| `triggered` | Sync request received, log created | API endpoint |
-| `queued` | Task queued in Celery | Celery broker |
-| `running` | Task execution started | Celery worker |
-| `success` | Task completed successfully | Celery worker |
-| `failed` | Task failed after all retries | Celery worker |
-| `cancelled` | Task manually cancelled | Manual intervention |
+| Status | Description | Updated By | Transition |
+|--------|-------------|------------|------------|
+| `triggered` | Sync request received, log created | API endpoint | Immediately on POST /sync |
+| `running` | Task execution started | Celery worker | When worker picks up task |
+| `success` | Task completed successfully | Celery worker | On successful completion |
+| `failed` | Task failed after all retries | Celery worker | On permanent failure |
+| `cancelled` | Task manually cancelled | Manual intervention | Rare, manual only |
+
+**Lifecycle Flow:**
+1. **API trigger** (POST `/api/v1/channel-connections/{id}/sync`):
+   - Creates log entry with `status="triggered"`
+   - Includes `task_id` (Celery task UUID) and `batch_id` (groups multiple operations)
+   - Returns immediately with task_ids array
+
+2. **Worker picks up task**:
+   - Updates log to `status="running"`
+   - Executes sync operation (platform API calls)
+
+3. **Task completes**:
+   - On success: Updates log to `status="success"`, updates `connection.last_sync_at`
+   - On failure: Updates log to `status="failed"`, sets `error` field
+
+**Note on "queued" status:** Prior to 2026-01-03, logs used `status="queued"` when triggered. This was semantically equivalent to "triggered" and both are treated identically in batch status aggregation. Production systems may still show "queued" in historical logs.
 
 ---
 
 ### Querying Sync Logs
 
-**Via API:**
+**Via API (Basic):**
 ```bash
 # Get last 50 logs for connection
 curl https://api.your-domain.com/api/v1/channel-connections/{id}/sync-logs?limit=50 \
@@ -7713,6 +7728,60 @@ curl https://api.your-domain.com/api/v1/channel-connections/{id}/sync-logs?limit
 # Get logs with pagination
 curl https://api.your-domain.com/api/v1/channel-connections/{id}/sync-logs?limit=20&offset=40 \
   -H "Authorization: Bearer TOKEN"
+```
+
+**Via API (Filtering & Polling):**
+```bash
+# Poll logs for a specific task_id (check if task completed)
+curl "https://api.your-domain.com/api/v1/channel-connections/{id}/sync-logs?task_id=abc123" \
+  -H "Authorization: Bearer TOKEN"
+
+# Poll logs for entire batch (check batch progress)
+curl "https://api.your-domain.com/api/v1/channel-connections/{id}/sync-logs?batch_id={batch_uuid}" \
+  -H "Authorization: Bearer TOKEN"
+
+# Filter by status (get only failed syncs)
+curl "https://api.your-domain.com/api/v1/channel-connections/{id}/sync-logs?status=failed" \
+  -H "Authorization: Bearer TOKEN"
+
+# Filter by operation type (get only availability updates)
+curl "https://api.your-domain.com/api/v1/channel-connections/{id}/sync-logs?operation_type=availability_update" \
+  -H "Authorization: Bearer TOKEN"
+
+# Filter by direction (get only inbound syncs)
+curl "https://api.your-domain.com/api/v1/channel-connections/{id}/sync-logs?direction=inbound" \
+  -H "Authorization: Bearer TOKEN"
+
+# Combine filters (get failed availability updates)
+curl "https://api.your-domain.com/api/v1/channel-connections/{id}/sync-logs?status=failed&operation_type=availability_update" \
+  -H "Authorization: Bearer TOKEN"
+```
+
+**Polling Pattern (Check Task Completion):**
+```bash
+# 1. Trigger sync and capture task_id
+RESPONSE=$(curl -X POST "https://api.your-domain.com/api/v1/channel-connections/{id}/sync" \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"sync_type": "availability", "properties": []}')
+
+TASK_ID=$(echo "$RESPONSE" | jq -r '.task_ids[0]')
+echo "Task ID: $TASK_ID"
+
+# 2. Poll until task completes (simple loop)
+while true; do
+  STATUS=$(curl -s "https://api.your-domain.com/api/v1/channel-connections/{id}/sync-logs?task_id=$TASK_ID" \
+    -H "Authorization: Bearer TOKEN" | jq -r '.logs[0].status')
+
+  echo "Status: $STATUS"
+
+  if [[ "$STATUS" == "success" ]] || [[ "$STATUS" == "failed" ]]; then
+    echo "Task completed with status: $STATUS"
+    break
+  fi
+
+  sleep 2  # Wait 2 seconds before next poll
+done
 ```
 
 **Via Database:**
