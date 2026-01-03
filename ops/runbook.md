@@ -1803,6 +1803,101 @@ bash scripts/pms_phase23_smoke.sh
 
 ---
 
+## Phase 21: Inventory/Availability Production Hardening
+
+**Date:** 2026-01-03
+
+**Summary:** Production readiness validation for inventory/availability APIs with common gotchas documentation and operational guidance.
+
+### What Phase 20 Proved
+
+Phase 20 smoke tests validated core inventory mechanics:
+- ✅ **Manual blocks prevent bookings**: Availability blocks correctly reject overlapping bookings with HTTP 409 `inventory_overlap`
+- ✅ **Deleting blocks unblocks inventory**: Block deletion immediately frees inventory for booking
+- ✅ **Cancel frees inventory**: Booking cancellation releases inventory instantly
+- ✅ **Idempotent cancellation**: Canceling already-cancelled bookings returns 200 (safe retry)
+- ✅ **Cancelled bookings don't prevent rebooking**: Same dates can be rebooked after cancellation
+- ✅ **Race-safe concurrency**: Under concurrent requests, exactly 1 booking succeeds (201), rest rejected (409)
+
+### Common Gotchas Checklist
+
+#### 1. Missing Query Parameters (422 Validation Error)
+
+**Symptom:** `GET /api/v1/availability` returns HTTP 422 with validation errors
+
+**Cause:** `from_date` and `to_date` query parameters are required but missing
+
+**Example Error:**
+```json
+{
+  "detail": [
+    {"type": "missing", "loc": ["query", "from_date"], "msg": "Field required"},
+    {"type": "missing", "loc": ["query", "to_date"], "msg": "Field required"}
+  ]
+}
+```
+
+**Fix:** Always include both query parameters:
+```bash
+# Correct usage
+curl -H "Authorization: Bearer $TOKEN" \
+  "$API/api/v1/availability?property_id=$PID&from_date=2026-01-10&to_date=2026-01-20"
+
+# Incorrect (422 error)
+curl -H "Authorization: Bearer $TOKEN" \
+  "$API/api/v1/availability?property_id=$PID"
+```
+
+#### 2. Schema Drift Symptoms
+
+**Symptom:** API returns `503 Service Unavailable` with error message `"Schema not installed"` or `"Schema out of date"`
+
+**Common Missing Columns:**
+- `guests.total_bookings`, `guests.total_spent`, `guests.last_booking_at` → Apply migration `20260103120000_ensure_guests_metrics_columns.sql`
+- `guests.first_booking_at`, `guests.average_rating`, `guests.updated_at`, `guests.deleted_at` → Apply migration `20260103123000_ensure_guests_booking_timeline_columns.sql`
+
+**What to Do:**
+1. Check which column is missing from error logs
+2. Apply corresponding migration via Supabase CLI or SQL Editor
+3. Verify with `\d guests` in psql
+4. See [Schema Drift](#schema-drift) section for full troubleshooting steps
+
+### Minimum Production Checklist for Inventory
+
+Before deploying inventory/availability features to production:
+
+- [ ] **Migrations Applied**
+  - Run `supabase migration list` or check migration table
+  - Ensure all inventory-related migrations present (guests metrics, timeline columns, exclusion constraints)
+
+- [ ] **Exclusion Constraint Present**
+  - Verify `bookings.no_double_bookings` constraint exists
+  - Check with: `\d bookings` in psql and look for `EXCLUDE USING gist` constraint
+  - Migration: `20251229200517_enforce_overlap_prevention_via_exclusion.sql`
+
+- [ ] **Smoke Scripts Pass**
+  - Run `pms_phase20_final_smoke.sh` → Should complete without 503/422 errors
+  - Run `pms_booking_concurrency_test.sh` → Should show exactly 1 success, rest 409
+  - Run `pms_phase21_inventory_hardening_smoke.sh` → Should validate availability API contract
+
+- [ ] **Environment Variables Configured**
+  - `DATABASE_URL` set and reachable
+  - `JWT_SECRET` configured for token validation
+  - `ALLOWED_ORIGINS` includes admin console domain (CORS)
+
+### What We Do Next
+
+Phase 21 focuses on edge cases and operational robustness:
+
+- **Back-to-Back Bookings**: Validate check-out day can be another booking's check-in (end-exclusive semantics)
+- **Timezone Boundaries**: Test bookings crossing DST transitions and UTC midnight boundaries
+- **Min Stay Constraints**: Enforce minimum night requirements per property/season
+- **Booking Window Rules**: Validate advance booking limits (e.g., max 365 days future)
+- **Availability Read Contract**: Negative tests for missing query params, malformed dates
+- **Concurrency Edge Cases**: Multi-property parallel bookings, rapid cancel-rebook cycles
+
+---
+
 ## Phase 30 — Inventory Final Validation
 
 **Date:** 2025-12-27
