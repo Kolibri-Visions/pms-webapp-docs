@@ -1850,7 +1850,7 @@ Phase 20 smoke tests validated core inventory mechanics:
 }
 ```
 
-**Note:** The API may return either error format. Both indicate missing required query parameters.
+**Note:** The API may return either error format. Both indicate missing required query parameters. When using curl or smoke scripts, you may see extra artifacts (HTTP headers, status lines, trailing text) mixed with the JSON response. The Phase 21 smoke script handles this by extracting JSON boundaries and falling back to raw string checks.
 
 **Fix:** Always include both query parameters:
 ```bash
