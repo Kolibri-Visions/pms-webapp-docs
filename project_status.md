@@ -166,6 +166,12 @@ This document tracks the current state of the PMS-Webapp project, including comp
 - Fix: Updated all policies to use `auth.jwt() ->> 'agency_id'` and `auth.jwt() ->> 'role'` (canonical pattern from existing migrations)
 - Migration re-apply pending in PROD
 
+**Module System Integration (2026-01-03):**
+- ✅ Branding API mounted via module system (MODULES_ENABLED=true)
+- Created branding module (backend/app/modules/branding.py) following domain module pattern
+- Auto-registered in bootstrap.py for seamless integration
+- Verified by openapi.json paths and module mounting logs
+
 **Phase B (Future - Client-Facing):**
 - Frontend theme provider (load branding on app start, inject CSS variables)
 - Branding settings UI (admin page for logo/color picker)

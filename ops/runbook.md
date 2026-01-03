@@ -2701,6 +2701,36 @@ curl -L -X PUT "$API/api/v1/branding" \
   # Should show: 20260103150000_create_tenant_branding.sql with recent timestamp
   ```
 
+**Issue:** GET /api/v1/branding returns 404 while MODULES_ENABLED=true
+
+**Symptom:**
+- Migration applied successfully, policies exist, but API endpoint unreachable
+- openapi.json does not contain branding paths
+- Logs show: "Mounting N module(s): ['core_pms', 'inventory', 'properties', 'bookings', 'channel_manager']" (branding missing)
+
+**Cause:**
+- Branding router not part of module system, only mounted in fallback (MODULES_ENABLED=false)
+- Module system skips non-registered modules
+
+**Solution:**
+- Branding module now registered in module system (backend/app/modules/branding.py)
+- Auto-imported in bootstrap.py for self-registration
+- Redeploy to apply changes
+
+**Verification:**
+```bash
+# Verify branding paths in OpenAPI schema
+curl -s https://your-domain.com/openapi.json | grep -i branding
+# Expected: "/api/v1/branding" appears
+
+# Verify module mounting in logs (after redeploy)
+# Expected: "Mounting 6 module(s): ['core_pms', 'inventory', 'properties', 'bookings', 'branding', ...]"
+
+# Test endpoint (should return 401 without token, or 200 with valid token)
+curl -i https://your-domain.com/api/v1/branding
+# Expected: HTTP 401 Unauthorized (no token) or HTTP 200 OK (with Authorization header)
+```
+
 ---
 
 ## Redis + Celery Worker Setup (Channel Manager)
