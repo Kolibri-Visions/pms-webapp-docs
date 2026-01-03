@@ -5851,6 +5851,68 @@ curl -H "Authorization: Bearer $TOKEN" \
 
 **RBAC:** Admin and Manager roles only
 
+### A) Connections Quick Actions
+
+Each connection row in the Connections table provides inline quick actions for rapid E2E testing and operational workflows:
+
+**Quick Action Buttons:**
+
+1. **Test** - Test connection health
+   - Endpoint: `POST /api/v1/channel-connections/{id}/test`
+   - Response: Health status, platform API connectivity check
+   - Display: Shows pass/fail notification banner
+   - Mock Mode: Displays "Mock Mode (Simulated)" badge when `CHANNEL_MOCK_MODE=true`
+
+2. **View Logs** - Navigate to Channel Sync page with logs preloaded
+   - Action: Sets `localStorage.setItem("channelSync:lastConnectionId", connection_id)`
+   - Navigation: Redirects to `/channel-sync` page
+   - Result: Logs load immediately for the selected connection (no manual Auto-detect needed)
+   - UX: Does NOT auto-open sync log details modal (modal opens only on explicit user row click)
+
+3. **A** = Availability sync (quick trigger)
+   - Endpoint: `POST /api/v1/channel-connections/{id}/sync` with `{"sync_type": "availability"}`
+   - Response: Returns `task_ids` array (single task for availability-only sync)
+
+4. **P** = Pricing sync (quick trigger)
+   - Endpoint: `POST /api/v1/channel-connections/{id}/sync` with `{"sync_type": "pricing"}`
+   - Response: Returns `task_ids` array (single task for pricing-only sync)
+
+5. **B** = Bookings sync (quick trigger)
+   - Endpoint: `POST /api/v1/channel-connections/{id}/sync` with `{"sync_type": "bookings"}`
+   - Response: Returns `task_ids` array (single task for bookings-only sync)
+
+6. **F** = Full sync (quick trigger)
+   - Endpoint: `POST /api/v1/channel-connections/{id}/sync` with `{"sync_type": "full"}`
+   - Response: Returns `batch_id` + `task_ids` array (3 tasks: availability, pricing, bookings)
+   - Display: Shows notification with batch ID and task count
+
+**Expected UX Behavior:**
+
+- **No Dangerous Defaults:** No sync type or platform is preselected in form fields
+- **Trigger Disabled Until Ready:** Sync trigger buttons disabled until all required selections are made
+- **Auto-Refresh After Trigger:** After triggering sync, connections list refetches to update `last_sync_at` column
+- **Logs Auto-Load After Trigger:** After successful sync trigger, logs automatically refresh to show new sync operation
+- **Clear Resets All State:** Clicking "Clear" on Connection ID field:
+  - Clears logs list
+  - Closes sync log details modal if open
+  - Hides stale success banners
+  - Resets all filters and search state
+- **Inline Status Feedback:** Each quick action button shows loading state during operation (e.g., "Testing..." or "...")
+- **Last Sync Age Display:** `last_sync_at` column shows relative time ("3m ago", "2h ago", "never") instead of full ISO timestamp
+
+**Fastest UI-Based E2E Check:**
+
+The quick actions provide the fastest path for operators to verify end-to-end Channel Manager functionality:
+
+1. Click **Test** → Verify connection health (< 1 second)
+2. Click **A** (Availability) → Trigger sync (< 1 second to queue)
+3. Click **View Logs** → Navigate to logs page and verify sync completed (logs preloaded)
+4. Verify status badge shows "success" (green) or "failed" (red)
+
+This workflow validates: API authentication, connection health, sync task queueing, Celery workers, database writes, and UI state management.
+
+---
+
 ### UI Flow (Step-by-Step)
 
 **1. Create New Connection**
