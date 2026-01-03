@@ -11289,6 +11289,88 @@ After initial deployment of advisory lock serialization, a production bug was di
 
 ---
 
+### Inventory Blocking Behavior (Inquiry vs Confirmed)
+
+**Updated:** 2026-01-03 (Production Fix)
+
+**Contract:**
+
+Not all booking statuses occupy inventory. Only confirmed/hard reservations create `inventory_ranges` entries that block availability:
+
+**BLOCKING Statuses** (create active `inventory_ranges`):
+- `pending` - Awaiting payment/confirmation
+- `confirmed` - Paid reservation (hard hold)
+- `checked_in` - Guest currently on property
+
+**NON-BLOCKING Statuses** (do NOT create `inventory_ranges`):
+- `inquiry` - Information request, tentative interest (NOT a reservation)
+- `cancelled` - Reservation cancelled (inventory freed)
+- `declined` - Inquiry declined by host
+- `no_show` - Guest didn't arrive (inventory freed)
+- `checked_out` - Guest departed (inventory freed)
+
+**Why This Matters:**
+
+The availability API (`GET /api/v1/availability`) and booking creation (`POST /api/v1/bookings`) both use `inventory_ranges` with `state='active'` as the source of truth. This ensures:
+
+1. **Inquiry bookings never block availability** - They don't create `inventory_ranges`, so overlapping confirmed bookings can be created
+2. **API consistency** - If availability shows a window as free, booking creation will succeed (no false 409s)
+3. **Concurrency safety** - The exclusion constraint on `inventory_ranges` prevents race conditions
+
+**Common Scenario:**
+
+```
+# Scenario: Inquiry exists for 2026-01-10 to 2026-01-12
+
+# Step 1: Check availability
+GET /api/v1/availability?property_id=X&from_date=2026-01-10&to_date=2026-01-12
+→ Response: { "ranges": [] }  # Free! (inquiry doesn't block)
+
+# Step 2: Create confirmed booking
+POST /api/v1/bookings
+{ "property_id": "X", "check_in": "2026-01-10", "check_out": "2026-01-12", "status": "confirmed" }
+→ Response: HTTP 201 (success! inquiry doesn't block)
+
+# Step 3: Try to create another confirmed booking
+POST /api/v1/bookings (same dates)
+→ Response: HTTP 409 inventory_overlap (first confirmed booking blocks)
+```
+
+**Production Bug Fixed (2026-01-03):**
+
+**Symptom:**
+- Concurrency test auto-found "free window" via availability API (ranges=[])
+- But ALL 10 concurrent booking requests returned 409 (0 successes)
+- DB showed an `inquiry` booking overlapping the window
+
+**Root Cause:**
+- `inquiry` was incorrectly included in `OCCUPYING_STATUSES`
+- This caused inquiry bookings to create `inventory_ranges` entries
+- Violated the contract that inquiry should be non-blocking
+
+**Fix Applied:**
+- Removed `inquiry` from `OCCUPYING_STATUSES` (line 147)
+- Added `inquiry` to `NON_OCCUPYING_STATUSES` (line 150)
+- Now inquiry bookings do NOT create `inventory_ranges` entries
+- Confirmed bookings can overlap with inquiry bookings (as intended)
+
+**Code Locations:**
+- Status definitions: `backend/app/services/booking_service.py:145-150`
+- Inventory range creation: `backend/app/services/booking_service.py:771-788`
+- Status transition logic: `backend/app/services/booking_service.py:926-962`
+- Unit test: `backend/tests/unit/test_booking_deadlock.py::test_inquiry_non_blocking_full_lifecycle`
+
+**Verification:**
+```bash
+# Concurrency script should now succeed even if inquiry bookings exist
+bash scripts/pms_booking_concurrency_test.sh
+
+# Expected: 1 success (201), 9 conflicts (409)
+# Inquiry bookings in the window will NOT cause all-409s
+```
+
+---
+
 ## Ops Console (Admin UI)
 
 **Purpose:** Optional web-based operations console for system diagnostics and monitoring.
