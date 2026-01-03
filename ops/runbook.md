@@ -6560,6 +6560,63 @@ The Channel Sync Admin UI provides:
 
 ---
 
+### Channel Sync safety defaults
+
+**Intentionally NO preselected values:** The Channel Sync form starts with all fields empty (Sync Type, Platform, Property) to prevent accidental syncs.
+
+**Trigger button disabled** until all required fields are selected, with helper text: "ℹ️ Please select Sync Type, Platform, and Property to avoid triggering the wrong sync"
+
+**Why:** Prevents accidental syncs against wrong platform/property due to overlooked defaults. User must explicitly choose each field.
+
+See: **Features → Safety Defaults (Form Validation)** for full details.
+
+---
+
+### Channel Sync Logs: lifecycle
+
+**Status Progression:**
+1. `triggered` (blue) - Sync queued in Celery
+2. `running` (yellow) - Worker executing sync
+3. `success` (green) - Sync completed successfully
+4. `failed` (red) - Sync failed with error
+
+**Important Notes:**
+- Jobs can complete very quickly (< 1 second), so status may jump directly from "triggered" to "success" without showing "running" state
+- Logs automatically refresh when active (triggered/running) logs exist
+- Each log entry includes: status, platform, sync type, property, error (if failed), duration, timestamps
+- Connection's `last_sync_at` field updates on trigger (immediate) and on success (completion)
+
+See: **Features → View Sync Logs** and **Channel Connections: Last Sync Semantics** for full details.
+
+---
+
+### UX behavior
+
+**Trigger Sync Auto-loads Logs:**
+- After clicking "Trigger Sync", logs automatically appear immediately
+- If Connection ID was not set, it gets set from the triggered sync's connection
+- Success panel shows batch_id/task_ids with copy buttons
+
+**Auto-detect Only Sets Connection:**
+- Clicking "Auto-detect" button populates Connection ID and fetches logs
+- Does NOT open the Sync Log Details modal
+- User must explicitly click a log row to view details
+
+**Clearing Connection Resets UI:**
+- Clears Connection ID field and logs list
+- Closes Sync Log Details modal if open
+- Hides success panel and error messages
+- Resets all filters and search state
+
+**Success Panel Auto-dismiss:**
+- Green success banner includes dismiss button (×)
+- Auto-dismisses after 15 seconds
+- User can manually dismiss anytime
+
+See: **Features → UX Behavior** for full details.
+
+---
+
 ### Sync Trigger Payload Architecture
 
 **Important:** The sync page sends two distinct IDs to the API:
