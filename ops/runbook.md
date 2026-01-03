@@ -2565,6 +2565,105 @@ Verify modal displays data correctly by clicking "View Details" on any sync batc
 
 ---
 
+## Branding & Theming Verification (PROD)
+
+**Purpose:** Verify tenant branding system is working correctly in production (logo, colors, theme tokens).
+
+**EXECUTION LOCATION:** HOST-SERVER-TERMINAL (migration) + WEB-BROWSER (UI verification)
+
+### Apply Migration (HOST-SERVER-TERMINAL)
+
+```bash
+# Check migration status
+cd /path/to/repo
+bash backend/scripts/ops/apply_supabase_migrations.sh --status
+
+# Apply branding migration
+bash backend/scripts/ops/apply_supabase_migrations.sh --apply
+
+# Verify table exists
+psql $DATABASE_URL -c "\d tenant_branding"
+# Expected: Table with tenant_id, logo_url, primary_color, accent_color, etc.
+```
+
+### Verify API Endpoints (HOST-SERVER-TERMINAL or WEB-BROWSER)
+
+**Get Branding (defaults if no custom config):**
+```bash
+export API="https://api.fewo.kolibri-visions.de"
+export TOKEN="your-jwt-token"
+
+curl -L -H "Authorization: Bearer $TOKEN" \
+  "$API/api/v1/branding" | python3 -m json.tool
+
+# Expected: HTTP 200 with tokens object (primary, accent, background, surface, text, etc.)
+```
+
+**Update Branding (admin/manager only):**
+```bash
+curl -L -X PUT "$API/api/v1/branding" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "primary_color": "#4F46E5",
+    "accent_color": "#10B981",
+    "logo_url": "https://example.com/logo.png"
+  }' | python3 -m json.tool
+
+# Expected: HTTP 200 with updated tokens
+```
+
+### Verify UI (WEB-BROWSER)
+
+**1. Default Branding:**
+- Open Admin UI (fresh tenant with no branding set)
+- Expected: Default indigo primary, emerald accent, no logo
+
+**2. Set Custom Branding:**
+- Log in as admin
+- Navigate to Branding Settings (if UI implemented) OR use API via curl
+- Set logo_url, primary_color, accent_color
+- Save changes
+
+**3. Verify Theme Application:**
+- Refresh admin UI page
+- Expected:
+  - Logo appears in sidebar/header (if UI implemented)
+  - Primary color applied to buttons, links
+  - Accent color applied to success badges, highlights
+  - Theme persists across page navigations
+
+**4. Light/Dark Mode Toggle:**
+- Toggle OS/browser dark mode
+- Expected:
+  - Background/surface colors invert
+  - Text colors invert (dark text in light mode, light text in dark mode)
+  - Primary/accent colors remain consistent
+  - Search inputs NOT inverted (proper contrast in both modes)
+
+### Troubleshooting
+
+**Issue:** GET /api/v1/branding returns 503
+
+**Solution:**
+- Migration not applied: Run migration script
+- RLS policy blocking: Check user's agency_id matches tenant_id
+
+**Issue:** PUT /api/v1/branding returns 403
+
+**Solution:**
+- User is not admin or manager
+- Check role via: `SELECT role FROM users WHERE id = auth.uid()`
+
+**Issue:** Theme not applying in UI
+
+**Solution:**
+- Frontend not fetching branding on load (check browser DevTools network tab)
+- CSS variables not injected (check :root styles in DevTools elements tab)
+- Cache issue: Hard refresh (Cmd+Shift+R / Ctrl+Shift+R)
+
+---
+
 ## Redis + Celery Worker Setup (Channel Manager)
 
 **Purpose:** Configure Redis and Celery worker for Channel Manager background sync operations.

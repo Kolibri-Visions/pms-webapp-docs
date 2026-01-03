@@ -127,6 +127,43 @@ This document tracks the current state of the PMS-Webapp project, including comp
 - Deploy to staging/prod and follow runbook checklist: backend/docs/ops/runbook.md#channel-sync-console-ux-verification-checklist
 - Expected: All error states display actionable messages, empty states provide guidance, purge requires confirmation, copy helpers never leak secrets
 
+### Theming & Branding (Admin + Future Client) 🟡
+
+**Date Started:** 2026-01-03
+**Status:** Phase A - API + DB Implemented (Frontend UI Minimal/Pending)
+
+**Goal:** Enable per-tenant white-label branding with theme tokens for admin UI and future client-facing site.
+
+**Phase A (Implemented):**
+- ✅ **Database schema**: `tenant_branding` table with validation constraints (hex colors, font allowlist, radius allowlist)
+- ✅ **RLS policies**: SELECT for all tenant users, INSERT/UPDATE for admin/manager only
+- ✅ **API endpoints**:
+  - `GET /api/v1/branding` - Get effective branding with computed theme tokens (defaults applied)
+  - `PUT /api/v1/branding` - Update branding (admin/manager only)
+- ✅ **Theme token derivation**: Primary/accent colors → full token set (background, surface, text, border, radius)
+- ✅ **Validation**: Server-side hex color regex, allowlist enforcement for font/radius/mode
+- ✅ **Documentation**: `backend/docs/ux/theming_branding.md` with token contract, admin workflow, future phases
+- ✅ **Runbook**: Branding verification section with migration steps, API curl examples, UI verification checklist
+
+**Files Changed:**
+- `supabase/migrations/20260103150000_create_tenant_branding.sql` - Schema + RLS
+- `backend/app/schemas/branding.py` - Pydantic models with validators
+- `backend/app/api/routes/branding.py` - GET/PUT endpoints
+- `backend/app/main.py` - Router registration
+- `backend/docs/ux/theming_branding.md` - Complete theming docs
+- `backend/docs/ops/runbook.md` - Verification steps (line 2568+)
+
+**Phase B (Future - Client-Facing):**
+- Frontend theme provider (load branding on app start, inject CSS variables)
+- Branding settings UI (admin page for logo/color picker)
+- Apply tokens to booking widget, property listings, guest portal
+- Consistent brand across admin + client experiences
+
+**Verification:**
+- HOST-SERVER-TERMINAL: Apply migration `20260103150000_create_tenant_branding.sql`
+- HOST-SERVER-TERMINAL: Curl GET/PUT `/api/v1/branding` (verify defaults, update, persist)
+- WEB-BROWSER: Frontend integration pending (Phase B)
+
 ## Current Phase
 
 ### Phase 21: Inventory/Availability Production Hardening 🟡
