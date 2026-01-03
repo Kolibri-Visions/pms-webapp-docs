@@ -5869,22 +5869,25 @@ Each connection row in the Connections table provides inline quick actions for r
    - Result: Logs load immediately for the selected connection (no manual Auto-detect needed)
    - UX: Does NOT auto-open sync log details modal (modal opens only on explicit user row click)
 
-3. **A** = Availability sync (quick trigger)
+3. **Avail** (previously **A**) = Availability sync (quick trigger)
    - Endpoint: `POST /api/v1/channel-connections/{id}/sync` with `{"sync_type": "availability"}`
    - Response: Returns `task_ids` array (single task for availability-only sync)
+   - Display: Shows success toast "Availability sync triggered (Batch: ...)" with auto-dismiss after 10 seconds
 
-4. **P** = Pricing sync (quick trigger)
+4. **Price** (previously **P**) = Pricing sync (quick trigger)
    - Endpoint: `POST /api/v1/channel-connections/{id}/sync` with `{"sync_type": "pricing"}`
    - Response: Returns `task_ids` array (single task for pricing-only sync)
+   - Display: Shows success toast "Pricing sync triggered (Batch: ...)" with auto-dismiss after 10 seconds
 
-5. **B** = Bookings sync (quick trigger)
+5. **Book** (previously **B**) = Bookings sync (quick trigger)
    - Endpoint: `POST /api/v1/channel-connections/{id}/sync` with `{"sync_type": "bookings"}`
    - Response: Returns `task_ids` array (single task for bookings-only sync)
+   - Display: Shows success toast "Bookings sync triggered (Batch: ...)" with auto-dismiss after 10 seconds
 
-6. **F** = Full sync (quick trigger)
+6. **Full** (previously **F**) = Full sync (quick trigger)
    - Endpoint: `POST /api/v1/channel-connections/{id}/sync` with `{"sync_type": "full"}`
    - Response: Returns `batch_id` + `task_ids` array (3 tasks: availability, pricing, bookings)
-   - Display: Shows notification with batch ID and task count
+   - Display: Shows success toast "Full sync triggered (Batch: ...)" with batch ID and task count, auto-dismiss after 10 seconds
 
 **Expected UX Behavior:**
 
@@ -6606,12 +6609,15 @@ See: **Features → View Sync Logs** and **Channel Connections: Last Sync Semant
 - Clears Connection ID field and logs list
 - Closes Sync Log Details modal if open
 - Hides success panel and error messages
+- **Clears all active toasts immediately** (no lingering success/error messages)
 - Resets all filters and search state
 
-**Success Panel Auto-dismiss:**
-- Green success banner includes dismiss button (×)
-- Auto-dismisses after 15 seconds
-- User can manually dismiss anytime
+**Toast Auto-dismiss Behavior:**
+- **Channel Sync page:** Toasts auto-dismiss after 6 seconds
+- **Connections page:** Notifications auto-dismiss after 10 seconds
+- Green success banner (syncResult panel) auto-dismisses after 15 seconds
+- All toasts include manual dismiss button (×)
+- **Navigation cleanup:** Toasts and banners are cleared automatically when navigating away from page
 
 See: **Features → UX Behavior** for full details.
 
