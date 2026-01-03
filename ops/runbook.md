@@ -6461,6 +6461,18 @@ The Channel Sync Admin UI provides:
    - Format: `Xs` (seconds), `Ym Zs` (minutes/seconds), or `-` if timestamps unavailable
    - Active syncs (triggered/running) may show `-` until completion
 
+8. **Safety Defaults (Form Validation):**
+   - **Intentionally NO preselected values:** Sync Type, Platform, and Property fields start empty
+   - **Trigger button disabled** until all required fields are selected
+   - **Helper text displayed:** "ℹ️ Please select Sync Type, Platform, and Property to avoid triggering the wrong sync"
+   - **Why:** Prevents accidental syncs against wrong platform/property due to overlooked defaults
+   - **User must explicitly choose:**
+     - Sync Type (Availability / Pricing / Full)
+     - Platform (Airbnb / Booking.com / Expedia / FeWo-direkt / Google)
+     - Property (from dropdown loaded from database)
+   - **Connection ID:** Optional, can be auto-detected or manually entered after selecting platform + property
+   - **Form remains disabled** until user makes conscious selection of each required field
+
 ---
 
 ### Sync Trigger Payload Architecture
