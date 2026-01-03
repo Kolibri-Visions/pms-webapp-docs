@@ -114,6 +114,7 @@ This document tracks the current state of the PMS-Webapp project, including comp
   - 503: "Service temporarily unavailable. Please try again shortly."
 - ✅ **Empty state improvements**: "No sync logs yet" now includes actionable hint: "Trigger a manual sync or wait for automatic sync to create logs"
 - ✅ **Search field text visibility fix**: Sync Logs search input now has explicit text color for light/dark mode (text-slate-900/dark:text-slate-100, placeholder:text-slate-400/dark:placeholder:text-slate-500). Fixes white-on-white invisible text issue.
+- ✅ **Search field contrast enhancement**: Previous fix insufficient (low-contrast gray in light mode). Strengthened to text-gray-900/dark:text-white with explicit bg-white/dark:bg-gray-800, placeholder:text-gray-500. Pending user verification after deploy.
 - ✅ **Purge logs safety**: Confirmation already present (requires typing "PURGE", button disabled while in-flight, admin-only)
 - ✅ **Copy helpers verified**: curl commands use safe placeholders ($CID, $TOKEN, $PROPERTY_UUID) - no embedded secrets
 - ✅ **Runbook checklist**: Added "Channel Sync Console UX Verification Checklist" section with systematic test steps for errors, empty states, destructive actions, copy helpers, loading states, and RBAC

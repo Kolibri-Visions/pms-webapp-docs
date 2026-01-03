@@ -2552,6 +2552,7 @@ Verify modal displays data correctly by clicking "View Details" on any sync batc
    - Test: Click into Sync Logs search field and type text
    - Expected:
      - Typed text is clearly visible (not white on white or invisible)
+     - Typed text has high contrast in light mode (dark text on white background, not low-contrast gray)
      - Works in both light mode and dark mode
      - Placeholder text remains readable
    - Location: Sync Logs search input
