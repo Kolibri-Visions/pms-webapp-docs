@@ -11456,6 +11456,10 @@ Production migrations must be applied from the host server terminal with proper 
 # - User must be supabase_admin (table owner) for ALTER TABLE operations
 # - Run from repo root directory
 
+# Golden Check (recommended): verify you are table owner before ALTER TABLE migrations
+psql "$DATABASE_URL" -c "select current_user, (select tableowner from pg_tables where schemaname='public' and tablename='bookings') as bookings_owner;"
+# Expected: current_user = supabase_admin AND bookings_owner = supabase_admin
+
 # 1. Check migration status (shows applied vs pending)
 bash backend/scripts/ops/apply_supabase_migrations.sh --status
 
@@ -11482,7 +11486,10 @@ WHERE (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'checked_in'::tex
 2. **User is not table owner:**
    - Symptom: `ERROR: must be owner of table bookings`
    - Fix: Use `supabase_admin` role, not `postgres` or `anon`
-   - Connection string must include: `?user=supabase_admin`
+   - Reliable methods:
+     - Include username in URL: `postgresql://supabase_admin:password@host:5432/postgres`
+     - OR export `PGUSER=supabase_admin` and `PGPASSWORD=...` before psql
+   - Note: Query parameter `?user=supabase_admin` is NOT required (and may not work in all contexts)
 
 3. **Running SQL in Supabase SQL Editor:**
    - Limitation: Supabase SQL Editor does NOT support psql meta-commands (`\i`, `\set`)
