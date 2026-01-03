@@ -10978,6 +10978,31 @@ Booking B: 2026-01-12 to 2026-01-14  (occupies: Jan 12, Jan 13)
 Result: ✓ Both allowed (Jan 12 is available for Booking B)
 ```
 
+**Inquiry Bookings Policy (Non-Blocking):**
+
+As of 2026-01-03, inquiry bookings (`status='inquiry'`) are **non-blocking** for both availability checks and booking creation:
+
+- **Availability API** (`GET /api/v1/availability`): Does NOT show inquiry bookings as blocked ranges
+- **Booking Creation** (`POST /api/v1/bookings`): Does NOT treat inquiry bookings as conflicts (409)
+- **Rationale**: Inquiry bookings are preliminary/tentative and should not prevent confirmed reservations
+
+**Non-Blocking Statuses:**
+- `cancelled` - Cancelled bookings
+- `declined` - Declined bookings
+- `no_show` - No-show bookings
+- `inquiry` - Inquiry/tentative bookings (as of 2026-01-03)
+
+**Blocking Statuses:**
+- `confirmed` - Confirmed reservations
+- `pending` - Pending confirmation
+- `checked_in` - Active stays
+- `checked_out` - Completed stays (historical data)
+
+**Database Implementation:**
+- `inventory_ranges` table uses `source_id` (UUID) and `kind` (enum) to reference bookings/blocks
+- No `booking_id` or `block_id` columns exist in `inventory_ranges`
+- API responses may present `booking_id`/`block_id` derived from `source_id` + `kind` for client convenience
+
 #### Issue: HTTP 409 with `conflict_type=inventory_overlap`
 
 **Symptom:**

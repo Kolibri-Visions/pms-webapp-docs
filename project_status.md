@@ -155,6 +155,28 @@ This document tracks the current state of the PMS-Webapp project, including comp
   - Runbook: Added "Hotfix Note (2026-01-03)" section
   - Project status: This entry
 
+**API Consistency Fix (2026-01-03) - Inquiry Bookings Policy:**
+- ❗ **Issue:** Availability API vs Booking Creation inconsistency
+  - GET /api/v1/availability showed inquiry bookings as "free" (ranges=[])
+  - POST /api/v1/bookings treated inquiry bookings as blocking (returned 409)
+  - Concurrency script auto-window mode picked "free" windows with inquiry bookings, got all 409s (false fails)
+- ✅ **Fix Applied:**
+  - Updated `BookingService.check_availability()` to exclude inquiry from blocking statuses (line 1565)
+  - Non-blocking statuses now: cancelled, declined, no_show, inquiry
+  - Blocking statuses: confirmed, pending, checked_in, checked_out
+  - Inventory constraint (`inventory_ranges.inventory_ranges_no_overlap`) remains final guard
+- ✅ **Script Improvements:**
+  - Extended auto-window search from 3 to 7 windows (+1, +7, +14, +21, +30, +45, +60 days)
+  - Improved diagnostic messages for 0 successes + all 409s scenario
+  - Fallback increased to +90 days (from +60)
+- ✅ **Documentation:**
+  - Runbook: Added "Inquiry Bookings Policy (Non-Blocking)" section
+  - Scripts README: Updated free window auto-detection behavior
+  - Documented inventory_ranges uses source_id (not booking_id/block_id columns)
+- ✅ **Expected Behavior:**
+  - Inquiry bookings do NOT block availability checks or booking creation
+  - Concurrency script robust to inquiry-blocked windows (auto-searches multiple windows)
+
 **What's Next:**
 - Edge cases validation:
   - Back-to-back bookings (end-exclusive semantics)
