@@ -95,6 +95,24 @@ This document tracks the current state of the PMS-Webapp project, including comp
   - ModuleSpec dataclass with validation
   - Example module definitions (docs only)
   - NOT wired into runtime (Phase 22+)
+- ✅ Phase 21 smoke validation hardening
+  - Robust JSON extraction from mixed output
+  - Fallback to raw string checks
+  - Handles both PMS custom and FastAPI error envelopes
+
+**Completed in Phase 21A (DB Operations):**
+- ✅ Migration runner: `backend/scripts/ops/apply_supabase_migrations.sh`
+  - Idempotent migration application with tracking table
+  - Dry-run and status modes
+  - Production safety guards (CONFIRM_PROD flag)
+  - Transaction-based execution
+- ✅ Runbook section: "DB Migrations (Production)"
+  - Complete usage guide with examples
+  - Failure modes and troubleshooting
+  - Production workflow recommendations
+- ✅ Scripts README: Production Database Migrations section
+  - Usage examples and output samples
+  - Production workflow steps
 
 **What's Next:**
 - Edge cases validation:

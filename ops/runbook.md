@@ -1523,6 +1523,234 @@ docker exec $(docker ps -q -f name=supabase) psql -U postgres -d postgres \
 
 ---
 
+## DB Migrations (Production)
+
+**Date Added:** 2026-01-03 (Phase 21A)
+
+**Purpose:** Apply Supabase SQL migrations to production database in a safe, idempotent manner.
+
+### Migration Runner Script
+
+**Location:** `backend/scripts/ops/apply_supabase_migrations.sh`
+
+**Features:**
+- Tracks applied migrations in `public.pms_schema_migrations` table
+- Only applies pending migrations (idempotent)
+- Dry-run mode (preview without applying)
+- Status mode (show applied/pending summary)
+- Transaction-based (each migration runs in a transaction)
+- Production safety guard (requires explicit confirmation)
+
+### Common Use Cases
+
+#### 1. Check Migration Status
+
+```bash
+# SSH to host server
+ssh root@your-host
+
+# Navigate to repo
+cd /data/repos/pms-webapp
+
+# Check status
+bash backend/scripts/ops/apply_supabase_migrations.sh --status
+```
+
+**Expected Output:**
+```
+INFO: Latest applied: 20260103123000_ensure_guests_booking_timeline_columns.sql
+INFO: Applied migrations: 15
+INFO: Pending migrations: 0
+✓ All migrations applied - database schema is up to date
+```
+
+#### 2. Preview Pending Migrations (Dry-Run)
+
+```bash
+# Show what would be applied without executing
+bash backend/scripts/ops/apply_supabase_migrations.sh --dry-run
+```
+
+**Expected Output:**
+```
+INFO: 2 pending migration(s):
+  - 20260103140000_add_new_feature.sql
+  - 20260103150000_update_constraints.sql
+
+INFO: Dry-run mode - no migrations will be applied
+```
+
+#### 3. Apply Pending Migrations
+
+```bash
+# Set production confirmation flag
+export CONFIRM_PROD=1
+
+# Apply migrations
+bash backend/scripts/ops/apply_supabase_migrations.sh
+```
+
+**Expected Output:**
+```
+WARNING: Production mode confirmed (CONFIRM_PROD=1)
+✓ Database connection OK
+✓ Tracking table ready: public.pms_schema_migrations
+
+---
+INFO: Applying: 20260103140000_add_new_feature.sql
+✓ Applied: 20260103140000_add_new_feature.sql
+---
+INFO: Applying: 20260103150000_update_constraints.sql
+✓ Applied: 20260103150000_update_constraints.sql
+
+✓ All pending migrations applied successfully
+```
+
+### Environment Variables
+
+**Option 1: DATABASE_URL (Recommended)**
+```bash
+export DATABASE_URL="postgresql://postgres:password@host:port/database"
+bash backend/scripts/ops/apply_supabase_migrations.sh --status
+```
+
+**Option 2: Individual PG* Variables**
+```bash
+export PGHOST="your-host.supabase.co"
+export PGPORT="5432"
+export PGUSER="postgres"
+export PGPASSWORD="your-password"
+export PGDATABASE="postgres"
+bash backend/scripts/ops/apply_supabase_migrations.sh --status
+```
+
+### Production Safety Guards
+
+**Required Confirmation:**
+```bash
+# Without confirmation → Error
+bash backend/scripts/ops/apply_supabase_migrations.sh
+# ERROR: Production safety guard: set CONFIRM_PROD=1 to proceed
+
+# With confirmation → Proceeds
+export CONFIRM_PROD=1
+bash backend/scripts/ops/apply_supabase_migrations.sh
+```
+
+**Dev/Staging Override:**
+```bash
+# Skip confirmation for non-production environments
+export ALLOW_NON_PROD=1
+bash backend/scripts/ops/apply_supabase_migrations.sh
+```
+
+### Failure Modes & Troubleshooting
+
+#### Migration Fails Mid-Execution
+
+**Symptom:** Script stops with error:
+```
+ERROR: Failed to apply: 20260103140000_add_feature.sql
+ERROR: psql returned non-zero exit code
+```
+
+**Cause:** SQL syntax error, constraint violation, or missing dependencies
+
+**Fix:**
+1. Check the migration file for errors:
+   ```bash
+   cat supabase/migrations/20260103140000_add_feature.sql
+   ```
+2. Review psql error output (run migration manually for details):
+   ```bash
+   psql "$DATABASE_URL" -f supabase/migrations/20260103140000_add_feature.sql
+   ```
+3. Fix the SQL file or revert changes
+4. Re-run migration script (only pending migrations will be applied)
+
+**Important:** Failed migrations are NOT recorded in tracking table. Fix the issue and re-run.
+
+#### "Database connection failed"
+
+**Symptom:**
+```
+ERROR: Failed to connect to database
+Connection: host:5432/database as user
+```
+
+**Fix:**
+- Verify DATABASE_URL or PG* environment variables are set correctly
+- Check network connectivity to database host
+- Verify credentials are correct
+- Check firewall rules allow connection from host server
+
+#### "Migrations directory not found"
+
+**Symptom:**
+```
+ERROR: Migrations directory not found: /data/repos/pms-webapp/supabase/migrations
+```
+
+**Fix:**
+- Ensure you're running from repo root: `cd /data/repos/pms-webapp`
+- Verify migrations directory exists: `ls -la supabase/migrations/`
+- Pull latest code if directory is missing: `git pull`
+
+### Manual Migration Verification
+
+To verify migrations were applied correctly:
+
+```bash
+# Connect to database
+psql "$DATABASE_URL"
+
+# List applied migrations
+SELECT filename, applied_at FROM public.pms_schema_migrations ORDER BY applied_at DESC LIMIT 10;
+
+# Check specific table exists
+\dt guests
+
+# Check column exists
+\d guests
+```
+
+### When to Run Migrations
+
+**Always run after:**
+- Deploying new code with schema changes
+- Pulling latest code from git (check `supabase/migrations/` for new files)
+- Seeing 503 errors with "schema not installed" or "schema out of date"
+
+**Recommended workflow:**
+1. Pull latest code: `git pull`
+2. Check status: `bash backend/scripts/ops/apply_supabase_migrations.sh --status`
+3. If pending migrations exist:
+   - Preview with `--dry-run`
+   - Apply with `CONFIRM_PROD=1`
+4. Verify with `--status` again
+5. Run smoke tests to confirm
+
+### Migration Tracking Table Schema
+
+```sql
+CREATE TABLE public.pms_schema_migrations (
+    filename TEXT PRIMARY KEY,                    -- Migration filename
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT now(), -- When applied
+    sha256 TEXT,                                   -- File hash (integrity check)
+    notes TEXT                                     -- Optional notes
+);
+```
+
+**Example Data:**
+```
+filename                                          | applied_at                  | sha256
+--------------------------------------------------+-----------------------------+--------
+20260103120000_ensure_guests_metrics_columns.sql  | 2026-01-03 10:30:00+00     | abc123...
+20260103123000_ensure_guests_booking_timeline... | 2026-01-03 10:35:00+00     | def456...
+```
+
+---
+
 ## Smoke Script Pitfalls
 
 ### Symptom
