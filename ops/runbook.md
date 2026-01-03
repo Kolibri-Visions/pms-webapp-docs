@@ -12376,6 +12376,46 @@ The Connections page provides a comprehensive interface for:
 
 ---
 
+### Connections Quick Actions
+
+Each connection row in the table provides inline quick actions:
+
+**Test Connection:**
+- **Button:** "Test" (inline per row)
+- **Action:** POST `/api/v1/channel-connections/{id}/test`
+- **Response:** Health status, platform API connectivity check
+- **Display:** Shows notification banner with pass/fail result
+- **Disable state:** Button disabled during test (shows "Testing...")
+
+**Sync Quick Actions:**
+- **Buttons:** A (Availability), P (Pricing), B (Bookings), F (Full)
+- **Action:** POST `/api/v1/channel-connections/{id}/sync` with `{"sync_type": "availability"|"pricing"|"bookings"|"full"}`
+- **Response:** Returns `batch_id`, `task_ids` array, `status`, `message`
+- **Display:** Shows success notification with task count/batch ID
+- **Disable state:** Individual button disabled while that sync type is in progress (shows "...")
+- **Optimistic update:** Connections list refetched after trigger to update `last_sync_at`
+
+**View Logs:**
+- **Button:** "View Logs" (link-style button)
+- **Action:** Sets `localStorage.setItem("channelSync:lastConnectionId", connection_id)` and navigates to `/channel-sync`
+- **Result:** Channel Sync page loads with connection preselected and logs displayed immediately (no Auto-detect click needed)
+- **Note:** Does NOT auto-open sync log details modal (modal opens only on explicit row click)
+
+**Last Sync Age Display:**
+- **Column:** "Last Sync"
+- **Format:** Relative time (e.g., "3m ago", "2h ago", "1d ago", "never")
+- **Helper:** `formatRelativeTime()` converts ISO timestamp to human-friendly age
+- **Precision:**
+  - < 60s: "Xs ago"
+  - < 60m: "Xm ago"
+  - < 24h: "Xh ago"
+  - < 7d: "Xd ago"
+  - < 30d: "Xw ago"
+  - < 365d: "Xmo ago"
+  - ≥ 365d: "Xy ago"
+
+---
+
 ### API Endpoints Used
 
 The Admin UI consumes the following Channel Manager API endpoints:
