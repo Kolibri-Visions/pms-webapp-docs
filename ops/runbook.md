@@ -2795,6 +2795,63 @@ curl -i https://your-domain.com/api/v1/branding
 # Expected: HTTP 401 Unauthorized (NOT 404)
 ```
 
+**Verify Branding Endpoint (PROD)**
+
+**Expected GET Response (200 OK):**
+```json
+{
+  "tenant_id": "uuid-here",
+  "logo_url": null,
+  "primary_color": "#4F46E5",
+  "accent_color": "#10B981",
+  "font_family": "system",
+  "radius_scale": "md",
+  "mode": "system",
+  "tokens": {
+    "primary": "#4F46E5",
+    "accent": "#10B981",
+    "background": "#FFFFFF",
+    "surface": "#F9FAFB",
+    "text": "#111827",
+    "text_muted": "#6B7280",
+    "border": "#E5E7EB",
+    "radius": "0.5rem"
+  }
+}
+```
+
+**Common Failure Modes:**
+
+| Status | Cause | Solution |
+|--------|-------|----------|
+| 400 Bad Request | JWT missing agency_id claim | Regenerate token with proper claims |
+| 401 Unauthorized | Token expired or invalid | Get fresh token |
+| 403 Forbidden | Token valid but no auth header | Add Authorization: Bearer header |
+| 503 Service Unavailable | DB unavailable or migration not applied | Check DB connectivity, apply migrations |
+
+**Smoke Test (HOST-SERVER-TERMINAL):**
+```bash
+# Set environment variables
+export API_BASE_URL="https://your-domain.com"
+export JWT_TOKEN="eyJhbGc..."  # Valid token with agency_id claim
+
+# Run smoke test
+bash backend/scripts/pms_branding_smoke.sh
+
+# Expected output:
+# ✅ GET /api/v1/branding: SUCCESS
+# HTTP Status: 200
+```
+
+**Manual Verification:**
+```bash
+# Test GET endpoint with curl
+curl -H "Authorization: Bearer $JWT_TOKEN" https://your-domain.com/api/v1/branding | jq
+
+# Expected: HTTP 200 with defaults (if no custom branding)
+# Expected: tenant_id matches user's agency_id from JWT
+```
+
 ---
 
 ## Redis + Celery Worker Setup (Channel Manager)

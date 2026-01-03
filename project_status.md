@@ -172,7 +172,9 @@ This document tracks the current state of the PMS-Webapp project, including comp
 - Auto-registered in bootstrap.py for seamless integration
 - Import fixes: Removed invalid User import; moved require_roles from app.core.auth to app.api.deps
 - Use dict type for current_user (matches get_current_user return type)
-- Branding module mount fixed (require_roles import) - pending PROD verify
+- Error handling: 400 for missing tenant context, 503 for DB unavailable, 200 with defaults when no branding configured
+- Smoke test script: backend/scripts/pms_branding_smoke.sh for PROD verification
+- Status: Working (Phase A complete, pending UI Phase B)
 
 **Phase B (Future - Client-Facing):**
 - Frontend theme provider (load branding on app start, inject CSS variables)
