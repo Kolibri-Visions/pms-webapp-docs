@@ -1827,7 +1827,7 @@ Phase 20 smoke tests validated core inventory mechanics:
 
 **Cause:** `from_date` and `to_date` query parameters are required but missing
 
-**Example Error:**
+**Example Error (FastAPI/Pydantic format):**
 ```json
 {
   "detail": [
@@ -1836,6 +1836,21 @@ Phase 20 smoke tests validated core inventory mechanics:
   ]
 }
 ```
+
+**Example Error (PMS custom envelope):**
+```json
+{
+  "error": "validation_error",
+  "message": "Request validation failed",
+  "errors": [
+    {"field": "query.from_date", "message": "Field required", "type": "missing"},
+    {"field": "query.to_date", "message": "Field required", "type": "missing"}
+  ],
+  "path": "/api/v1/availability"
+}
+```
+
+**Note:** The API may return either error format. Both indicate missing required query parameters.
 
 **Fix:** Always include both query parameters:
 ```bash
