@@ -1442,6 +1442,45 @@ docker exec -it $(docker ps -q -f name=supabase) psql -U postgres -d postgres \
   -c "DROP TABLE IF EXISTS public.channel_sync_logs CASCADE;"
 ```
 
+### Guests Metrics Columns Migration
+
+**Migration File**: `supabase/migrations/20260103120000_ensure_guests_metrics_columns.sql`
+
+**When to Apply**: Required when existing guests table is missing metrics columns
+
+**Symptom if Missing**:
+- API returns `503 Service Unavailable` on guest operations
+- Error message: `"column total_bookings of relation guests does not exist"`
+- Logs show: `UndefinedColumn: column "total_bookings" does not exist`
+
+**Apply Migration**:
+
+```bash
+# Using Supabase CLI
+docker exec $(docker ps -q -f name=supabase) supabase migration up
+
+# Or manual SQL execution
+docker exec -it $(docker ps -q -f name=supabase) psql -U postgres -d postgres \
+  < supabase/migrations/20260103120000_ensure_guests_metrics_columns.sql
+```
+
+**Verify Installation**:
+
+```bash
+# Check columns exist
+docker exec $(docker ps -q -f name=supabase) psql -U postgres -d postgres \
+  -c "\d guests"
+
+# Expected columns: total_bookings, total_spent, last_booking_at
+```
+
+**What This Migration Does**:
+- Adds `total_bookings` column (INTEGER, default 0) if missing
+- Adds `total_spent` column (NUMERIC(12,2), default 0) if missing
+- Adds `last_booking_at` column (TIMESTAMPTZ NULL) if missing
+- Creates index on `last_booking_at` for recent guest activity queries
+- Idempotent: safe to run multiple times (uses information_schema checks)
+
 ---
 
 ## Smoke Script Pitfalls
