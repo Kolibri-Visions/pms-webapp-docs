@@ -160,6 +160,12 @@ This document tracks the current state of the PMS-Webapp project, including comp
 - Safe to re-run on partial state, fresh DB, or fully migrated DB
 - Pending user apply in PROD (see runbook troubleshooting section)
 
+**Policy Mapping Fix (2026-01-03):**
+- ✅ Fixed RLS policies to use JWT-based tenant mapping (matches existing schema pattern)
+- Issue: Policies referenced non-existent `public.users` table causing "relation does not exist" error in PROD
+- Fix: Updated all policies to use `auth.jwt() ->> 'agency_id'` and `auth.jwt() ->> 'role'` (canonical pattern from existing migrations)
+- Migration re-apply pending in PROD
+
 **Phase B (Future - Client-Facing):**
 - Frontend theme provider (load branding on app start, inject CSS variables)
 - Branding settings UI (admin page for logo/color picker)

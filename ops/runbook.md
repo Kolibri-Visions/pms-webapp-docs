@@ -2678,6 +2678,29 @@ curl -L -X PUT "$API/api/v1/branding" \
 - Verify completion: `bash backend/scripts/ops/apply_supabase_migrations.sh --status` (should show 0 pending)
 - Verify policies: `\d+ tenant_branding` in psql (should show 3 policies: select, insert, update)
 
+**Issue:** Migration fails with "relation public.users does not exist"
+
+**Symptom:**
+- Migration apply fails with ERROR: relation "public.users" does not exist
+- Context: CREATE POLICY tenant_branding_select ... SELECT agency_id FROM public.users WHERE id = auth.uid()
+- Policies not created, migration not tracked
+
+**Solution:**
+- Policy SQL referenced non-existent table (early version used public.users instead of JWT claims)
+- Migration patched (2026-01-03) to use JWT-based pattern: `auth.jwt() ->> 'agency_id'` and `auth.jwt() ->> 'role'`
+- Pull latest migration: `git pull origin main`
+- Re-run migration: `bash backend/scripts/ops/apply_supabase_migrations.sh --apply`
+- Verify policies installed:
+  ```bash
+  psql $DATABASE_URL -c "\d+ tenant_branding"
+  # Should show: Policies: tenant_branding_select, tenant_branding_insert, tenant_branding_update
+  ```
+- Verify migration tracked:
+  ```bash
+  psql $DATABASE_URL -c "SELECT filename, applied_at FROM public.pms_schema_migrations WHERE filename LIKE '%tenant_branding%' ORDER BY applied_at DESC LIMIT 1;"
+  # Should show: 20260103150000_create_tenant_branding.sql with recent timestamp
+  ```
+
 ---
 
 ## Redis + Celery Worker Setup (Channel Manager)
