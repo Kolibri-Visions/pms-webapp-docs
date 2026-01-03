@@ -7218,6 +7218,19 @@ ROLLBACK;
 - When troubleshooting "Last Sync: Never" issues
 - During onboarding to verify sync persistence works correctly
 
+**Quick Smoke Test:**
+For automated API-level verification, use the smoke test script:
+```bash
+source /root/pms_env.sh
+export TOKEN=$(curl -X POST "$SB_URL/auth/v1/token?grant_type=password" \
+  -H "Content-Type: application/json" \
+  -H "apikey: $SB_ANON_KEY" \
+  -d '{"email":"admin@example.com","password":"your-password"}' \
+  | jq -r '.access_token')
+bash backend/scripts/pms_channel_last_sync_smoke.sh
+```
+See [pms_channel_last_sync_smoke.sh](../../scripts/README.md#pms_channel_last_sync_smokesh) for details.
+
 ---
 
 ### 1. Admin UI Verification (Browser)
