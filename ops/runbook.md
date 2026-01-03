@@ -1481,6 +1481,46 @@ docker exec $(docker ps -q -f name=supabase) psql -U postgres -d postgres \
 - Creates index on `last_booking_at` for recent guest activity queries
 - Idempotent: safe to run multiple times (uses information_schema checks)
 
+### Guests Booking Timeline Columns Migration
+
+**Migration File**: `supabase/migrations/20260103123000_ensure_guests_booking_timeline_columns.sql`
+
+**When to Apply**: Required when existing guests table is missing booking timeline columns
+
+**Symptom if Missing**:
+- API returns `503 Service Unavailable` on guest operations or Phase 20 smoke tests
+- Error message: `"column first_booking_at of relation guests does not exist"`
+- Logs show: `UndefinedColumn: column "first_booking_at" does not exist`
+
+**Apply Migration**:
+
+```bash
+# Using Supabase CLI
+docker exec $(docker ps -q -f name=supabase) supabase migration up
+
+# Or manual SQL execution (Supabase SQL Editor or psql)
+docker exec -it $(docker ps -q -f name=supabase) psql -U postgres -d postgres \
+  < supabase/migrations/20260103123000_ensure_guests_booking_timeline_columns.sql
+```
+
+**Verify Installation**:
+
+```bash
+# Check columns exist
+docker exec $(docker ps -q -f name=supabase) psql -U postgres -d postgres \
+  -c "\d guests"
+
+# Expected columns: first_booking_at, average_rating, updated_at, deleted_at
+```
+
+**What This Migration Does**:
+- Adds `first_booking_at` column (TIMESTAMPTZ NULL) if missing
+- Adds `average_rating` column (NUMERIC(3,2) NULL) if missing
+- Adds `updated_at` column (TIMESTAMPTZ NOT NULL DEFAULT now()) if missing
+- Adds `deleted_at` column (TIMESTAMPTZ NULL) for soft delete support
+- Creates indexes on `first_booking_at` and `deleted_at` for performance
+- Idempotent: safe to run multiple times (uses information_schema checks)
+
 ---
 
 ## Smoke Script Pitfalls
