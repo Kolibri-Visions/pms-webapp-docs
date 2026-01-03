@@ -6473,6 +6473,29 @@ The Channel Sync Admin UI provides:
    - **Connection ID:** Optional, can be auto-detected or manually entered after selecting platform + property
    - **Form remains disabled** until user makes conscious selection of each required field
 
+9. **UX Behavior:**
+   - **Trigger Sync Auto-loads Logs:** After clicking "Trigger Sync", logs automatically appear immediately
+     - If Connection ID was not set, it gets set from the triggered sync's connection
+     - Logs refresh automatically to show the new sync operation
+     - Success panel shows batch_id/task_ids with copy buttons
+   - **Auto-detect Only Sets Connection:** Clicking "Auto-detect" button:
+     - Populates Connection ID field
+     - Fetches and displays logs for that connection
+     - Does NOT open the Sync Log Details modal
+     - User must explicitly click a log row to view details
+   - **Clearing Connection Resets UI:** Clicking "Clear" button:
+     - Clears Connection ID field
+     - Clears logs list (table becomes empty)
+     - Closes Sync Log Details modal if open
+     - Hides success panel (green banner)
+     - Clears any error messages
+     - Resets all filters and search state
+   - **Success Panel Auto-dismiss:** Green success banner after triggering sync:
+     - Includes dismiss button (×) in top-right corner
+     - Auto-dismisses after 15 seconds
+     - User can manually dismiss anytime by clicking ×
+   - **Note:** Jobs can complete very quickly (< 1 second), so status may jump directly from "triggered" to "success" without showing "running" state
+
 ---
 
 ### Sync Trigger Payload Architecture
