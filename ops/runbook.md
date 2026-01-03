@@ -12640,6 +12640,58 @@ Each connection row in the table provides inline quick actions:
 
 ---
 
+### Batch Details (Full Sync)
+
+When a Full Sync is triggered (sync_type=full), the backend creates a batch containing 3 operations:
+1. **availability_update** (outbound)
+2. **pricing_update** (outbound)
+3. **bookings_sync** (inbound)
+
+All operations in the batch share the same `batch_id`.
+
+**Accessing Batch Details:**
+- **From logs table:** Click the blue "Batch" button in any log row that has a `batch_id` (visible for full sync operations)
+- **From success panel:** After triggering a full sync, click the green "View Batch" button in the success notification
+
+**Batch Details Modal:**
+- **Header:**
+  - Title: "Full Sync Batch Details"
+  - Copy buttons for Batch ID and Connection ID (📋 with truncated IDs)
+  - Refresh button (⟳) to reload batch details
+  - Close button (×)
+
+- **Table Columns:**
+  - **Operation:** operation_type (e.g., availability_update, pricing_update, bookings_sync)
+  - **Status:** Status badge (triggered/running/success/failed) with color coding
+  - **Direction:** outbound or inbound
+  - **Task ID:** Clickable truncated task_id (click to copy full ID)
+  - **Duration:** Calculated from started_at/finished_at or created_at/updated_at
+  - **Updated At:** Localized timestamp
+  - **Error:** "View Error" button (if error exists) → opens detail drawer and closes batch modal
+
+- **States:**
+  - **Loading:** Spinner with "Loading batch details..." message
+  - **Error:** Red error banner with API error message
+  - **Empty:** "No operations found for this batch." (shouldn't happen for valid full sync batches)
+  - **Success:** Table showing all 3 operations
+
+**UX Rules:**
+- Clicking "View Error" button transitions from batch modal to detail drawer (closes modal, opens drawer)
+- Closing batch modal clears any active toasts (`setToast(null)`)
+- Toast lifecycle follows standard rules (6s auto-dismiss, cleared on navigation)
+
+**Backend Endpoint:**
+```
+GET /api/v1/channel-connections/{connection_id}/sync-logs?batch_id={batch_id}&limit=100
+```
+
+**Response:** Standard sync-logs response with `logs` array filtered to the specified batch_id
+
+**Use Case:**
+Operators can track the progress of all 3 operations in a Full Sync batch from a single view, quickly identifying which operation succeeded/failed and drilling into errors via the detail drawer.
+
+---
+
 ### API Endpoints Used
 
 The Admin UI consumes the following Channel Manager API endpoints:
