@@ -2765,6 +2765,36 @@ curl -i https://your-domain.com/api/v1/branding
 # Expected: HTTP 401 Unauthorized (NOT 404)
 ```
 
+**Issue:** Branding endpoints return 404 because module import failed (require_roles import path)
+
+**Symptom:**
+- Container logs show: "Branding module not available: cannot import name 'require_roles' from 'app.core.auth'"
+- openapi.json does not contain /api/v1/branding paths
+- GET /api/v1/branding returns 404
+
+**Cause:**
+- branding.py imports require_roles from wrong module (app.core.auth)
+- require_roles is actually in app.api.deps (same as other routes)
+
+**Solution:**
+- Fixed import in branding.py: from app.api.deps import require_roles
+- Redeploy to apply changes
+
+**Verification:**
+```bash
+# Check mounted modules in container logs
+docker logs pms-backend 2>&1 | grep -i "mounting.*module"
+# Expected: "Mounting 6 module(s): ['core_pms', 'inventory', 'properties', 'bookings', 'branding', ...]"
+
+# Check INTERNAL openapi has branding paths (from inside container)
+docker exec pms-backend curl -s http://localhost:8000/openapi.json | grep -o '"/api/v1/branding"'
+# Expected: "/api/v1/branding"
+
+# Test external endpoint (should return 401 without token, 200 with token)
+curl -i https://your-domain.com/api/v1/branding
+# Expected: HTTP 401 Unauthorized (NOT 404)
+```
+
 ---
 
 ## Redis + Celery Worker Setup (Channel Manager)
