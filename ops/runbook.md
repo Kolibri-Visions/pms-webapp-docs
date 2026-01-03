@@ -7209,6 +7209,265 @@ ROLLBACK;
 
 ---
 
+## Verify Connection last_sync_at (E2E)
+
+**Purpose:** End-to-end verification that `last_sync_at` updates correctly after sync operations complete successfully. This guide helps new team members verify the feature without stumbling over redirects, token expiration, or SQL column name errors.
+
+**When to Use:**
+- After deploying last_sync_at auto-update logic
+- When troubleshooting "Last Sync: Never" issues
+- During onboarding to verify sync persistence works correctly
+
+---
+
+### 1. Admin UI Verification (Browser)
+
+**Navigate to Connections page:**
+```
+https://admin.fewo.kolibri-visions.de/connections
+```
+
+**Verification Steps:**
+
+1. **Check Connections Table:**
+   - Locate your test connections (booking_com, airbnb, etc.)
+   - Verify "Last Sync" column shows actual timestamps (not "Never")
+   - If "Never" is shown, trigger a sync and verify it updates after completion
+
+2. **Trigger Sync via Sync Page:**
+   - Navigate to Channel Sync page: `https://admin.fewo.kolibri-visions.de/channel-sync`
+   - Select platform and property
+   - Use "Auto-detect" button if Connection ID is empty (matches platform + property)
+   - Trigger any sync type (Availability, Pricing, or Full)
+   - Wait for success message with batch_id or task_id
+
+3. **Verify Connection Summary:**
+   - On Sync page, scroll to "Connection Summary" section
+   - Verify "Last Sync" shows updated timestamp (within last few minutes)
+   - Compare with Connections table to ensure consistency
+
+**Expected Result:**
+- Last Sync timestamp updates after successful sync completion
+- Timestamp reflects when the sync log transitioned to `status='success'`
+- Both Connections page and Sync page show consistent timestamps
+
+---
+
+### 2. API Verification (curl)
+
+**Prerequisites:**
+```bash
+# Load environment variables
+source /root/pms_env.sh
+
+# Verify variables are set
+echo $SB_URL  # Should not be empty
+echo $API     # Should be https://api.fewo.kolibri-visions.de
+
+# Get fresh JWT token
+TOKEN=$(curl -X POST "$SB_URL/auth/v1/token?grant_type=password" \
+  -H "Content-Type: application/json" \
+  -H "apikey: $SB_ANON_KEY" \
+  -d '{"email":"admin@example.com","password":"your-password"}' \
+  | jq -r '.access_token')
+
+# Verify token is set
+echo $TOKEN
+```
+
+**Verification Query:**
+
+⚠️ **IMPORTANT:** The list endpoint requires trailing slash to avoid 307/308 redirects.
+
+```bash
+# Method 1: Use trailing slash (RECOMMENDED)
+curl -s "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/?limit=100&offset=0" \
+  -H "Authorization: Bearer $TOKEN" \
+  -w "\nHTTP Status: %{http_code}\n" \
+  -o /tmp/cc_body.json
+
+# Method 2: Use -L to follow redirects (alternative)
+curl -sL "https://api.fewo.kolibri-visions.de/api/v1/channel-connections?limit=100&offset=0" \
+  -H "Authorization: Bearer $TOKEN" \
+  -w "\nHTTP Status: %{http_code}\n" \
+  -o /tmp/cc_body.json
+
+# Check HTTP status (should be 200)
+cat /tmp/cc_body.json | head -c 100  # Verify body is not empty
+
+# Parse last_sync_at for booking_com connections
+jq '.[] | select(.platform_type == "booking_com") | {id, platform_type, property_id, last_sync_at, updated_at}' /tmp/cc_body.json
+
+# Parse last_sync_at for airbnb connections
+jq '.[] | select(.platform_type == "airbnb") | {id, platform_type, property_id, last_sync_at, updated_at}' /tmp/cc_body.json
+
+# Filter connections with NULL last_sync_at (should be empty after syncs)
+jq '.[] | select(.last_sync_at == null) | {id, platform_type, property_id, status}' /tmp/cc_body.json
+```
+
+**Expected Output:**
+```json
+{
+  "id": "abc-123-def-456",
+  "platform_type": "booking_com",
+  "property_id": "property-uuid",
+  "last_sync_at": "2026-01-03T14:30:00.123456Z",
+  "updated_at": "2026-01-03T14:30:00.123456Z"
+}
+```
+
+**Troubleshooting:**
+- **Empty body with 307/308 status:** Missing trailing slash → use `/api/v1/channel-connections/` (with slash) or add `-L` flag
+- **401 "Token has expired":** Fetch new token using `$SB_URL/auth/v1/token` endpoint (see Prerequisites)
+- **Empty `$SB_URL` variable:** Run `source /root/pms_env.sh` first (env vars not loaded in fresh shells)
+- **JSONDecodeError:** Usually means empty body (redirect or auth failure) → check HTTP status code first
+
+---
+
+### 3. Database Verification (Supabase SQL Editor)
+
+**Navigate to Supabase SQL Editor:**
+```
+https://supabase.com/dashboard/project/<project-id>/sql/new
+```
+
+**Query 1: Check channel_connections.last_sync_at**
+
+```sql
+-- List all connections with last_sync_at timestamps
+SELECT
+  id,
+  platform_type,
+  property_id,
+  status,
+  last_sync_at,
+  updated_at,
+  created_at
+FROM public.channel_connections
+WHERE deleted_at IS NULL
+ORDER BY updated_at DESC
+LIMIT 20;
+```
+
+**Expected Result:**
+- `last_sync_at` should NOT be NULL for connections that have completed successful syncs
+- Timestamp should match recent sync completions (within reasonable time window)
+
+**Query 2: Check channel_sync_logs for specific connection**
+
+⚠️ **IMPORTANT:** Column is `operation_type` (NOT `operation`)
+
+```sql
+-- List recent sync logs for a connection
+SELECT
+  id,
+  connection_id,
+  operation_type,    -- CORRECT column name (not "operation")
+  direction,
+  status,
+  error,
+  task_id,
+  batch_id,
+  tenant_id,
+  created_at,
+  updated_at
+FROM public.channel_sync_logs
+WHERE connection_id = '<CONNECTION-UUID-HERE>'
+ORDER BY created_at DESC
+LIMIT 20;
+```
+
+**Expected Result:**
+- Successful syncs show `status = 'success'`
+- `operation_type` values: `availability_update`, `pricing_update`, `bookings_sync`
+- `tenant_id` should NOT be NULL (matches connection's `agency_id`)
+
+**Query 3: Cross-check last_sync_at vs most recent success log**
+
+```sql
+-- Verify last_sync_at matches most recent successful sync
+SELECT
+  c.id AS connection_id,
+  c.platform_type,
+  c.last_sync_at AS connection_last_sync,
+  MAX(l.updated_at) AS latest_success_log,
+  CASE
+    WHEN c.last_sync_at IS NULL AND MAX(l.updated_at) IS NOT NULL
+      THEN 'MISMATCH: connection NULL but logs exist'
+    WHEN c.last_sync_at < MAX(l.updated_at)
+      THEN 'STALE: connection older than latest log'
+    WHEN c.last_sync_at >= MAX(l.updated_at)
+      THEN 'OK'
+    ELSE 'UNKNOWN'
+  END AS sync_status
+FROM public.channel_connections c
+LEFT JOIN public.channel_sync_logs l
+  ON l.connection_id = c.id AND l.status = 'success'
+WHERE c.deleted_at IS NULL
+GROUP BY c.id, c.platform_type, c.last_sync_at
+ORDER BY c.updated_at DESC
+LIMIT 20;
+```
+
+**Expected Result:**
+- `sync_status` should be `'OK'` for all connections with recent syncs
+- No `'MISMATCH'` entries (indicates auto-update logic not running)
+- No `'STALE'` entries (indicates connection not updated on log success)
+
+---
+
+### 4. Troubleshooting Quick Reference
+
+**Issue: "Token has expired" (401)**
+```bash
+# Fix: Refresh JWT token
+source /root/pms_env.sh  # Load env vars first
+TOKEN=$(curl -X POST "$SB_URL/auth/v1/token?grant_type=password" \
+  -H "Content-Type: application/json" \
+  -H "apikey: $SB_ANON_KEY" \
+  -d '{"email":"admin@example.com","password":"your-password"}' \
+  | jq -r '.access_token')
+```
+
+**Issue: JSONDecodeError or empty response**
+```bash
+# Root cause: Usually redirect (307/308) or auth failure
+# Fix 1: Check HTTP status code
+curl -I "https://api.fewo.kolibri-visions.de/api/v1/channel-connections?limit=5"
+# If 307/308: Add trailing slash OR use -L flag
+
+# Fix 2: Check response body size
+curl -s "..." -w "\nBody size: %{size_download} bytes\n" | head -c 200
+# If 0 bytes: Auth failure or redirect issue
+```
+
+**Issue: Wrong SQL column name**
+```sql
+-- ❌ WRONG (column doesn't exist)
+SELECT operation FROM channel_sync_logs;
+
+-- ✅ CORRECT
+SELECT operation_type FROM channel_sync_logs;
+```
+
+**Issue: Empty `$SB_URL` or `$SB_ANON_KEY`**
+```bash
+# Root cause: Environment variables not loaded in fresh SSH session
+# Fix: Always source env file first
+source /root/pms_env.sh
+
+# Verify
+echo $SB_URL       # Should show Supabase URL
+echo $SB_ANON_KEY  # Should show anon key
+```
+
+**Issue: Admin UI shows "Never" despite successful logs**
+- See [Connections Last Sync shows "Never"](#9-connections-last-sync-shows-never-null-last_sync_at) for full troubleshooting steps
+- Quick fix: Run manual backfill SQL (see section above)
+- Permanent fix: Verify auto-update logic deployed (check commit hash)
+
+---
+
 ### Environment Variables
 
 **Frontend (`pms-admin`):**
