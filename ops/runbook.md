@@ -6429,10 +6429,16 @@ The Channel Sync Admin UI provides:
    - **Status Filter:** All / Triggered / Running / Success / Failed / Active (triggered+running)
    - **Operation Type Filter:** All / availability_update / pricing_update / bookings_sync
    - **Direction Filter:** All / outbound / inbound
-   - **Search Input:** Free-text search across batch_id, task_id, log_id, connection_id, property_id
+   - **Search Input:** Case-insensitive free-text search across all log fields:
+     - IDs: batch_id, task_id, log_id, connection_id, property_id
+     - Fields: operation_type, status, direction, error
+     - Timestamps: created_at, updated_at
+     - Placeholder: "Search logs…"
+     - Clear button (✕) appears when search is active
+     - Empty state: "No logs match your search." when no results
    - **Copy Buttons:** Click 📋 icons in table and drawer to copy IDs (Log ID, Connection ID, Property ID, Task ID, Batch ID) to clipboard
    - **Sorting:** Logs always sorted by created_at (newest first)
-   - Filter buttons and search provide fine-grained access to specific sync operations
+   - Filter buttons and search work together (both applied simultaneously)
    - Smart auto-refresh (only polls when active triggered/running logs exist)
 
 5. **In-App Notifications:**
