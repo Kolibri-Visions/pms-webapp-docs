@@ -70,6 +70,7 @@ This document tracks the current state of the PMS-Webapp project, including comp
 - ✅ Operations include: operation_type, status, direction, task_id, error, duration_ms, log_id
 - ✅ Smoke test script: `backend/scripts/pms_sync_batch_details_smoke.sh`
 - ✅ Runbook section: "Verify Sync Batch Details (PROD)" with curl examples
+- ✅ **PROD E2E Verified (2026-01-03):** HOST-SERVER-TERMINAL smoke test (`backend/scripts/pms_sync_batch_details_smoke.sh`) returned HTTP 200 for list + details endpoints. Admin UI Batch Details Modal successfully displays batch ff237759… with 3 operations (availability_update, pricing_update, bookings_sync) all success, including batch_id, connection_id, statuses, and durations.
 
 **Expected Fields:**
 ```json

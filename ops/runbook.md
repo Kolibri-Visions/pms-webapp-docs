@@ -2463,6 +2463,8 @@ The "Batch Details Modal" in Admin UI (`/channel-sync` page) uses these endpoint
 
 Verify modal displays data correctly by clicking "View Details" on any sync batch row.
 
+**UI E2E Verification:** Click the "Batch" badge in Sync Logs table to open Batch Details Modal. Confirm operations list renders with correct batch_id, connection_id, operation types, statuses, and durations. Modal should display direction indicators (→/←) and handle loading/error states gracefully.
+
 ---
 
 ## Redis + Celery Worker Setup (Channel Manager)
