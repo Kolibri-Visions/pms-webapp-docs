@@ -2897,6 +2897,111 @@ bash backend/scripts/pms_branding_smoke.sh
 
 ---
 
+**Admin Branding UI Verification**
+
+**Purpose:** Verify branding tokens are applied in Admin UI and settings page works correctly.
+
+**EXECUTION LOCATION:** WEB-BROWSER
+
+**Prerequisites:**
+- Admin or manager role
+- Valid JWT token
+- Frontend deployed and accessible
+- Backend branding API working (verified via smoke script)
+
+**Verification Steps (WEB-BROWSER):**
+
+1. **Login and Navigate:**
+   - Login to Admin UI at `https://your-domain.com/login`
+   - Click "Branding" tab in navigation (admin/manager only)
+   - Expected: `/settings/branding` page loads
+
+2. **Verify CSS Variables Applied:**
+   - Open browser DevTools (F12)
+   - Select Elements/Inspector tab
+   - Inspect `<html>` or `<body>` element
+   - Check Computed Styles for CSS variables:
+     ```
+     --t-primary: #3b82f6 (or custom value)
+     --t-accent: #8b5cf6 (or custom value)
+     --t-bg: #ffffff (light) or #111827 (dark)
+     --t-surface: #f9fafb (light) or #1f2937 (dark)
+     --t-text: #111827 (light) or #f9fafb (dark)
+     --t-radius: 0.375rem (or custom)
+     ```
+   - Expected: All theme variables present with correct values
+
+3. **Verify Theme Mode:**
+   - Check `<html data-theme="...">` attribute
+   - Expected values: `light`, `dark`, or `system`
+   - If system mode: verify auto-switches based on OS preference
+
+4. **Test Branding Settings Form:**
+   - Change Primary Color to `#4169E1` (royal blue)
+   - Change Accent Color to `#32CD32` (lime green)
+   - Change Mode to "Dark"
+   - Click "Save Changes"
+   - Expected: "Branding updated successfully!" message
+   - Verify CSS variables update immediately (inspect DevTools)
+   - Verify background switches to dark mode
+
+5. **Test Form Validation:**
+   - Enter invalid hex color (e.g., `#ZZZ`)
+   - Try to save
+   - Expected: Browser validation error or API 400 error message
+
+6. **Test Access Control:**
+   - Logout and login as non-admin/non-manager user
+   - Try accessing `/settings/branding` directly
+   - Expected: "Access Denied" page with diagnostics
+   - Expected: "Branding settings are restricted to administrators and managers only."
+
+**Error Scenarios and Expected UI Behavior:**
+
+| Scenario | Expected UI Behavior |
+|----------|---------------------|
+| JWT lacks `agency_id` claim | Theme loads with defaults + console warning (graceful degradation) |
+| User belongs to multiple tenants | Theme loads with defaults if no `x-agency-id` header |
+| API returns 400 tenant error | Error toast: "Tenant context not available. Using default theme." |
+| API returns 401/403 | Error toast: "Not authorized to view branding. Using default theme." |
+| API returns 503 | Error toast: "Branding service temporarily unavailable. Using default theme." |
+| PUT fails with 400 | Form error message: "Validation error: ..." |
+| PUT fails with 403 | Form error message: "Access denied. Only admins and managers..." |
+| Network error | Form error message: "Failed to update branding. Please try again." |
+
+**Alternative Verification (HOST-SERVER-TERMINAL):**
+
+Check branding API returns correct tokens:
+```bash
+# EXECUTION LOCATION: HOST-SERVER-TERMINAL
+export JWT_TOKEN="your-jwt-token"
+export TENANT_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+
+curl -H "Authorization: Bearer $JWT_TOKEN" \
+     -H "x-agency-id: $TENANT_ID" \
+     https://your-domain.com/api/v1/branding | jq '.tokens'
+
+# Expected output:
+# {
+#   "primary": "#3b82f6",
+#   "primaryHover": "#2563eb",
+#   "accent": "#8b5cf6",
+#   ...
+# }
+```
+
+**Troubleshooting:**
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| CSS variables not applied | ThemeProvider not rendering | Check browser console for errors, verify ThemeProvider in root layout |
+| Form doesn't load | Auth check failed | Verify user has admin or manager role in `team_members` table |
+| Save button disabled | Form validation error | Check form inputs match validation patterns |
+| Theme doesn't change after save | refreshBranding() failed | Check network tab for API errors, verify PUT request succeeded |
+| Dark mode not working | CSS not loaded or `data-theme` attr missing | Verify globals.css loaded, check `<html data-theme>` attribute |
+
+---
+
 ## Redis + Celery Worker Setup (Channel Manager)
 
 **Purpose:** Configure Redis and Celery worker for Channel Manager background sync operations.

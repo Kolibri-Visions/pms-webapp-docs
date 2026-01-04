@@ -175,18 +175,39 @@ This document tracks the current state of the PMS-Webapp project, including comp
 - Error handling: 400 for missing tenant context, 503 for DB unavailable, 200 with defaults when no branding configured
 - Tenant context fallback implemented: JWT claim → x-agency-id header (validated) → single-tenant auto-pick
 - Smoke test script: backend/scripts/pms_branding_smoke.sh for PROD verification (supports AGENCY_ID env var)
-- Status: Working (Phase A complete, pending UI Phase B)
+- Status: Working (Phase A complete)
 
-**Phase B (Future - Client-Facing):**
-- Frontend theme provider (load branding on app start, inject CSS variables)
-- Branding settings UI (admin page for logo/color picker)
-- Apply tokens to booking widget, property listings, guest portal
-- Consistent brand across admin + client experiences
+**Phase B (Implemented - 2026-01-04):**
+- ✅ **Theme Provider**: Client-side context that fetches branding on app load and applies CSS variables to :root
+- ✅ **CSS Variables**: Extended globals.css with theme tokens (--t-primary, --t-accent, --t-bg, --t-surface, --t-text, --t-border, --t-radius)
+- ✅ **Dark Mode Support**: data-theme attribute (light/dark/system) with automatic theme switching
+- ✅ **Branding Settings Page**: Admin UI page at /settings/branding with form to update branding
+- ✅ **Form Fields**: logo_url, primary_color, accent_color, font_family, radius_scale, mode
+- ✅ **Access Control**: Server-side auth check (admin/manager only) with role-based redirect
+- ✅ **Error Handling**: Graceful degradation on API errors with user-friendly error messages
+- ✅ **Navigation**: Added "Branding" tab to BackofficeLayout (admin-only, appears after Connections)
+- ✅ **Runbook**: Added "Admin Branding UI Verification" section with WEB-BROWSER test steps
+
+**Files Changed (Phase B):**
+- `frontend/app/lib/theme-provider.tsx` - Theme context with branding fetch and CSS variable application
+- `frontend/app/globals.css` - CSS variables for theme tokens with light/dark mode support
+- `frontend/app/layout.tsx` - Wire ThemeProvider into root layout
+- `frontend/app/settings/branding/layout.tsx` - Server-side auth check (admin/manager only)
+- `frontend/app/settings/branding/page.tsx` - Branding settings page wrapper
+- `frontend/app/settings/branding/branding-form.tsx` - Client form component with save/refresh
+- `frontend/app/components/BackofficeLayout.tsx` - Added "Branding" navigation link
+- `backend/docs/ops/runbook.md` - Added WEB-BROWSER verification section (line 2900+)
 
 **Verification:**
 - HOST-SERVER-TERMINAL: Apply migration `20260103150000_create_tenant_branding.sql`
-- HOST-SERVER-TERMINAL: Curl GET/PUT `/api/v1/branding` (verify defaults, update, persist)
-- WEB-BROWSER: Frontend integration pending (Phase B)
+- HOST-SERVER-TERMINAL: Curl GET/PUT `/api/v1/branding` (verify defaults, update, persist) via smoke script
+- WEB-BROWSER: Login → Click Branding → Update colors → Verify CSS variables applied
+- WEB-BROWSER: Access control verified (non-admin users see "Access Denied" page)
+- WEB-BROWSER: Error handling verified (API errors gracefully fallback to default theme)
+
+**Future Phase C (Client-Facing):**
+- Apply tokens to booking widget, property listings, guest portal
+- Consistent brand across admin + client experiences
 
 ## Current Phase
 
