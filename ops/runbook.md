@@ -1990,13 +1990,114 @@ cd backend
 
 ---
 
+### Deployment Runner Wrapper (Enforcement)
+
+**Execution Location:** HOST-SERVER-TERMINAL (deployment automation context)
+
+**Script:** `backend/scripts/ops/deploy_gate.sh`
+
+**Purpose:** Vendor-neutral wrapper for deployment runners to gate container rebuild/recreate operations based on change classification.
+
+**Usage:**
+```bash
+# Explicit commit range
+./scripts/ops/deploy_gate.sh OLD_COMMIT NEW_COMMIT
+
+# Auto-infer from SOURCE_COMMIT env var
+SOURCE_COMMIT=abc123 ./scripts/ops/deploy_gate.sh
+
+# Auto-infer from HEAD~1..HEAD (last commit)
+./scripts/ops/deploy_gate.sh
+```
+
+**Output Format (Machine-Readable):**
+```
+DEPLOY=1 reason="code/config changes detected" old=abc123 new=def456
+DEPLOY=0 reason="docs-only changes" old=abc123 new=def456
+DEPLOY=1 reason="error: ... (fail-open mode)" old=unknown new=unknown
+```
+
+**Exit Codes:**
+- `0` = Proceed with deploy (code/config changes OR fail-open error)
+- `1` = Skip deploy (docs-only changes OR fail-closed error)
+- `2` = Critical error (git unavailable, not a repo)
+
+**Fail-Safe Behavior:**
+
+Use `DEPLOY_GATE_FAIL_MODE` environment variable to control error handling:
+
+- **`open`** (default, recommended): On error, proceed with deploy (exit 0)
+  - Rationale: Transient issues shouldn't block legitimate deployments
+  - Use case: Production environments where availability > optimization
+
+- **`closed`** (strict): On error, skip deploy (exit 1)
+  - Rationale: Maximum protection against unnecessary deployments
+  - Use case: Staging environments, cost-sensitive workloads
+
+**Integration Pattern:**
+
+```bash
+# Deployment runner pseudocode
+if ./backend/scripts/ops/deploy_gate.sh "$OLD" "$NEW"; then
+  echo "Proceeding with container rebuild"
+  # Build image
+  # Push to registry
+  # Replace/recreate container
+else
+  echo "Skipping deployment (docs-only changes)"
+  # No container operations
+fi
+```
+
+**Auto-Inference Logic:**
+
+1. If `OLD_COMMIT` and `NEW_COMMIT` arguments provided: Use them directly
+2. If `SOURCE_COMMIT` env var is set: Use `SOURCE_COMMIT..HEAD`
+3. Otherwise: Use `HEAD~1..HEAD` (last commit only)
+
+**Example Scenarios:**
+
+```bash
+# Scenario 1: Explicit range (deployment platform provides commit range)
+./scripts/ops/deploy_gate.sh f936bda 12cbe9f
+# Output: DEPLOY=1 reason="code/config changes detected" old=f936bda new=12cbe9f
+# Exit: 0 (proceed)
+
+# Scenario 2: SOURCE_COMMIT env var (platform sets this)
+SOURCE_COMMIT=f936bda ./scripts/ops/deploy_gate.sh
+# Output: DEPLOY=0 reason="docs-only changes" old=f936bda new=HEAD
+# Exit: 1 (skip)
+
+# Scenario 3: Fail-closed mode (strict)
+DEPLOY_GATE_FAIL_MODE=closed ./scripts/ops/deploy_gate.sh invalid_ref HEAD
+# Output: DEPLOY=0 reason="error: old commit not found: invalid_ref (fail-closed mode)" old=unknown new=unknown
+# Exit: 1 (skip on error)
+
+# Scenario 4: Fail-open mode (default)
+./scripts/ops/deploy_gate.sh invalid_ref HEAD
+# Output: DEPLOY=1 reason="error: old commit not found: invalid_ref (fail-open mode)" old=unknown new=unknown
+# Exit: 0 (proceed on error)
+```
+
+**Safety Notes:**
+
+- This script is **read-only** (only classifies changes)
+- **NEVER** triggers container operations directly
+- Safe to run multiple times (idempotent)
+- No side effects on repository or containers
+
+**Recommended Default:** Fail-open mode (`DEPLOY_GATE_FAIL_MODE=open`) to avoid blocking deployments due to transient errors.
+
+---
+
 ### Phase-1 vs Phase-2
 
-**Phase-1** (Current - Ticket Created):
+**Phase-1** (Current):
 - Helper script exists (`deploy_should_run.sh`)
+- Enforcement wrapper exists (`deploy_gate.sh`)
 - Documentation provided
 - CI/CD integration examples available
-- No enforcement (manual opt-in)
+- No enforcement in actual pipelines yet (manual opt-in)
 
 **Phase-2** (Future):
 - Integrate script into actual CI/CD pipeline

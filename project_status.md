@@ -58,6 +58,15 @@ This document tracks the current state of the PMS-Webapp project, including comp
   - Scripts README: `ops/deploy_should_run.sh` documentation with CI/CD integration examples
   - Phase-1: Tickets + docs + helper script created (no enforcement yet, manual opt-in)
   - Phase-2: CI/CD integration + host timer script update (future work)
+- ✅ **Deploy Gating Enforcement Wrapper (2026-01-05):** Vendor-neutral wrapper for deployment runners
+  - Script: `backend/scripts/ops/deploy_gate.sh` - Machine-readable interface for deployment automation
+  - Output: `DEPLOY=0|1 reason="..." old=... new=...` (single-line parseable format)
+  - Exit codes: 0=deploy, 1=skip, 2=error
+  - Fail-safe behavior: `DEPLOY_GATE_FAIL_MODE=open|closed` (default: open = proceed on error)
+  - Auto-inference: SOURCE_COMMIT env var → HEAD, or HEAD~1..HEAD fallback
+  - Runbook: "Deployment Runner Wrapper (Enforcement)" section added
+  - Scripts README: `ops/deploy_gate.sh` documentation with integration examples
+  - Enables deployment platforms to skip container rebuild for docs-only commits (reduces Case A duplicate startups)
 
 ### Channel Manager Admin UI ✅
 
