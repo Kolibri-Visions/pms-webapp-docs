@@ -11958,6 +11958,16 @@ The `conflict_type` field distinguishes between different overlap causes:
 }
 ```
 
+**Common Issues:**
+
+*HTTP 500 on booking creation after conflict-type detection changes:*
+- **Symptom:** POST `/api/v1/bookings` returns HTTP 500 instead of expected 409 when overlapping availability block
+- **Error in logs:** `NameError: name 'conn' is not defined` in BookingService.create_booking()
+- **Root cause:** Conflict detection pre-check uses undefined database connection variable (`conn` instead of `self.db`)
+- **Location:** `booking_service.py` availability block query in pre-check or update paths
+- **Fix:** Replace `await conn.fetchrow(...)` with `await self.db.fetchrow(...)` in all block overlap queries
+- **Expected behavior:** Should return HTTP 409 with `conflict_type=inventory_overlap` for block overlaps
+
 **Verify Constraints Exist:**
 
 ```bash
