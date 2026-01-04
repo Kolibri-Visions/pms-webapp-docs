@@ -509,6 +509,8 @@ All required environment variables configured:
 
 | Date | Phase | Change |
 |------|-------|--------|
+| 2026-01-04 | API | Implemented duration_ms SQL fallback for batch operations (created_at → updated_at) |
+| 2026-01-04 | Admin UI | Added duration display in Batch Details Modal with null handling ("—") |
 | 2026-01-03 | Phase 21 | Added Phase 21 hardening docs, smoke script, ModuleSpec scaffold |
 | 2026-01-03 | Phase 20 | Applied guests timeline columns migration (first_booking_at, etc.) |
 | 2026-01-03 | Phase 20 | Applied guests metrics columns migration (total_bookings, etc.) |

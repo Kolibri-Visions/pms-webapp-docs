@@ -14312,6 +14312,17 @@ curl -L -X GET "https://api.fewo.kolibri-visions.de/api/v1/channel-connections/{
 
 **Note:** Both list (`GET /sync-batches`) and details (`GET /sync-batches/{batch_id}`) endpoints return operations with all fields above. The list endpoint aggregates all logs per batch, while the details endpoint shows a single batch.
 
+**Duration Computation Fallback:**
+
+The `duration_ms` field is computed using the following fallback logic (implemented in SQL):
+1. **Preferred:** If `started_at` and `finished_at` columns exist and are populated, use those timestamps
+2. **Fallback:** If `started_at`/`finished_at` are not available but `created_at` and `updated_at` exist and `updated_at >= created_at`, compute duration as: `EXTRACT(EPOCH FROM (updated_at - created_at)) * 1000` milliseconds
+3. **Null:** If neither timestamps are available or `updated_at < created_at`, `duration_ms` is `null`
+
+**UI Display:**
+- When `duration_ms` is present: Display as human-friendly format (e.g., "2.35s" for 2350ms)
+- When `duration_ms` is `null`: Display as "—" (em dash) to indicate no duration available
+
 **Response Example:**
 ```json
 {
