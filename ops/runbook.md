@@ -10886,6 +10886,55 @@ docker exec pms-backend git rev-parse HEAD
 - Use consistent naming conventions to avoid collisions
 - Run `npm run build` locally before pushing (if possible)
 
+**Issue:** Frontend build fails with JSX syntax error (unclosed tag)
+
+**Symptom:**
+- Coolify deployment shows `npm run build` failing with error: "Unexpected token `div`. Expected jsx identifier"
+- Error trace points to a line with valid-looking JSX (e.g., `<div className="...">`)
+- TypeScript compiler (`npx tsc --noEmit`) shows "JSX element 'div' has no corresponding closing tag"
+- Actual root cause is often LATER in the file (cascading error from missing closing tag)
+
+**Common Causes:**
+1. **Missing closing tag** in JSX block (e.g., `<div>...</div>` → missing `</div>`)
+2. **Unclosed ternary expression** inside JSX (e.g., `{condition ? <div>...</div> : <div>...</div>}` missing closing tag)
+3. **Brace mismatch** in nested JSX blocks
+
+**Solution:**
+1. **Run TypeScript compiler locally** to get full error list:
+   ```bash
+   cd frontend
+   npx tsc --noEmit --jsx preserve app/connections/page.tsx
+   ```
+2. **Identify root cause:** Look for FIRST error (e.g., "JSX element 'div' has no corresponding closing tag")
+3. **Check surrounding JSX structure:** Trace opening tags to their closing tags
+4. **Common fix:** Add missing `</div>` after ternary expressions or conditional blocks
+5. **Re-run build** to verify: `npm run build`
+6. **Commit and push:**
+   ```bash
+   git add frontend/app/connections/page.tsx
+   git commit -m "fix: missing closing div tag in batch operations error display"
+   git push origin main
+   ```
+
+**Example Fix (Real Case):**
+```tsx
+{/* BEFORE (BROKEN) */}
+<div className="text-xs mt-1">
+  {op.error ? <div>...</div> : <div>...</div>}
+</div>  {/* This closes PARENT div, not "text-xs mt-1" div! */}
+
+{/* AFTER (FIXED) */}
+<div className="text-xs mt-1">
+  {op.error ? <div>...</div> : <div>...</div>}
+</div>  {/* Closes "text-xs mt-1" div */}
+</div>  {/* Closes parent div */}
+```
+
+**Prevention:**
+- Use editor with JSX tag matching/highlighting (VS Code, WebStorm)
+- Run `npm run build` locally before pushing
+- Watch for cascading errors in TypeScript output (first error is usually root cause)
+
 ---
 
 ### TLS: Admin Subdomain Shows TRAEFIK DEFAULT CERT (Let's Encrypt Missing)
