@@ -50,6 +50,14 @@ This document tracks the current state of the PMS-Webapp project, including comp
 - ✅ Host connectivity automation updated to avoid container restarts (network attach only)
 - ✅ Verification confirmed: single pool_id per runtime, StartedAt stable, no restart events
 - ✅ Documentation clarified: duplicate startup signatures have TWO external causes (container replace via deployment recreate OR host automation restart), not in-process uvicorn reload/workers. Process tree verification and decision tree added to runbook.
+- ✅ **Phase-1 Ops/Tickets Created (2026-01-04):** Two operational improvement tickets created with minimal tooling/docs
+  - Deploy Gating: `backend/docs/ops/tickets/2026-01-04_deploy_gating_docs_only.md` - Classify git changes to skip deploys for docs-only commits (reduces Case A duplicate startups)
+  - Network Attachment: `backend/docs/ops/tickets/2026-01-04_network_attach_create_time.md` - Attach network at container create-time (eliminates Case B duplicate startups)
+  - Helper script: `backend/scripts/ops/deploy_should_run.sh` - Git diff classifier (exit 0=deploy, 1=skip, 2=error)
+  - Runbook sections: "Deploy Gating (Docs-Only Change Detection)" and "Network Attachment at Create-Time (Docker)"
+  - Scripts README: `ops/deploy_should_run.sh` documentation with CI/CD integration examples
+  - Phase-1: Tickets + docs + helper script created (no enforcement yet, manual opt-in)
+  - Phase-2: CI/CD integration + host timer script update (future work)
 
 ### Channel Manager Admin UI ✅
 

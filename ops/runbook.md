@@ -1853,6 +1853,346 @@ WHERE status = 'failed' AND error LIKE '%auto-cleaned%';
 
 ---
 
+## Deploy Gating (Docs-Only Change Detection)
+
+### Overview
+
+**Problem:** Docs-only commits (e.g., `*.md`, `docs/**`) currently trigger full container rebuild + redeploy, causing unnecessary downtime and duplicate startup signatures.
+
+**Solution:** Use `backend/scripts/ops/deploy_should_run.sh` to classify changes as docs-only vs code/config, enabling CI/CD to skip deploys for non-functional changes.
+
+**Ticket:** See `backend/docs/ops/tickets/2026-01-04_deploy_gating_docs_only.md`
+
+---
+
+### How It Works
+
+```bash
+# Script classifies git changes
+./scripts/ops/deploy_should_run.sh HEAD~1..HEAD
+
+# Exit codes:
+#   0 = Needs deploy (code/config changes detected)
+#   1 = Skip deploy (docs-only changes detected)
+#   2 = Error (invalid git range, not a git repo)
+```
+
+**Classification Rules:**
+
+**Docs-only paths** (skip deploy):
+- `*.md` (Markdown files)
+- `docs/**` (Documentation directories)
+- `*.txt` (Text files, EXCEPT `requirements.txt`)
+- `.gitignore`, `LICENSE`
+
+**Always deploy paths** (proceed with deploy):
+- `app/**` (Python application code)
+- `requirements.txt` (Python dependencies)
+- `Dockerfile`, `docker-compose*.yml` (Container config)
+- `alembic/**` (Database migrations)
+- `tests/**` (Test code)
+- `.env*` (Environment config)
+- `scripts/**` (Operational scripts)
+- Any other files not in docs-only category
+
+---
+
+### CI/CD Integration Examples
+
+#### GitHub Actions
+
+```yaml
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for git diff
+
+      - name: Check if deploy needed
+        id: deploy_gate
+        run: |
+          if ./backend/scripts/ops/deploy_should_run.sh ${{ github.event.before }}..${{ github.sha }}; then
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_deploy=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build and deploy
+        if: steps.deploy_gate.outputs.should_deploy == 'true'
+        run: |
+          docker build -t myapp backend/
+          docker push myapp
+```
+
+#### GitLab CI
+
+```yaml
+deploy:
+  stage: deploy
+  script:
+    - ./backend/scripts/ops/deploy_should_run.sh $CI_COMMIT_BEFORE_SHA..$CI_COMMIT_SHA
+    - docker build -t myapp backend/
+    - docker push myapp
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  only:
+    - main
+```
+
+---
+
+### Manual Testing
+
+```bash
+# Test with last commit
+cd backend
+./scripts/ops/deploy_should_run.sh HEAD~1..HEAD
+
+# Test with specific commit range
+./scripts/ops/deploy_should_run.sh abc123..def456
+
+# Example output (docs-only):
+# Changed files in range HEAD~1..HEAD:
+#   - docs/ops/runbook.md
+#
+#   [DOCS] docs/ops/runbook.md
+#
+# ✅ Classification: DOCS-ONLY
+# Action: Skip deploy (no container rebuild needed)
+# Exit code: 1
+
+# Example output (needs deploy):
+# Changed files in range HEAD~1..HEAD:
+#   - app/core/database.py
+#   - docs/ops/runbook.md
+#
+#   [DEPLOY] app/core/database.py (Application code)
+#   [DOCS] docs/ops/runbook.md
+#
+# 🚀 Classification: NEEDS DEPLOY
+# Action: Proceed with deploy (code/config changes detected)
+# Exit code: 0
+```
+
+---
+
+### Benefits
+
+1. **Reduced downtime**: Documentation changes no longer trigger container replacement
+2. **Fewer duplicate startup signatures**: Avoid Case A (container replace) for docs commits
+3. **Faster feedback**: Docs contributors see changes merged without waiting for deploy
+4. **Cost savings**: Skip unnecessary image builds/pushes/pulls
+
+---
+
+### Phase-1 vs Phase-2
+
+**Phase-1** (Current - Ticket Created):
+- Helper script exists (`deploy_should_run.sh`)
+- Documentation provided
+- CI/CD integration examples available
+- No enforcement (manual opt-in)
+
+**Phase-2** (Future):
+- Integrate script into actual CI/CD pipeline
+- Add force-deploy override flag
+- Monitor deployment frequency reduction
+- Add metrics (deploy count, docs-only commit %)
+
+---
+
+## Network Attachment at Create-Time (Docker)
+
+### Overview
+
+**Problem:** PMS backend container currently lacks network connectivity at create-time, requiring a post-create restart by host automation to establish connectivity. This causes duplicate startup signatures (Case B).
+
+**Solution:** Attach network at `docker run` time using `--network` flag (or equivalent in Docker Compose, Kubernetes, etc.), eliminating the need for post-create restarts.
+
+**Ticket:** See `backend/docs/ops/tickets/2026-01-04_network_attach_create_time.md`
+
+---
+
+### Current vs Desired Behavior
+
+**Current** (Network attached AFTER create):
+```bash
+docker run --name pms-backend ghcr.io/org/pms-backend:latest
+  → Container starts (PID=1, generation=1)
+  → No network connectivity
+  → DB connection fails (DNS timeout)
+  → App enters degraded mode
+  → Host timer detects missing network
+  → docker restart pms-backend  # ← Creates duplicate startup
+  → Network now available
+  → DB connection succeeds (new PID=1, generation=1 again)
+```
+
+**Desired** (Network attached AT create):
+```bash
+docker run --name pms-backend --network pms-network ghcr.io/org/pms-backend:latest
+  → Container starts (PID=1, generation=1)
+  → Network connectivity ALREADY available
+  → DB connection succeeds immediately
+  → App enters ready mode (no degraded mode)
+  → Host timer becomes optional safety net (no restart)
+```
+
+---
+
+### Implementation Examples
+
+#### Docker CLI
+
+**Before:**
+```bash
+docker run -d \
+  --name pms-backend \
+  --env-file .env \
+  ghcr.io/org/pms-backend:latest
+```
+
+**After:**
+```bash
+docker run -d \
+  --name pms-backend \
+  --network pms-network \
+  --env-file .env \
+  ghcr.io/org/pms-backend:latest
+```
+
+#### Docker Compose
+
+**Before:**
+```yaml
+services:
+  backend:
+    image: ghcr.io/org/pms-backend:latest
+    env_file: .env
+    # No networks section
+```
+
+**After:**
+```yaml
+services:
+  backend:
+    image: ghcr.io/org/pms-backend:latest
+    env_file: .env
+    networks:
+      - pms-network
+
+networks:
+  pms-network:
+    external: true  # Assumes network already exists
+    # OR
+    # driver: bridge  # Creates network if not exists
+```
+
+#### Kubernetes
+
+Kubernetes automatically attaches Pod network at create-time (no action needed):
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pms-backend
+spec:
+  containers:
+  - name: backend
+    image: ghcr.io/org/pms-backend:latest
+  # Network attachment is automatic
+```
+
+---
+
+### Update Host Timer Script (Safety Net)
+
+**Before** (restart-based):
+```bash
+# Host timer script (HARMFUL - causes duplicate startups)
+if ! docker exec pms-backend ping -c1 database 2>/dev/null; then
+  echo "No connectivity, restarting container"
+  docker restart pms-backend  # ← Creates duplicate startup
+fi
+```
+
+**After** (attach-only):
+```bash
+# Host timer script (SAFE - attach without restart)
+NETWORK_ATTACHED=$(docker inspect pms-backend \
+  --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}' \
+  | grep -q pms-network && echo yes || echo no)
+
+if [ "$NETWORK_ATTACHED" != "yes" ]; then
+  echo "Network not attached, attaching now (no restart)"
+  docker network connect pms-network pms-backend
+else
+  echo "Network already attached, no action needed"
+fi
+```
+
+**Why no restart?** Docker supports live network attachment (`docker network connect`) without container restart. DNS resolution will work immediately after attachment.
+
+---
+
+### Benefits
+
+1. **Single startup signature**: Eliminates Case B duplicate startups (host automation restart)
+2. **Faster application readiness**: DB connection succeeds on first attempt (no degraded mode)
+3. **Simpler operations**: Host timer becomes attach-only safety net, not primary mechanism
+4. **Cleaner logs**: No false-positive "duplicate pool creation" alerts
+
+---
+
+### Verification
+
+**Before fix** (duplicate startup):
+```bash
+# Check logs for multiple startups
+docker logs pms-backend 2>&1 | grep -E "Started server process|pool created successfully"
+
+# Expected (BEFORE):
+# [Startup #1] Started server process [1]
+# [Startup #1] Database connection pool created successfully ... pool_id=12345
+# [Startup #1] Database connection pool initialization FAILED ... Degraded mode
+# [Startup #2] Started server process [1]  ← Duplicate!
+# [Startup #2] Database connection pool created successfully ... pool_id=67890
+# [Startup #2] ✅ Database connection pool initialized
+```
+
+**After fix** (single startup):
+```bash
+# Check logs for single startup
+docker logs pms-backend 2>&1 | grep -E "Started server process|pool created successfully"
+
+# Expected (AFTER):
+# [Startup #1] Started server process [1]
+# [Startup #1] Database connection pool created successfully ... pool_id=12345
+# [Startup #1] ✅ Database connection pool initialized
+# [Startup #1] 🚀 PMS Backend API started successfully
+```
+
+---
+
+### Phase-1 vs Phase-2
+
+**Phase-1** (Current - Ticket Created):
+- Ticket documents problem + solution
+- Examples provided for Docker CLI, Compose, Kubernetes
+- Host timer script update pattern documented
+- No infrastructure changes yet
+
+**Phase-2** (Future):
+- Update actual deployment configs to include `--network` flag
+- Patch host timer script to attach-only (no restart)
+- Validate single startup signature in production logs
+- Monitor reduction in duplicate startup events
+
+---
+
 ## Token Validation (apikey Header)
 
 ### Symptom
