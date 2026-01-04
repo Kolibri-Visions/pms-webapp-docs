@@ -730,6 +730,55 @@ PMS backend container cannot resolve Supabase database DNS (`supabase-db`) due t
 - Coolify creates a default network for PMS app: `coolify`
 - Container needs to be attached to **both** networks to resolve `supabase-db` hostname
 
+**Common scenario:**
+- Database/network may be temporarily unavailable during container startup (race condition)
+- DNS resolution may fail transiently before network is fully ready
+- Backend now retries connection for up to 60s before entering degraded mode
+
+### New Behavior: Startup Retry + Background Self-Heal (2026-01-04)
+
+**Startup Retry:**
+- Backend now retries DB connection for up to `DB_STARTUP_MAX_WAIT_SECONDS` (default: 60s)
+- Sleeps `DB_STARTUP_RETRY_INTERVAL_SECONDS` (default: 2s) between attempts
+- Logs progress: elapsed time, error type, next retry
+- If connection succeeds within timeout: starts normally (no degraded mode warning)
+- If still failing after timeout: enters degraded mode and starts background reconnection
+
+**Background Self-Heal:**
+- If startup fails, backend starts a background task to periodically retry DB connection
+- Retries every `DB_BACKGROUND_RECONNECT_INTERVAL_SECONDS` (default: 30s)
+- When DB becomes available: pool is created automatically (no restart needed)
+- Logs success: "Background reconnection: SUCCESS. App is now in NORMAL MODE"
+- Disable with `DB_BACKGROUND_RECONNECT_ENABLED=false` if needed
+
+**Expected Logs:**
+```
+# Startup (first attempt fails, retrying)
+Database connection attempt 1 failed (gaierror: Temporary failure in name resolution).
+Retrying in 2.0s (elapsed: 0.2s, max: 60s)...
+
+# Startup (success after retries)
+Database connection pool created successfully (PID=1, host=supabase-db, attempt=3, elapsed=4.5s)
+
+# Startup (all retries exhausted, entering degraded mode)
+Database connection failed after 30 attempts (60.1s).
+Last error: gaierror: Temporary failure in name resolution.
+App will start in DEGRADED MODE (DB unavailable).
+Background reconnection will retry every 30s.
+
+# Background reconnection (attempting)
+Background reconnection: attempting to create DB pool...
+
+# Background reconnection (success)
+Background reconnection: SUCCESS. App is now in NORMAL MODE (DB available).
+```
+
+**Impact:**
+- **Before:** Immediate degraded mode on any startup DNS failure (required restart)
+- **After:** Retries for 60s, then self-heals via background task (no restart needed)
+- **Readiness:** `/health/ready` will return 503 for up to 60s after deploy if DB is slow to start
+- **Operators:** If you see 503 immediately after deploy, wait up to 60s before investigating
+
 ### Verify
 
 ```bash
