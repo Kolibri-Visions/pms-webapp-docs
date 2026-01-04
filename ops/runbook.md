@@ -3047,6 +3047,91 @@ getComputedStyle(document.documentElement).getPropertyValue('--t-primary')
 3. Verify API response format matches expected schema
 4. Check network tab: `/api/v1/branding` response should include `tokens.background` field
 
+**Theme Mode Palette Mismatch (Fixed):**
+
+**Symptom:** `data-theme="dark"` but CSS variables still show light palette values (white background, dark text).
+
+Example:
+```
+<html data-theme="dark" ...>
+--t-bg: "#ffffff"    ✗ bug (should be "#111827" for dark mode)
+--t-text: "#111827"  ✗ bug (should be "#f9fafb" for dark mode)
+```
+
+**Root Cause:**
+- Backend returns flat light-mode tokens only (no per-mode token sets)
+- Frontend applied those light tokens to :root regardless of mode setting
+- data-theme attribute changed but CSS variable values did not
+
+**Fix Applied:**
+1. Separate light and dark default palettes defined in frontend
+2. `deriveDarkTokens()` function creates dark palette from light tokens (keeps primary/accent, changes bg/surface/text)
+3. `getEffectiveMode()` determines active mode (light/dark/system with OS detection)
+4. `applyThemeTokens()` applies correct palette based on effective mode
+5. Added `data-effective-theme` attribute for debugging (shows resolved mode)
+
+**Verification (POST-FIX):**
+
+```bash
+# EXECUTION LOCATION: WEB-BROWSER (developer tools console)
+
+# Check data-theme and effective theme
+document.documentElement.getAttribute('data-theme')
+# Expected: "dark", "light", or "system"
+
+document.documentElement.getAttribute('data-effective-theme')
+# Expected: "dark" or "light" (resolved from system if mode=system)
+
+# Check CSS variables match the effective theme
+const mode = document.documentElement.getAttribute('data-effective-theme');
+const bg = getComputedStyle(document.documentElement).getPropertyValue('--t-bg').trim();
+const text = getComputedStyle(document.documentElement).getPropertyValue('--t-text').trim();
+
+console.log(`Mode: ${mode}, BG: ${bg}, Text: ${text}`);
+# Expected for dark mode: Mode: dark, BG: #111827 (dark gray), Text: #f9fafb (light)
+# Expected for light mode: Mode: light, BG: #ffffff (white), Text: #111827 (dark)
+```
+
+**Expected Result:**
+- Dark mode: bg="#111827", surface="#1f2937", text="#f9fafb"
+- Light mode: bg="#ffffff", surface="#f9fafb", text="#111827"
+- System mode: follows OS preference automatically
+
+**If Bug Persists:**
+1. Clear browser cache and hard reload
+2. Check mode setting in branding form matches data-theme
+3. Verify no CSS overrides in globals.css
+4. Check browser console for theme provider errors
+
+**Auth Client Multiple Instances Warning (Fixed):**
+
+**Symptom:** Browser console shows "multiple auth-client instances detected in same browser context"
+
+**Root Cause:**
+- Auth client created on each function call instead of singleton
+- Module-level caching didn't survive HMR (hot module reload)
+
+**Fix Applied:**
+1. Created dedicated singleton module: `auth-client-singleton.ts`
+2. Uses `globalThis` to cache instance (survives HMR and page reloads)
+3. `getAuthClient()` function returns same instance on all calls
+4. All auth client creation refactored to use singleton
+
+**Verification (POST-FIX):**
+
+```bash
+# EXECUTION LOCATION: WEB-BROWSER (developer tools console)
+
+# Check for warning message (should NOT appear after fix)
+# Open console and reload page
+# Expected: No "multiple instances" warning
+```
+
+**Expected Result:**
+- No console warnings about multiple auth-client instances
+- Single client instance used throughout application
+- Instance persists across HMR and page reloads
+
 ---
 
 ## Redis + Celery Worker Setup (Channel Manager)

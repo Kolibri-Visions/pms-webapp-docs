@@ -221,6 +221,25 @@ This document tracks the current state of the PMS-Webapp project, including comp
 - `frontend/app/lib/supabase-browser.ts` - Singleton browser client instance
 - `backend/docs/ops/runbook.md` - CSS var verification, third-party name cleanup
 
+**Phase B2 Fix (2026-01-04):**
+- ✅ **Theme Mode Palette Mismatch**: Dark mode showed light palette values (white bg, dark text)
+  - Root cause: Backend returns flat light tokens; frontend applied same tokens regardless of mode
+  - Fix: Separate light/dark default palettes, `deriveDarkTokens()` creates dark palette from light
+  - `getEffectiveMode()` resolves system mode via OS preference detection
+  - `applyThemeTokens()` applies correct palette based on effective mode
+  - Added `data-effective-theme` attribute for debugging
+  - Verification: Check bg/surface/text values differ between light/dark modes
+- ✅ **Auth Client Singleton Enhancement**: GlobalThis caching survives HMR and page reloads
+  - Created `auth-client-singleton.ts` with globalThis-backed singleton
+  - Refactored all auth client creation to use `getAuthClient()`
+  - Eliminates "multiple instances in same browser context" warning
+
+**Files Changed (B2):**
+- `frontend/app/lib/auth-client-singleton.ts` - New singleton module with globalThis caching
+- `frontend/app/lib/supabase-browser.ts` - Use singleton instead of module-level cache
+- `frontend/app/lib/theme-provider.tsx` - Separate light/dark palettes, mode-driven token application
+- `backend/docs/ops/runbook.md` - Mode palette verification, auth singleton troubleshooting
+
 **Future Phase C (Client-Facing):**
 - Apply tokens to booking widget, property listings, guest portal
 - Consistent brand across admin + client experiences
