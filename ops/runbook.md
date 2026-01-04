@@ -999,6 +999,77 @@ if result["duplicates_found"]:
 3. Remove circular imports (use TYPE_CHECKING for type hints)
 4. Verify sys.path doesn't contain duplicate entries
 
+### Singleflight Pool Creation - Race Condition Fix (2026-01-04)
+
+**Symptom:**
+- Multiple "Database connection pool created successfully" logs within single container lifetime
+- Different pool_id values despite same PID=1, RestartCount=0
+- Occurs during startup + concurrent requests (health checks, tenant resolution)
+- Race window: startup creates pool while concurrent requests also call ensure_pool()
+
+**Root Cause:**
+- **Before Fix:** ensure_pool() had bug where existing init task was awaited INSIDE lock
+- Lock held while waiting → concurrent callers blocked from joining same task
+- Result: Sequential callers each created own init task → multiple asyncpg.create_pool() calls
+- Manifests as: pool_id=123, then pool_id=456, then pool_id=789 (all PID=1, generation=1)
+
+**Fix Applied (2026-01-04 Singleflight):**
+
+Changed ensure_pool() to implement true singleflight pattern:
+1. **Fast path (line 262):** If pool exists, return immediately (zero lock contention, 99.9% case)
+2. **Slow path (lines 269-311):**
+   - Acquire lock to atomically check/create init task
+   - If init task in progress: store reference, **release lock**, await outside lock
+   - If no init task: create one, store reference, **release lock**, await outside lock
+   - All concurrent callers await the SAME task → asyncpg.create_pool() called exactly once
+
+**Key Change:**
+```python
+# BEFORE (BUG): Await inside lock - blocks other callers
+async with lock:
+    if _init_task is not None and not _init_task.done():
+        await _init_task  # ❌ Lock held while waiting!
+        return _pool
+
+# AFTER (FIXED): Store reference, await outside lock - allows concurrent joins
+async with lock:
+    if _init_task is not None and not _init_task.done():
+        task_to_await = _init_task  # ✅ Store reference
+# Lock released here
+await task_to_await  # ✅ Await outside lock
+```
+
+**Verification After Deployment:**
+
+```bash
+# 1. Check pool created only once per container lifetime
+docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "pool created successfully" | wc -l
+# Expected: 1 (unless background reconnect triggered after degraded mode)
+
+# 2. Verify pool_id stays constant
+docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "pool created successfully" | grep -o "pool_id=[0-9]*" | sort -u
+# Expected: Single pool_id value
+
+# 3. Check for singleflight log messages
+docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "joining existing task (singleflight)"
+# If present: Confirms concurrent callers joined existing init task (correct behavior)
+
+# 4. Check generation counter
+docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "pool created successfully" | grep -o "generation=[0-9]*"
+# Expected: generation=1 (first pool creation after startup)
+```
+
+**Expected Behavior:**
+- Startup calls ensure_pool() → creates init task, starts pool creation
+- Concurrent health check calls ensure_pool() → sees init task, awaits same task
+- Concurrent tenant resolution calls ensure_pool() → sees init task, awaits same task
+- Result: Single "pool created successfully" log, single pool_id, all callers get same pool
+
+**Regression Test:**
+- Unit tests added: `tests/unit/test_database_singleflight.py`
+- Test spawns 20 concurrent ensure_pool() calls, asserts asyncpg.create_pool() called exactly once
+- Test simulates realistic scenario: startup + health check + tenant resolution concurrently
+
 ### Verify
 
 ```bash
