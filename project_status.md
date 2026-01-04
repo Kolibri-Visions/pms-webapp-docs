@@ -49,6 +49,7 @@ This document tracks the current state of the PMS-Webapp project, including comp
 - ✅ DB pool duplicate startup issue root-caused: external host timer was restarting container (not in-process issue)
 - ✅ Host connectivity automation updated to avoid container restarts (network attach only)
 - ✅ Verification confirmed: single pool_id per runtime, StartedAt stable, no restart events
+- ✅ Documentation clarified: duplicate startup signatures have TWO external causes (container replace via deployment recreate OR host automation restart), not in-process uvicorn reload/workers. Process tree verification and decision tree added to runbook.
 
 ### Channel Manager Admin UI ✅
 

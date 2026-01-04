@@ -1262,6 +1262,197 @@ docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "pool created succes
 - Single pool_id throughout entire runtime
 - Network connectivity maintained without container disruption
 
+### Duplicate Startup Signatures + Multiple pool_id: Distinguish External Causes (2026-01-04)
+
+**Overview:**
+When you observe duplicate "Started server process [1]" + "Application startup complete" logs with CancelledError between them, and multiple different pool_id values while RestartCount=0, this is NOT an in-process application bug (e.g., uvicorn reload or multiple workers). It is caused by external container lifecycle events.
+
+**Proven Evidence (Not In-Process):**
+```bash
+# CONTAINER: Check process tree shows single process
+docker exec pms-backend ps aux
+# Expected: Single /opt/venv/bin/python ... uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# CONTAINER: Verify no reload or workers flags
+docker exec pms-backend cat /proc/1/cmdline | tr '\0' ' '
+# Expected: NO --reload or --workers flags
+```
+
+**Two Distinct External Causes:**
+
+---
+
+#### **CASE A: Container Replace (Deploy/Recreate)**
+
+**What Happens:**
+- Deployment manager (orchestrator) creates NEW container with updated image tag
+- Old container stops/removed, new container starts
+- Container ID changes (new container created)
+- RestartCount may stay 0 (new container, not a daemon restart loop)
+- Each container has its own startup sequence + pool_id
+
+**How to Prove (HOST):**
+
+```bash
+# 1. Check for container ID change
+docker ps -a --no-trunc --filter name=pms-backend | head -5
+# If multiple containers with different IDs: replacement occurred
+
+# 2. Check container creation/start times
+docker inspect pms-backend --format 'Id={{.Id}}
+Created={{.Created}}
+StartedAt={{.State.StartedAt}}
+FinishedAt={{.State.FinishedAt}}
+RestartCount={{.RestartCount}}
+ExitCode={{.State.ExitCode}}'
+# Created timestamp shows when container was created (replacement creates new)
+
+# 3. Check rendered deployment files modification time
+# (Use your deployment manager's rendered directory path)
+stat $DEPLOY_APP_DIR/docker-compose.yaml
+stat $DEPLOY_APP_DIR/.env
+# If mtimes align with container Created time: deployment recreated container
+
+# 4. Check image tag change in rendered compose
+diff <previous-compose-backup> $DEPLOY_APP_DIR/docker-compose.yaml
+# Look for image: tag changes (e.g., old-hash -> new-hash)
+
+# 5. Check logs show TWO separate container lifecycles
+docker logs --timestamps pms-backend 2>&1 | grep -E 'Started server process|Application startup complete|pool created' | head -20
+# First startup from old container (before Created time)
+# Second startup from new container (after Created time)
+```
+
+**Expected Behavior (Case A):**
+- Two container IDs exist (old removed, new running)
+- Two startup sequences in logs (one per container)
+- Each container has different pool_id (expected, separate processes)
+- RestartCount=0 in new container (not a restart, it's a new container)
+
+**Safe Pattern (Case A):**
+- This is normal deployment behavior (recreate strategy)
+- Use SOURCE_COMMIT or image tag + compose/env mtime to correlate deployments
+- Monitor for exactly ONE startup sequence in new container
+- Verify old container is stopped/removed (not running simultaneously)
+
+---
+
+#### **CASE B: Host Automation Restart (Network Connectivity)**
+
+**What Happens:**
+- Host-level script/timer monitors network connectivity
+- Script executes `docker network connect <network> <container>` (correct, idempotent)
+- Script ALSO executes `docker restart <container>` (incorrect, harmful)
+- Same container ID, but stop/start cycle produces duplicate startups
+- RestartCount stays 0 (manual stop/start, not daemon restart)
+
+**How to Prove (HOST):**
+
+```bash
+# 1. Check container ID stays SAME across time
+docker ps -a --no-trunc --filter name=pms-backend
+# Same container ID but FinishedAt set: stop/start within same container
+
+# 2. Check container state shows stop event
+docker inspect pms-backend --format 'FinishedAt={{.State.FinishedAt}}
+ExitCode={{.State.ExitCode}}
+RestartCount={{.RestartCount}}'
+# FinishedAt non-zero + ExitCode=0 + RestartCount=0: manual stop (not crash)
+
+# 3. Check daemon journal for manual stop events
+journalctl -u docker.service --since "1 hour ago" | grep -E "container.*stop|hasBeenManuallyStopped=true"
+# Look for stop events matching container ID
+
+# 4. Search host for network connectivity automation
+systemctl list-timers --all | grep -iE 'network|ensure|connectivity'
+find /usr/local/bin /etc/systemd/system -type f -name "*network*" -o -name "*ensure*" 2>/dev/null
+
+# 5. Audit automation script for restart behavior
+systemctl cat <timer-service-name>
+cat /usr/local/bin/<ensure-network-script>
+# Look for "docker restart" command (HARMFUL)
+
+# 6. Monitor for stop/start events during timer execution
+journalctl -u docker.service -f | grep "container.*pms-backend"
+# While timer runs, watch for stop/start events
+```
+
+**Expected Behavior Before Fix (Case B):**
+- Same container ID persists
+- FinishedAt timestamp appears (container was stopped)
+- Duplicate startup signatures every timer interval (e.g., 30s)
+- Multiple pool_id values within same container name
+
+**Safe Fix Pattern (Case B):**
+```bash
+#!/bin/bash
+# CORRECT: Idempotent network attach WITHOUT restart
+
+CONTAINER_NAME="pms-backend"
+NETWORK_NAME="database-network"  # Generic placeholder
+
+# Only proceed if container is running
+if [ "$(docker inspect -f '{{.State.Running}}' $CONTAINER_NAME 2>/dev/null)" != "true" ]; then
+    exit 0
+fi
+
+# Idempotent network connect (fails silently if already connected)
+docker network connect $NETWORK_NAME $CONTAINER_NAME 2>/dev/null || true
+
+# NO docker restart command!
+# NO docker stop/start commands!
+```
+
+**Verification After Fix (Case B):**
+```bash
+# 1. Verify StartedAt doesn't change
+docker inspect pms-backend --format 'StartedAt={{.State.StartedAt}}'
+# Wait through several timer cycles, check again - should be unchanged
+
+# 2. Monitor daemon journal shows NO stop/start
+journalctl -u docker.service -f | grep "container.*pms-backend"
+# Should see network connect events, but NO stop/start
+
+# 3. Check logs show NO new startup signatures
+docker logs --since 10m pms-backend 2>&1 | grep "Started server process"
+# Should be empty (no new startups)
+
+# 4. Verify single pool_id persists
+docker logs pms-backend 2>&1 | grep "pool created successfully" | tail -5
+# Same pool_id across all recent logs
+```
+
+---
+
+**Decision Tree: Which Case?**
+
+| Observation | Indicates |
+|-------------|-----------|
+| Container ID changed between startups | **CASE A** (Deploy Replace) |
+| Container ID same, FinishedAt set | **CASE B** (Host Automation) |
+| Rendered compose/env mtime matches startup | **CASE A** (Deploy Replace) |
+| Image tag changed in compose | **CASE A** (Deploy Replace) |
+| Daemon journal shows "manually stopped" | **CASE B** (Host Automation) |
+| Host timer service found with restart | **CASE B** (Host Automation) |
+| Two container IDs in `docker ps -a` | **CASE A** (Deploy Replace) |
+| StartedAt changes regularly (e.g., every 30s) | **CASE B** (Host Automation) |
+
+**Verification Checklist:**
+
+After Host Automation Fix (Case B):
+- [ ] Container StartedAt stable across timer triggers
+- [ ] No stop/start events in daemon journal
+- [ ] No new startup signatures in logs
+- [ ] Single pool_id throughout runtime
+- [ ] Network connectivity maintained without disruption
+
+After Deploy Replace (Case A):
+- [ ] Exactly one startup sequence in new container
+- [ ] Old container stopped/removed (not running)
+- [ ] Process tree shows single uvicorn process
+- [ ] No --reload or --workers flags in /proc/1/cmdline
+- [ ] New container ID correlates with compose/env mtime
+
 ### Verify
 
 ```bash
