@@ -934,6 +934,71 @@ docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "pool created succes
    - Cause: Background reconnect working correctly (not a bug)
    - Action: Verify degraded mode preceded this (expected behavior)
 
+### Pool Churn Diagnostics - Python Helpers (2026-01-04)
+
+**Purpose:** Programmatic diagnostic functions for detecting pool churn at runtime.
+
+**Function: `pool_debug_state()`**
+
+Returns comprehensive pool state for debugging:
+
+```python
+from app.core.database import pool_debug_state
+import json
+
+# In endpoint (for debugging)
+@router.get("/debug/pool-state")
+async def get_pool_state():
+    return pool_debug_state()
+
+# In logs
+logger.info(f"Pool state: {json.dumps(pool_debug_state(), indent=2)}")
+```
+
+**Returns:**
+```json
+{
+  "pool_exists": true,
+  "pool_id": 140137983023888,
+  "pool_pid": 1,
+  "current_pid": 1,
+  "pool_generation": 1,
+  "init_task_running": false,
+  "background_reconnect_running": false,
+  "module_info": {
+    "duplicates_found": false,
+    "module_keys": ["app.core.database"],
+    "module_id": 140137982456320,
+    "module_file": "/app/app/core/database.py"
+  }
+}
+```
+
+**Function: `detect_duplicate_module_import()`**
+
+Detects if database module is imported multiple times (root cause of pool churn):
+
+```python
+from app.core.database import detect_duplicate_module_import
+
+result = detect_duplicate_module_import()
+if result["duplicates_found"]:
+    logger.error(f"Duplicate module imports detected: {result['module_keys']}")
+    # Example: ["app.core.database", "core.database", "database"]
+```
+
+**Common Causes of Duplicate Imports:**
+- Import path variation: `app.core.database` vs `core.database` vs `database`
+- Symlinks: `/app/core/database.py` vs `/app-symlink/core/database.py`
+- sys.path manipulation: module loaded from different paths
+- Circular imports: Python imports module twice to break cycle
+
+**Action on Detection:**
+1. Review all import statements: grep for `from.*database import` or `import.*database`
+2. Standardize to single import path: `from app.core.database import ...`
+3. Remove circular imports (use TYPE_CHECKING for type hints)
+4. Verify sys.path doesn't contain duplicate entries
+
 ### Verify
 
 ```bash
