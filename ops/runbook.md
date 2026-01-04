@@ -2467,6 +2467,12 @@ Verify modal displays data correctly by clicking "View Details" on any sync batc
 
 **UI E2E Verification:** Click the "Batch" badge in Sync Logs table to open Batch Details Modal. Confirm operations list renders with correct batch_id, connection_id, operation types, statuses, and durations. Modal should display direction indicators (→/←) and handle loading/error states gracefully.
 
+**Manual Sync Trigger Form:**
+- Auto-detect connection now auto-derives Platform and Property fields from the selected connection
+- Platform and Property fields are locked (disabled) when derived from connection with "from connection" badge indicator
+- Use Clear button to reset derived state and unlock fields for manual selection
+- Manually changing Platform or Property while connection is derived will auto-clear the connection and unlock fields
+
 ---
 
 ### Channel Sync Console UX Verification Checklist
