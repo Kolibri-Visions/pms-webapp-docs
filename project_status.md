@@ -67,6 +67,7 @@ This document tracks the current state of the PMS-Webapp project, including comp
   - Runbook: "Deployment Runner Wrapper (Enforcement)" section added
   - Scripts README: `ops/deploy_gate.sh` documentation with integration examples
   - Enables deployment platforms to skip container rebuild for docs-only commits (reduces Case A duplicate startups)
+  - Classifier updated: `deploy_gate.sh` treated as tooling (same as `deploy_should_run.sh`) - changes to wrapper itself do not trigger deploy
 
 ### Channel Manager Admin UI ✅
 

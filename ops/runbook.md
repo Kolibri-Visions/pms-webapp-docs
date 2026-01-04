@@ -1885,6 +1885,7 @@ WHERE status = 'failed' AND error LIKE '%auto-cleaned%';
 - `*.txt` (Text files, EXCEPT `requirements.txt`)
 - `.gitignore`, `LICENSE`
 - `scripts/ops/deploy_should_run.sh` (Deploy classifier itself - tooling)
+- `scripts/ops/deploy_gate.sh` (Deploy wrapper - tooling)
 
 **Always deploy paths** (proceed with deploy):
 - `app/**` (Python application code)
@@ -1893,10 +1894,10 @@ WHERE status = 'failed' AND error LIKE '%auto-cleaned%';
 - `alembic/**` (Database migrations)
 - `tests/**` (Test code)
 - `.env*` (Environment config)
-- `scripts/**` (Operational scripts, EXCEPT `deploy_should_run.sh`)
+- `scripts/**` (Operational scripts, EXCEPT `deploy_should_run.sh` and `deploy_gate.sh`)
 - Any other files not in docs-only category
 
-**Note:** Changes to `ops/deploy_should_run.sh` itself are treated as tooling and do not require app deploy.
+**Note:** Changes to `ops/deploy_should_run.sh` and `ops/deploy_gate.sh` are treated as tooling and do not require app deploy.
 
 ---
 
