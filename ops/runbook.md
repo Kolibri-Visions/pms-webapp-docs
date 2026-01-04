@@ -1884,6 +1884,7 @@ WHERE status = 'failed' AND error LIKE '%auto-cleaned%';
 - `docs/**` (Documentation directories)
 - `*.txt` (Text files, EXCEPT `requirements.txt`)
 - `.gitignore`, `LICENSE`
+- `scripts/ops/deploy_should_run.sh` (Deploy classifier itself - tooling)
 
 **Always deploy paths** (proceed with deploy):
 - `app/**` (Python application code)
@@ -1892,14 +1893,16 @@ WHERE status = 'failed' AND error LIKE '%auto-cleaned%';
 - `alembic/**` (Database migrations)
 - `tests/**` (Test code)
 - `.env*` (Environment config)
-- `scripts/**` (Operational scripts)
+- `scripts/**` (Operational scripts, EXCEPT `deploy_should_run.sh`)
 - Any other files not in docs-only category
+
+**Note:** Changes to `ops/deploy_should_run.sh` itself are treated as tooling and do not require app deploy.
 
 ---
 
 ### CI/CD Integration Examples
 
-#### GitHub Actions
+#### CI Pipeline Example 1
 
 ```yaml
 jobs:
@@ -1926,7 +1929,7 @@ jobs:
           docker push myapp
 ```
 
-#### GitLab CI
+#### CI Pipeline Example 2
 
 ```yaml
 deploy:
