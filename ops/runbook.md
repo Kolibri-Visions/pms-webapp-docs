@@ -779,59 +779,84 @@ Background reconnection: SUCCESS. App is now in NORMAL MODE (DB available).
 - **Readiness:** `/health/ready` will return 503 for up to 60s after deploy if DB is slow to start
 - **Operators:** If you see 503 immediately after deploy, wait up to 60s before investigating
 
-### Pool Idempotency Fix (2026-01-04)
+### Single-Instance Pool Initialization (2026-01-04 Updated)
 
 **Symptom:**
-- Backend logs show repeated "Database connection pool created successfully" messages
-- Multiple pool creation log lines appear within seconds (e.g., at 10:34:02, 10:34:04, 10:34:10)
-- Happens during startup or when multiple requests arrive concurrently
+- Backend logs show repeated "Database connection pool created successfully" messages with different attempt numbers
+- Multiple pool creation log lines appear (e.g., "attempt=12", then "attempt=1", then "attempt=1")
+- Indicates multiple init call sites creating new pools instead of reusing shared instance
+- Logs may show: pool created ... generation=1, then generation=2, generation=3 (generation increments)
 
-**Root Cause:**
-- Pool initialization was not idempotent (didn't check if pool already exists)
-- No concurrency control (multiple concurrent calls to `create_pool()` each created new pool)
-- Risk: leaked pools/connections, noisy logs, unnecessary DB load
+**Root Cause (Updated Analysis):**
+- Previous fix added lock but didn't prevent sequential retry loops
+- Multiple call sites (startup, request-time ensure, health checks) each started own retry loop
+- Lock only prevented concurrent execution, not duplicate initialization attempts
+- First caller starts retry loop (attempt=1...12), completes; second caller starts new retry (attempt=1)
+- Risk: leaked pools/connections, wasted DB retry attempts, noisy logs
 
-**Fix Applied:**
-- Added `asyncio.Lock` for concurrency-safe pool initialization
-- `create_pool()` now checks if pool already exists before creating new one
-- Returns existing pool immediately if already initialized (same PID)
-- All pool initialization centralized in `create_pool()` (single source of truth)
-- Background reconnect task uses idempotent `create_pool()` (no duplicate pools)
+**Fix Applied (Init Task Tracking):**
+- Added `_init_task` to track ongoing pool initialization (prevents duplicate init)
+- Added `_pool_generation` counter (increments on each pool creation for verification)
+- `ensure_pool()` now uses init task pattern:
+  - If pool exists: returns immediately (fast path, no lock)
+  - If init task exists: awaits it (reuses ongoing initialization)
+  - If neither exists: creates init task, awaits it (single retry loop)
+- All call sites use `ensure_pool()` (startup, requests, health, background task)
+- Retry loop runs exactly once per pool creation (not once per caller)
 
 **Expected Behavior After Fix:**
 ```
-# Startup (single pool creation)
+# Startup (single pool creation, single retry loop)
 Creating database connection pool (PID=1, host=supabase-db, max_wait=60s, retry_interval=2s)...
-Database connection pool created successfully (PID=1, host=supabase-db, attempt=1, elapsed=0.5s)
+Database connection pool created successfully (PID=1, host=supabase-db, generation=1, attempt=3, elapsed=4.5s, pool_id=140...)
 Database connected: PostgreSQL 15.1...
 
-# Subsequent calls (pool already exists, reuse)
-[No "pool created" log - pool is reused silently]
+# Subsequent calls (pool already exists, reuse, NO logs)
+[Silent - pool is reused via fast path]
+
+# If pool creation fails and background reconnect succeeds
+Background reconnection: attempting to create DB pool...
+Creating database connection pool (PID=1, host=supabase-db, max_wait=60s, retry_interval=2s)...
+Database connection pool created successfully (PID=1, host=supabase-db, generation=2, attempt=1, elapsed=0.5s, pool_id=140...)
+Background reconnection: SUCCESS. App is now in NORMAL MODE (DB available).
 ```
 
-**Verification:**
+**Verification Steps:**
 ```bash
 # 1. Restart backend container
 docker restart $(docker ps -q -f name=pms-backend)
 
-# 2. Check logs for pool creation (should see exactly ONE "pool created" line)
+# 2. Count pool creation events (should be exactly 1)
+docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "pool created successfully" | wc -l
+# Expected: 1
+
+# 3. Check generation counter (should be 1 for first pool)
 docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "pool created successfully"
+# Expected: Single line with "generation=1"
 
-# Expected: Single line like:
-# Database connection pool created successfully (PID=1, host=supabase-db, attempt=1, elapsed=0.5s)
+# 4. Check pool_id stays constant (proves same pool reused)
+docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "pool created successfully" | grep -o "pool_id=[0-9]*"
+# Expected: Single pool_id value
 
-# 3. Make multiple concurrent /health/ready requests (should NOT create new pools)
-for i in {1..10}; do curl -s https://api.fewo.kolibri-visions.de/health/ready & done
+# 5. Make multiple concurrent /health/ready requests (should NOT create new pools)
+for i in {1..20}; do curl -s https://api.fewo.kolibri-visions.de/health/ready & done
 wait
 
-# 4. Check logs again (should still show only ONE "pool created" line)
-docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "pool created successfully"
+# 6. Verify still only one pool creation
+docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "pool created successfully" | wc -l
+# Expected: Still 1 (not 2, 3, 10, etc.)
+
+# 7. Check for multiple attempt sequences (regression symptom)
+docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "Database connection attempt" | grep -o "attempt=[0-9]*"
+# Expected: Single sequence (e.g., attempt=1, attempt=2, attempt=3)
+# NOT multiple sequences starting from attempt=1
 ```
 
 **Operator Notes:**
-- If you see multiple "pool created" logs after this fix, report as regression
-- Healthy startup: exactly one "pool created" line per process
-- Forked processes (Celery workers): one "pool created" per worker PID (expected)
+- **Healthy:** Exactly one "pool created" log with generation=1, single attempt sequence
+- **Regression:** Multiple "pool created" logs, or generation>1 without background reconnect
+- **Forked processes:** Celery workers create own pool (generation increments per worker - expected)
+- **Pool ID:** Should remain constant across all requests (proves reuse)
 
 ### Verify
 
