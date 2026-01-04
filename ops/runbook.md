@@ -858,6 +858,82 @@ docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "Database connection
 - **Forked processes:** Celery workers create own pool (generation increments per worker - expected)
 - **Pool ID:** Should remain constant across all requests (proves reuse)
 
+### Multiple Pools Created in Same PID (pool_id changes) - 2026-01-04
+
+**Symptom:**
+- Same PID creates multiple pools with DIFFERENT pool_id values
+- Example logs from PID=1:
+  - pool_id=128315581080752, generation=1
+  - pool_id=136539789892368, generation=1
+  - pool_id=140137983023888, generation=1
+- Generation stays at 1 (should increment to 2, 3, 4)
+- Indicates true pool recreation, not just duplicate logging
+
+**Root Causes (Investigated):**
+
+**A) Multiple module instances (singleton not shared):**
+- Multiple imports of database module create separate _pool variables
+- Check: `module_id` should be identical across all "pool created" logs
+- If module_id changes: multiple module instances exist (reimport issue)
+
+**B) Code path closes/resets pool incorrectly:**
+- Some code calls `_pool = None` or `pool.close()` outside shutdown
+- Check: grep logs for "Resetting pool state" or "Closing database connection pool"
+- If appears during normal operation: incorrect reset/close call
+
+**C) Celery worker reset without clearing init task:**
+- `reset_pool_state()` must reset `_pool`, `_pool_pid`, AND `_init_task`
+- If `_init_task` not reset: child process may await parent's task (wrong event loop)
+- Fix: reset_pool_state() now clears _init_task (2026-01-04)
+
+**Fix Applied (2026-01-04):**
+- Updated `reset_pool_state()` to also reset `_init_task` (critical for fork safety)
+- Added comprehensive diagnostics to pool creation log:
+  - `module_file`: Path to database.py file (proves same module)
+  - `module_id`: ID of module object (proves singleton)
+  - `pool_id`: ID of pool instance (changes on recreation)
+  - `generation`: Counter (must increment on each creation)
+
+**Verification Commands:**
+```bash
+# 1. Check if pool_id changes (regression symptom)
+docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "pool created successfully" | grep -o "pool_id=[0-9]*"
+# Expected: Single pool_id value
+# Bad: Multiple different pool_id values
+
+# 2. Check if generation increments correctly
+docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "pool created successfully" | grep -o "generation=[0-9]*"
+# Expected: generation=1 (or generation=1, generation=2 if background reconnect)
+# Bad: Multiple generation=1 entries
+
+# 3. Check module_id stays constant (proves singleton)
+docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "pool created successfully" | grep -o "module_id=[0-9]*"
+# Expected: Single module_id value
+# Bad: Multiple different module_id values (indicates multiple module instances)
+
+# 4. Check module_file stays constant
+docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "pool created successfully" | grep -o "module_file=[^ ]*"
+# Expected: Same file path for all entries
+# Bad: Different file paths (indicates import from different locations)
+
+# 5. Full diagnostic line
+docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "pool created successfully"
+# Analyze: PID, generation, pool_id, module_id, module_file should be consistent
+```
+
+**Diagnosis Decision Tree:**
+1. **pool_id changes, generation stays 1, module_id changes:**
+   - Cause: Multiple module instances (reimport or circular import)
+   - Action: Check import paths, remove circular imports
+
+2. **pool_id changes, generation stays 1, module_id constant:**
+   - Cause: Pool is being closed/reset incorrectly during operation
+   - Action: Check for unauthorized pool.close() or _pool=None assignments
+
+3. **pool_id changes, generation increments, module_id constant:**
+   - Cause: Background reconnect working correctly (not a bug)
+   - Action: Verify degraded mode preceded this (expected behavior)
+
 ### Verify
 
 ```bash
