@@ -12986,6 +12986,46 @@ bash /app/scripts/pms_phase23_smoke.sh
 - Pre-production validation before go-live
 - NOT recommended for CI/CD or frequent monitoring (creates/deletes data)
 
+#### Phase 23 Status Summary (2026-01-04)
+
+**Test Status:** PASS (all required + optional tests)
+
+**Core Tests (Always Run):**
+- Health endpoints (`/health`, `/health/ready`) - HEAD and GET methods
+- OpenAPI schema availability (`/openapi.json`)
+- JWT authentication (token fetch from auth service)
+- Authenticated API access (properties, bookings, availability)
+
+**Optional Test 8 (AVAIL_BLOCK_TEST=true):**
+- **Status:** PASS
+- **Expectation:** Availability block overlap MUST return HTTP 409 with `conflict_type=inventory_overlap`
+- **Enforcement:** Script FAILS (exit 1) if wrong conflict_type, even when HTTP 409 is correct
+- **Semantic rule:** Block overlap → `inventory_overlap`, booking overlap → `double_booking`
+
+**Optional Test 9 (B2B_TEST=true):**
+- **Status:** PASS
+- **Validation:** Back-to-back bookings allowed (check-in = previous check-out)
+- **Confirms:** End-exclusive date semantics `[check_in, check_out)` working correctly
+
+**Known Issues Resolved:**
+- ✓ Conflict type detection: Fixed NameError (undefined `conn` variable) that caused HTTP 500
+  - **Symptom:** Booking creation returned 500 instead of 409 when overlapping block
+  - **Root cause:** Wrong database handle in pre-check (`conn` instead of `self.db`)
+  - **Fix:** Use `self.db.fetchrow()` for availability block queries
+- ✓ Frontend auto-detect: Connection selection now auto-derives Platform and Property fields
+- ✓ Batch details: Duration display shows `duration_ms` with fallback logic
+
+**API Response Shape Notes:**
+- Some list endpoints return raw JSON array: `[{...}, {...}]`
+- Others return object with items: `{"items": [...], "total": N, "has_more": bool}`
+- **Best practice:** Always verify JSON shape before parsing in shell scripts
+- **Example:** Use `python3 -c 'data = json.load(sys.stdin); items = data if isinstance(data, list) else data.get("items", [])'`
+
+**Redirect/Trailing Slash:**
+- Some endpoints may redirect (307/302) on trailing slash mismatch
+- **Best practice:** Use `curl -L` in scripts to follow redirects automatically
+- **Avoid:** Parsing empty/non-JSON bodies from redirect responses
+
 **Full Documentation**: `/app/scripts/README.md` (in container)
 
 ### Other Resources
