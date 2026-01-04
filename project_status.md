@@ -45,6 +45,11 @@ This document tracks the current state of the PMS-Webapp project, including comp
 - Scripts README updated with auto-pick logic
 - Frontend README updated with batch details UI
 
+**Operations:**
+- ✅ DB pool duplicate startup issue root-caused: external host timer was restarting container (not in-process issue)
+- ✅ Host connectivity automation updated to avoid container restarts (network attach only)
+- ✅ Verification confirmed: single pool_id per runtime, StartedAt stable, no restart events
+
 ### Channel Manager Admin UI ✅
 
 **Date Completed:** 2026-01-02 to 2026-01-03

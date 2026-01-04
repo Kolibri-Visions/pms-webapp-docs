@@ -1151,6 +1151,117 @@ Database connection pool created successfully (PID=1, host=db.supabase.co, gener
 - generation=1 for first pool (or increments on reconnect after degraded mode)
 - DB_POOL_DEBUG shows fast path returns after first init
 
+### External Stop-Start Causing Duplicate Startup (2026-01-04)
+
+**Symptom:**
+- Container logs show duplicate startup signatures:
+  - "Started server process [1]" appears twice
+  - "Application startup complete" appears twice
+  - CancelledError between the two startup sequences
+- Multiple "pool created successfully" logs with different pool_id values
+- RestartCount remains 0 (no increment)
+- Container appears to have been stopped and started without a "restart"
+
+**How to Prove It's External Stop-Start (Not In-Process Issue):**
+
+```bash
+# 1. Check container state for FinishedAt timestamp
+docker inspect $(docker ps -q -f name=pms-backend) --format '{{.State.FinishedAt}}'
+# If non-zero: container was stopped at some point
+# Compare with StartedAt to see if stop happened during current runtime
+
+# 2. Compare container StartedAt vs log timestamps
+docker inspect $(docker ps -q -f name=pms-backend) --format 'StartedAt={{.State.StartedAt}}'
+docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "Started server process" | head -2
+# If first "Started server process" timestamp is BEFORE StartedAt: old log from previous run
+# If both timestamps are AFTER StartedAt: duplicate startup in current run (different issue)
+
+# 3. Check container state for ExitCode
+docker inspect $(docker ps -q -f name=pms-backend) --format 'ExitCode={{.State.ExitCode}} RestartCount={{.RestartCount}}'
+# ExitCode=0 + RestartCount=0 suggests clean stop (not crash/restart)
+
+# 4. Check daemon journal for manual stop events
+journalctl -u docker.service --since "1 hour ago" | grep "container.*stop"
+journalctl -u docker.service --since "1 hour ago" | grep "hasBeenManuallyStopped=true"
+# Look for stop events matching container ID at the same time as FinishedAt
+
+# 5. Search host for network connectivity automation
+find /usr/local/bin /etc/systemd/system -name "*network*" -o -name "*ensure*" 2>/dev/null
+systemctl list-timers --all | grep -i network
+systemctl list-timers --all | grep -i ensure
+# Look for timers or services that might restart containers
+
+# 6. Inspect the automation script for restart behavior
+cat /usr/local/bin/pms-ensure-*-network.sh  # or similar
+# Check if script contains "docker restart" command
+```
+
+**Root Cause:**
+Host-level automation designed to "ensure network connectivity" was:
+- Running on a timer (e.g., every 30 seconds)
+- Executing `docker network connect <network> <container>`
+- **Also executing `docker restart <container>`** (unnecessary and harmful)
+
+This caused the container to stop cleanly (ExitCode=0), then start again, without incrementing RestartCount (because it's a manual stop-start, not an automatic restart).
+
+**Fix Applied (on Host):**
+Updated the host network connectivity script to:
+1. **NEVER restart the container**
+2. Only attach the network if it's missing (idempotent `docker network connect`)
+3. Only operate on running containers (check container state first)
+4. Optionally adjust timer frequency if 30s is too aggressive
+
+**Example Fixed Script Pattern:**
+```bash
+#!/bin/bash
+# Good: Idempotent network attach WITHOUT restart
+
+CONTAINER_NAME="pms-backend"
+NETWORK_NAME="your-network"
+
+# Only proceed if container is running
+if [ "$(docker inspect -f '{{.State.Running}}' $CONTAINER_NAME 2>/dev/null)" != "true" ]; then
+    exit 0
+fi
+
+# Idempotent network connect (fails silently if already connected)
+docker network connect $NETWORK_NAME $CONTAINER_NAME 2>/dev/null || true
+
+# NO docker restart command!
+```
+
+**Verification Steps After Fix:**
+
+```bash
+# 1. Verify StartedAt doesn't change over time
+docker inspect $(docker ps -q -f name=pms-backend) --format 'StartedAt={{.State.StartedAt}}'
+# Wait 5 minutes, check again - should be unchanged
+
+# 2. Monitor daemon journal for stop/start events
+journalctl -u docker.service -f | grep "container.*pms-backend"
+# Should see network connect events, but NO stop/start events
+
+# 3. Check for new startup signatures in logs
+docker logs --since 5m $(docker ps -q -f name=pms-backend) 2>&1 | grep "Started server process"
+# Should be empty (no new startup sequences)
+
+# 4. Verify timer still runs but doesn't restart
+systemctl list-timers --all | grep ensure
+journalctl -u your-ensure-timer.service --since "5m ago"
+# Timer should run, but logs should show only network operations, no restarts
+
+# 5. Verify single pool_id persists
+docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "pool created successfully" | tail -1
+# Wait 5 minutes, check again - should show same pool_id
+```
+
+**Expected Behavior After Fix:**
+- Container StartedAt timestamp remains constant
+- No stop/start events in daemon journal
+- No new "Started server process" signatures in logs
+- Single pool_id throughout entire runtime
+- Network connectivity maintained without container disruption
+
 ### Verify
 
 ```bash
