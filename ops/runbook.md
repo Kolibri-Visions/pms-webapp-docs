@@ -1070,6 +1070,87 @@ docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "pool created succes
 - Test spawns 20 concurrent ensure_pool() calls, asserts asyncpg.create_pool() called exactly once
 - Test simulates realistic scenario: startup + health check + tenant resolution concurrently
 
+### Multiple pool_id Within One Runtime - Detection & Debug (2026-01-04)
+
+**Symptom:**
+- Same container (RestartCount=0, PID=1) shows multiple "pool created successfully" logs
+- Different pool_id values within single runtime (no container restart)
+- Server startup sequence appears twice in logs:
+  - "Started server process [1]"
+  - "Waiting for application startup"
+  - "Application startup complete"
+  - (repeats above sequence again)
+
+**Root Cause Analysis:**
+
+Multiple pool creations within same runtime can be caused by:
+1. **Application startup running twice** (reload, worker restart, double-init)
+2. **Concurrent requests racing** during startup (health checks, tenant resolution)
+3. **Background reconnect** after degraded mode (expected, generation increments)
+
+**Detection Commands:**
+
+```bash
+# 1. Check container hasn't restarted
+docker inspect $(docker ps -q -f name=pms-backend) --format '{{.Name}}: Started={{.State.StartedAt}} RestartCount={{.RestartCount}}'
+# Expected: RestartCount=0 (no restarts)
+# If symptom persists with RestartCount=0: multiple pools in same runtime confirmed
+
+# 2. Count pool creations in current runtime
+docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "pool created successfully" | wc -l
+# Expected: 1 (unless background reconnect triggered)
+# Bad: 2+ within same runtime
+
+# 3. List unique pool_id values
+docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "pool created successfully" | grep -o "pool_id=[0-9]*" | sort -u
+# Expected: Single pool_id
+# Bad: Multiple different pool_id values
+
+# 4. Check generation counter progression
+docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "pool created successfully" | grep -o "generation=[0-9]*"
+# Expected: generation=1 (or 1,2 if background reconnect)
+# Bad: Multiple generation=1 entries (indicates duplicate init, not progression)
+
+# 5. Look for startup sequence duplication
+docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep -c "Started server process"
+# Expected: 1
+# Bad: 2+ (indicates application lifecycle running twice)
+```
+
+**Debug Mode (DB_POOL_DEBUG=true):**
+
+Enable detailed pool initialization logging to diagnose which code path triggers duplicate creation:
+
+```bash
+# Set via environment variable
+docker exec pms-backend env | grep DB_POOL_DEBUG
+# Or restart with DB_POOL_DEBUG=true
+
+# Check debug logs after enabling
+docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "\[DB_POOL_DEBUG\]"
+# Shows: entry point, PID, generation, reason, callsite (file:line/function)
+```
+
+**Debug Log Example:**
+```
+[DB_POOL_DEBUG] ensure_pool entry: PID=1, gen=0, pool_exists=False, callsite=main.py:77/lifespan
+[DB_POOL_DEBUG] Creating pool init task (PID=1, reason=no_pool, callsite=main.py:77/lifespan)
+Database connection pool created successfully (PID=1, host=db.supabase.co, generation=1, ...)
+[DB_POOL_DEBUG] ensure_pool entry: PID=1, gen=1, pool_exists=True, callsite=health.py:15/health_check
+# Fast path returns immediately (no duplicate creation)
+```
+
+**Mitigation Applied (2026-01-04):**
+- Singleflight pattern ensures only ONE pool creation per runtime
+- DB_POOL_DEBUG flag for detailed diagnostics (silent by default)
+- Defensive check: warns + closes old pool if duplicate detected (shouldn't happen)
+
+**Expected Behavior:**
+- Within single runtime (RestartCount=0): exactly 1 pool creation
+- pool_id stays constant throughout runtime
+- generation=1 for first pool (or increments on reconnect after degraded mode)
+- DB_POOL_DEBUG shows fast path returns after first init
+
 ### Verify
 
 ```bash
