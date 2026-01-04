@@ -205,6 +205,22 @@ This document tracks the current state of the PMS-Webapp project, including comp
 - WEB-BROWSER: Access control verified (non-admin users see "Access Denied" page)
 - WEB-BROWSER: Error handling verified (API errors gracefully fallback to default theme)
 
+**Phase B Hardening (2026-01-04):**
+- ✅ **CSS Variable "undefined" Bug Fix**: API token field mismatch caused undefined values in CSS variables
+  - Root cause: API returns `background`/`text_muted`, frontend expected `bg`/`textMuted`
+  - Fix: Added `normalizeTokenValue()` sanitizer, API token mapper, derived missing tokens
+  - Safe property setter: `applyCssVariable()` removes null values instead of stringifying
+  - Verification: Check browser console for valid hex colors (not "undefined" strings)
+- ✅ **Single Auth Client Instance**: Singleton pattern prevents multiple client warnings
+  - Fix: Module-level browser client instance with memoization
+  - Prevents "multiple instances in same browser context" warning
+- ✅ **Third-Party Name Removal**: Replaced product/tool names with generic terms in docs
+
+**Files Changed (Hardening):**
+- `frontend/app/lib/theme-provider.tsx` - Token sanitization, API mapping, derived tokens
+- `frontend/app/lib/supabase-browser.ts` - Singleton browser client instance
+- `backend/docs/ops/runbook.md` - CSS var verification, third-party name cleanup
+
 **Future Phase C (Client-Facing):**
 - Apply tokens to booking widget, property listings, guest portal
 - Consistent brand across admin + client experiences

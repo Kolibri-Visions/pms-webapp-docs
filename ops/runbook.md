@@ -2917,7 +2917,7 @@ bash backend/scripts/pms_branding_smoke.sh
    - Expected: `/settings/branding` page loads
 
 2. **Verify CSS Variables Applied:**
-   - Open browser DevTools (F12)
+   - Open browser developer tools (F12)
    - Select Elements/Inspector tab
    - Inspect `<html>` or `<body>` element
    - Check Computed Styles for CSS variables:
@@ -2942,7 +2942,7 @@ bash backend/scripts/pms_branding_smoke.sh
    - Change Mode to "Dark"
    - Click "Save Changes"
    - Expected: "Branding updated successfully!" message
-   - Verify CSS variables update immediately (inspect DevTools)
+   - Verify CSS variables update immediately (inspect developer tools)
    - Verify background switches to dark mode
 
 5. **Test Form Validation:**
@@ -2999,6 +2999,53 @@ curl -H "Authorization: Bearer $JWT_TOKEN" \
 | Save button disabled | Form validation error | Check form inputs match validation patterns |
 | Theme doesn't change after save | refreshBranding() failed | Check network tab for API errors, verify PUT request succeeded |
 | Dark mode not working | CSS not loaded or `data-theme` attr missing | Verify globals.css loaded, check `<html data-theme>` attribute |
+
+**CSS Variable "undefined" String Bug (Fixed):**
+
+**Symptom:** Browser console shows CSS variables set to string "undefined" instead of valid color values.
+
+Example:
+```
+--t-primary: "#3B82F6"   ✓ correct
+--t-bg: "undefined"      ✗ bug (fixed in latest release)
+```
+
+**Root Cause:**
+- API response token field mismatch (API returns `background`, frontend expected `bg`)
+- Missing token sanitization allowed undefined values to be stringified
+- No validation before setting CSS properties
+
+**Fix Applied:**
+1. Added `normalizeTokenValue()` sanitizer: rejects undefined/null/"undefined"/"null" strings
+2. Created API token mapper: `background` → `bg`, `text_muted` → `textMuted`
+3. Derived missing tokens: `primaryHover`, `accentHover`, `surfaceHover`, `borderSubtle`
+4. Safe CSS property setter: `applyCssVariable()` uses `removeProperty()` for null values instead of setting "undefined"
+
+**Verification (POST-FIX):**
+
+```bash
+# EXECUTION LOCATION: WEB-BROWSER (developer tools console)
+
+# Check CSS variables are valid hex colors (not "undefined" strings)
+getComputedStyle(document.documentElement).getPropertyValue('--t-bg')
+# Expected: "#ffffff" or "#111827" (valid hex)
+# NOT: "undefined"
+
+getComputedStyle(document.documentElement).getPropertyValue('--t-primary')
+# Expected: "#3b82f6" or custom hex
+# NOT: "undefined"
+```
+
+**Expected Result:**
+- All theme variables (`--t-*`) resolve to valid CSS values
+- No "undefined" or "null" strings in computed styles
+- Theme applies correctly on page load and after save
+
+**If Bug Persists:**
+1. Clear browser cache and hard reload
+2. Check browser console for API errors
+3. Verify API response format matches expected schema
+4. Check network tab: `/api/v1/branding` response should include `tokens.background` field
 
 ---
 
