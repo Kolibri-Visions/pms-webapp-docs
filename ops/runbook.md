@@ -779,6 +779,60 @@ Background reconnection: SUCCESS. App is now in NORMAL MODE (DB available).
 - **Readiness:** `/health/ready` will return 503 for up to 60s after deploy if DB is slow to start
 - **Operators:** If you see 503 immediately after deploy, wait up to 60s before investigating
 
+### Pool Idempotency Fix (2026-01-04)
+
+**Symptom:**
+- Backend logs show repeated "Database connection pool created successfully" messages
+- Multiple pool creation log lines appear within seconds (e.g., at 10:34:02, 10:34:04, 10:34:10)
+- Happens during startup or when multiple requests arrive concurrently
+
+**Root Cause:**
+- Pool initialization was not idempotent (didn't check if pool already exists)
+- No concurrency control (multiple concurrent calls to `create_pool()` each created new pool)
+- Risk: leaked pools/connections, noisy logs, unnecessary DB load
+
+**Fix Applied:**
+- Added `asyncio.Lock` for concurrency-safe pool initialization
+- `create_pool()` now checks if pool already exists before creating new one
+- Returns existing pool immediately if already initialized (same PID)
+- All pool initialization centralized in `create_pool()` (single source of truth)
+- Background reconnect task uses idempotent `create_pool()` (no duplicate pools)
+
+**Expected Behavior After Fix:**
+```
+# Startup (single pool creation)
+Creating database connection pool (PID=1, host=supabase-db, max_wait=60s, retry_interval=2s)...
+Database connection pool created successfully (PID=1, host=supabase-db, attempt=1, elapsed=0.5s)
+Database connected: PostgreSQL 15.1...
+
+# Subsequent calls (pool already exists, reuse)
+[No "pool created" log - pool is reused silently]
+```
+
+**Verification:**
+```bash
+# 1. Restart backend container
+docker restart $(docker ps -q -f name=pms-backend)
+
+# 2. Check logs for pool creation (should see exactly ONE "pool created" line)
+docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "pool created successfully"
+
+# Expected: Single line like:
+# Database connection pool created successfully (PID=1, host=supabase-db, attempt=1, elapsed=0.5s)
+
+# 3. Make multiple concurrent /health/ready requests (should NOT create new pools)
+for i in {1..10}; do curl -s https://api.fewo.kolibri-visions.de/health/ready & done
+wait
+
+# 4. Check logs again (should still show only ONE "pool created" line)
+docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "pool created successfully"
+```
+
+**Operator Notes:**
+- If you see multiple "pool created" logs after this fix, report as regression
+- Healthy startup: exactly one "pool created" line per process
+- Forked processes (Celery workers): one "pool created" per worker PID (expected)
+
 ### Verify
 
 ```bash
