@@ -2445,6 +2445,8 @@ bash backend/scripts/pms_sync_batch_details_smoke.sh
 - **HTTP 401:** TOKEN expired or invalid (re-fetch from Supabase auth)
 - **HTTP 503:** Database schema not installed or out of date (run migration: `20251227000000_create_channel_sync_logs.sql`)
 - **HTTP 307 redirects:** Use `-L` flag with curl to follow redirects
+- **HTTP 405 on HEAD requests:** Batch endpoints reject HEAD method; use GET for sanity checks (never use `curl -I`)
+- **List endpoint JSON shape:** `/api/v1/channel-connections` may return top-level array OR `{items: [...]}` object; scripts handle both shapes robustly
 
 **Batch Status Logic:**
 
