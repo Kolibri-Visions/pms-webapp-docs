@@ -2852,6 +2852,49 @@ curl -H "Authorization: Bearer $JWT_TOKEN" https://your-domain.com/api/v1/brandi
 # Expected: tenant_id matches user's agency_id from JWT
 ```
 
+**Branding Tenant Context Resolution**
+
+**Symptom:** GET /api/v1/branding returns 400 "Tenant context not available"
+
+**Cause:**
+- JWT token missing agency_id claim
+- User belongs to multiple tenants and no tenant specified
+
+**Solution (tenant resolution order):**
+1. JWT claim agency_id (if present)
+2. x-agency-id header (validated via membership check)
+3. Auto-pick (if user belongs to exactly one tenant)
+
+**Fix with x-agency-id header (HOST-SERVER-TERMINAL):**
+```bash
+# Using curl directly
+export JWT_TOKEN="your-jwt-token"
+export TENANT_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+
+curl -H "Authorization: Bearer $JWT_TOKEN" \
+     -H "x-agency-id: $TENANT_ID" \
+     https://your-domain.com/api/v1/branding
+
+# Expected: HTTP 200 with branding data
+```
+
+**Fix with smoke script:**
+```bash
+# EXECUTION LOCATION: HOST-SERVER-TERMINAL
+export API_BASE_URL="https://your-domain.com"
+export JWT_TOKEN="your-jwt-token"
+export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+
+bash backend/scripts/pms_branding_smoke.sh
+
+# Expected: GET /api/v1/branding: SUCCESS (HTTP 200)
+```
+
+**Error Messages:**
+- "User belongs to N tenants. Provide x-agency-id header" → Set AGENCY_ID env var
+- "Not authorized for this tenant" (403) → User not member of specified tenant
+- "No tenant context available" → User not assigned to any tenant (contact admin)
+
 ---
 
 ## Redis + Celery Worker Setup (Channel Manager)

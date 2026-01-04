@@ -173,7 +173,8 @@ This document tracks the current state of the PMS-Webapp project, including comp
 - Import fixes: Removed invalid User import; moved require_roles from app.core.auth to app.api.deps
 - Use dict type for current_user (matches get_current_user return type)
 - Error handling: 400 for missing tenant context, 503 for DB unavailable, 200 with defaults when no branding configured
-- Smoke test script: backend/scripts/pms_branding_smoke.sh for PROD verification
+- Tenant context fallback implemented: JWT claim → x-agency-id header (validated) → single-tenant auto-pick
+- Smoke test script: backend/scripts/pms_branding_smoke.sh for PROD verification (supports AGENCY_ID env var)
 - Status: Working (Phase A complete, pending UI Phase B)
 
 **Phase B (Future - Client-Facing):**
