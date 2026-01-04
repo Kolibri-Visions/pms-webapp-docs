@@ -14322,6 +14322,8 @@ The `duration_ms` field is computed using the following fallback logic (implemen
 **UI Display:**
 - When `duration_ms` is present: Display as human-friendly format (e.g., "2.35s" for 2350ms)
 - When `duration_ms` is `null`: Display as "—" (em dash) to indicate no duration available
+- **Hover Tooltip:** When duration is available, hovering over the duration shows raw milliseconds (e.g., "453 ms")
+- **Format:** Seconds with 2 decimal places (e.g., "0.45s"), tooltip shows integer milliseconds
 
 **Response Example:**
 ```json
