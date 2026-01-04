@@ -11927,6 +11927,21 @@ docker exec $(docker ps -q -f name=supabase) psql -U postgres -d postgres -c "
 - Clients should retry with different dates or cancel conflicting booking/block
 - This is **not an error** — it's race-safe conflict prevention working as designed
 
+**Conflict Type Semantics:**
+
+The `conflict_type` field distinguishes between different overlap causes:
+
+| conflict_type | Meaning | Example Scenario |
+|---------------|---------|------------------|
+| `inventory_overlap` | Overlap with **availability block** | Admin blocks Jan 10-12 for maintenance. Guest tries to book Jan 10-12 → HTTP 409 with `conflict_type=inventory_overlap` |
+| `double_booking` | Overlap with **existing booking** | Guest A books Jan 10-12. Guest B tries to book Jan 10-12 → HTTP 409 with `conflict_type=double_booking` |
+
+**Detection Logic:**
+- When exclusion constraint fires, API checks if overlapping availability_block exists for property + dates
+- If block found → `conflict_type=inventory_overlap`
+- If no block found → `conflict_type=double_booking` (must be booking overlap)
+- This allows clients to provide context-aware error messages (e.g., "Property is blocked for maintenance" vs "Property is already booked")
+
 **Verify Constraints Exist:**
 
 ```bash
