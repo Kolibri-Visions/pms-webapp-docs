@@ -11937,10 +11937,26 @@ The `conflict_type` field distinguishes between different overlap causes:
 | `double_booking` | Overlap with **existing booking** | Guest A books Jan 10-12. Guest B tries to book Jan 10-12 → HTTP 409 with `conflict_type=double_booking` |
 
 **Detection Logic:**
-- When exclusion constraint fires, API checks if overlapping availability_block exists for property + dates
-- If block found → `conflict_type=inventory_overlap`
+- When availability check fails, API queries `availability_blocks` table to determine conflict source
+- If overlapping block found → `conflict_type=inventory_overlap`
 - If no block found → `conflict_type=double_booking` (must be booking overlap)
 - This allows clients to provide context-aware error messages (e.g., "Property is blocked for maintenance" vs "Property is already booked")
+
+**Example Response (Availability Block Conflict):**
+```json
+{
+  "detail": "Property is already booked for these dates",
+  "conflict_type": "inventory_overlap"
+}
+```
+
+**Example Response (Booking Overlap):**
+```json
+{
+  "detail": "Property is already booked for these dates",
+  "conflict_type": "double_booking"
+}
+```
 
 **Verify Constraints Exist:**
 
