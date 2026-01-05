@@ -18113,6 +18113,14 @@ Race-safe booking validation successful:
   - No 500 errors (API properly maps constraint to 409)
 ```
 
+**Important Note on Test Reuse**:
+When rerunning the concurrency smoke test (e.g., after redeployment or for periodic verification), **always use a fresh date window** that doesn't overlap with previous test runs. If you reuse the same dates from a previous test, the property will already have a confirmed booking for those dates, causing all 10 concurrent requests to return 409 Conflict (10x409 instead of 1x201 + 9x409). This is a false negative—the constraint is working, but you won't see the expected "exactly 1 success" pattern.
+
+**Best Practice**: Either:
+- Set `CHECK_IN_DATE` and `CHECK_OUT_DATE` to future dates that haven't been tested yet
+- Let the script use default dates (+14 days), which automatically advances with calendar time
+- Cancel any bookings created by previous test runs before reusing the same date range
+
 ### Troubleshooting
 
 ---
