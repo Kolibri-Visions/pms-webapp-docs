@@ -16584,6 +16584,43 @@ docker ps | grep pms-admin
 docker logs <container-id> 2>&1 | grep -i error
 ```
 
+#### Unified Admin UI Baseline (2026-01-05)
+
+**Overview:**
+All admin pages now use the unified AdminShell component for consistent layout, navigation, and branding.
+
+**Pages using Admin UI baseline:**
+- /guests - Guest CRM (list, detail, timeline)
+- /settings/branding - Branding settings
+- /connections - Channel connections management
+- /channel-sync - Sync monitoring console
+- /ops/status - System health checks
+- /ops/runbook - Operations documentation
+
+**Layout Components:**
+- `AdminShell` (frontend/app/components/AdminShell.tsx) - Unified shell with sidebar navigation
+- Individual `layout.tsx` files per route handle auth, role checks, and wrap children in AdminShell
+
+**Navigation Structure:**
+- Übersicht: Dashboard
+- Betrieb: Objekte, Buchungen, Verfügbarkeit
+- Channel Manager: Verbindungen, Sync-Protokoll
+- CRM: Gäste
+- Einstellungen: Branding, Rollen & Rechte, Plan & Abrechnung
+
+**Design Consistency:**
+- All pages use German language for UI text
+- Platform names replaced with neutral labels (Plattform A/B/C)
+- Consistent typography, spacing (4/8/12/16/24 px rhythm)
+- Indigo primary palette with gray neutrals
+- No third-party brand names in user-facing UI
+
+**Finding Admin Pages:**
+All admin routes now show sidebar navigation. Access via:
+- Direct URL: `/guests`, `/connections`, `/channel-sync`, `/ops/status`, `/ops/runbook`
+- Sidebar navigation from any admin page
+- Login redirect preserves destination path
+
 ---
 
 ## Change Log
