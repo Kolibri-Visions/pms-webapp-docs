@@ -16650,6 +16650,99 @@ bash backend/scripts/pms_guests_smoke.sh
 
 ---
 
+#### Admin UI API Base URL Resolution (2026-01-05)
+
+**Overview:**
+The frontend admin UI needs to communicate with the backend API, which is hosted on a different subdomain. The API client uses a smart resolution strategy to determine the correct API base URL.
+
+**Resolution Strategy (in order):**
+
+1. **NEXT_PUBLIC_API_BASE environment variable (preferred)**
+   - Explicitly set in `.env` or deployment config
+   - Example: `NEXT_PUBLIC_API_BASE=https://api.fewo.kolibri-visions.de`
+   - This is the recommended approach for production deployments
+
+2. **Automatic hostname derivation (fallback)**
+   - If `NEXT_PUBLIC_API_BASE` is not set, derives from current hostname
+   - Pattern: `admin.*` → `api.*`
+   - Examples:
+     - `admin.fewo.kolibri-visions.de` → `https://api.fewo.kolibri-visions.de`
+     - `admin.localhost:3000` → `http://api.localhost:3000`
+   - Preserves protocol and port
+   - Logs to console: `[api-client] Derived API base from hostname: <url>`
+
+3. **Mixed content protection**
+   - If frontend is HTTPS but env var specifies HTTP, automatically upgrades to HTTPS
+   - Prevents browser mixed-content blocking
+   - Logs warning: `[api-client] Upgrading HTTP API base to HTTPS...`
+
+**Common Symptom: UI Shows 404 While API is Healthy**
+
+**Diagnosis Steps:**
+
+1. **Check browser network tab:**
+   ```
+   Expected: Request to https://api.<domain>/api/v1/...
+   Wrong:    Request to https://admin.<domain>/api/v1/...
+   ```
+   - If seeing `admin.*` in API request URLs → API base URL resolution failed
+
+2. **Check browser console:**
+   ```javascript
+   // Should show API base URL being used
+   // Look for: [api-client] Derived API base from hostname: ...
+   ```
+
+3. **Verify environment variable:**
+   ```bash
+   # In Coolify or deployment config
+   echo $NEXT_PUBLIC_API_BASE
+   # Should show: https://api.<domain>
+
+   # If empty, auto-derivation should work if hostname pattern is admin.*
+   ```
+
+4. **Test API endpoint directly:**
+   ```bash
+   # Verify API is actually reachable
+   curl -H "Cookie: sb-access-token=..." \
+        https://api.<domain>/api/v1/guests?limit=5
+   # Should return 200 with data
+   ```
+
+**Fix Actions:**
+
+1. **Set NEXT_PUBLIC_API_BASE explicitly (recommended):**
+   ```bash
+   # In Coolify environment variables or .env
+   NEXT_PUBLIC_API_BASE=https://api.fewo.kolibri-visions.de
+   ```
+   - Rebuild and redeploy frontend
+   - Verify in browser console that env var is set
+
+2. **Verify hostname pattern (if using auto-derivation):**
+   - Frontend must be hosted on `admin.*` subdomain
+   - If using different pattern (e.g., `app.*`), auto-derivation won't work
+   - Solution: Set `NEXT_PUBLIC_API_BASE` explicitly
+
+3. **Check for typos in code:**
+   ```bash
+   # Verify all pages use getApiBase() or apiClient
+   grep -r "fetch.*api/v1" frontend/app/
+   # Should NOT find hardcoded relative URLs like fetch("/api/v1/...")
+
+   # All should import and use:
+   import { getApiBase } from "../lib/api-client";
+   // OR
+   import { apiClient } from "../lib/api-client";
+   ```
+
+**Code Reference:**
+- Implementation: `frontend/app/lib/api-client.ts` → `getApiBase()` function
+- Used by: All admin pages (guests, connections, settings, etc.)
+
+---
+
 #### Unified Admin UI Baseline (2026-01-05)
 
 **Overview:**
