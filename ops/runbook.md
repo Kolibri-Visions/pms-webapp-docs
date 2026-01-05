@@ -17668,6 +17668,225 @@ npm run build
 - Coolify deployment has env vars configured via settings
 
 ---
+## Deploy Verification + Implemented vs Verified
+
+### Overview
+This section documents the "Implemented vs Verified" best-practice workflow for production deployments.
+
+**Status Semantics**:
+- **Implemented**: Feature code merged to main branch, deployed to staging/production
+- **Verified**: Automatic production verification succeeded (deploy script + health checks)
+
+**Key Principle**: Only mark features as "Verified" after automated deploy verification succeeds in production environment.
+
+### Deploy Verification Script
+
+**Script**: `backend/scripts/pms_verify_deploy.sh`
+
+**Purpose**: Automatically verify successful deployment and commit hash in production/staging.
+
+**Usage**:
+```bash
+# On HOST-SERVER-TERMINAL (production/staging server)
+# Basic verification
+API_BASE_URL=https://api.example.com ./backend/scripts/pms_verify_deploy.sh
+
+# With commit verification (recommended for CI/CD)
+API_BASE_URL=https://api.example.com \
+EXPECT_COMMIT=$(git rev-parse HEAD) \
+./backend/scripts/pms_verify_deploy.sh
+```
+
+**Endpoints Checked**:
+1. `GET /health` - Basic health check
+2. `GET /health/ready` - Readiness check (database connectivity)
+3. `GET /api/v1/ops/version` - Deployment version metadata
+
+**Exit Codes**:
+- `0`: Success (all checks passed)
+- `1`: Missing configuration (API_BASE_URL not set)
+- `2`: Endpoint failure (non-200 status or parse error)
+- `3`: Commit mismatch (EXPECT_COMMIT set but source_commit doesn't match)
+
+**Example Output**:
+```
+╔════════════════════════════════════════════════════════════╗
+║ PMS Deploy Verification                                    ║
+╚════════════════════════════════════════════════════════════╝
+API Base URL: https://api.example.com
+
+[1/3] GET /health
+✅ Status: 200 OK
+
+[2/3] GET /health/ready
+✅ Status: 200 OK
+
+[3/3] GET /api/v1/ops/version
+✅ Status: 200 OK
+📦 Service: pms-backend
+🌍 Environment: production
+🔖 API Version: 0.1.0
+📝 Source Commit: abc123def456
+⏰ Started At: 2024-01-05T10:30:00Z
+
+╔════════════════════════════════════════════════════════════╗
+║ ✅ All checks passed!                                      ║
+╚════════════════════════════════════════════════════════════╝
+```
+
+### Version Endpoint
+
+**Endpoint**: `GET /api/v1/ops/version`
+
+**Purpose**: Returns deployment metadata for automated verification and monitoring.
+
+**Authentication**: None required (public endpoint, safe metadata only)
+
+**Response Schema**:
+```json
+{
+  "service": "pms-backend",
+  "source_commit": "abc123def456",
+  "environment": "production",
+  "api_version": "0.1.0",
+  "started_at": "2024-01-05T10:30:00Z"
+}
+```
+
+**Response Fields**:
+- `service`: Service name (always "pms-backend")
+- `source_commit`: Git commit SHA (from SOURCE_COMMIT env var, null if not set)
+- `environment`: Environment name (development/staging/production)
+- `api_version`: FastAPI application version
+- `started_at`: ISO 8601 timestamp of process start time
+
+**Environment Variables**:
+- `SOURCE_COMMIT`: Git commit SHA (set by CI/CD pipeline)
+- `ENVIRONMENT`: Environment name (development/staging/production)
+
+**Characteristics**:
+- **No database calls**: Always fast, suitable for health checks
+- **No authentication**: Safe metadata only, no secrets exposed
+- **Cheap**: Suitable for frequent monitoring/alerting polls
+
+### Workflow: Implemented → Verified
+
+**Step 1: Implementation**
+1. Merge feature code to main branch
+2. CI/CD pipeline builds and deploys to staging/production
+3. Mark feature status as "Implemented" in project_status.md
+
+**Step 2: Verification**
+1. Run deploy verification script on production server:
+   ```bash
+   API_BASE_URL=https://api.production.example.com \
+   EXPECT_COMMIT=$(git rev-parse HEAD) \
+   ./backend/scripts/pms_verify_deploy.sh
+   ```
+2. If script exits with code 0 (success):
+   - All endpoints returned 200 OK
+   - Commit hash matches expected value
+   - Mark feature status as "Verified" in project_status.md
+
+**Step 3: Evidence**
+- Save script output as deployment evidence
+- Include in deployment log/changelog
+- Reference commit SHA in verification notes
+
+**Example project_status.md Entry**:
+```markdown
+### API - Deploy Verification Endpoint ✅ VERIFIED
+
+**Date**: 2024-01-05  
+**Status**: Implemented + Verified in production  
+**Commit**: abc123def456
+
+**Issue**: Need automated way to verify production deployments
+
+**Implementation**:
+- Added GET /api/v1/ops/version endpoint (no DB, no auth)
+- Created backend/scripts/pms_verify_deploy.sh
+- Updated runbook with verification workflow
+
+**Verification**:
+- ✅ Deployed to production (2024-01-05 15:30 UTC)
+- ✅ Script passed: all endpoints 200 OK, commit verified
+- ✅ Monitoring polling /ops/version successfully
+
+**Expected Result**:
+- Deploy verification script exits 0 on successful deployment
+- Commit hash verification prevents wrong-version deploys
+- Monitoring can track deployments via source_commit field
+```
+
+### Troubleshooting
+
+**Problem**: Script exits with code 2 (endpoint failure)
+
+**Diagnosis**:
+- Check script output for which endpoint failed (health, ready, or version)
+- Verify API_BASE_URL is correct and server is reachable
+- Check server logs for errors
+
+**Solution**:
+```bash
+# Test endpoints manually
+curl -v https://api.example.com/health
+curl -v https://api.example.com/health/ready
+curl -v https://api.example.com/api/v1/ops/version
+```
+
+---
+
+**Problem**: Script exits with code 3 (commit mismatch)
+
+**Diagnosis**:
+- SOURCE_COMMIT env var not set in deployment
+- Wrong commit deployed (e.g., stale Docker image)
+
+**Solution**:
+```bash
+# Check what's deployed
+curl https://api.example.com/api/v1/ops/version
+
+# Verify CI/CD sets SOURCE_COMMIT in deployment
+# Example Dockerfile:
+ARG SOURCE_COMMIT
+ENV SOURCE_COMMIT=${SOURCE_COMMIT}
+
+# Example docker-compose.yml:
+environment:
+  SOURCE_COMMIT: ${GITHUB_SHA}
+```
+
+---
+
+**Problem**: source_commit field returns null
+
+**Diagnosis**:
+- SOURCE_COMMIT environment variable not set in deployment
+- Deployment process doesn't pass git commit SHA
+
+**Solution**:
+1. Update CI/CD pipeline to set SOURCE_COMMIT:
+   ```bash
+   # In CI/CD script
+   export SOURCE_COMMIT=$(git rev-parse HEAD)
+   # or
+   docker build --build-arg SOURCE_COMMIT=$(git rev-parse HEAD) .
+   ```
+2. Update Dockerfile to accept and use SOURCE_COMMIT:
+   ```dockerfile
+   ARG SOURCE_COMMIT
+   ENV SOURCE_COMMIT=${SOURCE_COMMIT}
+   ```
+3. Verify deployment:
+   ```bash
+   curl https://api.example.com/api/v1/ops/version | grep source_commit
+   ```
+
+---
+
 
 ## Change Log
 

@@ -7,6 +7,78 @@
 
 This document tracks the current state of the PMS-Webapp project, including completed phases, ongoing work, and next steps.
 
+## Status Semantics: Implemented vs Verified
+
+This project distinguishes between **Implemented** and **Verified** status for production features:
+
+### Status Definitions
+
+**Implemented** ✅
+- Feature code merged to main branch
+- Deployed to staging/production environment
+- Manual testing completed
+- Documentation updated
+
+**Verified** ✅ VERIFIED
+- All "Implemented" criteria met
+- **AND** automated production verification succeeded
+- Deploy verification script passed (exit code 0)
+- Commit hash verified in production
+- Evidence/logs captured
+
+### Verification Process
+
+Features are marked as **VERIFIED** only after:
+
+1. **Deployment**: Code deployed to production environment
+2. **Automated Check**: `backend/scripts/pms_verify_deploy.sh` runs successfully
+3. **Evidence**: Script output saved as deployment proof
+4. **Documentation**: Commit SHA and verification timestamp recorded
+
+**Example Verification Command**:
+```bash
+# On production server
+API_BASE_URL=https://api.production.example.com \
+EXPECT_COMMIT=$(git rev-parse HEAD) \
+./backend/scripts/pms_verify_deploy.sh
+```
+
+### Why This Matters
+
+**Problem**: "Deployed" doesn't always mean "working in production"
+- Wrong commit deployed (stale cache, wrong image tag)
+- Database migrations failed but app started
+- Configuration missing (environment variables)
+- Network/DNS issues preventing access
+
+**Solution**: Automated verification ensures:
+- ✅ Correct git commit deployed (`source_commit` matches)
+- ✅ Health endpoints responding (`/health`, `/health/ready`)
+- ✅ Database connectivity established
+- ✅ Version metadata accessible (`/api/v1/ops/version`)
+
+### Entry Format Example
+
+```markdown
+### Feature Name ✅ VERIFIED
+
+**Date Completed:** 2024-01-05  
+**Status**: Implemented + Verified in production  
+**Commit**: abc123def456
+
+**Implementation**: [details...]
+
+**Verification**:
+- ✅ Deployed to production (2024-01-05 15:30 UTC)
+- ✅ Script passed: all endpoints 200 OK, commit verified
+- ✅ Monitoring confirmed operational
+```
+
+### Historical Entries
+
+**Note**: Entries created before 2026-01-05 are marked as "Implemented" only. The verification requirement applies to all new features going forward. Do NOT retroactively mark old entries as "Verified".
+
+
 ## Current Status Summary
 
 | Area | Status | Notes |
@@ -433,6 +505,91 @@ Fixed inconsistency where guests list showed `total_bookings=0` but timeline API
 - Cancelled bookings counted in both (complete history)
 - Consistent UX: count matches what user sees
 - FK-based linkage enforced consistently across all queries
+
+
+### OPS - Deploy Verification + Implemented vs Verified Workflow ✅
+
+**Date Completed:** 2026-01-05
+
+**Overview:**
+Implemented automated deployment verification workflow to ensure production deployments are validated automatically, preventing "deployed but broken" scenarios.
+
+**Issue:**
+- No automated way to verify production deployments succeeded
+- Manual verification error-prone and time-consuming
+- Risk of deploying wrong commit (stale cache, wrong image tag)
+- No evidence/audit trail of successful deployments
+- "Deployed" status doesn't guarantee "working in production"
+
+**Business Impact:**
+- Deployment confidence: automated verification catches issues immediately
+- Audit trail: commit SHA verification prevents wrong-version deploys
+- Monitoring integration: version endpoint enables deployment tracking
+- CI/CD integration: verification script blocks on failure (exit codes)
+
+**Implementation:**
+
+1. **GET /api/v1/ops/version Endpoint** (backend/app/api/routes/ops.py):
+   - No database calls (cheap, fast, always available)
+   - No authentication required (safe metadata only)
+   - Returns deployment metadata:
+     ```json
+     {
+       "service": "pms-backend",
+       "source_commit": "abc123def456",
+       "environment": "production",
+       "api_version": "0.1.0",
+       "started_at": "2024-01-05T10:30:00Z"
+     }
+     ```
+
+2. **Deploy Verification Script** (backend/scripts/pms_verify_deploy.sh):
+   - Checks: `/health`, `/health/ready`, `/api/v1/ops/version`
+   - Validates HTTP 200 responses
+   - Optional commit verification (EXPECT_COMMIT env var)
+   - Exit codes: 0=success, 1=config error, 2=endpoint failure, 3=commit mismatch
+   - Example:
+     ```bash
+     API_BASE_URL=https://api.example.com \
+     EXPECT_COMMIT=$(git rev-parse HEAD) \
+     ./backend/scripts/pms_verify_deploy.sh
+     ```
+
+3. **Configuration** (backend/app/core/config.py):
+   - Added `source_commit` field (from SOURCE_COMMIT env var)
+   - CI/CD must set: `docker build --build-arg SOURCE_COMMIT=$(git rev-parse HEAD)`
+
+4. **Module Integration** (backend/app/modules/core.py):
+   - Registered ops router in core_pms module
+   - Mounted at `/api/v1/ops` with "Operations" tag
+   - Available in both module system and fallback mode
+
+**Status Semantics Change:**
+
+Introduced "Implemented vs Verified" distinction in project_status.md:
+- **Implemented**: Code merged, deployed, manual testing done
+- **Verified**: Implemented + automated verification passed + commit hash confirmed
+
+**Files Changed:**
+- `backend/app/core/config.py:36` - Added source_commit field
+- `backend/app/api/routes/ops.py` - Created ops router with /version endpoint
+- `backend/app/api/routes/__init__.py:67` - Exported ops router
+- `backend/app/modules/core.py:20,37` - Registered ops router in core module
+- `backend/app/main.py:149,155` - Mounted ops router in fallback mode
+- `backend/scripts/pms_verify_deploy.sh` - Deploy verification script (executable)
+- `backend/docs/ops/runbook.md:17671` - Added "Deploy Verification + Implemented vs Verified" section
+- `backend/scripts/README.md:4237` - Added verification script documentation
+- `backend/docs/project_status.md:10` - Added "Status Semantics" section
+
+**Expected Result:**
+- ✅ GET /api/v1/ops/version returns deployment metadata (no auth, no DB)
+- ✅ Deploy script verifies health + version endpoints
+- ✅ Commit verification prevents wrong-version deploys
+- ✅ CI/CD can block on verification failure (exit code != 0)
+- ✅ Monitoring can track deployments via source_commit field
+- ✅ Project status entries distinguish Implemented vs Verified
+
+**Note**: This entry itself is marked "Implemented" (not "Verified") as verification workflow applies to future deployments after this feature is merged.
 
 
 ### Channel Manager Admin UI ✅
