@@ -16584,6 +16584,72 @@ docker ps | grep pms-admin
 docker logs <container-id> 2>&1 | grep -i error
 ```
 
+#### Guests Page Shows HTTP 404 / List Not Loading (2026-01-05)
+
+**Symptoms:**
+- Navigate to `/guests` → page renders but shows "Fehler beim Laden — HTTP 404"
+- No guest list displayed
+- Browser console shows: `GET /api/v1/guests?limit=20&offset=0 404 (Not Found)`
+- Search and pagination don't work (list never loads)
+
+**Root Causes:**
+1. **Wrong API base URL** - Frontend using relative URL `/api/v1/guests` instead of absolute backend API URL
+   - Resolves to `https://admin.<domain>/api/v1/guests` instead of `https://api.<domain>/api/v1/guests`
+   - Cause: fetch() call without proper base URL configuration
+2. **Missing API route** - Guests router not properly mounted (less common after Phase 19)
+3. **CORS/credentials** - API rejects requests without proper credentials or origin headers
+
+**Quick Diagnostic Checks:**
+
+1. **Verify API endpoint exists:**
+```bash
+# Check OpenAPI schema lists guests routes
+curl -s https://api.<domain>/openapi.json | grep -i guests
+
+# Test API directly
+curl -H "Cookie: sb-access-token=..." \
+     https://api.<domain>/api/v1/guests?limit=5
+# Should return 200 with {items: [...], total: N}
+```
+
+2. **Check frontend API base URL:**
+```bash
+# In browser console on /guests page:
+console.log(process.env.NEXT_PUBLIC_API_BASE)
+# Should show: https://api.<domain>
+
+# Check if getApiBase() is being used:
+grep -n "getApiBase\|apiClient" frontend/app/guests/page.tsx
+```
+
+3. **Check browser network tab:**
+   - Failed request URL should be `https://api.<domain>/api/v1/guests` (correct)
+   - If showing `https://admin.<domain>/api/v1/guests` → frontend base URL issue
+
+**Fix Summary (2026-01-05):**
+- Exported `getApiBase()` from `frontend/app/lib/api-client.ts`
+- Updated `frontend/app/guests/page.tsx` to use `getApiBase()` for constructing full API URL
+- Before: `fetch('/api/v1/guests?...')`
+- After: `fetch('${getApiBase()}/api/v1/guests?...')`
+
+**Verification After Fix:**
+```bash
+# 1. Build should pass
+cd frontend && npm run build
+
+# 2. Deploy and check /guests loads
+curl -H "Cookie: ..." https://admin.<domain>/guests
+# Should render page without 404 errors
+
+# 3. Run smoke test
+export API_BASE_URL="https://api.<domain>"
+export JWT_TOKEN="..."
+bash backend/scripts/pms_guests_smoke.sh
+# Should pass: list, search, pagination tests
+```
+
+---
+
 #### Unified Admin UI Baseline (2026-01-05)
 
 **Overview:**
