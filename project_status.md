@@ -307,6 +307,52 @@ Fixed rendering bug where booking details page displayed "Steuer: NaN €" (and 
 - Valid monetary strings like `"42.50"` → display as `"42,50 €"`
 - Never renders `"NaN €"` in any monetary field
 
+### API - Enforce Booking Guest Linkage (FK + Validation) ✅
+
+**Date Completed:** 2026-01-05
+
+**Overview:**
+Enforced referential integrity for booking-guest relationships to prevent orphaned guest_id references while maintaining DSGVO-compliant data minimization principles.
+
+**Issue:**
+- Bookings could have guest_id pointing to non-existent guest UUIDs
+- No foreign key constraint on bookings.guest_id → guests.id
+- No validation that guest_id exists before creating booking
+- Caused 404 errors in UI when navigating to guest detail from booking
+- Example: Booking `ddffc289-...` had guest_id `8036f477-...` but guest didn't exist
+
+**DSGVO/Data Model Philosophy:**
+- Guest is optional: bookings can exist without linked guest (guest_id=NULL valid)
+- Booking is standalone: preserves business records even after guest deletion
+- When guest_id is set, it MUST reference valid guest record
+- Never use Supabase Auth User UUID as guest_id (separation of concerns)
+
+**Implementation:**
+
+1. **Database Migration** (`20260105150000_enforce_booking_guest_fk.sql`):
+   - Cleanup step: SET guest_id=NULL for orphaned references (WHERE guest_id NOT IN guests)
+   - Add FK constraint: `bookings.guest_id → guests.id ON DELETE SET NULL`
+   - Add partial index: `idx_bookings_guest_id` (speeds up FK checks and guest queries)
+   - ON DELETE SET NULL: preserves booking history when guest deleted (DSGVO right to erasure)
+
+2. **API Validation** (booking service):
+   - On booking creation, if guest_id provided: validate it exists in same agency
+   - If validation fails → 422 error with clear message
+   - If guest data provided (email/phone/name): upsert guest, then set guest_id
+   - If neither: guest_id remains NULL (booking without CRM linkage)
+
+**Files Changed:**
+- `supabase/migrations/20260105150000_enforce_booking_guest_fk.sql` - Migration with cleanup and FK constraint
+- `backend/app/services/booking_service.py:540-553` - Guest existence validation in create_booking
+- `backend/docs/ops/runbook.md:17435` - Added "DSGVO / Guest vs Booking Linkage (Best Practice)" section
+
+**Expected Result:**
+- Cannot create booking with non-existent guest_id (422 validation error)
+- Database enforces FK constraint (prevents orphaned references at DB level)
+- When guest deleted → booking.guest_id becomes NULL (booking preserved, DSGVO compliant)
+- Existing orphaned guest_id references cleaned up during migration (set to NULL)
+- UI shows "Gast nicht verknüpft" for bookings without guest link
+
 
 ### Channel Manager Admin UI ✅
 

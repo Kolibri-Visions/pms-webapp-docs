@@ -17432,6 +17432,70 @@ const formatCurrency = (amount: string | null | undefined) => {
 **Related Files:**
 - `frontend/app/bookings/[id]/page.tsx:117-128` - safeNumber helper and formatCurrency
 
+#### DSGVO / Guest vs Booking Linkage (Best Practice)
+
+**Data Model Philosophy:**
+
+The PMS follows DSGVO-minimal best practices for guest-booking relationships:
+- **Guest is optional**: Bookings can exist without a linked guest (guest_id=NULL is valid)
+- **Booking is standalone**: Preserves business records even after guest deletion (DSGVO right to erasure)
+- **When guest_id is set, it MUST reference a valid guest**: Foreign key constraint prevents orphaned references
+- **Never use Auth User UUID as guest_id**: Guests are CRM entities, not authentication entities
+
+**Database Constraints:**
+
+```sql
+-- Foreign key with ON DELETE SET NULL
+ALTER TABLE bookings
+ADD CONSTRAINT fk_bookings_guest_id
+FOREIGN KEY (guest_id) REFERENCES guests(id) ON DELETE SET NULL;
+```
+
+**ON DELETE SET NULL behavior:**
+- When guest deleted (DSGVO erasure request) → booking.guest_id becomes NULL
+- Booking history preserved for business/accounting purposes
+- Guest data (PII) removed from system
+- Booking shows "Gast nicht verknüpft" in UI
+
+**API Validation (Create/Update):**
+
+When creating/updating bookings:
+1. **If `guest_id` provided:** Validate guest exists in same agency, else 422 error
+2. **If guest data provided** (email/phone/name): Upsert guest, then set guest_id
+3. **If neither:** guest_id remains NULL (booking without CRM linkage)
+
+```python
+# In booking service create_booking():
+if guest_id_input is not None:
+    guest_exists = await db.fetchval(
+        "SELECT EXISTS(SELECT 1 FROM guests WHERE id = $1 AND agency_id = $2)",
+        guest_id_input, agency_id
+    )
+    if not guest_exists:
+        raise ValidationException(
+            f"Guest with ID '{guest_id_input}' not found or does not belong to this agency"
+        )
+```
+
+**Migration Safety:**
+
+Migration `20260105150000_enforce_booking_guest_fk.sql` handles existing bad data:
+1. **Cleanup orphaned references:** `UPDATE bookings SET guest_id=NULL WHERE guest_id NOT IN (SELECT id FROM guests)`
+2. **Add FK constraint:** Safe after cleanup, no data loss
+3. **Add index:** Speeds up FK checks and guest-based queries
+
+**Troubleshooting:**
+
+| Symptom | Root Cause | Resolution |
+|---------|-----------|------------|
+| 422 "Guest with ID '...' not found" on booking creation | Provided guest_id doesn't exist in guests table | Verify guest exists, or provide guest data for upsert instead |
+| Booking shows "Gast nicht verknüpft" | Guest was deleted (DSGVO erasure) or guest_id was NULL | Expected behavior - booking preserved, guest link cleared |
+| Cannot create booking with guest_id | Guest belongs to different agency | Use guest from same agency, or create new guest |
+
+**Related Files:**
+- `backend/app/services/booking_service.py:540-553` - Guest existence validation
+- `supabase/migrations/20260105150000_enforce_booking_guest_fk.sql` - FK constraint migration
+
 ---
 
 ## Frontend Build Failures (TSX/JSX Syntax Errors)
