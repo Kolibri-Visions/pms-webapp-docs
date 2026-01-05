@@ -1,6 +1,6 @@
 # PMS-Webapp Project Status
 
-**Last Updated:** 2026-01-03
+**Last Updated:** 2026-01-05
 **Current Phase:** Phase 21 - Inventory/Availability Production Hardening
 
 ## Overview
@@ -68,6 +68,21 @@ This document tracks the current state of the PMS-Webapp project, including comp
   - Scripts README: `ops/deploy_gate.sh` documentation with integration examples
   - Enables deployment platforms to skip container rebuild for docs-only commits (reduces Case A duplicate startups)
   - Classifier updated: `deploy_gate.sh` treated as tooling (same as `deploy_should_run.sh`) - changes to wrapper itself do not trigger deploy
+- ✅ **Guest CRM API Implementation (2026-01-05):** Full CRUD + Search + Timeline endpoints for guest management
+  - API Routes: `backend/app/api/routes/guests.py` - 6 endpoints under /api/v1/guests
+  - Endpoints: GET (list), GET (detail), POST (create), PATCH (update), PUT (update), GET (timeline)
+  - Service Layer: `backend/app/services/guest_service.py` - list_guests, get_guest, update_guest, get_guest_timeline (upsert already existed)
+  - Schemas: `backend/app/schemas/guests.py` - GuestListResponse, GuestTimelineResponse, GuestTimelineBooking
+  - RBAC: admin/manager/staff for CRUD, all roles for read
+  - Multi-tenant: Agency isolation enforced, owner role can view guests who booked their properties
+  - Search: Text search across first_name, last_name, email, phone
+  - Pagination: limit/offset params (default: 20, max: 100)
+  - Timeline: Paginated booking history per guest (ordered by check-in desc)
+  - Smoke Test: `backend/scripts/pms_guests_smoke.sh` - Verifies list, search, CRUD, timeline endpoints
+  - Integration Tests: `backend/tests/integration/test_guests.py` - Full coverage (list, get, create, update, timeline)
+  - Runbook: "Guest CRM API Smoke Test" section with diagnostic steps, error table, validation checklist
+  - Scripts README: `pms_guests_smoke.sh` documentation with usage examples
+
 
 ### Channel Manager Admin UI ✅
 

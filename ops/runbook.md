@@ -4073,6 +4073,132 @@ bash backend/scripts/pms_branding_smoke.sh
 
 ---
 
+### Guest CRM API Smoke Test
+
+**Problem:** After deployment, guests API endpoints (list, create, update, timeline) may fail due to database issues, schema mismatches, or RBAC configuration errors.
+
+**Symptoms:**
+- GET /api/v1/guests returns 500 or 503
+- Search functionality returns no results
+- Guest creation fails with validation errors
+- Timeline endpoint returns 404 for valid guest IDs
+
+**Diagnostic Steps:**
+
+1. **Verify API Availability:**
+   ```bash
+   # EXECUTION LOCATION: HOST-SERVER-TERMINAL
+   curl -I https://your-domain.com/api/v1/guests
+   # Expected: HTTP 401 (auth required)
+   ```
+
+2. **Check Database Connection:**
+   ```bash
+   # Verify guests table exists
+   docker exec pms-backend psql -U postgres -c "\d guests"
+   # Expected: Table structure with columns id, agency_id, email, etc.
+   ```
+
+3. **Verify RBAC Configuration:**
+   ```bash
+   # Check if JWT token has correct role
+   echo $JWT_TOKEN | cut -d'.' -f2 | base64 -d | jq '.role'
+   # Expected: "admin", "manager", or "staff" for CRUD operations
+   ```
+
+**Common Errors:**
+
+| Error Code | Symptom | Cause | Solution |
+|------------|---------|-------|----------|
+| 200 Empty List | GET /api/v1/guests returns `{"items":[],"total":0}` | No guests in database | Expected for new deployment |
+| 403 Forbidden | POST /api/v1/guests fails | User has owner/accountant role | Use admin/manager/staff token |
+| 404 Not Found | GET /api/v1/guests/{id} fails | Guest belongs to different agency | Verify multi-tenant isolation |
+| 422 Validation | POST /api/v1/guests fails | Invalid email or phone format | Check payload validation |
+| 503 Service Unavailable | All endpoints fail | Database connection lost | Check DB connectivity, restart container |
+
+**Smoke Test (HOST-SERVER-TERMINAL):**
+```bash
+# Set environment variables
+export API_BASE_URL="https://your-domain.com"
+export JWT_TOKEN="eyJhbGc..."  # Valid token with admin/manager/staff role
+export AGENCY_ID="your-tenant-uuid"  # Optional: if JWT lacks agency_id claim
+
+# Run smoke test (read-only)
+bash backend/scripts/pms_guests_smoke.sh
+
+# Expected output:
+# ✅ GET /api/v1/guests: SUCCESS
+# ✅ GET /api/v1/guests?q=search: SUCCESS
+
+# Run smoke test (full CRUD)
+export GUESTS_CRUD_TEST=true
+bash backend/scripts/pms_guests_smoke.sh
+
+# Expected output:
+# ✅ POST /api/v1/guests: SUCCESS
+# ✅ PATCH /api/v1/guests/{id}: SUCCESS
+# ✅ GET /api/v1/guests/{id}/timeline: SUCCESS
+```
+
+**Manual Verification:**
+```bash
+# Test list endpoint
+curl -H "Authorization: Bearer $JWT_TOKEN" https://your-domain.com/api/v1/guests | jq
+
+# Test search endpoint
+curl -H "Authorization: Bearer $JWT_TOKEN" "https://your-domain.com/api/v1/guests?q=test" | jq
+
+# Test create endpoint (requires admin/manager/staff role)
+curl -X POST \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"first_name":"Test","last_name":"Guest","email":"test@example.com"}' \
+  https://your-domain.com/api/v1/guests | jq
+
+# Test timeline endpoint (replace {guest_id} with actual ID)
+curl -H "Authorization: Bearer $JWT_TOKEN" https://your-domain.com/api/v1/guests/{guest_id}/timeline | jq
+```
+
+**Fix Steps:**
+
+1. **Database Connection Issues:**
+   ```bash
+   # Check if database is accepting connections
+   docker exec pms-backend pg_isready -U postgres
+   
+   # Restart backend if needed
+   docker restart pms-backend
+   ```
+
+2. **RBAC Issues:**
+   ```bash
+   # Verify token role
+   echo $JWT_TOKEN | cut -d'.' -f2 | base64 -d | jq '.role'
+   
+   # If role is "owner" or "accountant", use a different token
+   # Admin, manager, or staff role required for CRUD operations
+   ```
+
+3. **Multi-Tenant Isolation Issues:**
+   ```bash
+   # If JWT lacks agency_id claim, provide it explicitly
+   export AGENCY_ID="your-tenant-uuid"
+   bash backend/scripts/pms_guests_smoke.sh
+   ```
+
+**Validation Checklist:**
+- [ ] GET /api/v1/guests returns HTTP 200 with guest list
+- [ ] GET /api/v1/guests?q=search returns HTTP 200 with search results
+- [ ] POST /api/v1/guests creates new guest (HTTP 201)
+- [ ] PATCH /api/v1/guests/{id} updates guest (HTTP 200)
+- [ ] GET /api/v1/guests/{id}/timeline returns booking history (HTTP 200)
+- [ ] Cross-tenant access returns 404 (not 403 to avoid leaking existence)
+- [ ] Search works across first_name, last_name, email, phone
+- [ ] Pagination works correctly (limit, offset parameters)
+
+---
+
+
 **Admin Branding UI Verification**
 
 **Purpose:** Verify branding tokens are applied in Admin UI and settings page works correctly.
