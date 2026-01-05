@@ -3966,6 +3966,96 @@ curl -k -sS "$API/openapi.json" | grep -oE '"/api/v1/guests[^"]*"' | head
 ```
 
 
+
+**Issue:** GET /api/v1/guests returns 500 with validation errors or missing fields
+
+**Symptom:**
+- Endpoint returns HTTP 500 Internal Server Error
+- Logs show: "validation errors for GuestResponse" with missing fields like agency_id, updated_at
+- OR logs show: "UndefinedColumn" or "column does not exist"
+- OR language/vip_status/blacklisted fields contain NULL causing validation failures
+
+**Cause:**
+- Database schema drift: required columns missing or nullable when code expects non-null
+- Migration 20260105120000_fix_guests_list_required_fields.sql not applied
+- Columns language, vip_status, blacklisted lack defaults and contain NULLs
+
+**Fix:**
+1. Apply migration via SQL Editor:
+   ```sql
+   -- Run migration: supabase/migrations/20260105120000_fix_guests_list_required_fields.sql
+   -- Or apply manually:
+
+   -- Ensure updated_at exists
+   ALTER TABLE public.guests
+   ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now() NOT NULL;
+
+   -- Set defaults and backfill NULLs
+   ALTER TABLE public.guests ALTER COLUMN language SET DEFAULT 'unknown';
+   UPDATE public.guests SET language = 'unknown' WHERE language IS NULL;
+
+   ALTER TABLE public.guests ALTER COLUMN vip_status SET DEFAULT false;
+   UPDATE public.guests SET vip_status = false WHERE vip_status IS NULL;
+   ALTER TABLE public.guests ALTER COLUMN vip_status SET NOT NULL;
+
+   ALTER TABLE public.guests ALTER COLUMN blacklisted SET DEFAULT false;
+   UPDATE public.guests SET blacklisted = false WHERE blacklisted IS NULL;
+   ALTER TABLE public.guests ALTER COLUMN blacklisted SET NOT NULL;
+
+   -- Backfill updated_at
+   UPDATE public.guests SET updated_at = COALESCE(updated_at, created_at, now()) WHERE updated_at IS NULL;
+   ```
+
+2. Restart backend to reload schema metadata:
+   ```bash
+   docker restart pms-backend
+   ```
+
+**Verification (DB SQL Editor):**
+```sql
+-- Verify required columns exist with correct defaults
+SELECT column_name, data_type, is_nullable, column_default
+FROM information_schema.columns
+WHERE table_schema='public' AND table_name='guests'
+  AND column_name IN ('agency_id','updated_at','city','country','language','vip_status','blacklisted','source')
+ORDER BY column_name;
+
+-- Expected output:
+-- agency_id    | uuid         | NO  | (not null)
+-- blacklisted  | boolean      | NO  | false
+-- city         | text         | YES | NULL
+-- country      | text         | YES | NULL
+-- language     | text         | YES | 'unknown'::text
+-- source       | text         | YES | NULL
+-- updated_at   | timestamptz  | NO  | now()
+-- vip_status   | boolean      | NO  | false
+```
+
+**Verification (HOST-SERVER-TERMINAL):**
+```bash
+# Test endpoint with valid JWT
+API="https://api.fewo.kolibri-visions.de"
+curl -k -sS -i -L "$API/api/v1/guests?limit=1&offset=0" -H "Authorization: Bearer $JWT_TOKEN" | sed -n '1,120p'
+
+# Expected: HTTP/1.1 200 OK (not 500)
+# Expected response body: {"items":[...],"total":N,"limit":1,"offset":0}
+```
+
+**Verification (CONTAINER):**
+```bash
+# Verify routes and OpenAPI paths
+docker exec pms-backend python3 - <<'PY'
+from app.main import app
+print("guest_routes=", [getattr(r,"path",None) for r in app.routes if getattr(r,"path",None) and "guest" in getattr(r,"path","").lower()])
+spec=app.openapi()
+paths=spec.get("paths",{}) or {}
+print("guest_paths=", sorted([p for p in paths.keys() if "guest" in p.lower()]))
+PY
+
+# Expected guest_routes= ['/api/v1/guests', '/api/v1/guests/{guest_id}', '/api/v1/guests/{guest_id}/timeline', ...]
+# Expected guest_paths= ['/api/v1/guests', '/api/v1/guests/{guest_id}', '/api/v1/guests/{guest_id}/timeline']
+```
+
 - Redeploy to apply changes
 
 **Verification:**

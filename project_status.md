@@ -89,6 +89,14 @@ This document tracks the current state of the PMS-Webapp project, including comp
   - OpenAPI: /api/v1/guests* paths now appear in /openapi.json
   - Logs: Module 'guests' appears in mounted modules list at startup
   - Runbook: Troubleshooting section added for guests 404 with MODULES_ENABLED=true
+- ✅ **Guests List Response Fix (2026-01-05):** Fixed 500 error from missing fields in SELECT query
+  - Issue: GET /api/v1/guests returned 500 with validation errors (missing agency_id, updated_at)
+  - Root cause: list_guests query didn't select required fields; NULLs in language/vip_status/blacklisted
+  - Service fix: Added agency_id, updated_at to SELECT; COALESCE for nullable fields
+  - Router fix: Added asyncpg schema exception handling (503 with actionable message)
+  - Migration: 20260105120000_fix_guests_list_required_fields.sql (defaults + backfill NULLs)
+  - Runbook: Added troubleshooting section with DB/HOST/CONTAINER verification commands
+
 
 
 
