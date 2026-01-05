@@ -217,6 +217,33 @@ Fixed production build failures that prevented Admin UI changes (commit 922f581)
 - /settings/branding shows AdminShell sidebar
 - Future TypeScript errors caught during build with clear messages
 
+### Admin UI - Guest Booking History Count Fix ✅
+
+**Date Completed:** 2026-01-05
+
+**Overview:**
+Fixed UI bug where guest detail page showed "Buchungshistorie (0)" tab badge even when booking history list displayed multiple items.
+
+**Issue:**
+- Guest detail page tab label used `guest.total_bookings` field from guest record
+- Actual booking history rendered from separate timeline API fetch
+- When `guest.total_bookings` was 0 or stale, badge showed 0 while list had visible items
+
+**Fix:**
+- Added `timelineTotal` state to store API response `total` field
+- Changed tab label to: `Math.max(timelineTotal, timeline.length)`
+- Ensures badge always reflects actual rendered items or API total (whichever is higher)
+- Prevents showing "(0)" when list has visible booking cards
+
+**Files Changed:**
+- `frontend/app/guests/[id]/page.tsx:57,91,218` - Added timelineTotal state, stored from API response, used in tab label
+- `backend/docs/ops/runbook.md:17298` - Added troubleshooting section "Guest Booking History Count Badge Shows 0"
+
+**Expected Result:**
+- Booking history tab badge matches number of booking items displayed
+- If timeline has 4 bookings → shows "Buchungshistorie (4)"
+- If API total is 15 but only 10 items fetched → shows "Buchungshistorie (15)"
+
 
 ### Channel Manager Admin UI ✅
 

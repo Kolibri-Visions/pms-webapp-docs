@@ -17295,6 +17295,49 @@ ls frontend/app/bookings/[id]/page.tsx
 - `frontend/app/bookings/[id]/page.tsx` - Booking detail route
 - `frontend/app/guests/[id]/page.tsx` - Similar pattern (guest detail)
 
+#### Guest Booking History Count Badge Shows 0
+
+**Symptom:** Admin UI → Guests → Guest Detail → Tab shows "Buchungshistorie (0)" but the booking history list renders multiple booking cards (e.g., 4 entries).
+
+**Root Cause:**
+
+The tab count badge used `guest.total_bookings` from the guest record, but the actual booking history is fetched separately via the timeline API. If `guest.total_bookings` is 0 or stale, the badge shows 0 even though timeline items are rendered.
+
+**Fix Pattern:**
+
+Derive the count from the actual timeline data fetched, not from the guest record:
+
+```typescript
+// Store timeline total from API response
+const [timelineTotal, setTimelineTotal] = useState<number>(0);
+
+// When fetching timeline
+const timelineData: TimelineResponse = await apiClient.get(
+  `/api/v1/guests/${guestId}/timeline?limit=10&offset=0`,
+  accessToken
+);
+setTimeline(timelineData.bookings);
+setTimelineTotal(timelineData.total ?? 0);
+
+// In tab label - use max to handle cases where API total is 0 but items exist
+<button>
+  Buchungshistorie ({Math.max(timelineTotal, timeline.length)})
+</button>
+```
+
+**Why `Math.max(timelineTotal, timeline.length)`:**
+- `timelineTotal` is the API's total count (may be paginated total)
+- `timeline.length` is the actual items fetched (limited to 10)
+- If API returns `total: 0` but items exist → show items count (prevents 0 badge with visible items)
+- If API returns correct total → show total (e.g., 15 when showing 10 items)
+
+**Prevention:**
+- Always derive UI counts from the actual data being rendered, not from separate/stale fields
+- For paginated data, display either `items.length` or `max(apiTotal, items.length)`
+
+**Related Files:**
+- `frontend/app/guests/[id]/page.tsx:218` - Booking history tab count
+
 ---
 
 ## Frontend Build Failures (TSX/JSX Syntax Errors)
