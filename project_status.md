@@ -45,6 +45,17 @@ EXPECT_COMMIT=$(git rev-parse HEAD) \
 
 ### Why This Matters
 
+**Commit SHA Matching**:
+
+`EXPECT_COMMIT` supports both full (40-char) and short (7+ char) commit SHAs using intelligent prefix matching. This follows standard git conventions and improves readability.
+
+**Examples** (both valid):
+- Short SHA: `EXPECT_COMMIT=5767b15` ✅ (prefix match)
+- Full SHA: `EXPECT_COMMIT=5767b154906f9edf037fc9bbc10312126698cc29` ✅ (exact match)
+
+Verification passes if `source_commit` from production starts with the expected prefix (case-insensitive). Prefix match is acceptable evidence for VERIFIED status.
+
+
 **Problem**: "Deployed" doesn't always mean "working in production"
 - Wrong commit deployed (stale cache, wrong image tag)
 - Database migrations failed but app started

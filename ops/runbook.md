@@ -17698,6 +17698,16 @@ EXPECT_COMMIT=$(git rev-parse HEAD) \
 ```
 
 **Endpoints Checked**:
+
+**EXPECT_COMMIT - Short SHA Support**:
+
+The `EXPECT_COMMIT` parameter accepts both full (40-char) and short (7+ char) commit SHAs. The script uses intelligent prefix matching:
+
+- **Short SHA** (recommended): `EXPECT_COMMIT=5767b15` - more readable, typical git convention
+- **Full SHA**: `EXPECT_COMMIT=5767b154906f9edf037fc9bbc10312126698cc29` - exact match
+
+Verification passes if the deployed `source_commit` starts with the expected prefix (case-insensitive). Output indicates "prefix match" or "exact match" for clarity.
+
 1. `GET /health` - Basic health check
 2. `GET /health/ready` - Readiness check (database connectivity)
 3. `GET /api/v1/ops/version` - Deployment version metadata
