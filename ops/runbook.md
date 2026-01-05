@@ -3891,6 +3891,34 @@ curl -L -X PUT "$API/api/v1/branding" \
 **Solution:**
 - Branding module now registered in module system (backend/app/modules/branding.py)
 - Auto-imported in bootstrap.py for self-registration
+
+**Issue:** GET /api/v1/guests returns 404 while MODULES_ENABLED=true
+
+**Symptom:**
+- Guests table exists, migrations applied, but API endpoints unreachable
+- openapi.json does not contain /api/v1/guests* paths
+- Logs show mounted modules list without 'guests' entry
+
+**Cause:**
+- Guests router not part of module system (module registration missing)
+- Module system skips non-registered modules when MODULES_ENABLED=true
+
+**Solution:**
+- Guests module now registered in module system (backend/app/modules/guests.py)
+- Auto-imported in bootstrap.py for self-registration
+- Enabled by default (no env var required)
+
+**Verification:**
+```bash
+# Check startup logs for guests module
+docker logs pms-backend --tail 100 | grep -i "guests"
+# Expected: "Module 'guests' (v1.0.0, 1 router(s))"
+
+# Verify openapi.json contains guests paths
+curl http://localhost:8000/openapi.json | jq '.paths | keys | map(select(startswith("/api/v1/guests")))'
+# Expected: ["/api/v1/guests", "/api/v1/guests/{guest_id}", "/api/v1/guests/{guest_id}/timeline"]
+```
+
 - Redeploy to apply changes
 
 **Verification:**

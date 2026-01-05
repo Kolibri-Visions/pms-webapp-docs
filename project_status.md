@@ -82,6 +82,14 @@ This document tracks the current state of the PMS-Webapp project, including comp
   - Integration Tests: `backend/tests/integration/test_guests.py` - Full coverage (list, get, create, update, timeline)
   - Runbook: "Guest CRM API Smoke Test" section with diagnostic steps, error table, validation checklist
   - Scripts README: `pms_guests_smoke.sh` documentation with usage examples
+- ✅ **Guests Module Integration (2026-01-05):** Guests routes now properly mounted in module system
+  - Module: `backend/app/modules/guests.py` - Wraps guests router for module system
+  - Bootstrap: Auto-imported in `app/modules/bootstrap.py` for self-registration
+  - Production Fix: Guests API now reachable when MODULES_ENABLED=true (default)
+  - OpenAPI: /api/v1/guests* paths now appear in /openapi.json
+  - Logs: Module 'guests' appears in mounted modules list at startup
+  - Runbook: Troubleshooting section added for guests 404 with MODULES_ENABLED=true
+
 
 
 ### Channel Manager Admin UI ✅
