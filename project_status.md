@@ -102,6 +102,12 @@ This document tracks the current state of the PMS-Webapp project, including comp
   - Migration: 20260105130000_add_guests_auth_user_id.sql (optional uuid column + index)
   - Router fix: Added asyncpg schema exception handling to create_guest and get_guest_timeline (503)
   - Runbook: Added troubleshooting for timeline UndefinedColumnError and create auth_user_id errors
+- ✅ **Guests Schema Migration (2026-01-05):** Added missing optional profile columns to prevent schema drift
+  - Issue: Production returned 503 errors for missing columns (address_line1, address_line2, marketing_consent, etc.)
+  - Migration: 20260105140000_guests_missing_columns.sql (6 optional profile fields)
+  - Ensures fresh installations and schema restores have all required columns
+  - Smoke script: backend/scripts/pms_guests_smoke.sh validates full CRUD lifecycle
+  - Runbook: Added troubleshooting for 503 missing column errors with verification commands
 
 
 

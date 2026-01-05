@@ -4233,6 +4233,71 @@ export GUESTS_CRUD_TEST=true
 # Expected: All tests pass including "POST /api/v1/guests"
 ```
 
+**Issue:** Guests endpoints return 503 with missing column errors
+
+**Symptom:**
+- Endpoints return HTTP 503 Service Unavailable
+- Logs show: "asyncpg.exceptions.UndefinedColumnError: column does not exist"
+- Missing columns: address_line1, address_line2, marketing_consent, marketing_consent_at, profile_notes, blacklist_reason
+
+**Cause:**
+- Database schema drift: optional guest profile columns not created
+- Migration 20260105140000_guests_missing_columns.sql not applied
+- Fresh database installations or schema restores missing these columns
+
+**Fix:**
+1. Apply migration via SQL Editor:
+   ```sql
+   -- Run migration: supabase/migrations/20260105140000_guests_missing_columns.sql
+   -- Or apply manually:
+
+   ALTER TABLE public.guests
+   ADD COLUMN IF NOT EXISTS address_line1 text;
+
+   ALTER TABLE public.guests
+   ADD COLUMN IF NOT EXISTS address_line2 text;
+
+   ALTER TABLE public.guests
+   ADD COLUMN IF NOT EXISTS marketing_consent boolean NOT NULL DEFAULT false;
+
+   ALTER TABLE public.guests
+   ADD COLUMN IF NOT EXISTS marketing_consent_at timestamptz;
+
+   ALTER TABLE public.guests
+   ADD COLUMN IF NOT EXISTS profile_notes text;
+
+   ALTER TABLE public.guests
+   ADD COLUMN IF NOT EXISTS blacklist_reason text;
+   ```
+
+2. Restart backend to reload schema metadata:
+   ```bash
+   docker restart pms-backend
+   ```
+
+**Verification (DB SQL Editor):**
+```sql
+-- Verify all optional profile columns exist
+SELECT column_name, data_type, is_nullable, column_default
+FROM information_schema.columns
+WHERE table_schema='public' AND table_name='guests'
+  AND column_name IN ('address_line1', 'address_line2', 'marketing_consent', 'marketing_consent_at', 'profile_notes', 'blacklist_reason')
+ORDER BY column_name;
+
+-- Expected: 6 rows returned with all columns present
+```
+
+**Verification (HOST-SERVER-TERMINAL):**
+```bash
+# Run full Guests CRUD smoke test
+cd /data/repos/pms-webapp
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export GUESTS_CRUD_TEST=true
+./backend/scripts/pms_guests_smoke.sh
+
+# Expected: All tests pass (list, search, create, details, update, timeline)
+```
+
 - Redeploy to apply changes
 
 **Verification:**
