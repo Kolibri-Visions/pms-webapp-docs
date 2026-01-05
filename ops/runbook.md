@@ -16762,10 +16762,16 @@ All admin pages now use the unified AdminShell component for consistent layout, 
 
 **Navigation Structure:**
 - Übersicht: Dashboard
-- Betrieb: Objekte, Buchungen, Verfügbarkeit
+- Betrieb: Objekte, Buchungen, Verfügbarkeit, **Systemstatus** (admin-only), **Runbook** (admin-only)
 - Channel Manager: Verbindungen, Sync-Protokoll
 - CRM: Gäste
 - Einstellungen: Branding, Rollen & Rechte, Plan & Abrechnung
+
+**Finding Ops Pages:**
+- **Systemstatus** (/ops/status): Real-time system health monitoring - admin role required
+- **Runbook** (/ops/runbook): Operations troubleshooting guide - admin role required
+- Both pages accessible via sidebar navigation under "Betrieb" section
+- Requires NEXT_PUBLIC_ENABLE_OPS_CONSOLE=1 environment variable
 
 **Design Consistency:**
 - All pages use German language for UI text
@@ -16779,6 +16785,46 @@ All admin routes now show sidebar navigation. Access via:
 - Direct URL: `/guests`, `/connections`, `/channel-sync`, `/ops/status`, `/ops/runbook`
 - Sidebar navigation from any admin page
 - Login redirect preserves destination path
+
+**UI Troubleshooting Quick Checks:**
+
+If UI shows 404 errors or empty data when API is healthy:
+
+1. **Check API Base URL Resolution:**
+   ```javascript
+   // In browser console:
+   console.log(process.env.NEXT_PUBLIC_API_BASE)
+   // Should show: https://api.<domain>
+   ```
+   - If undefined, check environment variables or hostname derivation (admin.* → api.*)
+   - See "Admin UI API Base URL Resolution" section above for details
+
+2. **Check Browser Network Tab:**
+   ```
+   Expected: Request to https://api.<domain>/api/v1/...
+   Wrong:    Request to https://admin.<domain>/api/v1/... (404)
+   ```
+   - If seeing admin.* in API URLs → API base URL misconfigured
+
+3. **Check JWT Session:**
+   ```javascript
+   // In browser console:
+   document.cookie.split(';').find(c => c.trim().startsWith('sb-access-token'))
+   // Should exist and not be expired
+   ```
+   - If missing → session expired, logout and login again
+   - Check browser dev tools → Application → Cookies → sb-access-token
+
+4. **Check Admin Role (for /ops pages):**
+   - /ops/status and /ops/runbook require admin role
+   - Non-admin users see "Access Denied" message (not a bug)
+   - Verify user has role='admin' in team_members table
+
+5. **Common UI Issues:**
+   - **Sidebar doesn't show Ops pages** → User role is not admin
+   - **Page shows blank/empty** → JWT expired, refresh or re-login
+   - **404 on all API calls** → NEXT_PUBLIC_API_BASE not set or wrong
+   - **Mixed content errors** → Frontend HTTPS but API configured as HTTP
 
 ---
 

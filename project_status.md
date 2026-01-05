@@ -682,6 +682,7 @@ All required environment variables configured:
 
 | Date | Phase | Change |
 |------|-------|--------|
+| 2026-01-05 | Admin UI | Unified admin shell now covers ops + channel pages - all pages use consistent sidebar navigation |
 | 2026-01-04 | Admin UI | Enhanced duration display with tooltip (hover shows raw ms, e.g., "453 ms") |
 | 2026-01-04 | API | Implemented duration_ms SQL fallback for batch operations (created_at → updated_at) |
 | 2026-01-04 | Admin UI | Added duration display in Batch Details Modal with null handling ("—") |
