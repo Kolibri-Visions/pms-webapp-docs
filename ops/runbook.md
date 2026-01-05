@@ -17537,6 +17537,69 @@ guest_id: Optional[UUID] = Field(
 **Related Files:**
 - `backend/app/schemas/bookings.py:662` - BookingResponse.guest_id now Optional[UUID]
 
+#### Guest Booking History Consistency
+
+**Symptom:** Guests list shows `total_bookings=0` but guest detail timeline displays multiple bookings (e.g., 4 entries shown).
+
+**Root Cause:**
+
+Inconsistency between two booking count queries:
+- **Timeline API** (`GET /api/v1/guests/{id}/timeline`): Counts ALL bookings WHERE `bookings.guest_id = guest.id`
+- **Old trigger** (`update_guest_statistics`): Filtered by status, excluded cancelled/declined/no_show bookings
+- Result: UX confusion - "0 bookings listed but 4 shown in history"
+
+**DSGVO/Business Rule:**
+
+Guest booking history follows FK-based linkage ONLY:
+- **Source of truth**: `bookings.guest_id` (FK to guests.id)
+- **Counts ALL bookings** linked to guest (including cancelled)
+- **Does NOT count**: Bookings with `guest_id=NULL` (guest optional by design)
+- **Does NOT infer**: By auth_user_id, email, or other heuristics
+
+**Fix:**
+
+Align `total_bookings` computation with timeline query:
+```sql
+-- Updated trigger (migration 20260105160000)
+total_bookings = (
+  SELECT COUNT(*)
+  FROM bookings
+  WHERE guest_id = NEW.guest_id
+    -- No status filter - count ALL bookings
+    -- Aligns with timeline API behavior
+)
+```
+
+**Timeline Query (unchanged, correct):**
+```sql
+-- backend/app/services/guest_service.py:675-680
+SELECT COUNT(*)
+FROM bookings b
+WHERE b.guest_id = $1 AND b.agency_id = $2 AND b.deleted_at IS NULL
+```
+
+**Why Count Cancelled Bookings:**
+- Part of guest's complete history (business record)
+- Aligns with timeline display (shows all bookings regardless of status)
+- Consistent UX: count matches what user sees
+
+**Troubleshooting:**
+
+| Symptom | Root Cause | Resolution |
+|---------|-----------|------------|
+| total_bookings=0 but timeline shows bookings | Old trigger had status filter | Apply migration 20260105160000 to align trigger |
+| Expected bookings not shown in timeline | Bookings have guest_id=NULL | Link bookings to guest via booking create/update with valid guest_id |
+| Timeline shows 0 for guest with bookings in agency | Bookings linked to different guest_id | Verify correct guest linkage in bookings table |
+
+**Prevention:**
+- Use same WHERE clause for counts and list queries
+- Document filtering rules in API comments
+- Test count endpoints against list endpoints in integration tests
+
+**Related Files:**
+- `supabase/migrations/20260105160000_align_guest_total_bookings_with_timeline.sql` - Fixed trigger
+- `backend/app/services/guest_service.py:675-680` - Timeline count query (source of truth)
+
 ---
 
 ## Frontend Build Failures (TSX/JSX Syntax Errors)

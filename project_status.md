@@ -382,6 +382,58 @@ Fixed production bug where booking API responses failed with 500 ResponseValidat
 - OpenAPI documentation shows guest_id as nullable
 - Aligns with DSGVO data model (guest optional, booking standalone)
 
+### API - Align Guest Timeline with guest_id Linkage ✅
+
+**Date Completed:** 2026-01-05
+
+**Overview:**
+Fixed inconsistency where guests list showed `total_bookings=0` but timeline API returned multiple bookings, creating confusing UX.
+
+**Issue:**
+- Guests list displayed `total_bookings=0` for all guests
+- Timeline API (`GET /api/v1/guests/{id}/timeline`) returned bookings with `total: 4` (non-zero)
+- UX confusion: "0 bookings listed but 4 shown in history"
+- Root cause: Mismatch between timeline count query and trigger computation
+
+**Root Cause Analysis:**
+- **Timeline query** (correct): `SELECT COUNT(*) FROM bookings WHERE guest_id = $1` (ALL bookings)
+- **Old trigger**: `WHERE guest_id = NEW.guest_id AND status NOT IN ('cancelled', 'declined', 'no_show')` (filtered)
+- Status filter in trigger caused lower counts than timeline
+- Created inconsistent user experience
+
+**DSGVO/Business Rule:**
+- Guest booking history follows FK-based linkage ONLY: `bookings.guest_id → guests.id`
+- Counts ALL bookings linked to guest (including cancelled) - complete business record
+- Does NOT count bookings with `guest_id=NULL` (guest optional by design)
+- Does NOT infer by auth_user_id, email, or other heuristics
+
+**Implementation:**
+
+1. **Migration** (`20260105160000_align_guest_total_bookings_with_timeline.sql`):
+   - Updated `update_guest_statistics()` trigger to count ALL bookings (removed status filter)
+   - Aligned trigger logic with timeline API query
+   - Backfilled existing data for all guests to recompute `total_bookings`
+
+2. **Query Alignment:**
+   ```sql
+   -- Both now use same logic:
+   SELECT COUNT(*)
+   FROM bookings
+   WHERE guest_id = guest.id
+     -- No status filter - count ALL bookings
+   ```
+
+**Files Changed:**
+- `supabase/migrations/20260105160000_align_guest_total_bookings_with_timeline.sql` - Fixed trigger and backfilled data
+- `backend/docs/ops/runbook.md:17540` - Added "Guest Booking History Consistency" section
+
+**Expected Result:**
+- `total_bookings` matches timeline `total` count
+- Guests list badge shows same count as timeline displays
+- Cancelled bookings counted in both (complete history)
+- Consistent UX: count matches what user sees
+- FK-based linkage enforced consistently across all queries
+
 
 ### Channel Manager Admin UI ✅
 
