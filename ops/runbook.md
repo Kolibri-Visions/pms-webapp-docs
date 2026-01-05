@@ -17496,6 +17496,47 @@ Migration `20260105150000_enforce_booking_guest_fk.sql` handles existing bad dat
 - `backend/app/services/booking_service.py:540-553` - Guest existence validation
 - `supabase/migrations/20260105150000_enforce_booking_guest_fk.sql` - FK constraint migration
 
+**Production Issue: 500 ResponseValidationError After FK ON DELETE SET NULL**
+
+**Symptom:** After applying FK constraint migration, `GET /api/v1/bookings/{id}` returns 500 error:
+```json
+{
+  "detail": [
+    {
+      "loc": ["response", "guest_id"],
+      "msg": "UUID input should be a string/bytes/UUID object",
+      "input": null
+    }
+  ]
+}
+```
+
+**Root Cause:**
+
+After FK constraint with `ON DELETE SET NULL`, bookings can have `guest_id=NULL` (guest deleted or booking created without guest). However, `BookingResponse` schema defined `guest_id: UUID` (non-nullable), causing FastAPI response validation to fail when serializing bookings with NULL guest_id.
+
+**Fix:**
+
+Change `guest_id` in `BookingResponse` schema to nullable:
+```python
+# Before (breaks with NULL guest_id)
+guest_id: UUID = Field(description="Guest making the booking")
+
+# After (allows NULL per DSGVO design)
+guest_id: Optional[UUID] = Field(
+    default=None,
+    description="Guest making the booking (nullable - guest optional per DSGVO design)"
+)
+```
+
+**Prevention:**
+- When adding FK constraints with `ON DELETE SET NULL`, ensure response schemas allow NULL
+- Test API responses with NULL foreign keys before deploying constraints
+- Align schema nullability with database column constraints
+
+**Related Files:**
+- `backend/app/schemas/bookings.py:662` - BookingResponse.guest_id now Optional[UUID]
+
 ---
 
 ## Frontend Build Failures (TSX/JSX Syntax Errors)

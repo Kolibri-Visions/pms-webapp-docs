@@ -353,6 +353,35 @@ Enforced referential integrity for booking-guest relationships to prevent orphan
 - Existing orphaned guest_id references cleaned up during migration (set to NULL)
 - UI shows "Gast nicht verknüpft" for bookings without guest link
 
+### API - Allow Null guest_id in Booking Responses ✅
+
+**Date Completed:** 2026-01-05
+
+**Overview:**
+Fixed production bug where booking API responses failed with 500 ResponseValidationError after FK constraint allowed NULL guest_id values.
+
+**Production Issue:**
+- After FK constraint migration (`ON DELETE SET NULL`), bookings can have `guest_id=NULL`
+- `GET /api/v1/bookings/{id}` returned 500 error for bookings with NULL guest_id
+- FastAPI ResponseValidationError: "UUID input should be a string/bytes/UUID object", input: null
+- Root cause: `BookingResponse` schema defined `guest_id: UUID` (non-nullable)
+
+**Fix:**
+- Changed `BookingResponse.guest_id` from `UUID` to `Optional[UUID]` with `default=None`
+- Updated field description to note "nullable - guest optional per DSGVO design"
+- Aligns schema nullability with database column constraints
+- OpenAPI spec now reflects nullable field
+
+**Files Changed:**
+- `backend/app/schemas/bookings.py:662-665` - BookingResponse.guest_id now Optional[UUID]
+- `backend/docs/ops/runbook.md:17499` - Added troubleshooting entry for ResponseValidationError
+
+**Expected Result:**
+- `GET /api/v1/bookings/{id}` succeeds for bookings with NULL guest_id
+- API responses serialize correctly when guest_id is NULL
+- OpenAPI documentation shows guest_id as nullable
+- Aligns with DSGVO data model (guest optional, booking standalone)
+
 
 ### Channel Manager Admin UI ✅
 
