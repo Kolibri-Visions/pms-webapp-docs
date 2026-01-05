@@ -17040,8 +17040,119 @@ When investigating API 404 errors in Admin UI:
 
 **Related Files:**
 - `frontend/app/lib/api-client.ts` - API base URL resolution + apiClient wrapper
-- `frontend/app/guests/[id]/page.tsx` - Example: Guest detail using `getApiBase()`
-- `frontend/app/guests/page.tsx` - Example: Guest list using `apiClient.get()`
+- `frontend/app/guests/[id]/page.tsx` - Example: Guest detail using `apiClient.get()` with auth
+- `frontend/app/guests/page.tsx` - Example: Guest list using `apiClient.get()` with auth
+
+#### 403 Forbidden - Missing Authorization Header
+
+**Symptom:** Admin UI page loads but API calls return HTTP 403:
+```
+GET https://api.fewo.kolibri-visions.de/api/v1/guests/<id> → 403
+Response: {"detail": "Not authenticated"}
+```
+
+**Root Causes:**
+
+1. **Missing Authorization header** in client-side fetch call
+2. **Missing access token** from Supabase session
+3. **Using raw fetch()** instead of authenticated API client
+
+**Fix Pattern (Mandatory):**
+
+ALL authenticated API calls MUST:
+1. Use `useAuth()` hook to get the access token
+2. Pass token to `apiClient` methods OR add Authorization header manually
+3. Handle 401/403 errors with actionable user message
+
+```typescript
+// CORRECT - Use apiClient with auth token
+import { useAuth } from "../../lib/auth-context";
+import { apiClient, ApiError } from "../../lib/api-client";
+
+export default function MyPage() {
+  const { accessToken } = useAuth();
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!accessToken) {
+        setError("Session expired. Please log in again.");
+        return;
+      }
+
+      try {
+        const data = await apiClient.get(`/api/v1/guests/${id}`, accessToken);
+        // Use data...
+      } catch (err) {
+        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+          setError("Session expired or not authenticated. Please log in again.");
+        }
+      }
+    };
+    fetchData();
+  }, [accessToken]);
+}
+```
+
+```typescript
+// WRONG - Raw fetch without auth
+const response = await fetch(`${apiBase}/api/v1/guests/${id}`); // ❌ NO AUTH!
+```
+
+**How apiClient Handles Auth:**
+
+See `frontend/app/lib/api-client.ts`:
+```typescript
+export async function apiRequest(endpoint, options = {}) {
+  const { token, ...fetchOptions } = options;
+  const headers = new Headers();
+
+  // Automatically adds Authorization header if token provided
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const url = endpoint.startsWith("http") ? endpoint : `${API_BASE}${endpoint}`;
+  return fetch(url, { ...fetchOptions, headers });
+}
+```
+
+**Debug Checklist for 403 Errors:**
+
+1. **Check browser DevTools Network tab:**
+   - Request Headers should include: `Authorization: Bearer eyJ...`
+   - If missing → auth token not passed to apiClient
+
+2. **Check React DevTools / Console:**
+   ```javascript
+   // In browser console on admin page:
+   console.log("Access token:", localStorage.getItem('supabase.auth.token'))
+   ```
+   - If null/empty → Supabase session expired, user needs to login
+
+3. **Check source code:**
+   ```bash
+   cd frontend/app
+   # Find pages using raw fetch without auth (should return EMPTY)
+   rg -n 'fetch.*api/v1' --type tsx | grep -v apiClient
+   ```
+
+4. **Verify useAuth() is called:**
+   - Page must import: `import { useAuth } from "../../lib/auth-context";`
+   - Component must call: `const { accessToken } = useAuth();`
+   - Effect must check: `if (!accessToken) return;`
+
+**Common Mistakes:**
+
+- ❌ Using `credentials: "include"` without Authorization header (backend expects JWT, not cookies)
+- ❌ Forgetting to pass `accessToken` to `apiClient.get()`
+- ❌ Not handling 401/403 errors with user-friendly message
+- ❌ Using raw `fetch()` instead of `apiClient` wrapper
+
+**Prevention:**
+
+- Code review: ALL API calls must use `apiClient` with `accessToken`
+- Error boundaries: Show "Session expired" message on 401/403
+- Consistent pattern: Follow guests list page example (frontend/app/guests/page.tsx)
 
 ---
 
