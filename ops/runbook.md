@@ -16828,6 +16828,73 @@ If UI shows 404 errors or empty data when API is healthy:
 
 ---
 
+## Frontend Build Failures (TSX/JSX Syntax Errors)
+
+**Problem:** Coolify deployment fails with TypeScript/JSX syntax errors like:
+```
+Expected ',', got '{'
+```
+
+**Common Causes:**
+1. **Extra closing tags** - Premature closure of JSX container
+2. **Mismatched braces** - Stray `}` or `]` breaking JSX context
+3. **JSX comments outside JSX** - Comments in array/object literal context
+
+**Diagnosis:**
+```bash
+# Run build locally to reproduce
+cd frontend && npm run build
+
+# Check TypeScript compilation
+npx tsc --noEmit --jsx preserve app/path/to/file.tsx
+```
+
+**Root Cause (connections/page.tsx Example):**
+The connections page had an extra `</div>` at line 1221 that prematurely closed the main container `<div className="space-y-6">`, leaving modals outside the JSX tree.
+
+Structure was:
+```tsx
+return (
+  <div className="space-y-6">  {/* Line 1037 - Main container */}
+    {/* Search + Table cards */}
+    <div className="bg-white...">  {/* Line 1102 - Table card */}
+      {/* Table content */}
+    </div>  {/* Line 1220 - Closes table card */}
+    </div>  {/* Line 1221 - EXTRA! Closes main container */}
+
+    {/* Connection Details Modal */}  {/* Line 1223 - NOW OUTSIDE JSX! */}
+```
+
+**Fix:**
+Remove the extra closing tag so modals remain inside the JSX tree:
+```tsx
+return (
+  <div className="space-y-6">
+    {/* Search + Table */}
+    <div className="bg-white...">
+      {/* Table content */}
+    </div>  {/* Closes table card only */}
+
+    {/* Modals still inside main container */}
+    {selectedConnection && (<div>...</div>)}
+
+  </div>  {/* Main container closes at end */}
+);
+```
+
+**Verification:**
+```bash
+# Build must succeed
+npm run build
+# ✓ Compiled successfully
+```
+
+**Related:**
+- Prerender errors about missing Supabase env vars are expected in local builds
+- Coolify deployment has env vars configured via settings
+
+---
+
 ## Change Log
 
 | Date | Change | Author |
