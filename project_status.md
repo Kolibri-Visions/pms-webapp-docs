@@ -784,6 +784,68 @@ Implemented database-level exclusion constraint to prevent overlapping bookings 
 
 ---
 
+### API - Fix Booking Creation guest_id FK Violation (500 → 422) ✅
+
+**Date Completed:** 2026-01-05
+
+**Overview:**
+Fixed production 500 errors when creating bookings without valid guest_id. API was incorrectly using auth_user_id as guest_id fallback, causing FK violations (`asyncpg.exceptions.ForeignKeyViolationError: fk_bookings_guest_id`). Booking API now properly handles optional guest_id (DSGVO design) and returns actionable 422 errors for invalid guest_id instead of 500.
+
+**Issue:**
+- Production logs showed: `ForeignKeyViolationError: insert or update on table "bookings" violates foreign key constraint "fk_bookings_guest_id"`
+- Root cause: `Key (guest_id)=(<auth_user_id>) is not present in table "guests"`
+- Auth user IDs (auth.users table) were incorrectly written to bookings.guest_id (references guests table)
+- Resulted in 500 Internal Server Errors instead of actionable validation errors
+
+**Business Impact:**
+- Prevents 500 errors when creating bookings without guests
+- Supports DSGVO design: bookings can be created without guest information
+- Returns actionable error messages (422) when guest_id is invalid
+- Improves API reliability and error handling
+
+**Implementation:**
+
+1. **API Service Fix** (`backend/app/services/booking_service.py`):
+   - Line 555-558: Removed auth_user_id fallback for guest_id
+   - Set `guest_id = None` when not provided (guest is optional per DSGVO)
+   - Line 833-855: Added FK violation error handling
+   - Catches `asyncpg.exceptions.ForeignKeyViolationError`
+   - Maps to `ValidationException` (422) with actionable message:
+     - "guest_id does not reference an existing guest. Create the guest first or omit guest_id to create booking without guest."
+
+2. **Request Schema** (`backend/app/schemas/bookings.py:181`):
+   - `guest_id: Optional[UUID] = Field(default=None)`
+   - Already correctly defined as optional in BookingCreate schema
+
+3. **Tests** (`backend/tests/integration/test_bookings.py`):
+   - `test_create_booking_with_guest_id_omitted`: Creates booking without guest_id, verifies 201 and guest_id=null (not auth user ID)
+   - `test_create_booking_with_invalid_guest_id`: Creates booking with non-existent guest_id, verifies 422 (not 500) with actionable error message
+
+**Files Changed:**
+- `backend/app/services/booking_service.py:555-558,833-855` - Guest_id handling + FK error handling
+- `backend/app/schemas/bookings.py:181` - Already Optional (no change needed)
+- `backend/tests/integration/test_bookings.py:1172-1264` - Added 2 integration tests
+- `backend/docs/ops/runbook.md:18193` - FK violation troubleshooting (already added in previous commit)
+- `backend/docs/project_status.md` - This entry
+
+**Expected Result:**
+- ✅ POST /api/v1/bookings without guest_id → 201 Created (guest_id=null in DB)
+- ✅ POST /api/v1/bookings with invalid guest_id → 422 Unprocessable Entity (not 500)
+- ✅ Error message is actionable: "guest_id does not reference an existing guest..."
+- ✅ Tests verify both scenarios
+
+**Status**: ✅ IMPLEMENTED (awaiting production verification)
+
+**Note**: This entry will be marked **VERIFIED** only after:
+1. Deployed to production environment
+2. `pms_verify_deploy.sh` passes (commit verification)
+3. Manual smoke test confirms:
+   - POST /api/v1/bookings without guest_id returns 201 (not 500)
+   - POST /api/v1/bookings with invalid guest_id returns 422 (not 500)
+4. Evidence captured with commit SHA and test results
+
+---
+
 **Date Completed:** 2026-01-02 to 2026-01-03
 
 **Key Features:**
