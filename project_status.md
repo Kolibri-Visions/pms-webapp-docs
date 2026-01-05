@@ -754,6 +754,34 @@ TOKEN="$(./backend/scripts/get_fresh_token.sh)" \
 
 ---
 
+**Follow-up Fix (2026-01-05)**: Stabilized smoke script counter parsing for rc=0 on PASS
+
+**Issue**: Smoke test showed correct concurrency behavior (1 success, 9 conflicts) but exited rc=1 due to bash parsing errors:
+- `bash: 0: syntax error in expression (error token is "0")` - counters becoming "0\n0"
+- `bash: ERROR_COUNT: unbound variable` - variables used before initialization under `set -u`
+
+**Root Cause**: Pattern `COUNT=$(grep -c ... || echo "0")` produced "0\n0" when grep failed (stdout + echo), breaking arithmetic evaluation. Variables not initialized before use with `set -euo pipefail`.
+
+**Changes**:
+- **Smoke Script** (`backend/scripts/pms_booking_concurrency_smoke.sh:262-291`):
+  - Initialize all counters to 0 before parsing (SUCCESS_COUNT, CONFLICT_COUNT, ERROR_COUNT, OTHER_COUNT, TOTAL_COUNT)
+  - Use robust parsing: `grep || true`, strip non-digits `${VAR//[^0-9]/}`, default to 0 if empty
+  - Ensure PASS returns rc=0 (already correct at line 297: `exit 0`)
+
+- **Documentation** (DOCS SAFE MODE):
+  - `backend/scripts/README.md:4602` - Added robustness note (set -euo pipefail, counter initialization, rc=0 guarantee)
+  - `backend/docs/ops/runbook.md:18240` - Added troubleshooting entry for "syntax error in expression" / "unbound variable"
+  - `backend/docs/project_status.md` - This note
+
+**Expected Result** (after fix):
+- ✅ Script returns rc=0 when test passes (1 success, 9 conflicts, 0 errors)
+- ✅ No bash parsing errors ("syntax error" or "unbound variable")
+- ✅ All counters are valid integers (0-10 range)
+
+**Status**: Smoke script stabilized; still awaiting production verification (pms_verify_deploy.sh + smoke rc=0 + commit match)
+
+---
+
 **Date Completed:** 2026-01-02 to 2026-01-03
 
 **Key Features:**

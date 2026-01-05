@@ -18237,6 +18237,49 @@ ALTER TABLE bookings DROP CONSTRAINT bookings_no_overlap_exclusion;
 
 ---
 
+**Problem**: Smoke test script shows "syntax error in expression (error token is '0')" or "unbound variable" errors
+
+**Diagnosis**: Bash parsing issues with counter variables under `set -euo pipefail`
+
+**Symptoms**:
+- Script output shows: `bash: 0: syntax error in expression (error token is "0")`
+- Or: `bash: ERROR_COUNT: unbound variable`
+- Test results show correct HTTP codes (1x201, 9x409) but script exits rc=1 or rc=2 instead of rc=0
+- Counter values appear as "0\n0" (two lines) instead of single integer
+
+**Root Cause**:
+- Pattern `COUNT=$(grep -c ... || echo "0")` can produce "0\n0" when grep fails (outputs to stdout, then `|| echo "0"` also executes)
+- Arithmetic evaluation `$((...))` on "0\n0" triggers "syntax error in expression"
+- `set -u` requires all variables initialized before use, but counters were parsed directly without initialization
+
+**Solution**:
+1. **Initialize all counters to 0** before parsing:
+   ```bash
+   SUCCESS_COUNT=0
+   CONFLICT_COUNT=0
+   ERROR_COUNT=0
+   ```
+
+2. **Use robust parsing pattern**:
+   ```bash
+   # Safe pattern: grep || true, strip non-digits, default to 0
+   SUCCESS_COUNT=$(grep -c "^201$" "$RESPONSES_FILE" 2>/dev/null || true)
+   SUCCESS_COUNT=${SUCCESS_COUNT//[^0-9]/}  # strip non-digits
+   [[ -n "$SUCCESS_COUNT" ]] || SUCCESS_COUNT=0
+   ```
+
+3. **Verify script version**: Ensure using latest version with counter parsing fix (commit 405d3f0 or later)
+
+**Expected Behavior After Fix**:
+- ✅ Script returns rc=0 when test passes (1 success, 9 conflicts, 0 errors)
+- ✅ No "syntax error in expression" or "unbound variable" errors
+- ✅ All counters are valid integers (0-10 range for 10 concurrent requests)
+
+**Code Reference**:
+- Counter parsing: `backend/scripts/pms_booking_concurrency_smoke.sh:262-291`
+
+---
+
 ### API Error Response
 
 When exclusion constraint is triggered, API returns:
