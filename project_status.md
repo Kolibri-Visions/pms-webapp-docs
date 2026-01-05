@@ -844,6 +844,8 @@ Fixed production 500 errors when creating bookings without valid guest_id. API w
    - POST /api/v1/bookings with invalid guest_id returns 422 (not 500)
 4. Evidence captured with commit SHA and test results
 
+**Related Improvement (2026-01-05)**: Booking concurrency smoke script made reliable with date override support (DATE_FROM/DATE_TO, BOOK_FROM/BOOK_TO) and auto-shift on "all conflicts" scenario (10×409). Script now honors manual date overrides and automatically retries with shifted windows when encountering already-booked dates, preventing false failures. See: `backend/scripts/pms_booking_concurrency_smoke.sh` (SHIFT_DAYS, MAX_WINDOW_TRIES configuration).
+
 ---
 
 **Date Completed:** 2026-01-02 to 2026-01-03

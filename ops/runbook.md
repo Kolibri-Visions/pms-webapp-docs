@@ -18190,6 +18190,53 @@ ALTER TABLE bookings DROP CONSTRAINT bookings_no_overlap_exclusion;
 
 ---
 
+**Problem**: Concurrency smoke test returns 0×201 and all 10×409 (all conflicts, no successes)
+
+**Diagnosis**: Date window already booked (property has existing confirmed/checked_in booking for those dates)
+
+**Symptoms**:
+- `pms_booking_concurrency_smoke.sh` shows: 0 Created (201), 10 Conflict (409), 0 Server Errors
+- Script prints "All requests returned 409 Conflict (0 successes)"
+- Test is failing but API behavior is correct (constraint is working)
+
+**Root Cause**:
+- The date window being tested already has a booking
+- All 10 concurrent requests correctly receive 409 Conflict
+- This is NOT a test failure—it's expected behavior for already-booked dates
+
+**Solution**:
+1. **Use DATE_FROM/DATE_TO overrides** with known-free dates:
+   ```bash
+   export DATE_FROM="2026-12-01"
+   export DATE_TO="2026-12-03"
+   ./backend/scripts/pms_booking_concurrency_smoke.sh
+   ```
+
+2. **Rely on auto-shift** (default behavior as of 2026-01-05):
+   - Script automatically detects "all 409s" and shifts window by `SHIFT_DAYS` (default 7)
+   - Retries up to `MAX_WINDOW_TRIES` (default 10) times
+   - First free window will yield expected 1×201 + 9×409
+
+3. **Cancel existing booking** for the window:
+   ```bash
+   # Find booking for the window
+   curl "$API_BASE_URL/api/v1/bookings?property_id=<uuid>&check_in=2026-09-14" \
+     -H "Authorization: Bearer $TOKEN"
+
+   # Cancel it
+   curl -X POST "$API_BASE_URL/api/v1/bookings/<booking-id>/cancel" \
+     -H "Authorization: Bearer $TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"cancelled_by":"host","cancellation_reason":"Smoke test cleanup"}'
+   ```
+
+**Expected Behavior After Fix**:
+- ✅ Script auto-shifts to free window and passes (1×201 + 9×409)
+- ✅ OR manual override with DATE_FROM/DATE_TO succeeds
+- ✅ Exit code 0 on success, exit code 2 if all retries exhausted
+
+---
+
 **Problem**: Concurrent booking requests return 500 Server Error with "foreign key constraint" violation
 
 **Diagnosis**: API attempting to create bookings with invalid guest_id (not in guests table)
