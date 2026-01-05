@@ -16550,6 +16550,40 @@ const agency = (teamMember as any)?.agency;
 const agencyName = (Array.isArray(agency) ? agency?.[0]?.name : agency?.name) ?? 'PMS';
 ```
 
+**Specific Issue: Nullable Props to AdminShell (2026-01-05)**
+
+**Symptom:**
+```
+Type error: Type 'string | null' is not assignable to type 'string'.
+  ./app/settings/branding/layout.tsx:121:17
+```
+
+**Root Cause:**
+- AdminShell expects `userRole: string` (non-nullable required)
+- Layout files pass nullable values: `resolvedRole: string | null`, `session.user.email: string | null`
+
+**Fix:**
+Normalize to safe strings before passing to AdminShell:
+```typescript
+// Normalize nullable auth/session values
+const safeUserName = (userEmail ?? "").trim() || "—";
+const safeUserRole = (resolvedRole ?? "").trim() || "staff";
+
+<AdminShell userRole={safeUserRole} userName={safeUserName} agencyName={agencyName}>
+```
+
+**Diagnostic Commands:**
+```bash
+# Check Coolify build logs for TypeScript errors
+# Look for "Type 'string | null' is not assignable to type 'string'"
+
+# Verify docker image tag after deploy
+docker ps | grep pms-admin
+
+# If old image still running, check build succeeded
+docker logs <container-id> 2>&1 | grep -i error
+```
+
 ---
 
 ## Change Log

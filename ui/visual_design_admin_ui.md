@@ -401,6 +401,58 @@ The Admin UI implements a modern, elegant, and soft visual language with consist
 - [ ] Tables scroll horizontally if needed
 - [ ] Cards stack on mobile
 
+## Build Pitfalls
+
+**Added:** 2026-01-05
+
+### TypeScript Error: Nullable Props Passed to AdminShell
+
+**Symptom:**
+- Production build fails in Coolify/Nixpacks
+- Admin UI deploy stuck on old image
+- /guests routes return 404 (old code still running)
+- Build error: `Type 'string | null' is not assignable to type 'string'`
+- Error location: branding/layout.tsx or guests/layout.tsx at AdminShell component call
+
+**Root Cause:**
+- AdminShell props expect `userRole: string` (non-nullable required)
+- Layout files may pass nullable values from auth/session/cookies:
+  - `session.user.email` is typed as `string | null | undefined`
+  - `resolvedRole` declared as `string | null`
+  - `user?.email` from parsed cookies may be undefined
+- TypeScript build step (tsc --noEmit) catches type mismatch
+
+**Fix Pattern:**
+Normalize all AdminShell props to safe strings before passing:
+
+```typescript
+// Bad: Direct pass of potentially nullable values
+const userEmail = session.user.email || 'unknown';
+const resolvedRole: string | null = /* ... */;
+<AdminShell userRole={resolvedRole} userName={userEmail} agencyName={agencyName}>
+
+// Good: Normalize to safe strings first
+const userEmail = session.user.email || 'unknown';
+const safeUserName = (userEmail ?? "").trim() || "—";
+
+const resolvedRole: string | null = /* ... */;
+const safeUserRole = (resolvedRole ?? "").trim() || "staff";
+
+<AdminShell userRole={safeUserRole} userName={safeUserName} agencyName={agencyName}>
+```
+
+**Files to Check:**
+- frontend/app/settings/branding/layout.tsx
+- frontend/app/guests/layout.tsx
+- Any other layout files using AdminShell
+
+**Manual Verification After Fix:**
+1. Build succeeds locally: `cd frontend && npm run build`
+2. Deploy to production (Coolify triggers rebuild)
+3. Verify /guests loads (no 404)
+4. Verify /settings/branding shows sidebar
+5. Check docker image tag matches latest commit
+
 ## Future Enhancements
 
 **Phase 1 (Current):**
