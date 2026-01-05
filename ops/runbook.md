@@ -17154,6 +17154,110 @@ export async function apiRequest(endpoint, options = {}) {
 - Error boundaries: Show "Session expired" message on 401/403
 - Consistent pattern: Follow guests list page example (frontend/app/guests/page.tsx)
 
+#### Next.js 404 (Missing Route) vs API 404
+
+**Symptom:** Clicking a link in Admin UI opens a page that shows Next.js 404 error:
+```
+404 | This page could not be found
+```
+
+**Browser network tab shows:**
+```
+GET /bookings/<uuid>?_rsc=... → 404
+```
+
+**Root Cause:**
+
+This is a **Next.js route 404**, NOT an API 404. The difference:
+- **Next route missing** → Browser requests `/bookings/<id>` from Next.js app, but no `app/bookings/[id]/page.tsx` exists
+- **API 404** → Route exists, but backend API returns 404 for resource
+
+**How to Distinguish:**
+
+1. **Check URL in browser address bar:**
+   - If URL is `https://admin.fewo.../bookings/<id>` → Next route issue
+   - Network tab shows `?_rsc=...` parameter → Next.js RSC (React Server Component) request
+
+2. **Check browser DevTools Network tab:**
+   - Request URL ends with `?_rsc=...` → Next.js routing, NOT backend API
+   - No `Authorization` header in request → Not an API call
+   - Response is HTML/text, not JSON → Next.js 404 page
+
+3. **Backend API 404 would show:**
+   - Request URL: `https://api.fewo.../api/v1/bookings/<id>` (API domain)
+   - Authorization header present
+   - JSON response: `{"detail": "Not found"}`
+
+**Fix Pattern:**
+
+Create the missing Next.js route:
+
+1. **Create route directory:**
+   ```bash
+   mkdir -p frontend/app/bookings/[id]
+   ```
+
+2. **Create page component:**
+   ```typescript
+   // frontend/app/bookings/[id]/page.tsx
+   "use client";
+
+   import { useState, useEffect } from "react";
+   import { useParams } from "next/navigation";
+   import { useAuth } from "../../lib/auth-context";
+   import { apiClient, ApiError } from "../../lib/api-client";
+
+   export default function BookingDetailPage() {
+     const params = useParams();
+     const bookingId = params?.id as string;
+     const { accessToken } = useAuth();
+
+     useEffect(() => {
+       const fetchData = async () => {
+         if (!accessToken) return;
+         const data = await apiClient.get(
+           `/api/v1/bookings/${bookingId}`,
+           accessToken
+         );
+         // Render data...
+       };
+       fetchData();
+     }, [bookingId, accessToken]);
+
+     return <div>Booking Details...</div>;
+   }
+   ```
+
+3. **IMPORTANT - Use correct import paths:**
+   - From `app/bookings/[id]/page.tsx`: `import { ... } from "../../lib/..."`
+   - NOT `../../../lib/...` (will cause webpack module not found error)
+
+4. **Use apiClient with auth** (avoid relative URLs):
+   - ✅ `apiClient.get(\`/api/v1/bookings/${id}\`, accessToken)`
+   - ❌ `fetch(\`/api/v1/bookings/${id}\`)` (no auth)
+
+**Verification:**
+
+```bash
+# Build must succeed
+cd frontend && npm run build
+# ✓ Compiled successfully
+
+# Check route exists
+ls frontend/app/bookings/[id]/page.tsx
+```
+
+**Common Mistakes:**
+
+- ❌ Thinking it's an API issue when it's a Next route issue
+- ❌ Wrong import paths (too many `../`)
+- ❌ Forgetting to add auth to API calls in new route
+- ❌ Not creating a layout if auth is needed
+
+**Related Files:**
+- `frontend/app/bookings/[id]/page.tsx` - Booking detail route
+- `frontend/app/guests/[id]/page.tsx` - Similar pattern (guest detail)
+
 ---
 
 ## Frontend Build Failures (TSX/JSX Syntax Errors)
