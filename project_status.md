@@ -276,6 +276,37 @@ Fixed UI navigation issue where booking detail page "Zum Gast →" button caused
 - If guest missing → Shows "Gast nicht verknüpft" inline message instead of broken link
 - Booking details page remains functional regardless of guest record state
 
+### Admin UI - Prevent NaN Money Values ✅
+
+**Date Completed:** 2026-01-05
+
+**Overview:**
+Fixed rendering bug where booking details page displayed "Steuer: NaN €" (and potentially other monetary fields) due to null/undefined values not being safely parsed.
+
+**Issue:**
+- Booking details page showed "NaN €" for monetary fields (tax, subtotal, cleaning_fee, service_fee, total_price, nightly_rate)
+- API returns monetary fields as strings (`"0.00"`) but may return `null`, `undefined`, or empty strings
+- `formatCurrency()` called `parseFloat(amount)` directly without validation
+- `parseFloat(null/undefined/"")` returns `NaN`
+- `Intl.NumberFormat().format(NaN)` renders as `"NaN €"`
+
+**Fix:**
+- Added `safeNumber()` helper function to safely parse monetary values
+- Logic: `if (null/undefined/"") return 0; else parseFloat(value); if (isNaN) return 0`
+- Updated `formatCurrency()` to use `safeNumber()` before formatting
+- All monetary fields now guaranteed to render as valid currency (e.g., `"0,00 €"` for missing/invalid values)
+- Regression guard ensures NaN can never reach the formatter
+
+**Files Changed:**
+- `frontend/app/bookings/[id]/page.tsx:117-128` - Added safeNumber helper, updated formatCurrency to use it
+- `backend/docs/ops/runbook.md:17390` - Added troubleshooting section "Booking Details Shows 'NaN €'"
+
+**Expected Result:**
+- Null/undefined monetary values → display as `"0,00 €"`
+- Invalid string values → display as `"0,00 €"`
+- Valid monetary strings like `"42.50"` → display as `"42,50 €"`
+- Never renders `"NaN €"` in any monetary field
+
 
 ### Channel Manager Admin UI ✅
 

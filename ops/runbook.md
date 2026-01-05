@@ -17387,6 +17387,51 @@ if (bookingData.guest_id) {
 **Related Files:**
 - `frontend/app/bookings/[id]/page.tsx:72-89,194-206,313` - Guest existence check and conditional rendering
 
+#### Booking Details Shows "NaN €"
+
+**Symptom:** Admin UI → Booking Details → Preisinformationen section shows "Steuer: NaN €" (or other fields like "Subtotal: NaN €", "Cleaning Fee: NaN €").
+
+**Root Cause:**
+
+Monetary fields from the API (`tax`, `subtotal`, `cleaning_fee`, etc.) are strings (e.g., `"0.00"`) but may be `null`, `undefined`, or empty strings in some cases. The `formatCurrency()` function called `parseFloat(amount)` directly without validation, causing:
+- `parseFloat(null)` → `NaN`
+- `parseFloat(undefined)` → `NaN`
+- `parseFloat("")` → `NaN`
+- `Intl.NumberFormat().format(NaN)` → `"NaN €"`
+
+**Fix Pattern:**
+
+Add a `safeNumber` helper to coerce invalid values to 0 before formatting:
+
+```typescript
+const safeNumber = (value: string | null | undefined): number => {
+  if (value === null || value === undefined || value === "") return 0;
+  const num = parseFloat(value);
+  return isNaN(num) ? 0 : num;
+};
+
+const formatCurrency = (amount: string | null | undefined) => {
+  return new Intl.NumberFormat("de-DE", {
+    style: "currency",
+    currency: "EUR",
+  }).format(safeNumber(amount));
+};
+```
+
+**Result:**
+- Null/undefined/empty monetary fields → display as `"0,00 €"`
+- Invalid strings → display as `"0,00 €"`
+- Valid strings like `"42.50"` → display as `"42,50 €"`
+- Never renders `"NaN €"`
+
+**Prevention:**
+- Always validate/coerce monetary values before formatting
+- Use safe parsers for all numeric fields that may be null/undefined
+- Add regression guards: `isNaN(num) ? 0 : num`
+
+**Related Files:**
+- `frontend/app/bookings/[id]/page.tsx:117-128` - safeNumber helper and formatCurrency
+
 ---
 
 ## Frontend Build Failures (TSX/JSX Syntax Errors)
