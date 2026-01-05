@@ -3919,6 +3919,53 @@ curl http://localhost:8000/openapi.json | jq '.paths | keys | map(select(startsw
 # Expected: ["/api/v1/guests", "/api/v1/guests/{guest_id}", "/api/v1/guests/{guest_id}/timeline"]
 ```
 
+**Detailed Verification (CONTAINER - prove routes exist):**
+```bash
+# Execute inside container to verify routes are registered
+docker exec pms-backend python3 - <<'PY'
+from app.main import app
+routes=[]
+for r in app.routes:
+    p=getattr(r,"path",None)
+    m=getattr(r,"methods",None)
+    if p: routes.append((p,sorted(list(m)) if m else []))
+guest=[(p,m) for (p,m) in routes if "guest" in p.lower()]
+print("guest_routes_found=",len(guest))
+for p,m in guest: print("ROUTE",p,"methods=",m)
+spec=app.openapi()
+paths=spec.get("paths",{}) or {}
+guest_paths=[p for p in paths.keys() if "guest" in p.lower()]
+print("guest_paths_found=",len(guest_paths))
+for p in sorted(guest_paths): print("OPENAPI",p,"methods=",sorted((paths.get(p) or {}).keys()))
+PY
+
+# Expected output:
+# guest_routes_found= 6
+# ROUTE /api/v1/guests methods= ['GET']
+# ROUTE /api/v1/guests/{guest_id} methods= ['GET']
+# ROUTE /api/v1/guests/{guest_id} methods= ['PATCH']
+# ROUTE /api/v1/guests/{guest_id} methods= ['PUT']
+# ROUTE /api/v1/guests methods= ['POST']
+# ROUTE /api/v1/guests/{guest_id}/timeline methods= ['GET']
+# guest_paths_found= 5
+# OPENAPI /api/v1/guests methods= ['get', 'post']
+# OPENAPI /api/v1/guests/{guest_id} methods= ['get', 'patch', 'put']
+# OPENAPI /api/v1/guests/{guest_id}/timeline methods= ['get']
+```
+
+**Detailed Verification (HOST-SERVER-TERMINAL - prove external OpenAPI):**
+```bash
+# Verify external OpenAPI exposes guests endpoints
+API="https://api.fewo.kolibri-visions.de"
+curl -k -sS "$API/openapi.json" | grep -oE '"/api/v1/guests[^"]*"' | head
+
+# Expected output:
+# "/api/v1/guests"
+# "/api/v1/guests/{guest_id}"
+# "/api/v1/guests/{guest_id}/timeline"
+```
+
+
 - Redeploy to apply changes
 
 **Verification:**
