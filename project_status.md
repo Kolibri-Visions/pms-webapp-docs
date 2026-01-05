@@ -109,6 +109,80 @@ This document tracks the current state of the PMS-Webapp project, including comp
   - Smoke script: backend/scripts/pms_guests_smoke.sh validates full CRUD lifecycle
   - Runbook: Added troubleshooting for 503 missing column errors with verification commands
 
+### Admin UI Navigation + Guests CRM Interface ✅
+
+**Date Completed:** 2026-01-05
+
+**Overview:**
+Implemented modern, cohesive Admin UI with sidebar navigation and integrated Guests CRM interface. Replaced top navigation with structured sidebar supporting grouped navigation, role-based access control, and consistent layout across all admin pages.
+
+**Key Features:**
+- ✅ **AdminShell Component:** Reusable layout with sidebar + topbar + content area
+  - Sidebar groups: Übersicht, Betrieb, Channel Manager, CRM, Einstellungen
+  - Collapsible sidebar (icons-only mode) with localStorage persistence
+  - Responsive drawer pattern on mobile with overlay
+  - Active route highlighting and auto-expand for settings group
+  - Agency context display in sidebar header
+- ✅ **Guests CRM UI Pages:**
+  - Guests list page with search, pagination, status badges (VIP, Gesperrt)
+  - Guest detail page with tabs (Details, Buchungshistorie)
+  - Timeline integration showing booking history
+  - Empty/loading/error states for all views
+  - API integration with existing endpoints (list, detail, timeline)
+- ✅ **Branding Settings Integration:**
+  - Settings/Branding page now uses AdminShell (sidebar visible)
+  - Access denied pages show within AdminShell for consistency
+  - German translations for UI text
+- ✅ **RBAC & Plan-Gating UX:**
+  - Hide nav items user cannot access (role-based)
+  - Show plan-locked items with lock icon and disabled state
+  - Friendly access denied messages within layout shell
+- ✅ **Visual Design System:**
+  - Documented in backend/docs/ui/visual_design_admin_ui.md
+  - Soft + elegant + modern aesthetic (calm surfaces, clear hierarchy, gentle contrast)
+  - Consistent spacing (4/8/12/16/24 px rhythm), typography, colors
+  - Component patterns for tables, forms, cards, modals, empty states, loading states
+  - Indigo primary palette with gray neutrals
+
+**Files Changed:**
+- frontend/app/components/AdminShell.tsx (new)
+- frontend/app/guests/page.tsx (new - list view)
+- frontend/app/guests/[id]/page.tsx (new - detail + timeline)
+- frontend/app/guests/layout.tsx (new)
+- frontend/app/settings/branding/layout.tsx (updated to use AdminShell)
+- backend/docs/ui/visual_design_admin_ui.md (new)
+
+**Navigation Structure:**
+```
+Übersicht
+  - Dashboard
+
+Betrieb
+  - Objekte
+  - Buchungen
+  - Verfügbarkeit
+
+Channel Manager
+  - Verbindungen
+  - Sync-Protokoll
+
+CRM
+  - Gäste (NEW)
+
+Einstellungen (collapsible)
+  - Branding
+  - Rollen & Rechte (admin-only)
+  - Plan & Abrechnung (plan-locked)
+```
+
+**Manual Verification:**
+- Navigate to /guests to see guests list with search and pagination
+- Click a guest row to view detail page with timeline
+- Visit /settings/branding to confirm sidebar is visible
+- Try sidebar collapse toggle to verify icon-only mode
+- Test mobile responsive drawer (hamburger menu)
+- Verify active route highlighting in sidebar
+
 
 
 
