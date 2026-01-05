@@ -96,6 +96,12 @@ This document tracks the current state of the PMS-Webapp project, including comp
   - Router fix: Added asyncpg schema exception handling (503 with actionable message)
   - Migration: 20260105120000_fix_guests_list_required_fields.sql (defaults + backfill NULLs)
   - Runbook: Added troubleshooting section with DB/HOST/CONTAINER verification commands
+- ✅ **Guests Timeline/Create Hardening (2026-01-05):** Fixed timeline + create schema mismatches
+  - Timeline fix: Changed query to use check_in_at/check_out_at (was check_in_date/check_out_date)
+  - Create fix: Added guests.auth_user_id column via migration for guest portal linking
+  - Migration: 20260105130000_add_guests_auth_user_id.sql (optional uuid column + index)
+  - Router fix: Added asyncpg schema exception handling to create_guest and get_guest_timeline (503)
+  - Runbook: Added troubleshooting for timeline UndefinedColumnError and create auth_user_id errors
 
 
 

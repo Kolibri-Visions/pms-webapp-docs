@@ -4056,6 +4056,103 @@ PY
 # Expected guest_paths= ['/api/v1/guests', '/api/v1/guests/{guest_id}', '/api/v1/guests/{guest_id}/timeline']
 ```
 
+**Issue:** GET /api/v1/guests/{guest_id}/timeline returns 500 with UndefinedColumnError
+
+**Symptom:**
+- Endpoint returns HTTP 500 Internal Server Error
+- Logs show: "asyncpg.exceptions.UndefinedColumnError: column b.check_in_date does not exist"
+- Hint suggests: "Perhaps you meant b.check_in_at"
+
+**Cause:**
+- Timeline query expected old column names (check_in_date, check_out_date)
+- Database schema uses check_in_at and check_out_at columns
+- Code updated to use correct column names in commit that fixes this issue
+
+**Fix:**
+- Deploy latest code (includes corrected timeline query using check_in_at/check_out_at)
+- Restart backend:
+  ```bash
+  docker restart pms-backend
+  ```
+
+**Verification (HOST-SERVER-TERMINAL):**
+```bash
+# Test timeline endpoint with valid guest ID and JWT
+API="https://api.fewo.kolibri-visions.de"
+GID="1e9dd87c-ba39-4ec5-844e-e4c66e1f4dc1"
+curl -k -sS -i -L "$API/api/v1/guests/$GID/timeline?limit=5&offset=0" \
+  -H "Authorization: Bearer $JWT_TOKEN" | sed -n '1,160p'
+
+# Expected: HTTP/1.1 200 OK (empty bookings list is fine)
+# Expected response: {"guest_id":"...","guest_name":"...","bookings":[...],"total":N,"limit":5,"offset":0}
+```
+
+**Verification (DB SQL Editor):**
+```sql
+-- Verify bookings table has correct column names
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_schema='public' AND table_name='bookings'
+  AND column_name IN ('check_in_at','check_out_at','check_in_date','check_out_date')
+ORDER BY column_name;
+
+-- Expected: check_in_at and check_out_at exist (not check_in_date/check_out_date)
+```
+
+**Issue:** POST /api/v1/guests returns 500 with UndefinedColumnError for auth_user_id
+
+**Symptom:**
+- Endpoint returns HTTP 500 Internal Server Error
+- Logs show: "asyncpg.exceptions.UndefinedColumnError: column 'auth_user_id' does not exist"
+
+**Cause:**
+- guests.auth_user_id column missing from database schema
+- Migration 20260105130000_add_guests_auth_user_id.sql not applied
+
+**Fix:**
+1. Apply migration via SQL Editor:
+   ```sql
+   -- Run migration: supabase/migrations/20260105130000_add_guests_auth_user_id.sql
+   -- Or apply manually:
+
+   ALTER TABLE public.guests
+   ADD COLUMN IF NOT EXISTS auth_user_id uuid;
+
+   COMMENT ON COLUMN public.guests.auth_user_id IS 'Optional link to authenticated user account (for guest portal access)';
+
+   CREATE INDEX IF NOT EXISTS idx_guests_auth_user_id
+   ON public.guests(auth_user_id)
+   WHERE auth_user_id IS NOT NULL;
+   ```
+
+2. Restart backend to reload schema metadata:
+   ```bash
+   docker restart pms-backend
+   ```
+
+**Verification (DB SQL Editor):**
+```sql
+-- Verify auth_user_id column exists
+SELECT column_name, data_type, is_nullable
+FROM information_schema.columns
+WHERE table_schema='public' AND table_name='guests'
+  AND column_name='auth_user_id';
+
+-- Expected output:
+-- auth_user_id | uuid | YES
+```
+
+**Verification (HOST-SERVER-TERMINAL):**
+```bash
+# Run full CRUD smoke test including POST
+cd /data/repos/pms-webapp
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export GUESTS_CRUD_TEST=true
+./backend/scripts/pms_guests_smoke.sh
+
+# Expected: All tests pass including "POST /api/v1/guests"
+```
+
 - Redeploy to apply changes
 
 **Verification:**
