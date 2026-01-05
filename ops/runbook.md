@@ -16828,6 +16828,142 @@ If UI shows 404 errors or empty data when API is healthy:
 
 ---
 
+## Admin UI Sidebar Architecture (Single Source of Truth)
+
+**Purpose:** Ensure consistent navigation across ALL authenticated routes in the frontend admin UI.
+
+**Problem Solved:** Previously, some pages used cookie-based authentication while others used Supabase server-side auth, leading to inconsistent user data (role, agency name) and navigation visibility across routes.
+
+**Architecture Overview:**
+
+1. **Navigation Configuration (Single Source):**
+   - File: `frontend/app/components/AdminShell.tsx`
+   - Constant: `NAV_GROUPS` (lines 34-73)
+   - All navigation groups and items are defined here
+   - Supports role-based visibility via `roles: ["admin"]` property
+   - Supports plan-gating via `planLocked: true` property
+
+2. **Server-Side Authentication (Shared Utility):**
+   - File: `frontend/app/lib/server-auth.ts`
+   - Function: `getAuthenticatedUser(currentPath)`
+   - ALL authenticated routes use this utility for consistent:
+     - Supabase session validation with redirect
+     - Database role lookup from `team_members` table
+     - Agency name resolution from `agencies` table
+     - Normalized user data for AdminShell props
+
+3. **Layout Pattern (Standardized):**
+   - Every authenticated route has a `layout.tsx` that:
+     - Calls `getAuthenticatedUser('/route-path')`
+     - Wraps children in `<AdminShell>` with user data
+     - Uses `dynamic = 'force-dynamic'` export config
+   - Examples:
+     - `frontend/app/guests/layout.tsx`
+     - `frontend/app/properties/layout.tsx`
+     - `frontend/app/connections/layout.tsx`
+     - `frontend/app/settings/*/layout.tsx`
+
+**Navigation Groups:**
+
+Current sidebar groups (as of implementation):
+1. **Übersicht** (Overview): Dashboard
+2. **Betrieb** (Operations): Properties, Bookings, Availability, Systemstatus*, Runbook*
+3. **Channel Manager**: Connections, Sync-Protokoll
+4. **CRM**: Guests
+5. **Einstellungen** (Settings): Branding, Roles*, Billing (plan-locked)
+
+*Items marked with asterisk are admin-only (visible when `userRole === "admin"`)
+
+**How to Add a New Sidebar Item:**
+
+1. **Add Route Files:**
+   ```bash
+   mkdir -p frontend/app/my-feature
+   touch frontend/app/my-feature/layout.tsx
+   touch frontend/app/my-feature/page.tsx
+   ```
+
+2. **Create Layout (Use Shared Auth):**
+   ```typescript
+   // frontend/app/my-feature/layout.tsx
+   import AdminShell from "../components/AdminShell";
+   import { getAuthenticatedUser } from "../lib/server-auth";
+
+   export const dynamic = 'force-dynamic';
+   export const revalidate = 0;
+   export const fetchCache = 'force-no-store';
+
+   export default async function MyFeatureLayout({ children }) {
+     const userData = await getAuthenticatedUser('/my-feature');
+     return (
+       <AdminShell
+         userRole={userData.role}
+         userName={userData.name}
+         agencyName={userData.agencyName}
+       >
+         {children}
+       </AdminShell>
+     );
+   }
+   ```
+
+3. **Add Nav Item to AdminShell:**
+   ```typescript
+   // frontend/app/components/AdminShell.tsx
+   // Find the appropriate NAV_GROUP and add:
+   {
+     label: "Betrieb",
+     items: [
+       // ... existing items ...
+       { label: "My Feature", href: "/my-feature", icon: "🎯" },
+       // Optional: restrict to admins
+       { label: "Admin Feature", href: "/admin-feature", icon: "🔒", roles: ["admin"] },
+     ],
+   }
+   ```
+
+4. **Verify Build:**
+   ```bash
+   cd frontend && npm run build
+   # Should compile successfully
+   ```
+
+**Troubleshooting:**
+
+1. **Sidebar item not showing:**
+   - Check `NAV_GROUPS` in AdminShell.tsx includes the item
+   - Check `roles` property - if set to `["admin"]`, only admins see it
+   - Verify `userRole` is correctly passed from layout to AdminShell
+   - Check browser console for any errors
+
+2. **Different sidebar on different pages:**
+   - This should NOT happen with unified architecture
+   - Verify all layouts use `getAuthenticatedUser()` utility
+   - Check that no layouts are reading cookies directly
+   - Ensure all layouts import AdminShell from same file
+
+3. **User role not resolving:**
+   - Check Supabase session is valid (not expired)
+   - Verify `team_members` table has active row for user
+   - Check `profiles.last_active_agency_id` points to correct agency
+   - Review `server-auth.ts` role resolution logic
+
+**Architecture Benefits:**
+
+- ✅ **Consistent UX:** Same navigation visible on all pages
+- ✅ **Single Source of Truth:** Nav config in one place (AdminShell.tsx)
+- ✅ **Secure:** Server-side Supabase auth with database role lookup
+- ✅ **Maintainable:** Add new pages by following standard pattern
+- ✅ **Role-Based:** Supports admin-only items via `roles` property
+- ✅ **Plan-Gating:** Supports locked features via `planLocked` property
+
+**Related Files:**
+- `frontend/app/components/AdminShell.tsx` - Navigation config + UI component
+- `frontend/app/lib/server-auth.ts` - Shared authentication utility
+- `frontend/app/*/layout.tsx` - Individual route layouts (all use shared auth)
+
+---
+
 ## Frontend Build Failures (TSX/JSX Syntax Errors)
 
 **Problem:** Coolify deployment fails with TypeScript/JSX syntax errors like:
