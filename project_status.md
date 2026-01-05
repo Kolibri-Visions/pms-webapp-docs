@@ -628,6 +628,102 @@ EXPECT_COMMIT=014c54234e8d4a7360dca1f6a0a0f5a3bb715edb \
 
 ### Channel Manager Admin UI ✅
 
+### INVENTORY - Race-Safe Bookings via Exclusion Constraint ✅
+
+**Date Completed:** 2026-01-05
+
+**Overview:**
+Implemented database-level exclusion constraint to prevent overlapping bookings for the same property, ensuring inventory safety even under concurrent API requests.
+
+**Issue:**
+- Application-level availability checks are not race-safe (TOCTOU: time-of-check-time-of-use)
+- Multiple concurrent POST /api/v1/bookings could create overlapping dates
+- Resulted in double-bookings and inventory conflicts
+- Race condition window: between availability check and INSERT
+
+**Business Impact:**
+- Prevents double-bookings at database level (atomic guarantee)
+- Enables safe concurrent booking requests (no serialization overhead)
+- Eliminates inventory conflicts from race conditions
+- API returns proper 409 Conflict (not 500) on overlaps
+
+**Implementation:**
+
+1. **Database Migration** (`supabase/migrations/20260105170000_race_safe_bookings_exclusion.sql`):
+   - Enables btree_gist extension (required for EXCLUSION with ranges)
+   - Pre-migration validation: detects existing overlaps, aborts if found
+   - Creates EXCLUSION constraint:
+     ```sql
+     EXCLUDE USING gist (
+       property_id WITH =,
+       daterange(check_in, check_out, '[)') WITH &&
+     )
+     WHERE status IN ('confirmed', 'checked_in') AND deleted_at IS NULL
+     ```
+   - Blocking statuses (inventory-occupying): `confirmed`, `checked_in`
+   - Non-blocking statuses: `cancelled`, `declined`, `no_show`, `checked_out`, `inquiry`, `pending`
+   - Date range semantics: `[)` = inclusive start, exclusive end
+
+2. **API Error Handling** (`backend/app/services/booking_service.py`):
+   - create_booking() (line 777): Catches `asyncpg.exceptions.ExclusionViolationError`
+   - update_booking() (line 1565): Catches exclusion violations on date/status changes
+   - Maps to `ConflictException` → HTTP 409 Conflict
+   - Response: `{"error": "conflict", "message": "Property is already booked for these dates", "conflict_type": "double_booking"}`
+
+3. **Concurrency Smoke Test** (`backend/scripts/pms_booking_concurrency_smoke.sh`):
+   - Fires 10 concurrent POST /api/v1/bookings with same property/dates
+   - Expects: 1 success (201), 9 conflicts (409), 0 errors (500)
+   - Uses python3 for JSON parsing (no jq dependency)
+   - Auto-picks property if not specified
+   - Exit codes: 0=pass, 1=config error, 2=test failed
+
+4. **Advisory Lock** (backend/app/services/booking_service.py:518):
+   - Acquires per-property advisory lock in transaction
+   - Serializes concurrent bookings for same property
+   - Prevents potential deadlocks from overlapping constraint checks
+
+**Files Changed:**
+- `supabase/migrations/20260105170000_race_safe_bookings_exclusion.sql` - Exclusion constraint migration
+- `backend/app/services/booking_service.py:777,1565` - Error handling for ExclusionViolationError
+- `backend/scripts/pms_booking_concurrency_smoke.sh` - Concurrency validation script
+- `backend/docs/ops/runbook.md:17948` - Race-Safe Bookings section
+- `backend/scripts/README.md:4515` - Concurrency smoke test documentation
+- `backend/docs/project_status.md` - This entry
+
+**Expected Result:**
+- ✅ Concurrent bookings for same property/dates: exactly 1 succeeds, rest get 409
+- ✅ API returns 409 Conflict (not 500) when exclusion constraint triggered
+- ✅ Database guarantees no overlapping bookings for blocking statuses
+- ✅ Concurrency smoke test passes (1 success, 9 conflicts, 0 errors)
+
+**Verification (PROD)** - NOT YET VERIFIED
+
+**Status**: Implemented (awaiting production verification)
+
+This feature will be marked **VERIFIED** only after:
+1. ✅ Deployed to production environment
+2. ✅ `backend/scripts/pms_verify_deploy.sh` passes (commit verification)
+3. ✅ `backend/scripts/pms_booking_concurrency_smoke.sh` passes in prod (1 success, 9 conflicts)
+4. ✅ Evidence captured with commit SHA and test output
+
+**Verification Steps**:
+```bash
+# Step 1: Verify deployment
+API_BASE_URL=https://api.production.example.com \
+EXPECT_COMMIT=<short-sha> \
+./backend/scripts/pms_verify_deploy.sh
+
+# Step 2: Run concurrency smoke test
+API_BASE_URL=https://api.production.example.com \
+TOKEN="$(./backend/scripts/get_fresh_token.sh)" \
+./backend/scripts/pms_booking_concurrency_smoke.sh
+
+# Expected: exit code 0, "TEST PASSED" output
+```
+
+**Note**: Do NOT mark as VERIFIED until both scripts pass in production with evidence documented.
+
+
 **Date Completed:** 2026-01-02 to 2026-01-03
 
 **Key Features:**

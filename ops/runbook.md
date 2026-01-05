@@ -17945,6 +17945,278 @@ environment:
 
 
 ## Change Log
+## Race-Safe Bookings (DB Exclusion Constraint)
+
+### Overview
+
+This section documents the database-level exclusion constraint that prevents overlapping bookings for the same property, ensuring inventory safety even under concurrent API requests.
+
+**Problem**: Application-level availability checks are not race-safe (TOCTOU: time-of-check-time-of-use). Multiple concurrent POST /api/v1/bookings can create overlapping dates, resulting in double-bookings.
+
+**Solution**: PostgreSQL EXCLUSION constraint with btree_gist extension provides atomic, database-level guarantees that no overlaps can occur.
+
+### What It Prevents
+
+The `bookings_no_overlap_exclusion` constraint prevents overlapping bookings for the same property when the booking status is **inventory-occupying**:
+
+**Blocking Statuses** (inventory-occupying):
+- `confirmed`: Booking is confirmed and occupies property
+- `checked_in`: Guest is currently in the property
+
+**Non-blocking Statuses** (do NOT occupy inventory):
+- `cancelled`, `declined`, `no_show`: Booking is terminated
+- `checked_out`: Guest has left
+- `inquiry`, `pending`: Not yet confirmed
+
+### Constraint Details
+
+**Constraint Name**: `bookings_no_overlap_exclusion`
+
+**Definition**:
+```sql
+ALTER TABLE bookings
+ADD CONSTRAINT bookings_no_overlap_exclusion
+EXCLUDE USING gist (
+    property_id WITH =,
+    daterange(check_in, check_out, '[)') WITH &&
+)
+WHERE (
+    check_in IS NOT NULL
+    AND check_out IS NOT NULL
+    AND status IN ('confirmed', 'checked_in')
+    AND deleted_at IS NULL
+);
+```
+
+**Date Range Semantics**:
+- `[)` means [check_in, check_out) - inclusive start, exclusive end
+- Check-in day: included
+- Check-out day: excluded (guest leaves, property available)
+- Example: [2024-01-01, 2024-01-05) = nights of Jan 1-4, free on Jan 5
+
+### How to Apply in Production
+
+**Step 1: Verify btree_gist Extension**
+
+```sql
+-- In Supabase SQL Editor (or psql)
+SELECT * FROM pg_extension WHERE extname = 'btree_gist';
+```
+
+If not installed, the migration will create it automatically.
+
+**Step 2: Check for Existing Overlaps**
+
+Before applying the migration, check if existing data has overlaps:
+
+```sql
+-- Find overlapping bookings
+SELECT b1.id, b1.property_id, b1.check_in, b1.check_out, b1.status,
+       b2.id AS id2, b2.check_in AS check_in2, b2.check_out AS check_out2, b2.status AS status2
+FROM bookings b1
+INNER JOIN bookings b2 ON (
+  b1.property_id = b2.property_id
+  AND b1.id < b2.id
+  AND daterange(b1.check_in, b1.check_out, '[)') && daterange(b2.check_in, b2.check_out, '[)')
+  AND b1.status IN ('confirmed', 'checked_in')
+  AND b2.status IN ('confirmed', 'checked_in')
+  AND b1.deleted_at IS NULL
+  AND b2.deleted_at IS NULL
+);
+```
+
+**Step 3: Resolve Conflicts (if any)**
+
+If overlaps found, resolve before migration:
+
+```sql
+-- Option 1: Cancel one booking
+UPDATE bookings
+SET status = 'cancelled',
+    cancellation_reason = 'Overlap resolution before constraint',
+    cancelled_by = 'system',
+    cancelled_at = NOW()
+WHERE id = '<conflicting-booking-id>';
+
+-- Option 2: Adjust dates
+UPDATE bookings
+SET check_out = '2024-01-05'  -- Adjust to not overlap
+WHERE id = '<conflicting-booking-id>';
+```
+
+**Step 4: Apply Migration**
+
+```bash
+# Via Supabase Dashboard -> SQL Editor
+# Paste contents of: supabase/migrations/20260105170000_race_safe_bookings_exclusion.sql
+# Run migration
+```
+
+Or via CLI:
+```bash
+supabase db push
+```
+
+**Step 5: Verify Constraint**
+
+```sql
+-- Check constraint exists
+SELECT conname, contype, pg_get_constraintdef(oid)
+FROM pg_constraint
+WHERE conname = 'bookings_no_overlap_exclusion';
+
+-- Should return:
+-- conname: bookings_no_overlap_exclusion
+-- contype: x (exclusion)
+-- pg_get_constraintdef: EXCLUDE USING gist (property_id WITH =, ...
+```
+
+### Testing
+
+**Run Concurrency Smoke Test** (HOST-SERVER-TERMINAL):
+
+```bash
+# On production server or with production API access
+export API_BASE_URL="https://api.production.example.com"
+export TOKEN="$(./backend/scripts/get_fresh_token.sh)"
+
+./backend/scripts/pms_booking_concurrency_smoke.sh
+```
+
+**Expected Output**:
+```
+╔════════════════════════════════════════════════════════════╗
+║ PMS Booking Concurrency Smoke Test                        ║
+╚════════════════════════════════════════════════════════════╝
+API: https://api.production.example.com
+Property: <uuid>
+Dates: 2024-01-15 → 2024-01-17
+Concurrency: 10 parallel requests
+
+Results:
+────────────────────────────────────────────────────────────
+Total requests:     10
+201 Created:        1 ✅
+409 Conflict:       9 🚫
+500 Server Error:   0 ⚠️
+Other:              0
+════════════════════════════════════════════════════════════
+
+╔════════════════════════════════════════════════════════════╗
+║ ✅ TEST PASSED                                             ║
+╚════════════════════════════════════════════════════════════╝
+
+Race-safe booking validation successful:
+  - Exactly 1 booking created (201)
+  - Exactly 9 requests rejected with 409 Conflict
+  - Database exclusion constraint working correctly
+  - No 500 errors (API properly maps constraint to 409)
+```
+
+### Troubleshooting
+
+---
+
+**Problem**: Migration fails with "existing overlapping bookings found"
+
+**Diagnosis**: Existing data has overlapping confirmed/checked_in bookings
+
+**Solution**:
+1. Query to find conflicts (see Step 2 above)
+2. Review conflicting bookings with business team
+3. Resolve: cancel one booking or adjust dates
+4. Re-run migration
+
+**Sample Error**:
+```
+ERROR:  Cannot create exclusion constraint: 2 existing overlapping bookings found.
+
+Sample conflicts:
+  property=abc-123: booking_id=xyz-1 [2024-01-01 to 2024-01-05] OVERLAPS booking_id=xyz-2 [2024-01-03 to 2024-01-07]
+```
+
+---
+
+**Problem**: Concurrent booking requests return 500 Server Error
+
+**Diagnosis**: API not properly catching ExclusionViolationError
+
+**Solution**:
+1. Check backend logs for `asyncpg.exceptions.ExclusionViolationError`
+2. Verify booking_service.py catches exception and raises ConflictException
+3. Verify exception handler maps ConflictException to 409
+4. Check code at:
+   - `backend/app/services/booking_service.py:766-829` (create_booking)
+   - `backend/app/services/booking_service.py:1565-1576` (update_booking)
+
+---
+
+**Problem**: Concurrency smoke test shows multiple 201 (successes)
+
+**Diagnosis**: Exclusion constraint not active or dates not overlapping
+
+**Solution**:
+1. Verify constraint exists: `SELECT * FROM pg_constraint WHERE conname = 'bookings_no_overlap_exclusion'`
+2. Check if dates overlap: `SELECT daterange('2024-01-01', '2024-01-05', '[)') && daterange('2024-01-03', '2024-01-07', '[)')` (should be `t`)
+3. Check booking status: constraint only blocks `confirmed` and `checked_in`
+4. Check deleted_at: constraint excludes soft-deleted bookings
+
+---
+
+**Problem**: Need to temporarily disable constraint for data migration
+
+**Diagnosis**: Bulk data import or migration needs to bypass constraint
+
+**Solution** (use with caution):
+```sql
+-- Disable constraint (destructive - use only for migrations)
+ALTER TABLE bookings DROP CONSTRAINT bookings_no_overlap_exclusion;
+
+-- Perform data migration
+-- ...
+
+-- Re-enable constraint (check for overlaps first!)
+-- Run pre-migration overlap check query from Step 2
+-- Then re-apply constraint creation from migration file
+```
+
+---
+
+### API Error Response
+
+When exclusion constraint is triggered, API returns:
+
+**HTTP 409 Conflict**:
+```json
+{
+  "error": "conflict",
+  "message": "Property is already booked for these dates",
+  "conflict_type": "double_booking",
+  "path": "/api/v1/bookings"
+}
+```
+
+**Client Handling**:
+- Do NOT retry automatically (conflict is permanent for same dates)
+- Show user-friendly message: "Property unavailable for selected dates"
+- Suggest alternative dates or properties
+
+### Performance Considerations
+
+**Index**: The EXCLUSION constraint creates a GIST index automatically.
+
+**Advisory Lock**: Booking service acquires advisory lock per property to serialize concurrent requests and prevent deadlocks:
+
+```sql
+SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))
+```
+
+This ensures concurrent bookings for the same property are processed sequentially, preventing potential deadlock scenarios from overlapping constraint checks.
+
+**Query Impact**: Minimal - GIST index lookups are O(log N).
+
+---
+
 
 | Date | Change | Author |
 |------|--------|--------|
