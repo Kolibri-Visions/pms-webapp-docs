@@ -723,6 +723,36 @@ TOKEN="$(./backend/scripts/get_fresh_token.sh)" \
 
 **Note**: Do NOT mark as VERIFIED until both scripts pass in production with evidence documented.
 
+---
+
+**Follow-up Fix (2026-01-05)**: Fixed concurrency smoke test guest_id FK violations
+
+**Issue**: Smoke test was failing with all 10 requests returning 500 errors due to `ForeignKeyViolationError` on `fk_bookings_guest_id`. Root cause: booking service was incorrectly using auth user ID (`created_by_user_id`) as `guest_id` fallback, but these reference different tables (auth.users vs public.guests).
+
+**Changes**:
+1. **API/Backend** (`backend/app/services/booking_service.py`):
+   - Removed auth user fallback for guest_id (line 555-558): now sets `guest_id = None` when not provided (guest is optional per DSGVO)
+   - Added FK violation error handling (line 833-855): catches `asyncpg.exceptions.ForeignKeyViolationError` and returns 422 ValidationException with actionable error message
+
+2. **Smoke Test Script** (`backend/scripts/pms_booking_concurrency_smoke.sh`):
+   - Added `GUEST_ID` environment variable support (auto-picks existing guest or creates "smoketest@example.com" if not set)
+   - Fixed numeric parsing bugs (counts now use arithmetic evaluation to strip whitespace)
+   - Added 500 error diagnostics (prints sample error body + troubleshooting hints)
+   - Updated booking payload to use `guest_id` instead of guest object (avoids concurrent upsert issues)
+
+3. **Documentation** (DOCS SAFE MODE):
+   - `backend/docs/ops/runbook.md:18185` - Added FK violation troubleshooting entry
+   - `backend/scripts/README.md:4568,4583` - Documented GUEST_ID behavior and guest auto-creation
+   - `backend/docs/project_status.md` - This note
+
+**Expected Result** (after fix):
+- ✅ FK violations return 422 (not 500)
+- ✅ Exclusion violations return 409
+- ✅ Smoke test passes: 1 success (201), 9 conflicts (409), 0 errors (500)
+
+**Status**: Implemented (still awaiting production verification of original exclusion constraint + FK fix)
+
+---
 
 **Date Completed:** 2026-01-02 to 2026-01-03
 

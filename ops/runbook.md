@@ -18182,6 +18182,61 @@ ALTER TABLE bookings DROP CONSTRAINT bookings_no_overlap_exclusion;
 
 ---
 
+**Problem**: Concurrent booking requests return 500 Server Error with "foreign key constraint" violation
+
+**Diagnosis**: API attempting to create bookings with invalid guest_id (not in guests table)
+
+**Symptoms**:
+- Backend logs show: `asyncpg.exceptions.ForeignKeyViolationError: insert or update on table "bookings" violates foreign key constraint "fk_bookings_guest_id"`
+- Error message: `Key (guest_id)=<uuid> is not present in table "guests"`
+- Concurrency smoke test: all 10 requests return 500
+
+**Root Cause**:
+- guest_id provided in request doesn't match any existing guest record
+- Auth user ID (JWT sub) used as guest_id instead of actual guests table ID
+- Concurrent guest upserts failing under load
+
+**Solution**:
+1. **Use existing guest_id**: Ensure guest exists before creating booking
+   ```bash
+   # Verify guest exists
+   curl -H "Authorization: Bearer $TOKEN" \
+        "$API_BASE_URL/api/v1/guests/$GUEST_ID"
+
+   # If not found (404), create guest first:
+   curl -X POST "$API_BASE_URL/api/v1/guests" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d '{"email":"guest@example.com","first_name":"John","last_name":"Doe"}'
+   ```
+
+2. **For smoke test**: Use `GUEST_ID` env var or let script auto-pick/create
+   ```bash
+   export API_BASE_URL="https://api.example.com"
+   export TOKEN="$(./backend/scripts/get_fresh_token.sh)"
+   export GUEST_ID="<existing-guest-uuid>"  # Optional, auto-picked if not set
+   ./backend/scripts/pms_booking_concurrency_smoke.sh
+   ```
+
+3. **Verify FK violation returns 422 (not 500)**: After fix, API should return:
+   ```json
+   {
+     "error": "validation_error",
+     "message": "guest_id does not reference an existing guest. Create the guest first or omit guest_id to create booking without guest."
+   }
+   ```
+
+**Expected Behavior**:
+- ✅ FK violations return 422 Unprocessable Entity (not 500)
+- ✅ Exclusion violations return 409 Conflict
+- ✅ Concurrency smoke test: 1 success (201), 9 conflicts (409), 0 errors (500)
+
+**Code Reference**:
+- FK violation handling: `backend/app/services/booking_service.py:833-855`
+- Smoke test: `backend/scripts/pms_booking_concurrency_smoke.sh`
+
+---
+
 ### API Error Response
 
 When exclusion constraint is triggered, API returns:
