@@ -16962,6 +16962,87 @@ Current sidebar groups (as of implementation):
 - `frontend/app/lib/server-auth.ts` - Shared authentication utility
 - `frontend/app/*/layout.tsx` - Individual route layouts (all use shared auth)
 
+### Admin UI API Calls - Prevent Relative URL Bugs
+
+**Symptom:** Admin UI page shows HTTP 404 in browser console when calling API:
+```
+GET https://admin.fewo.kolibri-visions.de/api/v1/guests/<id> → 404
+```
+
+**Root Cause:**
+- Page uses relative API URL: `fetch("/api/v1/guests/...")`
+- Browser resolves this against current domain (admin.*) instead of API backend (api.*)
+- Backend API lives at `https://api.fewo.kolibri-visions.de`
+
+**Fix Pattern (Mandatory):**
+
+ALL client-side API calls MUST use the centralized API helper:
+
+```typescript
+// CORRECT - Use getApiBase() for fetch calls
+import { getApiBase } from "../../lib/api-client";
+
+const apiBase = getApiBase();
+const response = await fetch(`${apiBase}/api/v1/guests/${id}`, {
+  credentials: "include",
+});
+
+// OR use apiClient wrapper (preferred when token-based auth):
+import { apiClient } from "../../lib/api-client";
+
+const data = await apiClient.get(`/api/v1/guests/${id}`, accessToken);
+```
+
+```typescript
+// WRONG - Never use relative URLs
+const response = await fetch("/api/v1/guests/${id}"); // ❌ BUG!
+```
+
+**How getApiBase() Works:**
+
+Resolution order (see `frontend/app/lib/api-client.ts`):
+1. **NEXT_PUBLIC_API_BASE** env var (preferred, explicit)
+2. **Hostname derivation:** `admin.fewo.* → api.fewo.*`
+3. **HTTPS upgrade:** If frontend is HTTPS, upgrades HTTP API base to HTTPS (prevent mixed content)
+
+**Quick Debugging Checklist:**
+
+When investigating API 404 errors in Admin UI:
+
+1. **Check browser DevTools Network tab:**
+   - Look at the request URL hostname
+   - Should be `api.fewo.kolibri-visions.de`, NOT `admin.fewo.kolibri-visions.de`
+
+2. **Check source code:**
+   ```bash
+   cd frontend
+   # Find all relative API fetch calls (should return EMPTY)
+   rg -n --fixed-strings 'fetch("/api/' app/
+   rg -n --fixed-strings "fetch('/api/" app/
+   ```
+
+3. **Verify env var (if set):**
+   ```bash
+   # In Coolify deployment settings:
+   NEXT_PUBLIC_API_BASE=https://api.fewo.kolibri-visions.de
+   ```
+
+4. **Check runtime API base:**
+   - Open browser console on admin page
+   - Run: `fetch('/_next/static/...')` (check if HTTPS)
+   - Derivation should work: admin.* → api.*
+
+**Prevention:**
+
+- Code review: Reject any `fetch("/api/v1/...")` patterns
+- Use ESLint rule (future): Warn on relative `/api/` URLs in fetch calls
+- Always import and use `getApiBase()` or `apiClient` from `lib/api-client.ts`
+
+**Related Files:**
+- `frontend/app/lib/api-client.ts` - API base URL resolution + apiClient wrapper
+- `frontend/app/guests/[id]/page.tsx` - Example: Guest detail using `getApiBase()`
+- `frontend/app/guests/page.tsx` - Example: Guest list using `apiClient.get()`
+
 ---
 
 ## Frontend Build Failures (TSX/JSX Syntax Errors)
