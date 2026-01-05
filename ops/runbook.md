@@ -4132,6 +4132,53 @@ curl -k -sS -i -L "$API/api/v1/guests/$GID/timeline?limit=5&offset=0" \
 # Expected response: {"guest_id":"...","guest_name":"...","bookings":[{"check_in_date":"2024-01-15","check_out_date":"2024-01-20",...}],...}
 ```
 
+**Issue:** GET /api/v1/guests/{guest_id}/timeline returns 500 with null date fields
+
+**Symptom:**
+- Endpoint returns HTTP 500 Internal Server Error
+- Logs show: "ValidationError" or "Timeline response validation failed"
+- Error mentions check_in_date or check_out_date fields are null
+- Booking records exist but have NULL check_in_at or check_out_at timestamps
+
+**Cause:**
+- Response schema previously required non-null date fields
+- Legacy or incomplete booking records may have NULL check_in_at or check_out_at
+- Query casts NULL timestamps to NULL dates, causing validation error
+
+**Fix:**
+- Deploy latest code (response schema now allows nullable date fields)
+- check_in_date and check_out_date fields are now Optional (may be null)
+- Restart backend:
+  ```bash
+  docker restart pms-backend
+  ```
+
+**Verification (HOST-SERVER-TERMINAL):**
+```bash
+# Test timeline endpoint with valid guest ID and JWT
+API="https://api.fewo.kolibri-visions.de"
+GID="<guest_uuid>"
+curl -k -sS -i -L "$API/api/v1/guests/$GID/timeline?limit=5&offset=0" \
+  -H "Authorization: Bearer $JWT_TOKEN" | sed -n '1,200p'
+
+# Expected: HTTP/1.1 200 OK (even if some bookings have null dates)
+# Expected response: {"guest_id":"...","guest_name":"...","bookings":[{"check_in_date":null,"check_out_date":null,...}],...}
+```
+
+**Verification (DB SQL Editor - Find bookings with null dates):**
+```sql
+-- Find bookings with NULL check_in_at or check_out_at for a guest
+SELECT id, status, created_at, check_in_at, check_out_at
+FROM bookings
+WHERE guest_id = '<guest_uuid>' AND agency_id = '<agency_uuid>'
+ORDER BY created_at DESC;
+
+-- Expected: Some rows may show NULL in check_in_at or check_out_at columns
+```
+
+**Optional Data Cleanup:**
+If you need to backfill missing dates, update rows with appropriate values based on business logic. Do not use arbitrary fake dates without verifying business requirements first.
+
 **Issue:** POST /api/v1/guests returns 500 with UndefinedColumnError for auth_user_id
 
 **Symptom:**
