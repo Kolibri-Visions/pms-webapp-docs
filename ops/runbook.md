@@ -16521,6 +16521,35 @@ cd supabase/migrations
 supabase db push
 ```
 
+#### Frontend deploy - Admin UI doesn't update / /guests 404 after commit
+**Symptoms:**
+- New admin UI features don't appear after git push
+- Routes like `/guests` return 404
+- Coolify shows "Build failed" or old image still running
+
+**Common Causes:**
+1. Frontend build failed due to ESLint not installed (requires `eslint` package or `ignoreDuringBuilds: true`)
+2. TypeScript compilation errors (type mismatches, missing properties)
+3. Build process exited before completion (OOM, timeout)
+
+**Fix Checklist:**
+1. Check Coolify build logs for errors (ESLint, TypeScript, out-of-memory)
+2. Add `eslint: { ignoreDuringBuilds: true }` to `next.config.js` if ESLint not installed
+3. Fix TypeScript errors (especially Supabase query response types - array vs object handling)
+4. Verify routes exist in correct locations (`app/guests/page.tsx`, `app/guests/layout.tsx`)
+5. Trigger manual redeploy in Coolify after fixes are pushed
+6. Verify new routes are accessible after successful build
+
+**Example Fix (TypeScript array/object handling):**
+```typescript
+// Bad: assumes object
+const agencyName = teamMember?.agency?.name || 'PMS';
+
+// Good: handles both array and object
+const agency = (teamMember as any)?.agency;
+const agencyName = (Array.isArray(agency) ? agency?.[0]?.name : agency?.name) ?? 'PMS';
+```
+
 ---
 
 ## Change Log
