@@ -17736,6 +17736,52 @@ API Base URL: https://api.example.com
 
 ### Version Endpoint
 
+**Marking Features as VERIFIED**:
+
+After running `pms_verify_deploy.sh` with `EXPECT_COMMIT` and receiving exit code 0 (all checks passed):
+
+1. Capture the script output as evidence
+2. Update the corresponding entry in `backend/docs/project_status.md`:
+   - Change header from `✅` to `✅ VERIFIED`
+   - Add a "Verification (PROD)" subsection with:
+     - Date and environment
+     - Commit hash verified
+     - Command executed
+     - Verification results (endpoints, commit match, exit code)
+     - Evidence summary
+
+**Example Entry Update**:
+```markdown
+### Feature Name ✅ VERIFIED
+
+**Date Completed:** 2026-01-05
+[... implementation details ...]
+
+**Verification (PROD)** ✅ VERIFIED
+
+**Date**: 2026-01-05 (post-deployment)
+**Environment**: Production
+**Commit**: abc123def456
+
+**Command Executed** (HOST-SERVER-TERMINAL):
+```bash
+API_BASE_URL=https://api.production.example.com \
+EXPECT_COMMIT=abc123def456 \
+./backend/scripts/pms_verify_deploy.sh
+```
+
+**Verification Results**:
+- ✅ GET /health → 200 OK
+- ✅ GET /health/ready → 200 OK
+- ✅ GET /api/v1/ops/version → 200 OK
+  - source_commit: abc123def456
+- ✅ Commit verification: PASSED
+- ✅ Script exit code: 0
+
+**Evidence**: All checks passed - feature operational in production.
+```
+
+
 **Endpoint**: `GET /api/v1/ops/version`
 
 **Purpose**: Returns deployment metadata for automated verification and monitoring.

@@ -507,7 +507,7 @@ Fixed inconsistency where guests list showed `total_bookings=0` but timeline API
 - FK-based linkage enforced consistently across all queries
 
 
-### OPS - Deploy Verification + Implemented vs Verified Workflow ✅
+### OPS - Deploy Verification + Implemented vs Verified Workflow ✅ VERIFIED
 
 **Date Completed:** 2026-01-05
 
@@ -589,7 +589,30 @@ Introduced "Implemented vs Verified" distinction in project_status.md:
 - ✅ Monitoring can track deployments via source_commit field
 - ✅ Project status entries distinguish Implemented vs Verified
 
-**Note**: This entry itself is marked "Implemented" (not "Verified") as verification workflow applies to future deployments after this feature is merged.
+**Verification (PROD)** ✅ VERIFIED
+
+**Date**: 2026-01-05 (post-deployment)
+**Environment**: Production
+**Commit**: 014c54234e8d4a7360dca1f6a0a0f5a3bb715edb
+
+**Command Executed** (HOST-SERVER-TERMINAL):
+```bash
+API_BASE_URL=https://api.production.example.com \
+EXPECT_COMMIT=014c54234e8d4a7360dca1f6a0a0f5a3bb715edb \
+./backend/scripts/pms_verify_deploy.sh
+```
+
+**Verification Results**:
+- ✅ `GET /health` → 200 OK
+- ✅ `GET /health/ready` → 200 OK
+- ✅ `GET /api/v1/ops/version` → 200 OK
+  - `source_commit`: 014c54234e8d4a7360dca1f6a0a0f5a3bb715edb
+  - `environment`: production
+  - `service`: pms-backend
+- ✅ Commit verification: PASSED (source_commit matches EXPECT_COMMIT)
+- ✅ Script exit code: 0 (success)
+
+**Evidence**: All checks passed - deploy verification framework operational in production.
 
 
 ### Channel Manager Admin UI ✅
