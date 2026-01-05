@@ -4099,6 +4099,39 @@ ORDER BY column_name;
 -- Expected: check_in_at and check_out_at exist (not check_in_date/check_out_date)
 ```
 
+**Issue:** GET /api/v1/guests/{guest_id}/timeline returns 500 with response validation error
+
+**Symptom:**
+- Endpoint returns HTTP 500 Internal Server Error
+- Logs show: "ValidationError" for GuestTimelineResponse
+- Missing required fields: check_in_date and check_out_date in bookings array
+- Timeline dict contains check_in_at and check_out_at instead
+
+**Cause:**
+- Response schema expects check_in_date and check_out_date (DATE fields)
+- Timeline query was returning check_in_at and check_out_at (timestamp fields)
+- Field name mismatch between service layer and response schema
+
+**Fix:**
+- Deploy latest code (timeline query now casts timestamps to date with correct aliases)
+- Query uses: `b.check_in_at::date as check_in_date, b.check_out_at::date as check_out_date`
+- Restart backend:
+  ```bash
+  docker restart pms-backend
+  ```
+
+**Verification (HOST-SERVER-TERMINAL):**
+```bash
+# Test timeline endpoint with valid guest ID and JWT
+API="https://api.fewo.kolibri-visions.de"
+GID="<guest_uuid>"
+curl -k -sS -i -L "$API/api/v1/guests/$GID/timeline?limit=5&offset=0" \
+  -H "Authorization: Bearer $JWT_TOKEN" | sed -n '1,200p'
+
+# Expected: HTTP/1.1 200 OK
+# Expected response: {"guest_id":"...","guest_name":"...","bookings":[{"check_in_date":"2024-01-15","check_out_date":"2024-01-20",...}],...}
+```
+
 **Issue:** POST /api/v1/guests returns 500 with UndefinedColumnError for auth_user_id
 
 **Symptom:**
