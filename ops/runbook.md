@@ -2392,6 +2392,43 @@ Our smoke scripts call both:
 
 ---
 
+## Fresh JWT (Supabase)
+
+### Quick Token Generation
+
+Use the `get_fresh_token.sh` helper script to obtain Supabase JWT tokens for testing, debugging, or manual API calls:
+
+```bash
+# Get token to variable
+TOKEN="$(./backend/scripts/get_fresh_token.sh)"
+
+# Export to environment
+source <(./backend/scripts/get_fresh_token.sh --export)
+
+# Verify token metadata
+./backend/scripts/get_fresh_token.sh --check
+
+# Test token against /auth/v1/user
+./backend/scripts/get_fresh_token.sh --user
+```
+
+**Required environment variables:**
+- `SUPABASE_ANON_KEY` - Supabase anonymous key
+- `SB_EMAIL` - User email for authentication
+- `SB_PASSWORD` - User password for authentication
+- `SB_URL` (optional) - Supabase URL (defaults to https://sb-pms.kolibri-visions.de)
+
+**Exit codes:**
+- `0` - Success
+- `1` - Missing required environment variables
+- `2` - Authentication failed (invalid credentials)
+- `3` - Empty or invalid JSON response
+- `4` - Token verification failed (--user flag)
+
+For detailed usage, integration examples, and troubleshooting, see **[backend/scripts/README.md - Get Fresh JWT Token](../scripts/README.md#get-fresh-jwt-token-get_fresh_tokensh)**.
+
+---
+
 ## CORS Errors (Admin Console Blocked)
 
 ### Symptom
