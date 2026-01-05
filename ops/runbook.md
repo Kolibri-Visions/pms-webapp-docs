@@ -17338,6 +17338,55 @@ setTimelineTotal(timelineData.total ?? 0);
 **Related Files:**
 - `frontend/app/guests/[id]/page.tsx:218` - Booking history tab count
 
+#### Booking → Zum Gast Navigation (Guard Against 404)
+
+**Symptom:** Admin UI → Booking Details → Clicking "Zum Gast →" button navigates to `/guests/<guest_id>` but returns 404 with `{"detail":"Guest with ID '...' not found"}`.
+
+**Root Cause:**
+
+Booking records may have a `guest_id` that references a non-existent guest record (orphaned reference, deleted guest, or data inconsistency). The UI previously rendered the "Zum Gast" link without verifying the guest exists, causing 404 navigation.
+
+**Fix Pattern:**
+
+Before rendering the guest link, verify the guest exists:
+
+```typescript
+const [guestExists, setGuestExists] = useState<boolean | null>(null);
+
+// After fetching booking
+if (bookingData.guest_id) {
+  try {
+    await apiClient.get(`/api/v1/guests/${bookingData.guest_id}`, accessToken);
+    setGuestExists(true);
+  } catch (guestErr) {
+    if (guestErr instanceof ApiError && guestErr.status === 404) {
+      setGuestExists(false);
+    }
+  }
+}
+
+// Conditional rendering
+{booking.guest_id && guestExists === true && (
+  <Link href={`/guests/${booking.guest_id}`}>Zum Gast →</Link>
+)}
+{booking.guest_id && guestExists === false && (
+  <div>Gast nicht verknüpft</div>
+)}
+```
+
+**UI Behavior:**
+- If guest exists (200) → Show "Zum Gast →" link
+- If guest missing (404) → Show "Gast nicht verknüpft" text (no link)
+- In IDs section → Show "Gast-ID (nicht verknüpft)" label when guest doesn't exist
+
+**Prevention:**
+- Always verify foreign key references before navigation
+- Use guard checks for optional relationships to prevent 404 user experience
+- For orphaned references, show inline status ("nicht verknüpft") instead of broken links
+
+**Related Files:**
+- `frontend/app/bookings/[id]/page.tsx:72-89,194-206,313` - Guest existence check and conditional rendering
+
 ---
 
 ## Frontend Build Failures (TSX/JSX Syntax Errors)

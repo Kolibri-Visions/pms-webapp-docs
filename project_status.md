@@ -244,6 +244,38 @@ Fixed UI bug where guest detail page showed "Buchungshistorie (0)" tab badge eve
 - If timeline has 4 bookings → shows "Buchungshistorie (4)"
 - If API total is 15 but only 10 items fetched → shows "Buchungshistorie (15)"
 
+### Admin UI - Booking to Guest Navigation Guard ✅
+
+**Date Completed:** 2026-01-05
+
+**Overview:**
+Fixed UI navigation issue where booking detail page "Zum Gast →" button caused 404 errors when the referenced guest record didn't exist (orphaned guest_id reference).
+
+**Issue:**
+- Booking details page rendered "Zum Gast →" link whenever `booking.guest_id` was present
+- Link navigated to `/guests/<guest_id>` without verifying guest exists
+- Resulted in 404 error page when guest_id referenced non-existent guest record
+- Example: Booking `ddffc289-...` had `guest_id=8036f477-...` but guest API returned 404
+
+**Fix:**
+- Added guest existence check: After fetching booking, verify guest exists via `GET /api/v1/guests/{guest_id}`
+- Store result in `guestExists` state (true/false/null)
+- Conditional rendering:
+  - Guest exists (200) → Show "Zum Gast →" link (enabled)
+  - Guest missing (404) → Show "Gast nicht verknüpft" text (no link, prevents 404)
+  - Other errors → Don't show link (graceful degradation)
+- Bonus: IDs section shows "Gast-ID (nicht verknüpft)" label when guest doesn't exist
+
+**Files Changed:**
+- `frontend/app/bookings/[id]/page.tsx:45,72-89,194-206,313` - Guest existence check, conditional link rendering, ID label
+- `backend/docs/ops/runbook.md:17341` - Added troubleshooting section "Booking → Zum Gast Navigation (Guard Against 404)"
+
+**Expected Result:**
+- Users never navigate to 404 guest page from booking details
+- If guest exists → "Zum Gast →" button links to guest detail
+- If guest missing → Shows "Gast nicht verknüpft" inline message instead of broken link
+- Booking details page remains functional regardless of guest record state
+
 
 ### Channel Manager Admin UI ✅
 
