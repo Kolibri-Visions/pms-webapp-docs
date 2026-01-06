@@ -1351,6 +1351,40 @@ This entry will be marked **VERIFIED** only after automated production verificat
 
 ---
 
+**Stage 8 (production fix)**: Set stub pricing defaults for public booking requests (nightly_rate NOT NULL)
+
+1. Fixed production 422: "null value in column 'nightly_rate' of relation 'bookings' violates not-null constraint"
+2. Added Decimal import (line 13):
+   - Import Decimal for precise numeric pricing fields
+3. Added stub pricing defaults before INSERT (lines 291-296):
+   - `nightly_rate = Decimal("0.00")`
+   - `subtotal = Decimal("0.00")`
+   - `total_price = Decimal("0.00")`
+   - Comment: "Public direct booking v0 uses stub pricing to satisfy NOT NULL constraints"
+4. Added pricing fields to bookings INSERT (lines 317-319, 334-336):
+   - Column list: nightly_rate, subtotal, total_price
+   - Bindings: $12, $13, $14 (now 14 total parameters)
+   - Prevents NotNullViolationError on pricing columns
+5. Updated NotNullViolationError handler (lines 393-397):
+   - Specific handler for pricing field violations
+   - Maps to 422 with actionable message mentioning stub pricing
+   - Checks for nightly_rate, subtotal, or total_price in error
+6. Updated docs (add-only):
+   - runbook.md:18641 - Added stub pricing feature note
+   - runbook.md:18832-18860 - Added 422 pricing NotNullViolation troubleshooting
+   - scripts/README.md:5368 - Added stub pricing to schema compatibility note
+   - project_status.md - This Stage 8 entry
+
+**Root Cause**: Public booking endpoint did not include pricing fields (nightly_rate, subtotal, total_price) in bookings INSERT. Bookings table has NOT NULL constraints on these fields. Without pricing engine in v0, stub values (0.00) are required.
+
+**Fix**: Set stub pricing defaults (all 0.00) before INSERT. Include pricing fields in column list and bindings. Public booking v0 creates bookings with status="requested" and pricing=0.00 for manual review and pricing later.
+
+**Prevention**: Public direct booking v0 intentionally stubs pricing (no pricing engine integration yet). All pricing fields set to 0.00 to satisfy NOT NULL constraints. Future version will integrate pricing engine.
+
+**Status**: ✅ IMPLEMENTED (awaiting production verification - smoke should now pass with rc=0)
+
+---
+
 
 **Date Completed:** 2026-01-02 to 2026-01-03
 

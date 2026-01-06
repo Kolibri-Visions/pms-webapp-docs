@@ -18638,6 +18638,7 @@ DRY_RUN=0 CONFIRM=1 CONFIRM_DELETE_USER=1 ./backend/scripts/pms_smoke_user_clean
 - Booking created with status="requested" (pending approval)
 - Auto-detects agency via property_id
 - Currency support: defaults to EUR if not specified; accepts 3-letter ISO codes (EUR, USD, GBP, etc.)
+- Stub pricing (v0): nightly_rate, subtotal, and total_price all set to 0.00 to satisfy NOT NULL constraints; pricing engine integration comes in future version
 - Proper error mapping:
   - 409 conflict_type=double_booking for overlapping bookings
   - 422 for FK violations/validation errors
@@ -18825,6 +18826,38 @@ SELECT id, agency_id FROM public.properties WHERE id='<property-uuid>';
 - Validated against pattern `^[A-Z]{3}$`
 
 **Prevention**: Public booking endpoint now always sets currency (default EUR). This error should not occur in normal operation unless request schema validation is bypassed.
+
+---
+
+**Problem**: Booking creation returns 422 "null value in column 'nightly_rate' (or subtotal/total_price) violates not-null constraint"
+
+**Diagnosis**: Pricing fields not set in booking INSERT (should not happen with current v0 implementation)
+
+**Root Cause**:
+- Bookings table has NOT NULL constraints on pricing fields: nightly_rate, subtotal, total_price
+- Public booking v0 must provide stub pricing values (0.00) to satisfy these constraints
+- Error indicates pricing stub values were not included in INSERT
+
+**Solution**:
+1. Verify public booking endpoint sets stub pricing:
+   - `nightly_rate = Decimal("0.00")`
+   - `subtotal = Decimal("0.00")`
+   - `total_price = Decimal("0.00")`
+2. Check INSERT statement includes these columns and bindings
+3. Verify no schema drift (columns exist in bookings table):
+   ```sql
+   SELECT column_name, is_nullable, data_type
+   FROM information_schema.columns
+   WHERE table_name = 'bookings'
+   AND column_name IN ('nightly_rate', 'subtotal', 'total_price');
+   ```
+
+**Expected Behavior (v0)**:
+- All public bookings created with pricing = 0.00 (stub values)
+- Status = "requested" (pending manual pricing/approval)
+- Pricing engine integration comes in future version
+
+**Prevention**: Public booking endpoint v0 always sets stub pricing defaults. This error should not occur unless code was reverted or INSERT statement modified incorrectly.
 
 ---
 
