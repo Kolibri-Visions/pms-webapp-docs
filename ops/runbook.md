@@ -18749,6 +18749,45 @@ Response: 503 {"error":"service_unavailable","message":"Database schema/function
 
 ---
 
+**Problem**: Booking creation returns 422 "Property is missing agency assignment (agency_id)"
+
+**Diagnosis**: Property tenant assignment missing - property exists but agency_id column is NULL
+
+**Root Cause**:
+- Property row exists in database but agency_id field is not populated
+- This violates the NOT NULL constraint on bookings.agency_id
+- Public booking endpoint resolves agency_id from property before creating booking
+
+**SQL Diagnostic**:
+```sql
+-- Check if property exists and has agency_id populated
+SELECT id, agency_id FROM public.properties WHERE id='<property-uuid>';
+
+-- If agency_id is NULL, property needs tenant assignment
+```
+
+**Solution**:
+1. If agency_id is NULL for the property:
+   - Backfill agency_id for the property (assign it to correct agency/tenant)
+   - Run migrations if agency_id column doesn't exist in properties table
+   ```sql
+   UPDATE public.properties SET agency_id = '<agency-uuid>' WHERE id = '<property-uuid>';
+   ```
+2. If agency_id column doesn't exist:
+   - Run pending migrations to add agency_id to properties table
+   ```bash
+   cd /path/to/supabase
+   supabase db push
+   ```
+3. Verify property now has agency_id:
+   ```sql
+   SELECT id, agency_id FROM public.properties WHERE id='<property-uuid>';
+   ```
+
+**Prevention**: Ensure all properties have agency_id populated before creating public bookings. Use database constraints or backfill scripts to enforce agency_id NOT NULL on properties table.
+
+---
+
 **Problem**: All window attempts exhausted
 
 **Diagnosis**: Every tested date window already has bookings

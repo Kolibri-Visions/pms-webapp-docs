@@ -1283,6 +1283,36 @@ This entry will be marked **VERIFIED** only after automated production verificat
 
 ---
 
+**Stage 6 (production fix)**: Resolve agency_id for public booking requests (prevent NotNullViolationError)
+
+1. Fixed production 500: "null value in column 'agency_id' of relation 'bookings' violates not-null constraint"
+2. Added agency_id validation after resolving from property (lines 189-194):
+   - Check if agency_id is NULL after fetching from property
+   - Raise ValidationException (422) with actionable message if NULL
+   - Message guides user to backfill property agency_id or run migrations
+3. Added agency_id to bookings INSERT (line 294, 307):
+   - Column list now includes agency_id
+   - Binding includes agency_id value resolved from property
+   - Prevents NotNullViolationError on bookings.agency_id
+4. Added NotNullViolationError exception handling (lines 355-369):
+   - Maps to 422 ValidationException with actionable message
+   - Specifically handles agency_id NOT NULL violations
+   - Generic handler for other NOT NULL violations
+5. Updated docs (add-only):
+   - runbook.md:18752-18787 - Added 422 agency_id troubleshooting with SQL diagnostic
+   - scripts/README.md:5363-5364 - Mentioned property missing agency_id in 422 cases
+   - project_status.md - This Stage 6 entry
+
+**Root Cause**: Public booking endpoint resolved agency_id from property but did NOT include it in bookings INSERT. When bookings table has NOT NULL constraint on agency_id, INSERT failed with 500 NotNullViolationError.
+
+**Fix**: Include agency_id in INSERT column list and bindings. Validate agency_id is not NULL after resolving from property. Map NotNullViolationError to 422 (actionable) instead of 500.
+
+**Prevention**: Always include tenant/multi-tenancy fields (like agency_id) in INSERT statements when creating tenant-scoped resources. Validate tenant assignment before attempting INSERT.
+
+**Status**: ✅ IMPLEMENTED (awaiting production verification - smoke currently fails until deployed and property agency_id is backfilled)
+
+---
+
 
 **Date Completed:** 2026-01-02 to 2026-01-03
 
