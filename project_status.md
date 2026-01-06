@@ -1095,6 +1095,109 @@ This entry will be marked **VERIFIED** only after:
 
 ---
 
+### API - Public Direct Booking v0 (Availability + Booking Request, No Payment) ✅
+
+**Date Completed:** 2026-01-06
+
+**Overview:**
+Implemented minimal public direct booking flow without authentication or payment integration. Provides public-facing endpoints for availability checks and booking request submission.
+
+**Purpose:**
+- Enable direct bookings from external websites/platforms
+- No JWT/auth required for public endpoints
+- Creates pending/requested bookings for manual approval
+- Foundation for future payment integration
+
+**Implementation:**
+
+1. **Public Booking Router** (`backend/app/api/routes/public_booking.py`):
+   - GET /api/v1/public/availability - Check property availability for date range
+   - POST /api/v1/public/booking-requests - Create public booking request
+   - No auth dependencies (truly public endpoints)
+   - Mounted at /api/v1/public prefix
+
+2. **Availability Check**:
+   - Query params: property_id, date_from, date_to
+   - Returns available=true/false with reason (double_booking if conflicts exist)
+   - Lightweight overlap check against confirmed/checked_in bookings
+   - No auth required
+
+3. **Booking Request Creation**:
+   - Guest creation/lookup by email (case-insensitive, agency-scoped)
+   - Reuses existing guests to avoid duplicates
+   - Creates booking with status="requested" (pending approval)
+   - Auto-resolves agency via property_id
+   - Transaction-safe with proper rollback
+
+4. **Error Mapping** (never returns 500):
+   - Exclusion violation (double booking) → 409 with conflict_type=double_booking
+   - FK violations (property/guest not found) → 422 with actionable message
+   - Validation errors (invalid dates, etc.) → 422 with details
+   - Handles race conditions (concurrent guest creation) gracefully
+
+5. **Smoke Script** (`backend/scripts/pms_direct_booking_public_smoke.sh`):
+   - Tests both public endpoints without auth
+   - Auto-shifts date window on 409 conflicts (MAX_WINDOW_TRIES=10, SHIFT_DAYS=7)
+   - Exit codes: 0=pass, 1=fail/exhausted, 2=500 error
+   - Requires PID (property_id) - no auto-pick in prod
+
+**Files Changed:**
+- `backend/app/api/routes/public_booking.py` (new, +300 lines) - Public booking router
+- `backend/app/main.py:156` - Mount public router at /api/v1/public
+- `backend/scripts/pms_direct_booking_public_smoke.sh` (new, +285 lines, executable)
+- `backend/scripts/README.md` (add-only) - Smoke script documentation
+- `backend/docs/ops/runbook.md` (add-only) - Direct Booking (Public) v0 section
+- `backend/docs/project_status.md` - This entry
+
+**What is NOT included (v0)**:
+- ❌ Payment processing
+- ❌ Email notifications
+- ❌ Booking confirmation workflow (manual approval required)
+- ❌ Availability calendar UI
+- ❌ Price calculation
+
+**Expected Result:**
+- ✅ GET /api/v1/public/availability returns 200 with available=true/false
+- ✅ POST /api/v1/public/booking-requests creates booking with status="requested"
+- ✅ No auth/JWT required for public endpoints
+- ✅ 409 conflicts properly mapped with conflict_type=double_booking
+- ✅ 422 for FK violations with actionable messages
+- ✅ Never returns 500 on validation/constraint errors
+- ✅ Guest reuse by email (case-insensitive) works correctly
+
+**Status**: ✅ IMPLEMENTED (awaiting production verification)
+
+**Verification (Future)**:
+
+This entry will be marked **VERIFIED** only after automated production verification:
+
+1. **Deploy Verification** (`pms_verify_deploy.sh`):
+   ```bash
+   export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+   export EXPECT_COMMIT="<commit-sha-with-public-booking>"
+   ./backend/scripts/pms_verify_deploy.sh
+   # Expected: commit match + rc=0
+   ```
+
+2. **Public Booking Smoke Test** (`pms_direct_booking_public_smoke.sh`):
+   ```bash
+   export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+   export PID="<property-uuid>"
+   ./backend/scripts/pms_direct_booking_public_smoke.sh
+   # Expected: availability check 200 + booking request 201 + rc=0
+   ```
+
+3. **Success Criteria**:
+   - ✅ pms_verify_deploy.sh: Commit match, rc=0
+   - ✅ pms_direct_booking_public_smoke.sh: Both tests pass (200 + 201), rc=0
+   - ✅ No 500 errors on validation/constraint violations
+   - ✅ No auth required (public endpoints work without JWT)
+   - ✅ Auto-shift on 409 conflicts works correctly
+
+**Note**: Do NOT mark VERIFIED until both smoke tests pass bug-free in production.
+
+---
+
 
 **Date Completed:** 2026-01-02 to 2026-01-03
 

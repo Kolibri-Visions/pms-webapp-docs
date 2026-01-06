@@ -18535,6 +18535,103 @@ DRY_RUN=0 CONFIRM=1 CONFIRM_DELETE_USER=1 ./backend/scripts/pms_smoke_user_clean
 
 ---
 
+## Direct Booking (Public) v0
+
+**Purpose**: Public direct booking flow without authentication or payment integration.
+
+### What is included (v0)
+
+**Endpoints** (no auth required):
+1. GET /api/v1/public/availability - Check property availability for date range
+2. POST /api/v1/public/booking-requests - Create public booking request
+
+**Features**:
+- No JWT/auth required (truly public endpoints)
+- Guest creation/lookup by email (case-insensitive)
+- Booking created with status="requested" (pending approval)
+- Auto-detects agency via property_id
+- Proper error mapping:
+  - 409 conflict_type=double_booking for overlapping bookings
+  - 422 for FK violations/validation errors
+  - Never returns 500 on constraint/validation errors
+
+**What is NOT included (v0)**:
+- ❌ Payment processing
+- ❌ Email notifications
+- ❌ Booking confirmation workflow (manual approval required)
+- ❌ Availability calendar UI
+- ❌ Price calculation
+
+### How to run smoke test on HOST
+
+**Prerequisites**:
+- No token/auth required
+- Need property ID (PID)
+
+**Basic usage**:
+```bash
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export PID="<property-uuid>"
+./backend/scripts/pms_direct_booking_public_smoke.sh
+```
+
+**With date override**:
+```bash
+export DATE_FROM="2037-01-01"
+export DATE_TO="2037-01-03"
+./backend/scripts/pms_direct_booking_public_smoke.sh
+```
+
+**Script behavior**:
+1. Calls GET /api/v1/public/availability
+2. Calls POST /api/v1/public/booking-requests
+3. Auto-shifts date window on 409 conflicts (similar to other smoke scripts)
+4. Exit 0 on success, 1 on unexpected codes, 2 on 500 errors
+
+**Auto-retry**: If booking creation returns 409 (double_booking), automatically shifts window by SHIFT_DAYS (default 7) and retries up to MAX_WINDOW_TRIES (default 10) times.
+
+### Troubleshooting
+
+**Problem**: "PID (property ID) environment variable required"
+
+**Solution**: Set PID explicitly (do NOT auto-pick in prod):
+```bash
+export PID="abc-123-uuid"
+./backend/scripts/pms_direct_booking_public_smoke.sh
+```
+
+---
+
+**Problem**: Booking creation returns 500 error
+
+**Diagnosis**: Validation/FK/constraint errors not properly handled
+
+**Solution**: Check backend logs for specific error type. Expected error mappings:
+- Exclusion violation (double booking) → 409 conflict_type=double_booking
+- FK violation (property/guest not found) → 422 with actionable message
+- Validation error (invalid dates, etc.) → 422 with details
+
+---
+
+**Problem**: All window attempts exhausted
+
+**Diagnosis**: Every tested date window already has bookings
+
+**Solution**: Use DATE_FROM/DATE_TO with known-free dates:
+```bash
+export DATE_FROM="2037-01-01"
+export DATE_TO="2037-01-03"
+./backend/scripts/pms_direct_booking_public_smoke.sh
+```
+
+### Related Documentation
+
+- [Public Booking Smoke Script](../scripts/README.md#public-direct-booking-smoke-test-pms_direct_booking_public_smokesh) - Full script documentation
+- [Public Booking Router](../app/api/routes/public_booking.py) - API implementation
+- [Project Status](../docs/project_status.md) - Implementation status
+
+---
+
 
 | Date | Change | Author |
 |------|--------|--------|
