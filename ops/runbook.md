@@ -19234,6 +19234,54 @@ All pricing fields are nullable/optional for gradual adoption. If property_id is
 
 ---
 
+**Problem**: Create rate plan returns 500 Internal Server Error - Pydantic ValidationError on created_at/updated_at
+
+**Symptoms**:
+- POST /api/v1/pricing/rate-plans creates database row successfully
+- Logs show: "Created rate plan: id=9c15fd7e-..."
+- Then 500 error with ValidationError: "Input should be a valid string, got datetime.datetime(...)"
+- Stack trace points to RatePlanResponse serialization (pricing.py line ~209)
+- Same issue affects GET /api/v1/pricing/rate-plans if returned
+
+**Root Cause**:
+- Database returns created_at/updated_at as datetime.datetime objects
+- Pydantic schema (RatePlanResponse, RatePlanSeasonResponse) typed these as `str`
+- Validation fails when trying to serialize response with datetime objects
+
+**Solution**:
+Schema was fixed to use `datetime` type instead of `str`:
+```python
+# backend/app/schemas/pricing.py
+from datetime import date, datetime  # Added datetime import
+
+class RatePlanResponse(BaseModel):
+    created_at: datetime  # Changed from str
+    updated_at: datetime  # Changed from str
+```
+
+Pydantic v2 automatically serializes datetime to ISO 8601 strings in JSON responses.
+
+**Verification**:
+```bash
+# Create rate plan should return 201 (not 500)
+curl -X POST "$HOST/api/v1/pricing/rate-plans" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "x-agency-id: $AGENCY_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"property_id": "...", "name": "Test", "currency": "USD", "base_nightly_cents": 15000, "active": true}' \
+  | jq '.created_at'  # Should show ISO string like "2026-01-06T12:34:56.789Z"
+
+# Smoke script should pass
+HOST=$HOST JWT_TOKEN=$JWT_TOKEN AGENCY_ID=$AGENCY_ID ./backend/scripts/pms_pricing_quote_smoke.sh
+```
+
+**Prevention**:
+- Always match Pydantic schema types to actual database column types
+- Use `datetime` for TIMESTAMP columns, not `str`
+- Let Pydantic handle serialization (no manual .isoformat() needed)
+
+---
+
 **Problem**: Smoke script fails with "Cannot index object with number" or JSONDecodeError during property auto-pick
 
 **Solution**:
