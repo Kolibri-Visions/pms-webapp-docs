@@ -1542,7 +1542,22 @@ Verified in production on **2026-01-06** (Europe/Berlin timezone):
 - Mounted in backend/app/main.py at /api/v1/booking-requests
 - Tagged as "Booking Requests" in OpenAPI
 
-**Status:** ✅ IMPLEMENTED (awaiting production verification with smoke script rc=0)
+**Status:** ✅ VERIFIED
+
+**PROD Evidence:**
+- **Verification Date:** 2026-01-06T14:53:04+00:00
+- **API Base URL:** https://api.fewo.kolibri-visions.de
+- **Source Commit:** 3dea97cc8e864855e433d81fc808dfed363b4fa3
+- **Health Checks:** /health (200), /health/ready (200)
+- **Verification Script:** pms_verify_deploy.sh (commit verification PASS)
+- **Smoke Test:** pms_public_booking_requests_workflow_smoke.sh (rc=0)
+- **Key Outcomes:**
+  - Review → under_review ✅
+  - Approve → confirmed ✅
+  - Idempotent approval ✅
+  - Decline → cancelled ✅
+  - Availability window selection succeeded (auto-shifted until available)
+- **Router Mounted:** /api/v1/booking-requests found in OpenAPI (preflight PASS)
 
 ---
 
