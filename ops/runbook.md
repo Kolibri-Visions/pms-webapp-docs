@@ -18624,6 +18624,22 @@ export DATE_TO="2037-01-03"
 ./backend/scripts/pms_direct_booking_public_smoke.sh
 ```
 
+---
+
+**Problem**: GET /api/v1/public/availability returns 404 Not Found, OpenAPI docs show zero /api/v1/public paths
+
+**Diagnosis**: Public booking router not mounted via module system
+
+**Root Cause**: Router was added to fallback path in main.py (when MODULES_ENABLED=false) but not registered in the module system used by production (MODULES_ENABLED=true)
+
+**Solution**:
+1. Verify public_booking module exists: `backend/app/modules/public_booking.py`
+2. Verify bootstrap.py imports the module: Check `backend/app/modules/bootstrap.py` includes `from . import public_booking`
+3. Check OpenAPI docs at `/docs` - should show "Public Direct Booking" tag with /api/v1/public/ping, /api/v1/public/availability, /api/v1/public/booking-requests
+4. Use preflight check: `curl https://api.example.com/api/v1/public/ping` (should return 200 {"status": "ok"})
+
+**Prevention**: Smoke script now includes /ping preflight check to detect unmounted router early
+
 ### Related Documentation
 
 - [Public Booking Smoke Script](../scripts/README.md#public-direct-booking-smoke-test-pms_direct_booking_public_smokesh) - Full script documentation

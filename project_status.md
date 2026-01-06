@@ -1142,11 +1142,13 @@ Implemented minimal public direct booking flow without authentication or payment
    - Requires PID (property_id) - no auto-pick in prod
 
 **Files Changed:**
-- `backend/app/api/routes/public_booking.py` (new, +300 lines) - Public booking router
-- `backend/app/main.py:156` - Mount public router at /api/v1/public
-- `backend/scripts/pms_direct_booking_public_smoke.sh` (new, +285 lines, executable)
-- `backend/scripts/README.md` (add-only) - Smoke script documentation
-- `backend/docs/ops/runbook.md` (add-only) - Direct Booking (Public) v0 section
+- `backend/app/api/routes/public_booking.py` (new, +300 lines) - Public booking router with /ping preflight endpoint
+- `backend/app/modules/public_booking.py` (new, +35 lines) - Module registration for public booking router
+- `backend/app/modules/bootstrap.py` - Added public_booking module import for auto-registration
+- `backend/app/main.py:156` - Mount public router at /api/v1/public (fallback path only)
+- `backend/scripts/pms_direct_booking_public_smoke.sh` (new, +285 lines, executable) - Includes /ping preflight check
+- `backend/scripts/README.md` (add-only) - Smoke script documentation with preflight check details
+- `backend/docs/ops/runbook.md` (add-only) - Direct Booking (Public) v0 section with 404 troubleshooting
 - `backend/docs/project_status.md` - This entry
 
 **What is NOT included (v0)**:
@@ -1164,6 +1166,16 @@ Implemented minimal public direct booking flow without authentication or payment
 - ✅ 422 for FK violations with actionable messages
 - ✅ Never returns 500 on validation/constraint errors
 - ✅ Guest reuse by email (case-insensitive) works correctly
+- ✅ GET /api/v1/public/ping returns 200 {"status": "ok"} (preflight check)
+- ✅ Router properly registered via module system (MODULES_ENABLED=true)
+
+**Fix Applied (2026-01-06)**:
+Initial commit 49bd8c9 added the router only to the fallback path in main.py (when MODULES_ENABLED=false), causing 404 errors in production where MODULES_ENABLED=true. Fixed by:
+1. Creating `backend/app/modules/public_booking.py` module with proper ModuleSpec registration
+2. Adding module import to `backend/app/modules/bootstrap.py` for auto-registration
+3. Adding GET /api/v1/public/ping endpoint for preflight checks
+4. Updating smoke script to fail fast with clear error if router not mounted
+5. Adding troubleshooting to runbook for 404 on public endpoints
 
 **Status**: ✅ IMPLEMENTED (awaiting production verification)
 
