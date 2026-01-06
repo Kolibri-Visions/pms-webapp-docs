@@ -19225,6 +19225,60 @@ All pricing fields are nullable/optional for gradual adoption. If property_id is
 
 ---
 
+**Problem**: Quote uses wrong rate plan (expected newest plan, got older plan)
+
+**Symptoms**:
+- Multiple active rate plans exist for property
+- Quote returns rate_plan_id that doesn't match most recently created/updated plan
+- Smoke test fails with "Rate plan ID mismatch"
+- Nondeterministic behavior: sometimes gets new plan, sometimes old plan
+
+**Root Cause**:
+- Before fix (commit <43c122a): Quote selection had no ORDER BY for updated_at/created_at
+- PostgreSQL returned arbitrary row when multiple plans matched filter
+- Race condition: which plan gets selected depended on database internal ordering
+
+**Solution (Fixed)**:
+Quote endpoint now uses deterministic ordering:
+```sql
+ORDER BY property_id NULLS LAST,        -- Prefer property-specific over agency-wide
+         updated_at DESC NULLS LAST,    -- Then newest updated
+         created_at DESC NULLS LAST,    -- Then newest created
+         id DESC                        -- Final tiebreaker
+LIMIT 1
+```
+
+List endpoint also uses same ordering (without property_id preference since already filtered):
+```sql
+ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST, id DESC
+```
+
+**Expected Behavior**:
+- Quote always selects the most recently updated/created active rate plan
+- Property-specific plans always preferred over agency-wide
+- First rate plan in list matches the one used for quotes (consistent ordering)
+
+**Verification**:
+```bash
+# Create new rate plan
+curl -X POST "$HOST/api/v1/pricing/rate-plans" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "x-agency-id: $AGENCY_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"property_id": "...", "name": "New Plan", ...}' | jq '.id'
+# → new_plan_id
+
+# Get quote - should use new_plan_id
+curl -X POST "$HOST/api/v1/pricing/quote" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "x-agency-id: $AGENCY_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"property_id": "...", "check_in": "...", "check_out": "..."}' | jq '.rate_plan_id'
+# → should match new_plan_id
+```
+
+---
+
 **Problem**: Create rate plan fails with 404 Property Not Found
 
 **Solution**:
