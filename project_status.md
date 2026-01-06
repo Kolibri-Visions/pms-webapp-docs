@@ -1667,6 +1667,10 @@ Verified in production on **2026-01-06** (Europe/Berlin timezone):
    - Migration 20260106170000_add_audit_log.sql:
      - Created audit_log table: id, created_at, agency_id, actor_user_id, actor_type, action, entity_type, entity_id, request_id, idempotency_key, ip (INET), user_agent, metadata (JSONB)
      - Indexes on agency_id, entity, action, and actor for query performance
+   - Migration 20260106180000_fix_idempotency_keys_indexes.sql (hotfix):
+     - Fixed 42P17 error (functions in index predicate must be IMMUTABLE)
+     - Dropped partial indexes with `WHERE expires_at > NOW()` predicates (NOW() is VOLATILE)
+     - Recreated indexes without WHERE clause (still efficient, no partial filter optimization)
 
 2. **Idempotency Module** (backend/app/core/idempotency.py):
    - compute_request_hash(request_data) - SHA256 of canonical JSON
@@ -1717,7 +1721,7 @@ Verified in production on **2026-01-06** (Europe/Berlin timezone):
 - Smoke test: `backend/scripts/pms_p3a_idempotency_smoke.sh`
 - Expected: All 3 tests pass (first request 201, replay cached 201, conflict 409)
 - Verify idempotency_keys and audit_log tables populated correctly
-- Verify migrations applied: 20260106160000, 20260106170000
+- Verify migrations applied: 20260106160000, 20260106170000, 20260106180000 (hotfix)
 
 ---
 

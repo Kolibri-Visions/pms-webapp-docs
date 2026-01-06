@@ -19667,6 +19667,65 @@ LIMIT 5;
 
 ---
 
+**Problem**: Migration 20260106160000 fails with ERROR 42P17 (functions in index predicate must be marked IMMUTABLE)
+
+**Symptoms**:
+- Running migration `20260106160000_add_idempotency_keys.sql` in Supabase SQL Editor fails
+- Error: `42P17 - functions in index predicate must be marked IMMUTABLE`
+- Error points to indexes `idx_idempotency_keys_lookup` or `idx_idempotency_keys_expires_at`
+
+**Root Cause**:
+- Original migration created partial indexes with `WHERE expires_at > NOW()` predicates
+- PostgreSQL rejects this because `NOW()` is VOLATILE (not IMMUTABLE)
+- Index predicates require IMMUTABLE functions only
+
+**Solution**:
+1. Apply hotfix migration `20260106180000_fix_idempotency_keys_indexes.sql`:
+   - Drops problematic partial indexes
+   - Recreates them without the `WHERE` predicate
+   - Indexes still work correctly, just without the partial filter optimization
+2. Run in Supabase SQL Editor:
+   ```sql
+   -- Verify indexes exist after migration
+   SELECT indexname, indexdef
+   FROM pg_indexes
+   WHERE tablename = 'idempotency_keys';
+   ```
+3. Expected output: Two indexes without `WHERE expires_at > NOW()` predicates
+
+**Prevention**:
+- Never use VOLATILE functions (`NOW()`, `CURRENT_TIMESTAMP`, etc.) in index predicates
+- Use IMMUTABLE functions only, or omit the `WHERE` clause entirely
+
+---
+
+**Problem**: Smoke script Test 3 fails to detect idempotency_conflict despite 409 response
+
+**Symptoms**:
+- `pms_p3a_idempotency_smoke.sh` Test 3 returns 409 Conflict (correct)
+- Script reports: "Got 409 but error type is not idempotency_conflict"
+- Test 3 fails even though API behavior is correct
+
+**Root Cause**:
+- API returns 409 with nested error structure: `{"detail": {"error": "idempotency_conflict", ...}}`
+- Script was checking top-level `.error` field, not `.detail.error`
+
+**Solution**:
+- Updated smoke script to check multiple paths: `.detail.error`, `.error`, or grep fallback
+- Script now handles nested FastAPI HTTPException detail dicts
+- No API changes needed (response format is correct)
+
+**Verification**:
+```bash
+# Run smoke test (should pass all 3 tests now)
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export PID="<property-uuid>"
+./backend/scripts/pms_p3a_idempotency_smoke.sh
+# Expected: rc=0, all tests PASS
+```
+
+---
+
 **Related Documentation**:
 - [P3a Idempotency Smoke Script](../../scripts/pms_p3a_idempotency_smoke.sh) - Smoke test for idempotency behavior
 - [Idempotency Implementation](../../app/core/idempotency.py) - Idempotency check/store functions
@@ -19674,5 +19733,6 @@ LIMIT 5;
 - [Public Booking Routes](../../app/api/routes/public_booking.py) - Integration point
 - [Migration 20260106160000](../../../supabase/migrations/20260106160000_add_idempotency_keys.sql) - Idempotency keys table
 - [Migration 20260106170000](../../../supabase/migrations/20260106170000_add_audit_log.sql) - Audit log table
+- [Migration 20260106180000](../../../supabase/migrations/20260106180000_fix_idempotency_keys_indexes.sql) - Fix 42P17 index issue (hotfix)
 
 ---
