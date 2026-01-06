@@ -1651,6 +1651,76 @@ Verified in production on **2026-01-06** (Europe/Berlin timezone):
 
 ---
 
+# P3a: Idempotency + Audit Log (Public Booking Requests)
+
+**Implementation Date:** 2026-01-06
+
+**Scope:** Add idempotency-key support and best-effort audit logging to public direct booking endpoint (`POST /api/v1/public/booking-requests`) to prevent duplicate booking creation and provide audit trail.
+
+**Features Implemented:**
+
+1. **Database Migrations**:
+   - Migration 20260106160000_add_idempotency_keys.sql:
+     - Created idempotency_keys table: id, created_at, expires_at (24h default), agency_id, endpoint, method, idempotency_key, request_hash, response_status, response_body (JSONB), entity_type, entity_id, actor_user_id
+     - Unique constraint: (agency_id, endpoint, method, idempotency_key)
+     - Indexes for fast lookup and expiration cleanup
+   - Migration 20260106170000_add_audit_log.sql:
+     - Created audit_log table: id, created_at, agency_id, actor_user_id, actor_type, action, entity_type, entity_id, request_id, idempotency_key, ip (INET), user_agent, metadata (JSONB)
+     - Indexes on agency_id, entity, action, and actor for query performance
+
+2. **Idempotency Module** (backend/app/core/idempotency.py):
+   - compute_request_hash(request_data) - SHA256 of canonical JSON
+   - check_idempotency() - Check if key exists, return cached response or raise 409 on conflict
+   - store_idempotency() - Store response for future replays (best-effort, 24h TTL)
+   - Behavior: Same key + same request → cached response, Same key + different request → 409 idempotency_conflict
+
+3. **Audit Module** (backend/app/core/audit.py):
+   - emit_audit_event() - Best-effort audit logging (failures logged but do NOT break request)
+   - Captures: actor_type, action, entity_type, entity_id, request_id, idempotency_key, ip, user_agent, metadata (JSONB)
+   - Action types: "public_booking_request_created" for public booking endpoint
+
+4. **Public Booking Route Integration** (backend/app/api/routes/public_booking.py):
+   - Added Idempotency-Key header parameter (optional)
+   - Idempotency check after agency resolution (inline, before booking creation)
+   - Store idempotency record after successful booking creation (best-effort)
+   - Emit audit event after successful booking creation (best-effort)
+   - Returns cached 201 response on replay (same key + same payload)
+   - Returns 409 idempotency_conflict on conflict (same key + different payload)
+
+5. **Smoke Test** (backend/scripts/pms_p3a_idempotency_smoke.sh):
+   - Test 1: First request with Idempotency-Key creates booking (201)
+   - Test 2: Replay (same key + same payload) returns cached 201 with same booking_id
+   - Test 3: Conflict (same key + different payload) returns 409 idempotency_conflict
+   - No token required (public endpoint)
+   - All tests must pass (rc=0)
+
+6. **Documentation** (DOCS SAFE MODE - add-only):
+   - runbook.md:19515-19679 - "P3a: Idempotency + Audit Log" section with troubleshooting
+   - scripts/README.md:5498-5608 - P3a idempotency smoke test documentation
+   - project_status.md - This P3a entry
+
+**Architecture:**
+- Idempotency: 24h TTL, agency-scoped, endpoint+method+key unique constraint
+- Request hash: SHA256 of canonical JSON for conflict detection
+- Audit log: Best-effort (non-blocking), flexible JSONB metadata storage
+- Integration: Inline in public booking endpoint for control over agency resolution and response caching
+
+**Implementation Notes:**
+- Idempotency check is inline in endpoint (not pure middleware) for better control over agency resolution
+- Audit emission and idempotency storage are best-effort (failures logged but do NOT break request)
+- No Idempotency-Key provided → standard behavior (no idempotency check)
+- Public endpoint (no auth required)
+
+**Status:** ✅ IMPLEMENTED (NOT VERIFIED)
+
+**Verification Pending:**
+- Smoke test: `backend/scripts/pms_p3a_idempotency_smoke.sh`
+- Expected: All 3 tests pass (first request 201, replay cached 201, conflict 409)
+- Verify idempotency_keys and audit_log tables populated correctly
+- Verify migrations applied: 20260106160000, 20260106170000
+
+---
+
 
 **Date Completed:** 2026-01-02 to 2026-01-03
 

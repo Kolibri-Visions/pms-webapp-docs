@@ -19512,3 +19512,167 @@ curl https://api.example.com/api/v1/ops/modules | jq '.mounted_has_pricing'  # s
 | 2026-01-06 | P1 Booking Request Workflow - Fixed to operate on bookings table using existing columns (confirmed_at, cancelled_at, cancelled_by, cancellation_reason, internal_notes). Status: cancelled instead of declined. | System |
 | 2026-01-06 | P1 Status Mapping - Added API-to-DB status mapping layer: API under_review maps to DB inquiry for PROD compatibility. Prevents 500 errors from unsupported status values. | System |
 | 2026-01-06 | P2 Pricing v1 Foundation - rate_plans and rate_plan_seasons tables for pricing engine. All fields nullable/optional for gradual adoption. Endpoints: GET/POST /api/v1/pricing/rate-plans, POST /api/v1/pricing/quote. | System |
+| 2026-01-06 | P3a: Idempotency + Audit Log - Idempotency-Key for public booking requests (dedupe) + best-effort audit log + smoke script | System |
+
+## P3a: Idempotency + Audit Log (Public Booking Requests)
+
+### Overview
+
+P3a adds idempotency support and audit logging to the public direct booking endpoint (`POST /api/v1/public/booking-requests`). These features prevent duplicate booking creation from repeated requests and provide an audit trail for public booking requests.
+
+### Idempotency-Key Support
+
+**How It Works**:
+1. Client sends `Idempotency-Key` header with request
+2. First request with key creates booking and caches response (24h TTL)
+3. Replay (same key + same payload) returns cached response without DB insert
+4. Conflict (same key + different payload) returns 409 with actionable error
+
+**Behavior**:
+- Same key + same request → returns cached 201 response with same booking_id
+- Same key + different request → returns 409 idempotency_conflict
+- No key provided → standard behavior (no idempotency check)
+
+**Tables**:
+- `idempotency_keys`: Stores key, request hash, cached response, expires after 24h
+- Indexed on `(agency_id, endpoint, method, idempotency_key)` for fast lookup
+
+---
+
+### Audit Log
+
+**How It Works**:
+- Best-effort logging for critical actions (must not break main request)
+- Captures: actor type, action, entity, IP, user-agent, metadata
+- Failed audit writes are logged but do NOT fail the request
+
+**Tables**:
+- `audit_log`: Stores event records (agency_id, actor_type, action, entity_type, entity_id, request_id, idempotency_key, ip, user_agent, metadata JSONB)
+- Indexed on agency_id, entity, action, and actor for query performance
+
+**Sample Events**:
+- `public_booking_request_created`: Public booking request created via direct booking endpoint
+
+---
+
+### Troubleshooting
+
+**Problem**: Idempotency replay creates duplicate booking instead of returning cached response
+
+**Symptoms**:
+- Same Idempotency-Key + same payload creates two bookings with different IDs
+- Expected 201 with cached booking_id, got 201 with new booking_id
+
+**Root Cause**:
+- Idempotency check not running (missing dependency or import error)
+- Race condition: two concurrent requests with same key before first commits
+- Idempotency record expired (TTL > 24h since first request)
+
+**Solution**:
+1. Verify idempotency_keys table exists and has unique constraint:
+   ```sql
+   \d idempotency_keys
+   -- Should show UNIQUE constraint: idempotency_keys_unique (agency_id, endpoint, method, idempotency_key)
+   ```
+2. Check if idempotency record exists:
+   ```sql
+   SELECT * FROM idempotency_keys 
+   WHERE endpoint = '/api/v1/public/booking-requests' 
+   AND idempotency_key = '<key>' 
+   AND expires_at > NOW();
+   ```
+3. If missing: First request may have failed before storing idempotency record
+4. If expired: Record was created >24h ago (normal behavior, retry will create new booking)
+5. If race condition: Verify transaction isolation and uniqueness constraint enforcement
+
+**Verification**:
+```bash
+# Run P3a smoke test
+export API_BASE_URL="https://api.example.com"
+export PID="<property-uuid>"
+./backend/scripts/pms_p3a_idempotency_smoke.sh
+# Should pass all 3 tests: first request (201), replay (cached 201), conflict (409)
+```
+
+---
+
+**Problem**: Idempotency conflict (409) when replaying same request
+
+**Symptoms**:
+- Same Idempotency-Key + same payload returns 409 idempotency_conflict
+- Expected cached 201 response
+
+**Root Cause**:
+- Request payload differs slightly (whitespace, field order, floating point precision)
+- Request hash computation differs between first request and replay
+
+**Solution**:
+1. Verify payload is byte-for-byte identical (JSON canonical form):
+   ```python
+   import json, hashlib
+   payload = {...}  # Your request dict
+   canonical = json.dumps(payload, sort_keys=True, separators=(',', ':'))
+   print(hashlib.sha256(canonical.encode('utf-8')).hexdigest())
+   ```
+2. Check stored request_hash in idempotency_keys table
+3. Common causes:
+   - Floating point precision: `2.5` vs `2.50` (use integers for cents/currency)
+   - Date format: `2037-06-01` vs `2037-6-1` (use ISO 8601 with zero-padding)
+   - Field order: JSON objects have stable field order in canonical form
+4. If hashes differ: Client must send exact same payload or use new Idempotency-Key
+
+---
+
+**Problem**: Audit events not appearing in audit_log table
+
+**Symptoms**:
+- Booking created successfully but no audit_log record
+- Expected `public_booking_request_created` event missing
+
+**Root Cause**:
+- Audit logging is best-effort (failures logged but don't break request)
+- audit_log table doesn't exist or schema out of date
+- Audit event emission failed (exception caught and logged)
+
+**Solution**:
+1. Verify audit_log table exists:
+   ```sql
+   \d audit_log
+   -- Should show columns: id, created_at, agency_id, actor_user_id, actor_type, action, entity_type, entity_id, request_id, idempotency_key, ip, user_agent, metadata
+   ```
+2. Check application logs for audit emission errors:
+   ```bash
+   docker logs pms-backend 2>&1 | grep "Failed to emit audit event"
+   # Should show non-fatal error if audit write failed
+   ```
+3. If table missing: Run migrations to create audit_log table
+4. If schema mismatch: Run latest migrations to update schema
+5. Verify audit event was called (check application logs):
+   ```bash
+   docker logs pms-backend 2>&1 | grep "Audit event emitted"
+   # Should show: action=public_booking_request_created, entity=booking/<uuid>
+   ```
+
+**Verification**:
+```bash
+# Check audit log for recent public booking events
+psql $DATABASE_URL -c "
+SELECT created_at, action, entity_type, entity_id, actor_type, ip, metadata->>'property_id' as property_id
+FROM audit_log
+WHERE action = 'public_booking_request_created'
+ORDER BY created_at DESC
+LIMIT 5;
+"
+```
+
+---
+
+**Related Documentation**:
+- [P3a Idempotency Smoke Script](../../scripts/pms_p3a_idempotency_smoke.sh) - Smoke test for idempotency behavior
+- [Idempotency Implementation](../../app/core/idempotency.py) - Idempotency check/store functions
+- [Audit Implementation](../../app/core/audit.py) - Audit event emission (best-effort)
+- [Public Booking Routes](../../app/api/routes/public_booking.py) - Integration point
+- [Migration 20260106160000](../../../supabase/migrations/20260106160000_add_idempotency_keys.sql) - Idempotency keys table
+- [Migration 20260106170000](../../../supabase/migrations/20260106170000_add_audit_log.sql) - Audit log table
+
+---
