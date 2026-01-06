@@ -1636,7 +1636,18 @@ Verified in production on **2026-01-06** (Europe/Berlin timezone):
 - Mounted in backend/app/modules/bootstrap.py at /api/v1/pricing
 - Tagged as "Pricing" in OpenAPI
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
+
+**PROD Evidence:**
+- **Verification Date:** 2026-01-06
+- **API Base URL:** https://api.fewo.kolibri-visions.de
+- **Source Commit:** b2c426822e71dcf8d0f5302d59173de381216c43
+- **Started At:** 2026-01-06T19:03:08.549145+00:00
+- **Deploy Verify:** `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=b2c4268` → rc=0
+- **Smoke Test:** `backend/scripts/pms_pricing_quote_smoke.sh` → rc=0 (AGENCY_ID=ffd0123a-10b6-40cd-8ad5-66eee9757ab7)
+- **OpenAPI Paths:**
+  - `/api/v1/pricing/quote`
+  - `/api/v1/pricing/rate-plans`
 
 ---
 
