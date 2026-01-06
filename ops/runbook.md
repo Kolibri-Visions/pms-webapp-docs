@@ -19969,3 +19969,320 @@ TRUST_PROXY_HEADERS=true
 
 ---
 
+
+## P3c: Audit Review Actions + Request/Correlation ID + Idempotency (Review Endpoints)
+
+### Overview
+
+P3c completes the P3 hardening initiative by adding comprehensive audit logging, request tracing, and optional idempotency support for review workflow endpoints (approve/decline).
+
+**What P3c Provides:**
+1. **Audit Events for Review Actions**: Audit log entries are automatically created when booking requests are approved or declined via internal review endpoints
+2. **Request/Correlation ID Capture**: Standardized request ID extraction from headers (`X-Request-ID`, `X-Correlation-ID`, `CF-Ray`, `X-Amzn-Trace-Id`) for end-to-end tracing
+3. **Optional Idempotency for Review Transitions**: Prevents duplicate approve/decline transitions when the same `Idempotency-Key` is used (protects against retry/double-click)
+4. **Ops Endpoint for Audit Log Reads**: Admin-only API endpoint for querying audit log entries (enables automated verification)
+
+**Key Benefits:**
+- **Accountability**: Track who approved/declined which booking requests and when
+- **Traceability**: Correlate requests across systems using request IDs
+- **Retry Safety**: Idempotency prevents accidental duplicate state transitions
+- **Automated Verification**: Smoke tests can verify audit events are written correctly
+
+### Request/Correlation ID Headers
+
+P3c automatically extracts request IDs from incoming HTTP headers for correlation and tracing.
+
+**Supported Headers (checked in order):**
+1. `X-Request-ID` - Common custom request tracking header
+2. `X-Correlation-ID` - Alternative correlation header
+3. `CF-Ray` - Cloudflare trace ID (if using Cloudflare)
+4. `X-Amzn-Trace-Id` - AWS ALB/API Gateway trace ID (if using AWS)
+
+**Behavior:**
+- First non-empty header value is used as the request ID
+- If no headers present, a new UUID is generated automatically
+- Request ID is stored in audit log entries for each action
+
+**Example:**
+```bash
+curl -X POST https://api.example.com/api/v1/booking-requests/{id}/approve \
+  -H "Authorization: Bearer $JWT" \
+  -H "X-Request-ID: abc123-unique-id" \
+  -d '{"internal_note": "Approved after guest verification"}'
+```
+
+### Audit Log Events
+
+P3c emits audit events for the following review workflow actions:
+
+**Actions Audited:**
+- `booking_request_approved` - When a booking request is approved (status: requested/under_review → confirmed)
+- `booking_request_declined` - When a booking request is declined (status: requested/under_review → cancelled)
+
+**Audit Event Structure:**
+```json
+{
+  "id": "uuid",
+  "created_at": "2026-01-06T22:00:00Z",
+  "agency_id": "uuid",
+  "actor_type": "user",
+  "actor_user_id": "uuid",
+  "action": "booking_request_approved",
+  "entity_type": "booking_request",
+  "entity_id": "uuid",
+  "request_id": "abc123-unique-id",
+  "idempotency_key": "optional-idempotency-key",
+  "ip": "192.168.1.1",
+  "user_agent": "curl/7.68.0",
+  "metadata": {
+    "previous_status": "requested",
+    "new_status": "confirmed",
+    "internal_note": "Approved after verification",
+    "booking_id": "uuid"
+  }
+}
+```
+
+**Audit Behavior:**
+- **Best-effort**: Audit logging failures are logged but do NOT break the main request
+- **Tenant-scoped**: All audit events include `agency_id` for multi-tenant isolation
+- **Automatic**: No manual instrumentation needed - events are emitted automatically
+
+### Idempotency for Review Endpoints
+
+P3c extends the idempotency support from P3a to review endpoints (approve/decline).
+
+**How to Use Idempotency:**
+1. Include `Idempotency-Key` header in approve/decline requests
+2. Use a unique key per logical operation (e.g., `approve-{uuid}`)
+3. Reuse the same key for retries of the same operation
+
+**Example - Approve with Idempotency:**
+```bash
+# First attempt
+curl -X POST https://api.example.com/api/v1/booking-requests/{id}/approve \
+  -H "Authorization: Bearer $JWT" \
+  -H "Idempotency-Key: approve-20260106-abc123" \
+  -d '{"internal_note": "Approved"}'
+# Returns: 200 OK (approval executed)
+
+# Retry with same key (e.g., after timeout/network error)
+curl -X POST https://api.example.com/api/v1/booking-requests/{id}/approve \
+  -H "Authorization: Bearer $JWT" \
+  -H "Idempotency-Key: approve-20260106-abc123" \
+  -d '{"internal_note": "Approved"}'
+# Returns: 200 OK (cached response, no duplicate transition)
+```
+
+**Idempotency Behavior:**
+- **Same key + same payload** → Returns cached response (status 200, no DB write)
+- **Same key + different payload** → Returns 409 Conflict with `idempotency_conflict` error
+- **No key provided** → Standard behavior (no idempotency check)
+
+**Idempotency Key TTL:**
+- 24 hours (same as P3a public booking requests)
+- Stored in `public.idempotency_keys` table (shared with P3a)
+- Agency-scoped with unique constraint: `(agency_id, endpoint, method, idempotency_key)`
+
+### Ops Endpoint: Audit Log Reads
+
+P3c adds a new admin-only API endpoint for querying audit log entries.
+
+**Endpoint:** `GET /api/v1/ops/audit-log`
+
+**Authentication:** JWT with admin role required
+
+**Query Parameters:**
+- `action` (optional): Filter by action (e.g., `booking_request_approved`)
+- `entity_id` (optional): Filter by entity UUID
+- `limit` (optional): Max records to return (1-500, default: 50)
+
+**Example - Query Audit Log:**
+```bash
+# Get recent booking_request_approved events
+curl -X GET "https://api.example.com/api/v1/ops/audit-log?action=booking_request_approved&limit=10" \
+  -H "Authorization: Bearer $JWT"
+
+# Get audit events for specific booking request
+curl -X GET "https://api.example.com/api/v1/ops/audit-log?entity_id={booking_request_id}" \
+  -H "Authorization: Bearer $JWT"
+```
+
+**Response:**
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "created_at": "2026-01-06T22:00:00Z",
+      "action": "booking_request_approved",
+      "actor_type": "user",
+      "actor_user_id": "uuid",
+      "entity_type": "booking_request",
+      "entity_id": "uuid",
+      "request_id": "abc123",
+      "idempotency_key": "approve-20260106-xyz",
+      "metadata": {...}
+    }
+  ],
+  "total": 1,
+  "limit": 50
+}
+```
+
+**Usage:**
+- Automated smoke tests: Verify audit events are written
+- Manual auditing: Investigate who performed which actions
+- Troubleshooting: Trace request flow via `request_id`
+
+### Smoke Testing
+
+**Script:** `backend/scripts/pms_p3c_audit_review_smoke.sh`
+
+**Purpose:** Verify P3c audit logging, request ID capture, and idempotency for review endpoints.
+
+**What It Tests:**
+1. Create public booking requests
+2. Approve booking request with `Idempotency-Key`
+3. Test idempotent replay (same key → cached response)
+4. Decline booking request with `Idempotency-Key`
+5. Verify audit log entries via `/api/v1/ops/audit-log` endpoint
+
+**Prerequisites:**
+- `jq` (JSON parser)
+- Admin JWT token
+- Property UUID (`PID`)
+
+**Usage:**
+```bash
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export PID="<property-uuid>"
+export JWT="<admin-jwt-token>"
+./backend/scripts/pms_p3c_audit_review_smoke.sh
+```
+
+**Expected Output:**
+```
+✅ TEST PASSED: All tests passed
+Smoke test: PASS
+rc=0
+```
+
+**Exit Codes:**
+- `0` - Success (all tests passed)
+- `1` - Test failure (unexpected status code or missing audit events)
+- `2` - Server error (500 response detected)
+
+### Troubleshooting
+
+#### Missing Audit Log Entries
+
+**Symptom:** Audit log query returns 0 results after approve/decline action.
+
+**Possible Causes:**
+1. **Best-effort audit failed**: Audit emission is non-blocking; database errors don't break requests
+2. **Wrong tenant scope**: Audit log is tenant-scoped; verify JWT agency_id matches entity agency
+3. **Timing issue**: Allow 1-2 seconds after action before querying audit log (eventual consistency)
+4. **Wrong filter**: Check `action` and `entity_id` query parameters match expected values
+
+**How to Debug:**
+```bash
+# Check backend logs for audit emission errors
+tail -f logs/backend.log | grep "Failed to emit audit event"
+
+# Query all recent audit events (no filters)
+curl -X GET "https://api.example.com/api/v1/ops/audit-log?limit=50" \
+  -H "Authorization: Bearer $JWT"
+
+# Verify entity belongs to correct agency
+curl -X GET "https://api.example.com/api/v1/booking-requests/{id}" \
+  -H "Authorization: Bearer $JWT"
+```
+
+**Solution:**
+- If audit emission consistently fails, check database connectivity and `audit_log` table schema
+- If timing issue, add 2-second delay before verification in smoke tests
+- If wrong tenant, ensure JWT token agency_id matches booking request agency_id
+
+#### Idempotency Conflict (409) Unexpectedly
+
+**Symptom:** Getting 409 `idempotency_conflict` when retrying approve/decline with same key.
+
+**Possible Causes:**
+1. **Payload mismatch**: Request body differs between attempts (even whitespace/ordering matters)
+2. **Cached from different request**: Same key used for different operation/entity
+3. **Expired but re-added**: Key expired (24h TTL) and recreated with different payload
+
+**How to Debug:**
+```bash
+# Check idempotency_keys table
+SELECT idempotency_key, request_hash, response_status, created_at, expires_at
+FROM idempotency_keys
+WHERE idempotency_key = 'your-key-here'
+AND agency_id = '{agency-uuid}'
+AND expires_at > NOW()
+LIMIT 1;
+
+# Compare request hashes (should match for idempotent replay)
+```
+
+**Solution:**
+- Ensure request payload is byte-for-byte identical (JSON key ordering, whitespace)
+- Use unique idempotency keys per operation (don't reuse across different entities)
+- Wait for TTL expiration (24h) or use new key if payload needs to change
+
+#### Auth Scope Issue (403 Forbidden)
+
+**Symptom:** `GET /api/v1/ops/audit-log` returns 403 Forbidden.
+
+**Possible Causes:**
+1. **Non-admin role**: Endpoint requires admin role
+2. **Invalid JWT**: Token expired or malformed
+3. **Cross-tenant access**: JWT agency_id doesn't match audit records
+
+**How to Debug:**
+```bash
+# Verify JWT role claim
+echo $JWT | cut -d'.' -f2 | base64 -d | jq '.role'
+# Should return: "admin"
+
+# Check JWT expiration
+echo $JWT | cut -d'.' -f2 | base64 -d | jq '.exp'
+# Convert to date: date -r $(echo $JWT | cut -d'.' -f2 | base64 -d | jq -r '.exp')
+```
+
+**Solution:**
+- Use JWT with admin role (manager role is NOT sufficient for `/ops/audit-log`)
+- Refresh expired JWT using authentication endpoint
+- Ensure JWT agency_id matches the agency you're querying
+
+#### Request ID Not Captured
+
+**Symptom:** Audit log entries have `request_id` but it's a random UUID (not the header value).
+
+**Possible Causes:**
+1. **Header not sent**: Request didn't include `X-Request-ID` or similar headers
+2. **Proxy stripped headers**: Load balancer/proxy removed custom headers
+3. **Header name mismatch**: Used non-standard header name not in P3c header list
+
+**How to Debug:**
+```bash
+# Test header pass-through
+curl -X POST https://api.example.com/api/v1/booking-requests/{id}/approve \
+  -H "Authorization: Bearer $JWT" \
+  -H "X-Request-ID: test-header-123" \
+  -d '{"internal_note": "Test"}' \
+  -v 2>&1 | grep -i request-id
+
+# Check audit log entry
+curl -X GET "https://api.example.com/api/v1/ops/audit-log?action=booking_request_approved&limit=1" \
+  -H "Authorization: Bearer $JWT" | jq '.items[0].request_id'
+# Should return: "test-header-123" (if header was captured)
+```
+
+**Solution:**
+- Verify header is sent by client (use `-v` flag in curl to see request headers)
+- If behind proxy, configure proxy to preserve `X-Request-ID` header
+- Use one of the supported headers: `X-Request-ID`, `X-Correlation-ID`, `CF-Ray`, `X-Amzn-Trace-Id`
+- If no header provided, P3c generates a UUID automatically (this is expected behavior)
+

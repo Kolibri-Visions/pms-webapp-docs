@@ -1828,6 +1828,82 @@ Verified in production on **2026-01-06** (Europe/Berlin timezone):
 
 ---
 
+# P3c: Audit Review Actions + Request/Correlation ID + Idempotency (Review Endpoints)
+
+**Implementation Date:** 2026-01-06
+
+**Scope:** Add audit logging for review workflow actions (approve/decline), standardized request/correlation ID capture, and optional idempotency support for review endpoints. Completes P3 hardening initiative for direct booking system.
+
+**Features Implemented:**
+
+1. **Request/Correlation ID Module** (`app/core/request_ids.py`):
+   - `get_request_id()`: Extracts request ID from headers or generates UUID
+   - Supports headers: `X-Request-ID`, `X-Correlation-ID`, `CF-Ray`, `X-Amzn-Trace-Id`
+   - Never raises exceptions (defensive, always returns valid ID)
+   - Used for audit logging and distributed tracing
+
+2. **Audit Events for Review Actions** (`app/api/routes/booking_requests.py`):
+   - Emit audit events on successful approve/decline transitions
+   - Actions: `booking_request_approved`, `booking_request_declined`
+   - Includes: actor_user_id, request_id, idempotency_key, previous/new status
+   - Best-effort (failures logged but do NOT break request)
+
+3. **Idempotency for Review Endpoints**:
+   - Extended P3a idempotency support to approve/decline endpoints
+   - Optional `Idempotency-Key` header support
+   - Same key + same payload → cached response (no duplicate transition)
+   - Same key + different payload → 409 idempotency_conflict
+   - Reuses `public.idempotency_keys` table (24h TTL, agency-scoped)
+
+4. **Ops Endpoint for Audit Log Reads** (`app/api/routes/ops.py`):
+   - `GET /api/v1/ops/audit-log`: Query recent audit log entries
+   - Admin-only (requires JWT with admin role)
+   - Query parameters: `action`, `entity_id`, `limit`
+   - Tenant-scoped (agency_id from JWT)
+   - Enables automated smoke test verification
+
+5. **Smoke Script**:
+   - `backend/scripts/pms_p3c_audit_review_smoke.sh`: Tests audit logging, request ID capture, and idempotency
+   - Creates public booking requests → approves with Idempotency-Key → declines with Idempotency-Key
+   - Verifies audit log entries via `/api/v1/ops/audit-log` endpoint
+   - Tests idempotent replay (same key → cached response)
+   - Requires admin JWT token
+   - Exit codes: 0 (success), 1 (failure), 2 (500 error)
+
+6. **Documentation** (DOCS SAFE MODE - add-only):
+   - runbook.md - "P3c: Audit Review Actions + Request/Correlation ID + Idempotency" section with usage, troubleshooting
+   - scripts/README.md:5733-5888 - P3c audit review smoke test documentation
+   - project_status.md - This P3c entry
+
+**Architecture:**
+- Request ID extraction: Header-first (X-Request-ID/X-Correlation-ID/CF-Ray/X-Amzn-Trace-Id), UUID fallback
+- Audit emission: Best-effort, non-blocking (failures logged, request proceeds)
+- Idempotency: Reuses P3a infrastructure (check_idempotency, store_idempotency, compute_request_hash)
+- Tenant scoping: All audit events and idempotency records scoped by agency_id
+- Ops endpoint: Admin-only, query recent audit events for verification
+
+**Implementation Notes:**
+- Audit events emitted AFTER successful DB transaction (consistency)
+- Idempotency check runs BEFORE DB transaction (early cache hit)
+- Request ID captured from first available header or generated
+- Ops audit-log endpoint limited to 500 records per query (performance)
+- Smoke script requires admin JWT (unlike P3a/P3b which test public endpoints)
+
+**Status:** ✅ IMPLEMENTED
+
+**Integration Points:**
+- Review endpoints: `POST /api/v1/booking-requests/{id}/approve`, `POST /api/v1/booking-requests/{id}/decline`
+- Audit log table: `public.audit_log` (reused from P3a)
+- Idempotency table: `public.idempotency_keys` (reused from P3a)
+- Ops endpoint: `GET /api/v1/ops/audit-log` (new, admin-only)
+
+**Testing:**
+- Smoke script: `backend/scripts/pms_p3c_audit_review_smoke.sh`
+- Tests approve/decline with Idempotency-Key, audit log verification, idempotent replay
+- Requires admin JWT token for review endpoints and audit log access
+
+---
+
 
 **Date Completed:** 2026-01-02 to 2026-01-03
 
