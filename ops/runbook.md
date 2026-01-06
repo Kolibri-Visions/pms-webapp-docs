@@ -351,7 +351,94 @@ curl https://api.fewo.kolibri-visions.de/health/ready
 
 ---
 
-### 2. JWT/Auth Failures (401 Invalid Token / 403 Not Authenticated)
+### 2. ImportError at Startup → 503 No Available Server
+
+**Symptoms:**
+```
+Traefik returns: 503 Service Unavailable - "no available server"
+Container status: Restarting
+Logs: ImportError: cannot import name 'X' from 'app.Y'
+Backend never reaches healthy state
+```
+
+**Root Cause:**
+Python import-time error in application startup, often due to:
+- Importing non-existent function/symbol from a module
+- Circular import dependency
+- Missing dependency (typo in import statement)
+
+**Common Example (Public Booking Router):**
+```python
+# WRONG - get_db_pool doesn't exist in app.api.deps
+from app.api.deps import get_db_pool
+
+# CORRECT - use canonical DB dependency
+from app.api.deps import get_db
+```
+
+**Fix Steps:**
+
+1. Check container logs for ImportError
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+docker logs pms-backend --tail 50 | grep -A 5 "ImportError"
+# Look for: "ImportError: cannot import name 'X' from 'Y'"
+```
+
+2. Identify the failing import
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+# Check which module/file triggered the error
+docker logs pms-backend | grep -B 10 "ImportError"
+# Note the file path (e.g., /app/app/api/routes/public_booking.py)
+```
+
+3. Fix the import (use correct symbol name)
+
+WHERE: YOUR-WORKSTATION
+```bash
+# Example: Replace invalid get_db_pool with canonical get_db
+# Edit backend/app/api/routes/public_booking.py:
+# - from app.api.deps import get_db_pool  # REMOVE
+# + from app.api.deps import get_db       # ADD
+```
+
+4. Commit and redeploy
+
+WHERE: YOUR-WORKSTATION
+```bash
+git add backend/app/api/routes/public_booking.py
+git commit -m "fix: use canonical get_db dependency"
+git push origin main
+```
+
+**Verification:**
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+# 1. Container stays running (not restarting)
+docker ps | grep pms-backend
+# Expected: "Up X seconds" (not "Restarting")
+
+# 2. Health endpoint responds
+curl https://api.fewo.kolibri-visions.de/health
+# Expected: 200 OK
+
+# 3. No ImportError in logs
+docker logs pms-backend --tail 50 | grep ImportError
+# Expected: No output
+```
+
+**Prevention:**
+- Use canonical dependencies defined in `app/api/deps.py` (__all__ exports)
+- Verify imports exist before deploying
+- Run `python3 -m py_compile <file>` to catch import errors early
+
+---
+
+### 3. JWT/Auth Failures (401 Invalid Token / 403 Not Authenticated)
 
 **Symptoms:**
 ```

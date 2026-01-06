@@ -1190,6 +1190,19 @@ Initial commit 49bd8c9 added the router only to the fallback path in main.py (wh
 - **Layer 1 (Correct)**: Module system via `mount_modules()` registers public_booking module
 - **Layer 2 (Failsafe)**: Explicit `include_router()` in main.py:142-154 if Layer 1 failed
 
+**Stage 3 (incident fix)**: Prevent startup crash from invalid DB dependency import
+1. Fixed ImportError: `get_db_pool` does not exist in `app.api.deps`
+2. Replaced `from app.api.deps import get_db_pool` with canonical `from app.api.deps import get_db`
+3. Updated endpoint signatures: `pool=Depends(get_db_pool)` → `db=Depends(get_db)`
+4. Removed `async with pool.acquire() as conn:` wrapper (get_db already provides connection)
+5. Updated all database queries to use `db` directly instead of `conn`
+6. Added runbook failure mode: "ImportError at Startup → 503 No Available Server"
+7. Added import-time safety note to scripts/README.md
+
+**Root Cause**: Public booking router imported non-existent `get_db_pool` function, causing Python import-time error that prevented app startup. Backend container entered crashloop (Restarting), Traefik returned "503 no available server".
+
+**Fix**: Use canonical DB dependency `get_db` from `app.api.deps.__all__` exports. The `get_db()` dependency already acquires a connection from the pool and yields it, so endpoints use `db` directly without pool.acquire().
+
 **Status**: ✅ IMPLEMENTED (awaiting production verification)
 
 **Verification (Future)**:
