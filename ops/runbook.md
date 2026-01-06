@@ -19248,14 +19248,20 @@ All pricing fields are nullable/optional for gradual adoption. If property_id is
 **Problem**: Endpoints return 404 Not Found (router not mounted)
 
 **Solution**:
-1. Check module mount status: `GET /api/v1/ops/modules` → verify `pricing` appears in modules list with prefixes `["/api/v1/pricing"]`
-2. Check OpenAPI schema: `GET /openapi.json` → verify `/api/v1/pricing/*` paths exist
-3. Check deploy commit: `GET /api/v1/ops/version` → verify `source_commit` matches expected SHA
-4. If pricing not in modules list:
-   - Check if MODULES_ENABLED=false (fallback mode): pricing must be in explicit router list (backend/app/main.py)
-   - Check logs at startup for "Pricing module not available" warnings
-   - Verify: `backend/app/modules/pricing.py` exists and is imported in `bootstrap.py`
-5. If pricing in modules list but routes still 404: restart app (stale process)
+1. Check ACTUAL mounted routes (authoritative): `GET /api/v1/ops/modules` → verify:
+   - `mounted_has_pricing: true`
+   - `pricing_paths: ["/api/v1/pricing/rate-plans", "/api/v1/pricing/quote"]`
+   - `pricing` appears in `modules` list with prefixes `["/api/v1/pricing"]`
+2. If `mounted_has_pricing: false`:
+   - Check if pricing module is in registry modules list
+   - If missing from registry: pricing module failed to load/register
+     - Root cause: `backend/app/api/routes/__init__.py` must import pricing
+     - Verify: `from . import ... pricing` exists in routes/__init__.py
+     - Check logs for "Pricing module not available" ImportError warnings
+   - If in registry but not mounted: check MODULES_ENABLED setting
+3. Check OpenAPI schema: `GET /openapi.json` → verify `/api/v1/pricing/*` paths exist
+4. Check deploy commit: `GET /api/v1/ops/version` → verify `source_commit` matches expected SHA
+5. If still failing: restart app (stale process or module import cached failure)
 
 **Smoke Test**:
 ```bash
