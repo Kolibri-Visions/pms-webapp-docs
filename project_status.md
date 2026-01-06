@@ -1313,6 +1313,44 @@ This entry will be marked **VERIFIED** only after automated production verificat
 
 ---
 
+**Stage 7 (production fix)**: Set default currency for public booking requests (prevent NotNullViolationError on currency)
+
+1. Fixed production 422: "null value in column 'currency' of relation 'bookings' violates not-null constraint"
+2. Added currency field to BookingRequestInput schema (line 73):
+   - Default value: "EUR"
+   - Pattern validation: `^[A-Z]{3}$` (3-letter uppercase ISO code)
+   - Min/max length: 3 characters
+3. Added currency normalization in endpoint handler (lines 178-181):
+   - Strip whitespace and convert to uppercase
+   - Validate length == 3 and all alphabetic characters
+   - Raise ValidationException (422) if invalid format
+4. Added currency to bookings INSERT (lines 308, 322):
+   - Column list now includes currency
+   - Binding includes normalized currency value ($11)
+   - Prevents NotNullViolationError on bookings.currency
+5. Updated NotNullViolationError handler (lines 374-378):
+   - Specific handler for currency violations with actionable message
+   - Maps to 422 ValidationException (not 500)
+6. Updated smoke script (lines 59, 219):
+   - Added PUBLIC_CURRENCY env var (default: EUR)
+   - Payload includes currency field explicitly
+7. Updated docs (add-only):
+   - runbook.md:18640 - Added currency feature note
+   - runbook.md:18792-18827 - Added 422 currency troubleshooting with validation rules
+   - scripts/README.md:5338 - Added PUBLIC_CURRENCY to env vars table
+   - scripts/README.md:5368 - Added currency default note to schema compatibility
+   - project_status.md - This Stage 7 entry
+
+**Root Cause**: Public booking endpoint did not include currency in bookings INSERT. When bookings table has NOT NULL constraint on currency, INSERT failed with 422 NotNullViolationError. No default value or explicit field provided.
+
+**Fix**: Add currency field to request schema with EUR default. Normalize and validate currency. Include in INSERT. Map currency NotNullViolationError to 422 with actionable message.
+
+**Prevention**: Always provide defaults for required fields in public-facing APIs. Validate and normalize user input before database operations. Currency is now mandatory with sensible default.
+
+**Status**: ✅ IMPLEMENTED (awaiting production verification - smoke should now pass with rc=0)
+
+---
+
 
 **Date Completed:** 2026-01-02 to 2026-01-03
 

@@ -18637,6 +18637,7 @@ DRY_RUN=0 CONFIRM=1 CONFIRM_DELETE_USER=1 ./backend/scripts/pms_smoke_user_clean
 - Guest creation/lookup by email (case-insensitive)
 - Booking created with status="requested" (pending approval)
 - Auto-detects agency via property_id
+- Currency support: defaults to EUR if not specified; accepts 3-letter ISO codes (EUR, USD, GBP, etc.)
 - Proper error mapping:
   - 409 conflict_type=double_booking for overlapping bookings
   - 422 for FK violations/validation errors
@@ -18785,6 +18786,45 @@ SELECT id, agency_id FROM public.properties WHERE id='<property-uuid>';
    ```
 
 **Prevention**: Ensure all properties have agency_id populated before creating public bookings. Use database constraints or backfill scripts to enforce agency_id NOT NULL on properties table.
+
+---
+
+**Problem**: Booking creation returns 422 "Booking creation failed: currency is required"
+
+**Diagnosis**: Currency field missing or NULL in booking request (should not happen with current API schema)
+
+**Root Cause**:
+- Public booking endpoint requires currency field (defaults to EUR)
+- If currency is not provided or is NULL, booking INSERT fails NOT NULL constraint
+- This error indicates request validation bypassed or schema mismatch
+
+**Solution**:
+1. Ensure currency is included in booking request payload:
+   ```json
+   {
+     "property_id": "<uuid>",
+     "date_from": "2026-06-01",
+     "date_to": "2026-06-03",
+     "adults": 2,
+     "children": 0,
+     "currency": "EUR",
+     "guest": { ... }
+   }
+   ```
+2. If omitted, API defaults to "EUR" (no need to explicitly set)
+3. Currency must be 3-letter uppercase ISO code (EUR, USD, GBP, etc.)
+4. Smoke script supports `PUBLIC_CURRENCY` env var (default: EUR):
+   ```bash
+   export PUBLIC_CURRENCY="USD"
+   ./backend/scripts/pms_direct_booking_public_smoke.sh
+   ```
+
+**Validation Rules**:
+- Must be exactly 3 alphabetic characters
+- Automatically uppercased and trimmed
+- Validated against pattern `^[A-Z]{3}$`
+
+**Prevention**: Public booking endpoint now always sets currency (default EUR). This error should not occur in normal operation unless request schema validation is bypassed.
 
 ---
 
