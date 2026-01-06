@@ -18628,17 +18628,28 @@ export DATE_TO="2037-01-03"
 
 **Problem**: GET /api/v1/public/availability returns 404 Not Found, OpenAPI docs show zero /api/v1/public paths
 
-**Diagnosis**: Public booking router not mounted via module system
+**Diagnosis**: Public booking router not mounted (module system failed and failsafe not triggered)
 
-**Root Cause**: Router was added to fallback path in main.py (when MODULES_ENABLED=false) but not registered in the module system used by production (MODULES_ENABLED=true)
+**Root Cause**: Router not mounted via module registry AND failsafe explicit mounting in app factory did not execute
 
 **Solution**:
-1. Verify public_booking module exists: `backend/app/modules/public_booking.py`
-2. Verify bootstrap.py imports the module: Check `backend/app/modules/bootstrap.py` includes `from . import public_booking`
-3. Check OpenAPI docs at `/docs` - should show "Public Direct Booking" tag with /api/v1/public/ping, /api/v1/public/availability, /api/v1/public/booking-requests
-4. Use preflight check: `curl https://api.example.com/api/v1/public/ping` (should return 200 {"status": "ok"})
+1. Check backend logs for failsafe mounting messages:
+   - ✅ Expected: "Public booking router already mounted via module system"
+   - ⚠️  Fallback: "Public booking router not found in mounted routes, applying failsafe mounting"
+   - ❌ Neither message → app factory not reached or error during startup
+2. Verify module registration:
+   - `backend/app/modules/public_booking.py` exists with ModuleSpec
+   - `backend/app/modules/bootstrap.py:98` includes `from . import public_booking`
+3. Verify failsafe mounting in app factory:
+   - `backend/app/main.py:142-154` has failsafe include_router after mount_modules()
+4. Check OpenAPI docs at `/docs` - should show "Public Direct Booking" tag
+5. Use preflight check: `curl https://api.example.com/api/v1/public/ping` (should return 200 {"status": "ok"})
 
-**Prevention**: Smoke script now includes /ping preflight check to detect unmounted router early
+**Architecture**: Two-layer mounting guarantees router availability:
+- **Layer 1 (Correct)**: Module system via `mount_modules()` registers public_booking module
+- **Layer 2 (Failsafe)**: Explicit `include_router()` in main.py after module mounting if Layer 1 failed
+
+**Prevention**: Smoke script includes /ping preflight check with OpenAPI diagnostics to detect unmounted router early
 
 ### Related Documentation
 

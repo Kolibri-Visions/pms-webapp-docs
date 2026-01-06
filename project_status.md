@@ -1170,12 +1170,25 @@ Implemented minimal public direct booking flow without authentication or payment
 - ✅ Router properly registered via module system (MODULES_ENABLED=true)
 
 **Fix Applied (2026-01-06)**:
-Initial commit 49bd8c9 added the router only to the fallback path in main.py (when MODULES_ENABLED=false), causing 404 errors in production where MODULES_ENABLED=true. Fixed by:
-1. Creating `backend/app/modules/public_booking.py` module with proper ModuleSpec registration
-2. Adding module import to `backend/app/modules/bootstrap.py` for auto-registration
-3. Adding GET /api/v1/public/ping endpoint for preflight checks
-4. Updating smoke script to fail fast with clear error if router not mounted
-5. Adding troubleshooting to runbook for 404 on public endpoints
+Initial commit 49bd8c9 added the router only to the fallback path in main.py (when MODULES_ENABLED=false), causing 404 errors in production where MODULES_ENABLED=true. Fixed in two stages:
+
+**Stage 1 (commit 764bbbc)**: Module system registration
+1. Created `backend/app/modules/public_booking.py` module with proper ModuleSpec registration
+2. Added module import to `backend/app/modules/bootstrap.py:98` for auto-registration
+3. Added GET /api/v1/public/ping endpoint for preflight checks
+4. Updated smoke script to fail fast with clear error if router not mounted
+5. Added troubleshooting to runbook for 404 on public endpoints
+
+**Stage 2 (current)**: Deterministic mounting via two-layer guarantee
+1. Added FAILSAFE explicit mounting in `backend/app/main.py:142-154` after `mount_modules()`
+2. Failsafe checks if /api/v1/public routes exist; if not, explicitly includes public_booking router
+3. Idempotent: only mounts if not already present (avoids double-mounting)
+4. Enhanced smoke script OpenAPI diagnostics to show found paths or specific error hint
+5. Updated runbook with two-layer architecture explanation and log diagnostics
+
+**Architecture**: Two-layer mounting guarantees router availability:
+- **Layer 1 (Correct)**: Module system via `mount_modules()` registers public_booking module
+- **Layer 2 (Failsafe)**: Explicit `include_router()` in main.py:142-154 if Layer 1 failed
 
 **Status**: ✅ IMPLEMENTED (awaiting production verification)
 
