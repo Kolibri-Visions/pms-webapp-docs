@@ -20286,3 +20286,54 @@ curl -X GET "https://api.example.com/api/v1/ops/audit-log?action=booking_request
 - Use one of the supported headers: `X-Request-ID`, `X-Correlation-ID`, `CF-Ray`, `X-Amzn-Trace-Id`
 - If no header provided, P3c generates a UUID automatically (this is expected behavior)
 
+
+#### Smoke Script 422 Validation Error
+
+**Symptom:** `pms_p3c_audit_review_smoke.sh` fails with HTTP 422 validation_error when creating public booking requests.
+
+**Possible Causes:**
+1. **Payload mismatch**: Script sending incorrect field names or missing required fields
+2. **Schema drift**: API schema changed but smoke script not updated
+3. **Env var issues**: Required environment variables (PID, DATE_FROM, DATE_TO) not set or invalid
+
+**How to Debug:**
+The script automatically prints the sent payload on 422 errors:
+```bash
+❌ FAIL: Returned 422 validation_error (payload mismatch)
+Response: {"detail":[{"type":"missing","loc":["body","date_from"],...}]}
+
+Payload sent:
+{
+  "property_id": "...",
+  "check_in": "2037-06-01",  # ← WRONG: should be "date_from"
+  ...
+}
+```
+
+**Common Issues:**
+- Using `check_in`/`check_out` instead of `date_from`/`date_to`
+- Using `num_adults`/`num_children` instead of `adults`/`children`
+- Using `guest_info` instead of `guest`
+- Missing required fields: `property_id`, `date_from`, `date_to`, `adults`, `guest`
+
+**Solution:**
+Ensure the script uses the correct BookingRequestInput schema:
+```json
+{
+  "property_id": "uuid",
+  "date_from": "YYYY-MM-DD",
+  "date_to": "YYYY-MM-DD",
+  "adults": 2,
+  "children": 0,
+  "guest": {
+    "first_name": "...",
+    "last_name": "...",
+    "email": "...",
+    "phone": "..."
+  },
+  "currency": "EUR"
+}
+```
+
+If schema changed, update the smoke script payload builder to match current API requirements.
+
