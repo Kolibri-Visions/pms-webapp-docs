@@ -19736,3 +19736,236 @@ export PID="<property-uuid>"
 - [Migration 20260106180000](../../../supabase/migrations/20260106180000_fix_idempotency_keys_indexes.sql) - Fix 42P17 index issue (hotfix)
 
 ---
+## P3b: Domain Tenant Resolution + Host Allowlist + CORS (Public Endpoints)
+
+### Overview
+
+P3b adds multi-tenant domain mapping, host allowlist enforcement, and explicit CORS configuration for public direct booking endpoints. These features enable:
+1. **Domain-based tenant resolution**: Each agency can have their own domain (e.g., customer.com → agency_id)
+2. **Host allowlist**: Prevents unauthorized domains from accessing public endpoints
+3. **Explicit CORS origins**: Fine-grained control over which browser origins can call the API
+
+### Environment Configuration
+
+**Required Settings:**
+```bash
+# Host allowlist (comma-separated domains)
+ALLOWED_HOSTS="api.fewo.kolibri-visions.de,customer1.com,customer2.de"
+
+# CORS allowed origins (explicit origins, no wildcards)
+# Optional: Uses ALLOWED_ORIGINS if not set (backward compat)
+CORS_ALLOWED_ORIGINS="https://app.customer1.com,https://www.customer2.de"
+
+# Proxy headers (default: true)
+# Set to true if behind reverse proxy/load balancer (respect X-Forwarded-Host)
+TRUST_PROXY_HEADERS=true
+```
+
+**Safe Defaults:**
+- `ALLOWED_HOSTS=""` (empty): In non-prod → allow all with warning; In prod → allow all but log error (fail-open for backward compat)
+- `CORS_ALLOWED_ORIGINS` not set: Falls back to existing `ALLOWED_ORIGINS`
+- `TRUST_PROXY_HEADERS=true`: Respects X-Forwarded-Host header (standard for proxied deployments)
+
+---
+
+### How to Add Customer Domain
+
+**Prerequisites:**
+- Customer domain DNS points to API server (via A/CNAME record or reverse proxy)
+- Domain is routed to your API (Plesk, Nginx, etc.)
+
+**Steps:**
+
+1. **Add domain mapping in Supabase SQL Editor:**
+   ```sql
+   -- Insert domain → agency mapping
+   INSERT INTO public.agency_domains (agency_id, domain, is_primary)
+   VALUES (
+       '<agency-uuid>',        -- Agency UUID
+       'customer.com',          -- Domain (lowercase, no port, no protocol)
+       true                     -- Primary domain (one per agency recommended)
+   );
+   ```
+
+2. **Add domain to ALLOWED_HOSTS:**
+   ```bash
+   # Update environment variable (append to existing list)
+   ALLOWED_HOSTS="api.fewo.kolibri-visions.de,customer.com"
+   ```
+
+3. **Add site origins to CORS_ALLOWED_ORIGINS (if browser calls API directly):**
+   ```bash
+   # Update environment variable
+   CORS_ALLOWED_ORIGINS="https://app.customer.com,https://www.customer.com"
+   ```
+
+4. **Restart backend service:**
+   ```bash
+   docker restart pms-backend
+   ```
+
+5. **Verify domain works:**
+   ```bash
+   # Test with custom Host header
+   curl -H "Host: customer.com" https://api.fewo.kolibri-visions.de/api/v1/public/ping
+   # Expected: 200 OK
+   ```
+
+---
+
+### Domain Tenant Resolution Flow
+
+**For Public Endpoints** (`/api/v1/public/*`):
+
+1. **Extract Host from request:**
+   - If `TRUST_PROXY_HEADERS=true`: Prefer `X-Forwarded-Host` (first value if multiple)
+   - Else: Use `Host` header
+   - Normalize: lowercase, remove port, strip trailing dot
+
+2. **Resolve agency_id:**
+   - **Primary**: Query `agency_domains` table by domain → get `agency_id`
+   - **Fallback**: Query `properties` table by `property_id` → get `agency_id`
+   - **Cross-check**: Verify property belongs to resolved agency (prevent cross-tenant access)
+
+3. **If no resolution:**
+   - Return 422 with actionable message: "Could not resolve agency for booking request. Property may not exist, or domain mapping not configured."
+
+---
+
+### Troubleshooting
+
+**Problem**: Request returns 403 host_not_allowed
+
+**Symptoms**:
+- `POST /api/v1/public/booking-requests` returns 403
+- Error: `{"error": "host_not_allowed", "message": "Host '...' not allowed. Configure ALLOWED_HOSTS."}`
+
+**Root Cause**:
+- Request Host/X-Forwarded-Host is not in `ALLOWED_HOSTS` environment variable
+- Domain not added to allowlist after configuring in `agency_domains`
+
+**Solution**:
+1. Check request Host header:
+   ```bash
+   curl -v https://api.example.com/api/v1/public/ping 2>&1 | grep "Host:"
+   # Or check X-Forwarded-Host if behind proxy
+   ```
+2. Verify ALLOWED_HOSTS includes the domain:
+   ```bash
+   # Check environment variable
+   docker exec pms-backend env | grep ALLOWED_HOSTS
+   ```
+3. Add domain to ALLOWED_HOSTS and restart:
+   ```bash
+   ALLOWED_HOSTS="api.fewo.kolibri-visions.de,customer.com"
+   docker restart pms-backend
+   ```
+
+---
+
+**Problem**: Domain mapping not working (wrong agency resolved)
+
+**Symptoms**:
+- Request to `customer.com` resolves to wrong agency or fails
+- "Property not available for this domain" error
+
+**Root Cause**:
+- Domain not in `agency_domains` table
+- Domain normalized incorrectly (case mismatch, port included, etc.)
+- Property belongs to different agency than domain mapping
+
+**Solution**:
+1. Check if domain mapping exists:
+   ```sql
+   SELECT * FROM agency_domains WHERE domain = 'customer.com';
+   -- Should return row with correct agency_id
+   ```
+2. If missing, add mapping:
+   ```sql
+   INSERT INTO agency_domains (agency_id, domain, is_primary)
+   VALUES ('<agency-uuid>', 'customer.com', true);
+   ```
+3. Verify domain normalization matches:
+   - Stored domain must be lowercase, no port, no protocol
+   - Example: ✅ `customer.com` ❌ `Customer.com:443` ❌ `https://customer.com`
+4. Cross-check property agency:
+   ```sql
+   SELECT id, agency_id FROM properties WHERE id = '<property-uuid>';
+   -- agency_id must match agency_domains.agency_id for domain
+   ```
+
+---
+
+**Problem**: Proxy strips X-Forwarded-Host header
+
+**Symptoms**:
+- Domain resolution uses wrong host (API domain instead of customer domain)
+- Host allowlist check fails unexpectedly
+
+**Root Cause**:
+- Reverse proxy (Nginx, Caddy, etc.) not forwarding `X-Forwarded-Host` header
+- Proxy configuration missing `proxy_set_header X-Forwarded-Host $host;`
+
+**Solution**:
+1. **Nginx**: Add to proxy block:
+   ```nginx
+   location / {
+       proxy_pass http://backend:8000;
+       proxy_set_header Host $host;
+       proxy_set_header X-Forwarded-Host $host;
+       proxy_set_header X-Forwarded-Proto $scheme;
+       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+   }
+   ```
+2. **Caddy**: Usually automatic, but verify:
+   ```caddyfile
+   reverse_proxy backend:8000 {
+       header_up Host {host}
+       header_up X-Forwarded-Host {host}
+   }
+   ```
+3. Restart proxy and verify headers are forwarded
+
+---
+
+**Problem**: CORS preflight fails (browser error)
+
+**Symptoms**:
+- Browser console shows CORS error: "Access-Control-Allow-Origin header missing"
+- OPTIONS request to `/api/v1/public/booking-requests` fails
+
+**Root Cause**:
+- Origin not in `CORS_ALLOWED_ORIGINS` (or `ALLOWED_ORIGINS` if not set)
+- CORS middleware not configured or disabled
+
+**Solution**:
+1. Add origin to CORS_ALLOWED_ORIGINS:
+   ```bash
+   CORS_ALLOWED_ORIGINS="https://app.customer.com,https://www.customer.com"
+   ```
+2. Restart backend:
+   ```bash
+   docker restart pms-backend
+   ```
+3. Test CORS preflight:
+   ```bash
+   curl -X OPTIONS https://api.example.com/api/v1/public/booking-requests \
+     -H "Origin: https://app.customer.com" \
+     -H "Access-Control-Request-Method: POST" \
+     -H "Access-Control-Request-Headers: content-type,idempotency-key" \
+     -v
+   # Expected: Access-Control-Allow-Origin: https://app.customer.com
+   ```
+
+---
+
+**Related Documentation**:
+- [P3b Domain/Host/CORS Smoke Script](../../scripts/pms_p3b_domain_host_cors_smoke.sh) - Smoke test for P3b features
+- [Domain Resolution Implementation](../../app/core/tenant_domain.py) - Domain-based tenant resolution logic
+- [Host Allowlist Implementation](../../app/core/public_host_allowlist.py) - Host enforcement for public endpoints
+- [Public Booking Routes](../../app/api/routes/public_booking.py) - Integration point (updated for P3b)
+- [Migration 20260106190000](../../../supabase/migrations/20260106190000_add_agency_domains.sql) - Agency domains table
+- [Config](../../app/core/config.py) - ALLOWED_HOSTS, CORS_ALLOWED_ORIGINS, TRUST_PROXY_HEADERS settings
+
+---
+

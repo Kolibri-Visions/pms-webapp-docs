@@ -1733,6 +1733,86 @@ Verified in production on **2026-01-06** (Europe/Berlin timezone):
 
 ---
 
+# P3b: Domain Tenant Resolution + Host Allowlist + CORS (Public Endpoints)
+
+**Implementation Date:** 2026-01-06
+
+**Scope:** Add domain-based tenant resolution, host allowlist enforcement, and explicit CORS configuration to public direct booking endpoints. Enables multi-tenant white-label direct booking where each agency uses their own custom domain.
+
+**Features Implemented:**
+
+1. **Database Migrations**:
+   - Migration 20260106190000_add_agency_domains.sql:
+     - Created agency_domains table: id, created_at, agency_id, domain, is_primary, validated_at
+     - Unique constraint on domain (one-to-one mapping)
+     - ON DELETE CASCADE for agency cleanup
+     - Trigger for automatic domain normalization (lowercase, no port, no trailing dot)
+     - Index on agency_id for fast reverse lookups
+
+2. **Domain Tenant Resolution Module** (`app/core/tenant_domain.py`):
+   - `normalize_host()`: Normalize host for consistent lookups (lowercase, remove port, strip trailing dot)
+   - `extract_request_host()`: Extract effective host from X-Forwarded-Host or Host header
+   - `resolve_agency_id_by_domain()`: Query agency_domains table for domain→agency mapping
+   - `resolve_agency_id_for_public_endpoint()`: Domain-first resolution strategy (domain → agency, fallback to property → agency)
+
+3. **Host Allowlist Enforcement** (`app/core/public_host_allowlist.py`):
+   - `enforce_host_allowlist()`: FastAPI dependency for host validation
+   - Returns 403 with actionable error message if host not in ALLOWED_HOSTS
+   - Fails-open in production for backward compatibility (with error logging)
+   - Graceful handling of missing Host header (400 Bad Request)
+
+4. **Configuration Updates** (`app/core/config.py`):
+   - Added `ALLOWED_HOSTS` environment variable (comma-separated list of allowed hosts)
+   - Added `CORS_ALLOWED_ORIGINS` environment variable (explicit CORS origins, no wildcards by default)
+   - Property: `allowed_hosts_list` for normalized host list
+   - Property: `cors_allowed_origins_list` with fallback to existing `ALLOWED_ORIGINS`
+
+5. **Public Booking Router Updates** (`app/api/routes/public_booking.py`):
+   - Applied host allowlist enforcement to router (router-level dependency)
+   - Updated agency resolution to use domain-first strategy
+   - Added cross-tenant security check (property must belong to resolved agency)
+   - Respects TRUST_PROXY_HEADERS for X-Forwarded-Host support
+
+6. **Smoke Script**:
+   - `backend/scripts/pms_p3b_domain_host_cors_smoke.sh`: Tests host allowlist enforcement, CORS preflight (if configured), and domain tenant resolution (if custom domain provided)
+   - Graceful skips for tests that can't run in proxy environments (Host header override may be stripped)
+   - Exit codes: 0 (success/skipped), 1 (unexpected failure), 2 (500 server error)
+
+7. **Documentation** (DOCS SAFE MODE - add-only):
+   - runbook.md - "P3b: Domain Tenant Resolution + Host Allowlist + CORS" section with environment configuration, how to add customer domain, domain resolution flow, and troubleshooting
+   - scripts/README.md:5611-5730 - P3b domain/host/CORS smoke test documentation
+   - project_status.md - This P3b entry
+
+**Architecture:**
+- Domain resolution order: Domain → agency_id (primary), property → agency_id (fallback)
+- Host normalization: Lowercase, no port, no trailing dot (consistent DB and application layer)
+- Host allowlist: ALLOWED_HOSTS config, 403 for unauthorized hosts, fail-open in production
+- CORS: Explicit CORS_ALLOWED_ORIGINS (no wildcards by default), fallback to ALLOWED_ORIGINS
+- Cross-tenant security: Property must belong to resolved agency (prevents cross-domain property access)
+- Proxy support: TRUST_PROXY_HEADERS for X-Forwarded-Host header trust
+
+**Implementation Notes:**
+- Host allowlist enforcement is router-level dependency (applies to all public endpoints)
+- Domain resolution is domain-first (Host/X-Forwarded-Host → agency_id) with property fallback
+- Cross-tenant check prevents property access from wrong agency domain
+- Smoke script handles proxy environments gracefully (skips tests that can't run)
+- Database trigger ensures domain normalization at storage time
+- Public endpoints (no auth required)
+
+**Status:** ✅ IMPLEMENTED
+
+**Integration Points:**
+- Public booking router: Host allowlist + domain resolution
+- Agency domains table: Domain→agency mapping for white-label support
+- Configuration: ALLOWED_HOSTS and CORS_ALLOWED_ORIGINS environment variables
+
+**Testing:**
+- Smoke script: `backend/scripts/pms_p3b_domain_host_cors_smoke.sh`
+- Tests host allowlist (403 for unauthorized hosts), CORS preflight, domain resolution
+- Graceful skips in proxy environments (expected behavior)
+
+---
+
 
 **Date Completed:** 2026-01-02 to 2026-01-03
 
