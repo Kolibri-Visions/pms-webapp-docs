@@ -19248,11 +19248,14 @@ All pricing fields are nullable/optional for gradual adoption. If property_id is
 **Problem**: Endpoints return 404 Not Found (router not mounted)
 
 **Solution**:
-1. Verify router is mounted: Check `/openapi.json` for `/api/v1/pricing` paths
-2. If missing from OpenAPI: router not registered in module system
-3. Verify: `backend/app/modules/pricing.py` exists and is imported
-4. Verify: `backend/app/modules/bootstrap.py` imports pricing module
-5. Check logs at startup for "Pricing module not available" warnings
+1. Check module mount status: `GET /api/v1/ops/modules` → verify `pricing` appears in modules list with prefixes `["/api/v1/pricing"]`
+2. Check OpenAPI schema: `GET /openapi.json` → verify `/api/v1/pricing/*` paths exist
+3. Check deploy commit: `GET /api/v1/ops/version` → verify `source_commit` matches expected SHA
+4. If pricing not in modules list:
+   - Check if MODULES_ENABLED=false (fallback mode): pricing must be in explicit router list (backend/app/main.py)
+   - Check logs at startup for "Pricing module not available" warnings
+   - Verify: `backend/app/modules/pricing.py` exists and is imported in `bootstrap.py`
+5. If pricing in modules list but routes still 404: restart app (stale process)
 
 **Smoke Test**:
 ```bash
