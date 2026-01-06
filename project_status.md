@@ -1378,6 +1378,72 @@ Verified in production on **2026-01-06** with automated verification:
 
 ---
 
+# P0 Public Anti-Abuse (/api/v1/public/* rate limiting + honeypot)
+
+**Implementation Date:** 2026-01-06
+
+**Scope:** Add anti-abuse protection for ALL /api/v1/public/* endpoints
+
+**Features Implemented:**
+
+1. **Redis-backed rate limiting** (IP-based, property-scoped):
+   - backend/app/core/public_anti_abuse.py - Core anti-abuse module (~393 lines)
+   - Atomic INCR+EXPIRE via Lua script
+   - Per-IP, per-bucket rate limits (ping: 60/10s, availability: 30/10s, booking_requests: 10/10s)
+   - Property-scoped limits for availability + booking_requests (IP + property_id)
+   - X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Window headers
+   - Retry-After header on 429 responses
+   - Fail-open design (allow requests if Redis unavailable)
+
+2. **Honeypot field anti-bot protection**:
+   - Added `website` field to BookingRequestInput (must be empty)
+   - If non-empty, request blocked with 429 (same as rate limit)
+   - Prevents automated bot submissions without revealing detection method
+
+3. **Configuration settings** (backend/app/core/config.py:330-341):
+   - PUBLIC_ANTI_ABUSE_ENABLED (default: True)
+   - PUBLIC_RATE_LIMIT_ENABLED (default: True)
+   - PUBLIC_RATE_LIMIT_WINDOW_SECONDS (default: 10)
+   - PUBLIC_RATE_LIMIT_PING_MAX (default: 60)
+   - PUBLIC_RATE_LIMIT_AVAIL_MAX (default: 30)
+   - PUBLIC_RATE_LIMIT_BOOKING_MAX (default: 10)
+   - PUBLIC_RATE_LIMIT_REDIS_URL (fallback: REDIS_URL → CELERY_BROKER_URL)
+   - PUBLIC_RATE_LIMIT_PREFIX (default: "public_rl")
+   - PUBLIC_HONEYPOT_FIELD (default: "website")
+
+4. **Router-level protection** (backend/app/api/routes/public_booking.py):
+   - Added `dependencies=[Depends(public_anti_abuse_guard)]` to APIRouter
+   - Applies to ALL /api/v1/public/* endpoints automatically
+   - Added honeypot field to BookingRequestInput schema
+
+5. **Updated smoke script** (backend/scripts/pms_direct_booking_public_smoke.sh:294-396):
+   - Added Test 3: Rate Limit (Ping Burst)
+   - Honors Retry-After if already rate-limited
+   - Sends burst of requests and counts 429s
+   - Added rate limit result to summary output
+
+6. **Documentation** (DOCS SAFE MODE - add-only with grep proof):
+   - runbook.md:18904-18991 - "Public API Anti-Abuse (Rate Limiting + Honeypot)" section
+   - scripts/README.md:5361-5379 - Test 3 documentation + 429 status code
+
+**Architecture:**
+- Separate Redis pool for rate limiter (_rate_limit_pool)
+- Router-level FastAPI dependency (applies to all endpoints)
+- IP extraction respects TRUST_PROXY_HEADERS (X-Forwarded-For, X-Real-IP)
+- Bucket-based limits: ping, availability, booking_requests, public_default
+- Property-scoped key format: `{prefix}:{bucket}:{ip}:p:{property_id}`
+- Fail-open: allows requests if Redis unavailable (logs warning)
+
+**Error Handling:**
+- 429 Too Many Requests with Retry-After header
+- Honeypot triggers same 429 (doesn't reveal detection)
+- Logs rate limit hits with structured context (IP, bucket, property_id, current/max)
+- Fail-open on Redis errors (doesn't 503 due to rate limiter outages)
+
+**Status:** ✅ IMPLEMENTED (awaiting production verification with smoke script Test 3)
+
+---
+
 
 **Date Completed:** 2026-01-02 to 2026-01-03
 

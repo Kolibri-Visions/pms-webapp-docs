@@ -18901,6 +18901,94 @@ export DATE_TO="2037-01-03"
 
 **Prevention**: Smoke script includes /ping preflight check with OpenAPI diagnostics to detect unmounted router early
 
+### Public API Anti-Abuse (Rate Limiting + Honeypot)
+
+**Coverage**: All /api/v1/public/* endpoints
+
+**Protection Mechanisms**:
+
+1. **IP-Based Rate Limiting**:
+   - Ping endpoint: 60 requests per 10-second window (per IP)
+   - Availability endpoint: 30 requests per 10-second window (per IP + property_id when available)
+   - Booking requests: 10 requests per 10-second window (per IP + property_id when available)
+   - Redis-backed with atomic INCR+EXPIRE operations
+   - Fail-open design: allows requests if Redis unavailable (logs warning)
+
+2. **Honeypot Field** (Booking Requests Only):
+   - Field name: `website` (configurable via PUBLIC_HONEYPOT_FIELD)
+   - Behavior: If field is present and non-empty, request blocked with 429
+   - Does not reveal honeypot reason in response
+   - OpenAPI documents field as "Anti-bot honeypot field (must be empty)"
+
+**Response Headers** (on success):
+- `X-RateLimit-Limit`: Max requests allowed in window
+- `X-RateLimit-Remaining`: Requests remaining
+- `X-RateLimit-Window`: Window duration in seconds
+
+**Response on Limit Exceeded**:
+- Status: 429 Too Many Requests
+- Detail: "Too many requests. Please try again later."
+- Header: `Retry-After` (seconds until window resets)
+
+**Environment Variables**:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PUBLIC_ANTI_ABUSE_ENABLED` | `true` | Master toggle for anti-abuse protection |
+| `PUBLIC_RATE_LIMIT_ENABLED` | `true` | Enable rate limiting |
+| `PUBLIC_RATE_LIMIT_WINDOW_SECONDS` | `10` | Rate limit window duration |
+| `PUBLIC_RATE_LIMIT_PING_MAX` | `60` | Max ping requests per window |
+| `PUBLIC_RATE_LIMIT_AVAIL_MAX` | `30` | Max availability requests per window |
+| `PUBLIC_RATE_LIMIT_BOOKING_MAX` | `10` | Max booking requests per window |
+| `PUBLIC_RATE_LIMIT_REDIS_URL` | (auto) | Redis URL (defaults to REDIS_URL or CELERY_BROKER_URL) |
+| `PUBLIC_RATE_LIMIT_PREFIX` | `public_rl` | Redis key prefix |
+| `PUBLIC_HONEYPOT_FIELD` | `website` | Honeypot field name |
+
+**Testing**:
+
+The public booking smoke script (`pms_direct_booking_public_smoke.sh`) includes a rate limit test:
+- Sends burst of ping requests (limit + 5 or 80 if header not present)
+- Verifies at least one 429 response observed
+- Honors Retry-After header if already rate-limited at start
+- PASS condition: Test runs without fatal errors (informational test)
+
+**Logging**:
+
+Rate limit decisions logged with structured context:
+- `decision`: allowed / limited / honeypot
+- `ip`: Client IP address
+- `path`: Request path
+- `method`: HTTP method
+- `bucket`: Rate limit bucket (ping/availability/booking_requests)
+- `property_id`: Property ID if available
+- `user_agent`: User-Agent header
+- `retry_after`: Seconds until limit resets (on 429 only)
+
+**Troubleshooting**:
+
+**Problem**: All public requests return 429
+
+**Solution**:
+1. Check if rate limits configured too low for your traffic
+2. Verify Redis is operational: `redis-cli -u $REDIS_URL PING`
+3. Increase limits via environment variables (e.g., `PUBLIC_RATE_LIMIT_PING_MAX=120`)
+4. Check if multiple IPs sharing same public IP (NAT/proxy) - consider property-scoped limits
+
+**Problem**: Rate limiting not working (no 429s observed)
+
+**Solution**:
+1. Check `PUBLIC_RATE_LIMIT_ENABLED=true` in environment
+2. Verify Redis connection: check app logs for "Rate limit Redis pool created"
+3. If Redis unavailable, limiter fails open (allows all requests with warning)
+4. Test manually: `for i in {1..70}; do curl -s -o /dev/null -w "%{http_code}\n" https://api.example.com/api/v1/public/ping; done | grep 429`
+
+**Problem**: Legitimate requests blocked by honeypot
+
+**Solution**:
+1. Ensure frontend does NOT populate `website` field (or configured honeypot field)
+2. Check POST payload: field should be absent or empty string
+3. Verify field name matches `PUBLIC_HONEYPOT_FIELD` setting
+
 ### Related Documentation
 
 - [Public Booking Smoke Script](../scripts/README.md#public-direct-booking-smoke-test-pms_direct_booking_public_smokesh) - Full script documentation
