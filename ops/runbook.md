@@ -18705,33 +18705,47 @@ If 500 persists, check logs for unexpected exceptions and file incident report.
 
 **Problem**: Booking creation returns 503 "Database schema not installed or out of date"
 
-**Diagnosis**: Schema drift - code references DB column/table that doesn't exist in current schema
+**Diagnosis**: Schema drift - code references DB column/table/function that doesn't exist or has ambiguous signature
 
-**Common Example**:
+**Common Examples**:
 ```
+# Case 1: Missing column
 Backend logs: "column 'notes' of relation 'bookings' does not exist"
 Response: 503 {"error":"service_unavailable","message":"Database schema not installed or out of date: column notes..."}
+
+# Case 2: Ambiguous function
+Backend logs: "function generate_booking_reference() is not unique"
+Response: 503 {"error":"service_unavailable","message":"Database schema/function definitions out of date or duplicated: generate_booking_reference is ambiguous..."}
 ```
 
-**Root Cause**:
-- Public booking endpoint tries to INSERT into column that doesn't exist (e.g., bookings.notes)
-- DB migrations not run or schema out of sync with code
+**Root Causes**:
+- **Missing column**: Public booking endpoint tries to INSERT into column that doesn't exist (e.g., bookings.notes)
+- **Ambiguous function**: Multiple `generate_booking_reference()` function signatures exist without proper type disambiguation
+- **Schema drift**: DB migrations not run or schema out of sync with code
 
 **Solution**:
-1. Check if migration exists for the missing column/table
+1. Check if migration exists for the missing column/table/function
 2. If migration exists, run it:
    ```bash
    cd /path/to/supabase
    supabase db push
    # OR manually apply migration SQL
    ```
-3. If migration does NOT exist:
-   - Code should not reference the column (bug in code)
-   - Public booking endpoint intentionally does NOT persist notes field to bookings
-   - Verify `backend/app/api/routes/public_booking.py` does not include `notes` in INSERT statement
+3. For ambiguous function error:
+   - Check for duplicate function definitions in database:
+     ```sql
+     SELECT proname, proargtypes, prosrc FROM pg_proc WHERE proname = 'generate_booking_reference';
+     ```
+   - Drop duplicate/old function signatures
+   - Keep only one signature with explicit types (e.g., `generate_booking_reference(text)`)
+   - Code uses explicit type cast: `public.generate_booking_reference($1::text)`
+4. If migration does NOT exist:
+   - Code should not reference the missing column/function (bug in code)
+   - Public booking endpoint intentionally does NOT persist optional fields (like notes)
+   - Verify `backend/app/api/routes/public_booking.py` generates booking_reference before INSERT
    - If code was reverted accidentally, redeploy correct version
 
-**Prevention**: Public booking endpoint is designed to work with minimal schema. It does not persist optional fields (like notes) unless schema explicitly supports them.
+**Prevention**: Public booking endpoint explicitly generates booking_reference with type cast (`$1::text`) before INSERT to avoid ambiguity. It does not rely on database DEFAULT values that may have ambiguous function calls.
 
 ---
 

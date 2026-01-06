@@ -1226,6 +1226,30 @@ Initial commit 49bd8c9 added the router only to the fallback path in main.py (wh
 
 **Design Decision**: Public booking endpoint designed for minimal schema compatibility. Optional fields (like notes) are accepted in API but not persisted unless schema explicitly supports them. This prevents schema-related 500 errors and provides actionable 503 with migration guidance when drift detected.
 
+**Stage 5 (production fix)**: Prevent 500 error from ambiguous generate_booking_reference() function
+1. Fixed production 500: "function generate_booking_reference() is not unique"
+2. Generate booking_reference explicitly in Python before INSERT (lines 236-275)
+   - Use same pattern as booking_service.py:1791
+   - Explicit type cast: `public.generate_booking_reference($1::text)`
+   - Pass "PMS" prefix as text parameter
+3. Added AmbiguousFunctionError exception handling → 503:
+   - Message: "Database schema/function definitions out of date or duplicated: generate_booking_reference is ambiguous. Run migrations / fix DB function signatures."
+   - Also handles UndefinedFunctionError → 503 for missing function
+4. Updated INSERT to include booking_reference as parameter (line 293):
+   - Added booking_reference to column list
+   - Added $9 binding for booking_reference value
+   - No longer relies on database DEFAULT value that may have ambiguous function call
+5. Updated docs (add-only):
+   - runbook.md:18710-18748 - Added AmbiguousFunctionError case + SQL diagnostic query
+   - scripts/README.md:5364,5366 - Mentioned ambiguous function in 503 description
+   - project_status.md - This Stage 5 entry
+
+**Root Cause**: Database had multiple `generate_booking_reference()` function signatures without proper type disambiguation. INSERT relied on DEFAULT value that called function without explicit type cast, causing AmbiguousFunctionError → 500.
+
+**Fix**: Generate booking_reference explicitly in Python with type-casted function call before INSERT. Eliminates reliance on ambiguous DEFAULT value. Maps AmbiguousFunctionError to 503 (actionable) instead of 500.
+
+**Prevention**: Public booking endpoint no longer relies on database DEFAULT values for critical fields like booking_reference. Explicitly generates all required values with proper type casting before INSERT.
+
 **Status**: ✅ IMPLEMENTED (awaiting production verification)
 
 **Verification (Future)**:
