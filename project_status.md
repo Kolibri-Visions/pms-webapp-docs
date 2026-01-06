@@ -894,6 +894,9 @@ guest_fk_smoke_rc=0
 - ✅ FK violations properly handled: 422 Unprocessable Entity (not 500)
 - ✅ Both smoke tests passed bug-free (rc=0)
 
+**Tooling Reliability Improvement (2026-01-06)**: The `pms_booking_guest_id_fk_smoke.sh` script was enhanced with automatic date window shifting to prevent false failures. If Test 1 encounters 409 (double_booking), the script now automatically shifts the date window by SHIFT_DAYS (default 7) and retries up to MAX_WINDOW_TRIES (default 10) times. This eliminates flakiness when testing on already-booked dates. Status: ✅ IMPLEMENTED. Verification criteria: pms_verify_deploy.sh commit match + run script on booked window and observe auto-shift succeeds (rc=0).
+
+
 **Related Improvement (2026-01-05)**: See standalone entry below for booking concurrency smoke script reliability (commit 1897cf0, VERIFIED).
 
 ---

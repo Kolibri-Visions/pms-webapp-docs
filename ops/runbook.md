@@ -18364,6 +18364,8 @@ ALTER TABLE bookings DROP CONSTRAINT bookings_no_overlap_exclusion;
    - Test 1 (guest_id omitted): 201 Created, guest_id=null
    - Test 2 (guest_id invalid): 422 Unprocessable Entity with actionable message
    - Exit code: rc=0
+   - Auto-shift: Script automatically retries with shifted date window if 409 conflict encountered
+
 
 **Success Criteria**:
 - ✅ pms_verify_deploy.sh: Commit match + rc=0
