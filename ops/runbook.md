@@ -19008,6 +19008,11 @@ Rate limit decisions logged with structured context:
 - `internal_notes`: Append-only log of review actions with timestamps
 - No separate workflow-specific columns required (uses existing bookings schema)
 
+**Status Mapping (API ↔ DB)**: The API exposes `under_review` status for P1 workflow semantics, but the database stores this as `inquiry` for backward compatibility with existing PROD schema constraints. The mapping layer transparently converts:
+- API `under_review` ↔ DB `inquiry`
+- All other statuses (requested, confirmed, cancelled) pass through unchanged
+- Clients always see API status `under_review` in responses, never `inquiry`
+
 **Endpoints** (authenticated, requires manager/admin role):
 
 1. **List Booking Requests**:
@@ -19118,3 +19123,4 @@ JWT_TOKEN=<token> \
 | 2025-12-30 | Admin UI authentication verification - Cookie-based SSR login, curl checks for /ops/* access | System |
 | 2026-01-01 | Full Sync batching (batch_id) - Group 3 operations, API exposure, UI grouping, verification queries | System |
 | 2026-01-06 | P1 Booking Request Workflow - Fixed to operate on bookings table using existing columns (confirmed_at, cancelled_at, cancelled_by, cancellation_reason, internal_notes). Status: cancelled instead of declined. | System |
+| 2026-01-06 | P1 Status Mapping - Added API-to-DB status mapping layer: API under_review maps to DB inquiry for PROD compatibility. Prevents 500 errors from unsupported status values. | System |
