@@ -18997,6 +18997,81 @@ Rate limit decisions logged with structured context:
 - [Public Booking Router](../app/api/routes/public_booking.py) - API implementation
 - [Project Status](../docs/project_status.md) - Implementation status
 
+### P1 Booking Request Review Workflow
+
+**Scope**: Internal review workflow for public booking requests (submitted → under_review → approved/declined)
+
+**Endpoints** (authenticated, requires manager/admin role):
+
+1. **List Booking Requests**:
+   - `GET /api/v1/booking-requests?status=requested&limit=50&offset=0`
+   - Filter by status: requested, under_review, confirmed, declined
+   - Returns paginated list with review/approval timestamps
+
+2. **Get Booking Request Detail**:
+   - `GET /api/v1/booking-requests/{id}`
+   - Returns full booking request details including internal notes, decline reason
+
+3. **Review Booking Request**:
+   - `POST /api/v1/booking-requests/{id}/review`
+   - Transitions: requested → under_review, under_review → under_review (update note)
+   - Body: `{"internal_note": "optional note"}`
+   - Sets: reviewed_at, reviewed_by
+
+4. **Approve Booking Request**:
+   - `POST /api/v1/booking-requests/{id}/approve`
+   - Transitions: requested/under_review → confirmed
+   - Body: `{"internal_note": "optional note"}`
+   - Sets: approved_at, approved_by, confirmed_at, status=confirmed
+   - Idempotent: re-approving returns 200 with existing booking_id
+
+5. **Decline Booking Request**:
+   - `POST /api/v1/booking-requests/{id}/decline`
+   - Transitions: requested/under_review → declined
+   - Body: `{"decline_reason": "required reason", "internal_note": "optional note"}`
+   - Sets: decline_reason, reviewed_at, reviewed_by, status=declined
+
+**Status Lifecycle**:
+```
+requested → under_review → confirmed (approved)
+         ↘               ↘ declined
+```
+
+**Error Codes**:
+- **401 Unauthorized**: Missing or invalid JWT token
+- **403 Forbidden**: User lacks manager/admin role or agency access
+- **404 Not Found**: Booking request not found or deleted
+- **409 Conflict**: Invalid status transition (e.g., cannot approve declined request)
+- **422 Validation**: Missing required fields (e.g., decline_reason)
+
+**Troubleshooting**:
+
+**Problem**: Cannot approve booking request (409 Conflict)
+
+**Solution**:
+1. Check current status: `GET /api/v1/booking-requests/{id}` → verify status is requested/under_review
+2. If status=declined: cannot approve declined requests (invalid transition)
+3. If status=confirmed: already approved (idempotent, returns 200 with booking_id)
+
+**Problem**: Decline fails with 422 Validation
+
+**Solution**:
+1. Ensure `decline_reason` is provided and non-empty in request body
+2. Example: `{"decline_reason": "Property unavailable", "internal_note": "..."}`
+
+**Smoke Test**:
+```bash
+# Run workflow smoke test (requires JWT_TOKEN with manager/admin role)
+HOST=https://api.example.com \
+JWT_TOKEN=<token> \
+./backend/scripts/pms_public_booking_requests_workflow_smoke.sh
+```
+
+**Related Documentation**:
+- [Booking Request Workflow Smoke Script](../scripts/README.md#p1-booking-request-workflow-smoke-test) - Full script documentation
+- [Booking Requests API](../app/api/routes/booking_requests.py) - API implementation
+- [Migration 20260106120000](../../supabase/migrations/20260106120000_add_booking_request_workflow.sql) - Database schema
+
 ---
 
 

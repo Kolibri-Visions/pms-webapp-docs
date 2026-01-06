@@ -1468,6 +1468,84 @@ Verified in production on **2026-01-06** (Europe/Berlin timezone):
 
 ---
 
+# P1 Booking Request Review Workflow (Internal Review → Approve/Decline)
+
+**Implementation Date:** 2026-01-06
+
+**Scope:** Add internal authenticated workflow for reviewing, approving, and declining public booking requests
+
+**Features Implemented:**
+
+1. **Database Migration** (supabase/migrations/20260106120000_add_booking_request_workflow.sql):
+   - Added workflow columns to bookings table: reviewed_at, approved_at, reviewed_by, approved_by, decline_reason, approved_booking_id
+   - Indexes for workflow queries (reviewed_by, approved_at)
+   - All columns nullable for backwards compatibility
+
+2. **API Schemas** (backend/app/schemas/booking_requests.py):
+   - BookingRequestListItem (list response)
+   - BookingRequestDetail (detail response)
+   - ReviewInput/ReviewResponse (review action)
+   - ApproveInput/ApproveResponse (approve action)
+   - DeclineInput/DeclineResponse (decline action)
+   - BookingRequestListResponse (paginated list)
+
+3. **API Routes** (backend/app/api/routes/booking_requests.py):
+   - GET /api/v1/booking-requests (list with status filter, pagination)
+   - GET /api/v1/booking-requests/{id} (detail view)
+   - POST /api/v1/booking-requests/{id}/review (transition to under_review)
+   - POST /api/v1/booking-requests/{id}/approve (transition to confirmed)
+   - POST /api/v1/booking-requests/{id}/decline (transition to declined with reason)
+   - All routes require manager/admin role (via require_roles dependency)
+   - Agency scoping via get_db_authed
+
+4. **Status Lifecycle**:
+   - requested → under_review (review action)
+   - requested/under_review → confirmed (approve action)
+   - requested/under_review → declined (decline action with required reason)
+   - Idempotent approval: re-approving returns 200 with same booking_id
+   - Invalid transitions return 409 Conflict with clear message
+
+5. **Error Handling**:
+   - 401 Unauthorized: Missing/invalid JWT
+   - 403 Forbidden: User lacks manager/admin role or agency access
+   - 404 Not Found: Booking request not found
+   - 409 Conflict: Invalid status transition (e.g., approve declined request)
+   - 422 Validation: Missing required fields (e.g., decline_reason)
+
+6. **Audit Logging**:
+   - Logs action, request_id, user_id (actor), old_status → new_status
+   - Structured log context for review/approve/decline actions
+
+7. **Smoke Test** (backend/scripts/pms_public_booking_requests_workflow_smoke.sh):
+   - Test 1: Create public booking request
+   - Test 2: Review (set to under_review)
+   - Test 3: Approve (set to confirmed)
+   - Test 4: Idempotent approval (re-approve)
+   - Test 5: Create and decline another request
+   - All tests must pass (rc=0)
+
+8. **Documentation** (DOCS SAFE MODE - add-only with grep proof):
+   - runbook.md:19000-19074 - "P1 Booking Request Review Workflow" section
+   - scripts/README.md:5498-5567 - P1 workflow smoke test documentation
+   - project_status.md - This P1 entry
+
+**Architecture:**
+- In-place status updates (no separate booking record created on approval)
+- Booking requests are bookings with status='requested'
+- Approval transitions status to 'confirmed' and sets confirmed_at
+- Internal notes accumulated with timestamps
+- Agency scoping enforced via get_db_authed
+- RBAC via require_roles("manager", "admin")
+
+**Router Integration:**
+- Registered in backend/app/api/routes/__init__.py
+- Mounted in backend/app/main.py at /api/v1/booking-requests
+- Tagged as "Booking Requests" in OpenAPI
+
+**Status:** ✅ IMPLEMENTED (awaiting production verification with smoke script rc=0)
+
+---
+
 
 **Date Completed:** 2026-01-02 to 2026-01-03
 
