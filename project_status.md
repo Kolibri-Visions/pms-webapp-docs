@@ -1561,6 +1561,85 @@ Verified in production on **2026-01-06** (Europe/Berlin timezone):
 
 ---
 
+# P2 Pricing v1 Foundation (Rate Plans + Quote Calculation)
+
+**Implementation Date:** 2026-01-06
+
+**Scope:** Add pricing foundation with rate plans, seasonal overrides, and quote calculation for booking requests
+
+**Features Implemented:**
+
+1. **Database Migration** (supabase/migrations/20260106150000_add_pricing_v1.sql):
+   - Created rate_plans table: agency_id, property_id (nullable for agency-wide), name, currency, base_nightly_cents, min_stay_nights, max_stay_nights, active
+   - Created rate_plan_seasons table: rate_plan_id, date_from, date_to, nightly_cents (override), min_stay_nights (override), active
+   - Foreign key constraints: rate_plans → agencies/properties (CASCADE), rate_plan_seasons → rate_plans (CASCADE)
+   - Validation constraint: CHECK (date_from < date_to)
+   - Indexes for performance: agency_id, property_id, active, date_range
+   - All pricing fields nullable/optional for gradual adoption
+
+2. **API Schemas** (backend/app/schemas/pricing.py):
+   - RatePlanCreate (create request with optional seasons)
+   - RatePlanResponse (rate plan with seasons list)
+   - RatePlanSeasonCreate (seasonal override)
+   - RatePlanSeasonResponse (season response)
+   - QuoteRequest (property_id, check_in, check_out)
+   - QuoteResponse (nightly_cents, total_cents, nights, currency, rate_plan details)
+
+3. **API Routes** (backend/app/api/routes/pricing.py):
+   - GET /api/v1/pricing/rate-plans?property_id={uuid} (list rate plans with seasons)
+   - POST /api/v1/pricing/rate-plans (create rate plan with optional seasons)
+   - POST /api/v1/pricing/quote (calculate quote for property/dates)
+   - Rate plan management requires manager/admin role (via require_roles)
+   - Quote endpoint accessible to all authenticated users
+   - Agency scoping via get_db_authed
+
+4. **Quote Calculation Logic**:
+   - Find active rate plan for property (property-specific first, then agency-wide)
+   - Check for seasonal override that applies to check_in date
+   - Use seasonal nightly_cents if found, otherwise base_nightly_cents
+   - Calculate: total_cents = nightly_cents × nights
+   - Return quote with all pricing details or message if no pricing configured
+
+5. **Currency Fallback Hierarchy**:
+   - rate_plan.currency → property.currency → agency.currency → EUR
+
+6. **Module Integration** (backend/app/modules/pricing.py):
+   - Created pricing module with router configuration
+   - Registered in backend/app/modules/bootstrap.py
+   - Depends on: core_pms, properties
+   - Tagged: ["Pricing", "P2 Foundation"]
+
+7. **Smoke Test** (backend/scripts/pms_pricing_quote_smoke.sh):
+   - Test 1: Create rate plan with base pricing
+   - Test 2: List rate plans for property
+   - Test 3: Verify created rate plan in list
+   - Test 4: Calculate pricing quote
+   - Test 5: Verify quote calculation (nightly_cents × nights = total_cents)
+   - All tests must pass (rc=0)
+
+8. **Documentation** (DOCS SAFE MODE - add-only with grep proof):
+   - runbook.md:19134-19260 - "P2 Pricing v1 Foundation" section
+   - scripts/README.md:5602-5697 - P2 pricing smoke test documentation
+   - project_status.md - This P2 entry
+
+**Architecture:**
+- Two-table design: rate_plans (base config) + rate_plan_seasons (date-range overrides)
+- Property-specific rate plans take precedence over agency-wide plans
+- Seasonal overrides take precedence over base rates
+- All pricing fields nullable for gradual adoption (backwards compatible)
+- Quote calculation uses check_in date for season selection
+- Agency scoping enforced via get_db_authed
+- RBAC via require_roles("manager", "admin") for rate plan management
+
+**Router Integration:**
+- Registered in backend/app/modules/pricing.py
+- Mounted in backend/app/modules/bootstrap.py at /api/v1/pricing
+- Tagged as "Pricing" in OpenAPI
+
+**Status:** ✅ IMPLEMENTED
+
+---
+
 
 **Date Completed:** 2026-01-02 to 2026-01-03
 

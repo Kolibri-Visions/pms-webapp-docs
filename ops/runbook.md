@@ -19131,6 +19131,134 @@ JWT_TOKEN=<token> \
 
 ---
 
+### P2 Pricing v1 Foundation
+
+**Scope**: Rate plans, seasonal pricing overrides, and quote calculation for booking requests
+
+**Architecture Note**: Pricing is stored in two tables:
+- `rate_plans`: Base pricing configuration for properties (agency-wide or property-specific)
+- `rate_plan_seasons`: Date-range specific pricing overrides (seasonal rates, min stay)
+
+All pricing fields are nullable/optional for gradual adoption. If property_id is NULL, the rate plan applies agency-wide.
+
+**Currency Fallback Hierarchy**: rate_plan.currency → property.currency → agency.currency → EUR
+
+**Database Schema**:
+
+1. **rate_plans**:
+   - `id`: UUID primary key
+   - `agency_id`: UUID (required, FK to agencies)
+   - `property_id`: UUID (nullable, FK to properties, NULL = agency-wide)
+   - `name`: TEXT (required, rate plan display name)
+   - `currency`: TEXT (nullable, ISO 4217, fallback to property/agency)
+   - `base_nightly_cents`: INT (nullable, base nightly rate in cents)
+   - `min_stay_nights`: INT (nullable, minimum stay requirement)
+   - `max_stay_nights`: INT (nullable, maximum stay allowed)
+   - `active`: BOOLEAN (default true)
+   - Constraints: FK to agencies (CASCADE), FK to properties (CASCADE)
+
+2. **rate_plan_seasons**:
+   - `id`: UUID primary key
+   - `rate_plan_id`: UUID (required, FK to rate_plans)
+   - `date_from`: DATE (required, season start inclusive)
+   - `date_to`: DATE (required, season end exclusive)
+   - `nightly_cents`: INT (nullable, override nightly rate)
+   - `min_stay_nights`: INT (nullable, override min stay)
+   - `active`: BOOLEAN (default true)
+   - Constraints: FK to rate_plans (CASCADE), CHECK (date_from < date_to)
+
+**Endpoints**:
+
+1. **List Rate Plans** (manager/admin):
+   - `GET /api/v1/pricing/rate-plans?property_id={uuid}`
+   - Returns all rate plans for agency with seasonal overrides
+   - Optional filter by property_id
+
+2. **Create Rate Plan** (manager/admin):
+   - `POST /api/v1/pricing/rate-plans`
+   - Body: `{"property_id": "uuid|null", "name": "...", "currency": "USD", "base_nightly_cents": 15000, "min_stay_nights": 1, "active": true, "seasons": [...]}`
+   - Creates rate plan with optional seasonal overrides
+   - Returns 201 with created rate plan including all seasons
+
+3. **Calculate Quote** (authenticated):
+   - `POST /api/v1/pricing/quote`
+   - Body: `{"property_id": "uuid", "check_in": "2026-01-10", "check_out": "2026-01-13"}`
+   - Calculates pricing for date range using active rate plan
+   - Seasonal override takes precedence over base rate if date range overlaps
+   - Returns quote with nightly_cents, total_cents, nights, currency, rate_plan details
+   - If no pricing configured: returns quote with message and null amounts
+
+**Quote Calculation Logic**:
+1. Find active rate plan for property (property-specific first, then agency-wide)
+2. Check for seasonal override that applies to check_in date
+3. Use seasonal override nightly_cents if found, otherwise base_nightly_cents
+4. Calculate: total_cents = nightly_cents × nights
+5. Return quote with all pricing details
+
+**Error Codes**:
+- **400 Bad Request**: Invalid dates (check_out must be after check_in)
+- **401 Unauthorized**: Missing or invalid JWT token
+- **403 Forbidden**: User lacks required role or agency access
+- **404 Not Found**: Property not found in agency
+- **422 Validation**: Invalid input (e.g., negative nightly_cents, invalid currency)
+- **500 Internal Server Error**: Database error
+
+**Troubleshooting**:
+
+**Problem**: Quote returns null pricing (nightly_cents=null, total_cents=null)
+
+**Solution**:
+1. Check if rate plan exists: `GET /api/v1/pricing/rate-plans?property_id={uuid}`
+2. If no rate plans: Create one with `POST /api/v1/pricing/rate-plans`
+3. If rate plan exists but has null base_nightly_cents: No seasonal override found for dates
+4. Add seasonal override or set base_nightly_cents in rate plan
+
+---
+
+**Problem**: Quote uses wrong rate (expected seasonal rate, got base rate)
+
+**Solution**:
+1. Check seasonal override date ranges: `GET /api/v1/pricing/rate-plans`
+2. Verify check_in date falls within season date_from (inclusive) to date_to (exclusive)
+3. Verify seasonal override has active=true and nightly_cents is not null
+4. Season selection uses check_in date only (not check_out)
+
+---
+
+**Problem**: Create rate plan fails with 404 Property Not Found
+
+**Solution**:
+1. Verify property_id exists in agency: `GET /api/v1/properties`
+2. Verify property belongs to current agency (agency scoping enforced)
+3. For agency-wide rate plan: set property_id to null in request body
+
+---
+
+**Problem**: Endpoints return 404 Not Found (router not mounted)
+
+**Solution**:
+1. Verify router is mounted: Check `/openapi.json` for `/api/v1/pricing` paths
+2. If missing from OpenAPI: router not registered in module system
+3. Verify: `backend/app/modules/pricing.py` exists and is imported
+4. Verify: `backend/app/modules/bootstrap.py` imports pricing module
+5. Check logs at startup for "Pricing module not available" warnings
+
+**Smoke Test**:
+```bash
+# Run pricing smoke test (requires JWT_TOKEN with manager/admin role)
+HOST=https://api.example.com \
+JWT_TOKEN=<token> \
+./backend/scripts/pms_pricing_quote_smoke.sh
+```
+
+**Related Documentation**:
+- [Pricing Quote Smoke Script](../scripts/README.md#p2-pricing-quote-smoke-test) - Full script documentation
+- [Pricing API](../app/api/routes/pricing.py) - API implementation
+- [Pricing Schemas](../app/schemas/pricing.py) - Pydantic models
+- [Migration 20260106150000](../../supabase/migrations/20260106150000_add_pricing_v1.sql) - Database schema
+
+---
+
 
 | Date | Change | Author |
 |------|--------|--------|
@@ -19149,3 +19277,4 @@ JWT_TOKEN=<token> \
 | 2026-01-01 | Full Sync batching (batch_id) - Group 3 operations, API exposure, UI grouping, verification queries | System |
 | 2026-01-06 | P1 Booking Request Workflow - Fixed to operate on bookings table using existing columns (confirmed_at, cancelled_at, cancelled_by, cancellation_reason, internal_notes). Status: cancelled instead of declined. | System |
 | 2026-01-06 | P1 Status Mapping - Added API-to-DB status mapping layer: API under_review maps to DB inquiry for PROD compatibility. Prevents 500 errors from unsupported status values. | System |
+| 2026-01-06 | P2 Pricing v1 Foundation - rate_plans and rate_plan_seasons tables for pricing engine. All fields nullable/optional for gradual adoption. Endpoints: GET/POST /api/v1/pricing/rate-plans, POST /api/v1/pricing/quote. | System |
