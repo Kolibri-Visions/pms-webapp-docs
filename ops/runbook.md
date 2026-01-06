@@ -18903,6 +18903,8 @@ export DATE_TO="2037-01-03"
 
 ### Public API Anti-Abuse (Rate Limiting + Honeypot)
 
+**Verification (PROD)**: ✅ Verified 2026-01-06 (commit f85efb9, smoke rc=0, observed 429 responses)
+
 **Coverage**: All /api/v1/public/* endpoints
 
 **Protection Mechanisms**:
