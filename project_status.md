@@ -1715,13 +1715,21 @@ Verified in production on **2026-01-06** (Europe/Berlin timezone):
 - No Idempotency-Key provided → standard behavior (no idempotency check)
 - Public endpoint (no auth required)
 
-**Status:** ✅ IMPLEMENTED (NOT VERIFIED)
+**Status:** ✅ VERIFIED
 
-**Verification Pending:**
-- Smoke test: `backend/scripts/pms_p3a_idempotency_smoke.sh`
-- Expected: All 3 tests pass (first request 201, replay cached 201, conflict 409)
-- Verify idempotency_keys and audit_log tables populated correctly
-- Verify migrations applied: 20260106160000, 20260106170000, 20260106180000 (hotfix)
+**PROD Evidence:**
+- **Verification Date:** 2026-01-06
+- **API Base URL:** https://api.fewo.kolibri-visions.de
+- **Source Commit:** 549f4b2905a3fe64f0bc97f5aaa37dd1cb0a8b7e
+- **Started At:** 2026-01-06T20:45:04.096462+00:00
+- **Deploy Verify:** `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=549f4b2` → rc=0
+- **Smoke Test:** `backend/scripts/pms_p3a_idempotency_smoke.sh` → rc=0
+  - Property ID: 700bb4bf-c20e-400d-96b4-c3fadb2e2e20
+  - Test 1: First request with Idempotency-Key → 201 Created ✅
+  - Test 2: Replay (same key + same payload) → cached 201, same booking_id ✅
+  - Test 3: Conflict (same key + different payload) → 409 idempotency_conflict ✅
+- **Migrations Applied:** 20260106160000 (idempotency_keys), 20260106170000 (audit_log), 20260106180000 (hotfix: fix 42P17 index issue)
+- **Endpoint Verification:** `GET /api/v1/ops/version` confirmed commit 549f4b2 deployed and running
 
 ---
 
