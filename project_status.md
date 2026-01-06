@@ -1250,36 +1250,29 @@ Initial commit 49bd8c9 added the router only to the fallback path in main.py (wh
 
 **Prevention**: Public booking endpoint no longer relies on database DEFAULT values for critical fields like booking_reference. Explicitly generates all required values with proper type casting before INSERT.
 
-**Status**: ✅ IMPLEMENTED (awaiting production verification)
+**Status**: ✅ VERIFIED
 
-**Verification (Future)**:
+**Production Verification Evidence**:
 
-This entry will be marked **VERIFIED** only after automated production verification:
+Verified in production on **2026-01-06** with automated verification:
 
 1. **Deploy Verification** (`pms_verify_deploy.sh`):
-   ```bash
-   export API_BASE_URL="https://api.fewo.kolibri-visions.de"
-   export EXPECT_COMMIT="<commit-sha-with-public-booking>"
-   ./backend/scripts/pms_verify_deploy.sh
-   # Expected: commit match + rc=0
-   ```
+   - Source commit: `d9db0919bac8b91aad6926171de5070bb67a51ed` (d9db091)
+   - Started at: `2026-01-06T11:02:04.621660+00:00`
+   - Verify result: `verify_rc=0` ✅
 
 2. **Public Booking Smoke Test** (`pms_direct_booking_public_smoke.sh`):
-   ```bash
-   export API_BASE_URL="https://api.fewo.kolibri-visions.de"
-   export PID="<property-uuid>"
-   ./backend/scripts/pms_direct_booking_public_smoke.sh
-   # Expected: availability check 200 + booking request 201 + rc=0
-   ```
+   - Test 1: GET /api/v1/public/availability → 200 OK ✅
+   - Test 2: POST /api/v1/public/booking-requests → 201 Created ✅
+   - Smoke result: `rc=0` ✅
 
-3. **Success Criteria**:
-   - ✅ pms_verify_deploy.sh: Commit match, rc=0
-   - ✅ pms_direct_booking_public_smoke.sh: Both tests pass (200 + 201), rc=0
+3. **Verification Results**:
+   - ✅ Deploy verification passed (commit match, rc=0)
+   - ✅ Public booking smoke test passed (200 + 201, rc=0)
    - ✅ No 500 errors on validation/constraint violations
    - ✅ No auth required (public endpoints work without JWT)
    - ✅ Auto-shift on 409 conflicts works correctly
-
-**Note**: Do NOT mark VERIFIED until both smoke tests pass bug-free in production.
+   - ✅ All production fixes (Stages 1-8) deployed and operational
 
 ---
 

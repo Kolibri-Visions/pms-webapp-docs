@@ -18626,6 +18626,8 @@ DRY_RUN=0 CONFIRM=1 CONFIRM_DELETE_USER=1 ./backend/scripts/pms_smoke_user_clean
 
 **Purpose**: Public direct booking flow without authentication or payment integration.
 
+**Production Status**: Verified in production on 2026-01-06 (commit d9db091, verify_rc=0, smoke_rc=0).
+
 ### What is included (v0)
 
 **Endpoints** (no auth required):
