@@ -1203,6 +1203,29 @@ Initial commit 49bd8c9 added the router only to the fallback path in main.py (wh
 
 **Fix**: Use canonical DB dependency `get_db` from `app.api.deps.__all__` exports. The `get_db()` dependency already acquires a connection from the pool and yields it, so endpoints use `db` directly without pool.acquire().
 
+**Stage 4 (production fix)**: Prevent 500 error from missing bookings.notes column
+1. Fixed production 500: "column 'notes' of relation 'bookings' does not exist"
+2. Removed `notes` column from INSERT statement in booking creation (lines 249, 261 removed)
+3. Public booking endpoint accepts `notes` in request but does NOT persist it to DB
+4. Added schema drift exception handling:
+   - UndefinedColumnError/UndefinedTableError/UndefinedFunctionError → 503 with actionable message
+   - Message: "Database schema not installed or out of date: {error}. Run migrations to update schema."
+5. Updated error mapping ensures no 500 for known DB errors:
+   - ExclusionViolation → 409 conflict_type=double_booking
+   - ForeignKeyViolation → 422 with actionable message
+   - Schema drift → 503 with migration guidance
+   - Validation errors → 422
+6. Updated docs (add-only):
+   - runbook.md:18706-18735 - Added "503 schema drift" troubleshooting
+   - scripts/README.md:5360-5366 - Expected status codes + schema compatibility note
+   - project_status.md - This Stage 4 entry
+
+**Root Cause**: Code tried to INSERT into bookings.notes column that doesn't exist in current production schema. Public booking creation failed with 500 internal_server_error.
+
+**Fix**: Remove notes column reference from INSERT. Endpoint accepts notes field in API but doesn't persist it unless schema supports it. Added UndefinedColumn exception mapping to 503 (actionable) instead of 500.
+
+**Design Decision**: Public booking endpoint designed for minimal schema compatibility. Optional fields (like notes) are accepted in API but not persisted unless schema explicitly supports them. This prevents schema-related 500 errors and provides actionable 503 with migration guidance when drift detected.
+
 **Status**: ✅ IMPLEMENTED (awaiting production verification)
 
 **Verification (Future)**:

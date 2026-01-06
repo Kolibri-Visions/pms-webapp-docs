@@ -18691,12 +18691,47 @@ export PID="abc-123-uuid"
 
 **Problem**: Booking creation returns 500 error
 
-**Diagnosis**: Validation/FK/constraint errors not properly handled
+**Diagnosis**: Validation/FK/constraint errors not properly handled OR unhandled exception
 
 **Solution**: Check backend logs for specific error type. Expected error mappings:
 - Exclusion violation (double booking) → 409 conflict_type=double_booking
 - FK violation (property/guest not found) → 422 with actionable message
 - Validation error (invalid dates, etc.) → 422 with details
+- Schema drift (UndefinedColumn/UndefinedTable) → 503 with migration guidance (see below)
+
+If 500 persists, check logs for unexpected exceptions and file incident report.
+
+---
+
+**Problem**: Booking creation returns 503 "Database schema not installed or out of date"
+
+**Diagnosis**: Schema drift - code references DB column/table that doesn't exist in current schema
+
+**Common Example**:
+```
+Backend logs: "column 'notes' of relation 'bookings' does not exist"
+Response: 503 {"error":"service_unavailable","message":"Database schema not installed or out of date: column notes..."}
+```
+
+**Root Cause**:
+- Public booking endpoint tries to INSERT into column that doesn't exist (e.g., bookings.notes)
+- DB migrations not run or schema out of sync with code
+
+**Solution**:
+1. Check if migration exists for the missing column/table
+2. If migration exists, run it:
+   ```bash
+   cd /path/to/supabase
+   supabase db push
+   # OR manually apply migration SQL
+   ```
+3. If migration does NOT exist:
+   - Code should not reference the column (bug in code)
+   - Public booking endpoint intentionally does NOT persist notes field to bookings
+   - Verify `backend/app/api/routes/public_booking.py` does not include `notes` in INSERT statement
+   - If code was reverted accidentally, redeploy correct version
+
+**Prevention**: Public booking endpoint is designed to work with minimal schema. It does not persist optional fields (like notes) unless schema explicitly supports them.
 
 ---
 
