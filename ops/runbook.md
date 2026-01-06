@@ -18335,6 +18335,54 @@ ALTER TABLE bookings DROP CONSTRAINT bookings_no_overlap_exclusion;
 
 ---
 
+**Problem**: How to verify guest_id FK hardening in production
+
+**Purpose**: Confirm that booking creation API correctly handles guest_id foreign key violations without returning 500 errors.
+
+**When to Run**:
+- After deploying guest_id FK hardening fix (commit with booking_service.py FK error handling)
+- During routine production health checks
+- Before marking feature as VERIFIED in project_status.md
+
+**Steps**:
+1. **Verify deployment commit**:
+   ```bash
+   export API_BASE_URL="https://api.example.com"
+   export EXPECT_COMMIT="<commit-sha>"  # Expected production commit
+   ./backend/scripts/pms_verify_deploy.sh
+   ```
+
+2. **Run guest_id FK smoke test**:
+   ```bash
+   export API_BASE_URL="https://api.example.com"
+   export TOKEN="$(./backend/scripts/get_fresh_token.sh)"
+   export PROPERTY_ID="<uuid>"  # Optional, auto-picks if not set
+   ./backend/scripts/pms_booking_guest_id_fk_smoke.sh
+   ```
+
+3. **Expected results**:
+   - Test 1 (guest_id omitted): 201 Created, guest_id=null
+   - Test 2 (guest_id invalid): 422 Unprocessable Entity with actionable message
+   - Exit code: rc=0
+
+**Success Criteria**:
+- ✅ pms_verify_deploy.sh: Commit match + rc=0
+- ✅ pms_booking_guest_id_fk_smoke.sh: Both tests pass + rc=0
+- ✅ No 500 errors in either test case
+
+**Failure Scenarios**:
+- Test 1 returns 500: Booking service may be using auth user ID as guest_id fallback (check booking_service.py:555-558)
+- Test 2 returns 500: FK violation not caught (check booking_service.py:833-855)
+- Exit code rc=2: FK hardening broken, 500 errors present
+
+**Code Reference**:
+- Smoke test: `backend/scripts/pms_booking_guest_id_fk_smoke.sh`
+- FK error handling: `backend/app/services/booking_service.py:833-855`
+- Script docs: `backend/scripts/README.md` (search "guest_id FK Hardening")
+
+---
+
+
 ### API Error Response
 
 When exclusion constraint is triggered, API returns:

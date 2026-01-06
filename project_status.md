@@ -836,13 +836,34 @@ Fixed production 500 errors when creating bookings without valid guest_id. API w
 
 **Status**: ✅ IMPLEMENTED (awaiting production verification)
 
-**Note**: This entry will be marked **VERIFIED** only after:
-1. Deployed to production environment
-2. `pms_verify_deploy.sh` passes (commit verification)
-3. Manual smoke test confirms:
-   - POST /api/v1/bookings without guest_id returns 201 (not 500)
-   - POST /api/v1/bookings with invalid guest_id returns 422 (not 500)
-4. Evidence captured with commit SHA and test results
+**Verification (Prod)**:
+
+This entry will be marked **VERIFIED** only after automated production verification completes successfully:
+
+1. **Deploy Verification** (`pms_verify_deploy.sh`):
+   ```bash
+   export API_BASE_URL="https://api.production.example.com"
+   export EXPECT_COMMIT="<commit-sha-with-fk-fix>"
+   ./backend/scripts/pms_verify_deploy.sh
+   # Expected: commit match + rc=0
+   ```
+
+2. **FK Hardening Smoke Test** (`pms_booking_guest_id_fk_smoke.sh`):
+   ```bash
+   export API_BASE_URL="https://api.production.example.com"
+   export TOKEN="$(./backend/scripts/get_fresh_token.sh)"
+   export PROPERTY_ID="<uuid>"  # Optional, auto-picks if not set
+   ./backend/scripts/pms_booking_guest_id_fk_smoke.sh
+   # Expected: Test 1 (guest_id omitted) → 201, Test 2 (guest_id invalid) → 422, rc=0
+   ```
+
+3. **Success Criteria**:
+   - ✅ pms_verify_deploy.sh: Commit match, rc=0
+   - ✅ pms_booking_guest_id_fk_smoke.sh: Both tests pass, rc=0
+   - ✅ No 500 errors in either test case
+   - ✅ Evidence captured with commit SHA and test outputs
+
+**Note**: Do NOT mark VERIFIED until both smoke tests pass bug-free in production.
 
 **Related Improvement (2026-01-05)**: See standalone entry below for booking concurrency smoke script reliability (commit 1897cf0, VERIFIED).
 
