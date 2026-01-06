@@ -19279,6 +19279,52 @@ JWT_TOKEN=<token> \
 
 ---
 
+**Problem**: PROD restart loop - ImportError: cannot import name 'get_current_agency_id' from 'app.core.auth'
+
+**Symptoms**:
+- Backend crashes at startup with ImportError
+- 502 Bad Gateway (no healthy backend pods)
+- Logs show: `ImportError: cannot import name 'get_current_agency_id' from 'app.core.auth'`
+- Affects imports in pricing.py: `get_current_agency_id`, `get_current_role`, `require_roles`
+- MODULES_ENABLED=false doesn't help (imports happen in main.py fallback)
+
+**Root Cause**:
+- `backend/app/api/routes/pricing.py` imports auth dependencies that don't exist in auth.py
+- Missing symbols: `get_current_agency_id`, `get_current_role`, `require_roles`
+- auth.py has `require_role` (singular) but pricing.py imports `require_roles` (plural)
+- Import happens at startup (module load time), causing immediate crash
+
+**Solution**:
+1. Add missing auth dependencies to `backend/app/core/auth.py`:
+   - `get_current_agency_id`: Extract agency_id from JWT claims
+   - `get_current_role`: Extract role from JWT claims
+   - `require_roles`: Alias to existing `require_role` function
+2. Verify `get_current_user` extracts `agency_id` and `role` from JWT payload (lines 147-148)
+3. Pattern: Follow same structure as `get_current_user_id` (lines 216-240)
+4. Deploy and verify: Backend boots successfully, pricing routes respond
+
+**Prevention**:
+- Always verify imported symbols exist before deploying
+- Test imports in isolation: `python -c "from app.core.auth import get_current_agency_id"`
+- Add import smoke tests to CI/CD pipeline
+
+**Verification**:
+```bash
+# Check if backend boots (should return version info, not 502)
+curl https://api.example.com/api/v1/ops/version
+
+# Verify pricing routes mounted
+curl https://api.example.com/api/v1/ops/modules | jq '.mounted_has_pricing'  # should be true
+```
+
+**Related**:
+- auth.py:243-273 - get_current_agency_id implementation
+- auth.py:276-306 - get_current_role implementation
+- auth.py:498 - require_roles alias
+- pricing.py:22 - Import statement
+
+---
+
 
 | Date | Change | Author |
 |------|--------|--------|
