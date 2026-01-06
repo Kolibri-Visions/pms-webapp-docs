@@ -19059,6 +19059,16 @@ requested → under_review → confirmed (approved)
 1. Ensure `decline_reason` is provided and non-empty in request body
 2. Example: `{"decline_reason": "Property unavailable", "internal_note": "..."}`
 
+**Problem**: All endpoints return 404 Not Found (router not mounted)
+
+**Solution**:
+1. Verify router is mounted: Check `/openapi.json` for `/api/v1/booking-requests` paths
+2. If missing from OpenAPI: router not registered in module system
+3. Verify: `backend/app/modules/booking_requests.py` exists and is imported
+4. Verify: `backend/app/modules/bootstrap.py` imports booking_requests module
+5. Check logs at startup for "Booking Requests module not available" warnings
+6. If MODULES_ENABLED=false in production, verify fallback router mounting in main.py
+
 **Smoke Test**:
 ```bash
 # Run workflow smoke test (requires JWT_TOKEN with manager/admin role)
