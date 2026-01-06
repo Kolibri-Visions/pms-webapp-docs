@@ -1006,6 +1006,93 @@ rc=0
 
 ---
 
+### SCRIPTS - Smoke User Cleanup Helper (Safe Dry-Run + Optional Delete) ✅
+
+**Date Completed:** 2026-01-06
+
+**Overview:**
+Added safe cleanup script for smoke test users created during API testing. Deactivates user membership in `team_members` and optionally deletes auth users with explicit confirm flags.
+
+**Purpose:**
+- Prevent accumulation of smoke test users in production/staging environments
+- Safe default behavior (DRY_RUN=1, no changes unless explicitly disabled)
+- Clear visibility into planned actions before execution
+- Explicit confirmation required for destructive operations
+
+**Implementation:**
+
+1. **Script Features** (`backend/scripts/pms_smoke_user_cleanup.sh`):
+   - Safe by default: `DRY_RUN=1` (no changes), `CONFIRM=0` (must confirm)
+   - Auto-detects Supabase URL and service key from docker environment
+   - Finds latest `pms-smoke-*@example.com` user via GoTrue Admin API
+   - Deactivates membership: `UPDATE team_members SET is_active=false WHERE user_id=...`
+   - Optionally deletes auth user (requires `CONFIRM_DELETE_USER=1`)
+   - Never prints service keys or secrets to stdout
+
+2. **Auto-Detection (HOST-compatible)**:
+   - Service key: `docker exec supabase-kong printenv SUPABASE_SERVICE_KEY`
+   - DB container: `docker ps | grep supabase-db`
+   - Kong container: `docker ps | grep supabase-kong`
+   - JSON parsing: Uses `jq` if available, falls back to `python3`
+
+3. **Safety Features**:
+   - Default dry-run mode (shows plan, makes no changes)
+   - Requires `CONFIRM=1` to apply changes
+   - Requires `CONFIRM_DELETE_USER=1` to delete auth user
+   - Clear banner showing mode (DRY-RUN vs APPLY)
+   - Prints planned SQL and API calls before execution
+   - Exit code 2 if confirm flags not set (safety gate)
+
+4. **User Selection**:
+   - Allow `USER_ID` override for specific user cleanup
+   - Auto-detect: Query GoTrue Admin API for users matching email pattern
+   - Filter by `EMAIL_PREFIX` (default: `pms-smoke-`) and `EMAIL_DOMAIN` (default: `example.com`)
+   - Sort by `created_at` descending, select most recent
+   - Print selected user: ID, email, created_at
+
+**Files Changed:**
+- `backend/scripts/pms_smoke_user_cleanup.sh` (new, +371 lines)
+- `backend/scripts/README.md` (add-only: full script documentation)
+- `backend/docs/ops/runbook.md` (add-only: Smoke User Lifecycle section)
+- `backend/docs/project_status.md` - This entry
+
+**Expected Result:**
+- ✅ Dry-run shows target user and planned actions (no changes)
+- ✅ Apply mode deactivates membership in team_members
+- ✅ Optional auth user deletion (explicit flag required)
+- ✅ Never prints service keys to stdout
+- ✅ Clear exit codes: 0=success/dry-run, 1=prereqs missing, 2=refused (no confirm)
+
+**Status**: ✅ IMPLEMENTED (awaiting production verification)
+
+**Verification (Future)**:
+
+This entry will be marked **VERIFIED** only after:
+
+1. **Deploy Verification** (`pms_verify_deploy.sh`):
+   - Commit match: Expected commit with cleanup script
+   - rc=0
+
+2. **Dry-Run Validation**:
+   ```bash
+   # Run on HOST-SERVER-TERMINAL
+   ./backend/scripts/pms_smoke_user_cleanup.sh
+   # Expected: Shows target user selection, planned actions, DRY_RUN banner
+   # Expected: rc=0
+   ```
+
+3. **Success Criteria**:
+   - ✅ Script finds latest smoke user correctly
+   - ✅ Dry-run shows clear plan (no changes made)
+   - ✅ Service key auto-detected from docker (or manual override works)
+   - ✅ No secrets printed to stdout
+   - ✅ Exit code 0 for dry-run
+
+**Note**: Do NOT mark VERIFIED until dry-run validation passes on HOST with proper user selection.
+
+---
+
+
 **Date Completed:** 2026-01-02 to 2026-01-03
 
 **Key Features:**

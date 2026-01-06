@@ -18419,6 +18419,121 @@ This ensures concurrent bookings for the same property are processed sequentiall
 ---
 
 
+## Smoke User Lifecycle
+
+**Purpose**: Document the lifecycle of smoke test users and how to clean them up safely.
+
+### User Creation
+
+Smoke test users are created during API testing via the admin users endpoint:
+
+**Typical creation pattern**:
+```bash
+# Create smoke test user
+curl -X POST "$API_BASE_URL/api/v1/admin/users" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "pms-smoke-20260106-abc123@example.com",
+    "password": "<generated-password>",
+    "email_confirm": true
+  }'
+```
+
+**Email naming convention**:
+- Prefix: `pms-smoke-`
+- Timestamp: YYYYMMDD or YYYYMMDD-HHMMSS
+- Random suffix: 6-character hex
+- Domain: `example.com` (test domain)
+- Example: `pms-smoke-20260106-a3f7b2@example.com`
+
+### Agency Membership
+
+Smoke users may be linked to an agency via `team_members` table:
+
+**Membership creation**:
+```sql
+INSERT INTO public.team_members (
+  user_id,
+  agency_id,
+  role,
+  is_active
+) VALUES (
+  '<smoke-user-id>',
+  '<agency-id>',
+  'staff',
+  true
+);
+```
+
+**Active membership** enables:
+- Access to agency properties
+- Booking creation/management
+- Guest operations
+- Channel Manager operations (if enabled)
+
+### Cleanup Procedure
+
+Use `pms_smoke_user_cleanup.sh` for safe cleanup:
+
+**Step 1: Dry-run (default, safe)**:
+```bash
+# Show what would be cleaned up (no changes)
+./backend/scripts/pms_smoke_user_cleanup.sh
+```
+
+**Step 2: Apply cleanup (deactivate membership)**:
+```bash
+# Deactivate membership in team_members (preserves auth user)
+DRY_RUN=0 CONFIRM=1 ./backend/scripts/pms_smoke_user_cleanup.sh
+```
+
+**Step 3: Optional - Delete auth user**:
+```bash
+# Full cleanup: deactivate membership AND delete auth user
+DRY_RUN=0 CONFIRM=1 CONFIRM_DELETE_USER=1 ./backend/scripts/pms_smoke_user_cleanup.sh
+```
+
+**What the script does**:
+1. Finds the latest `pms-smoke-*@example.com` user (or uses `USER_ID` override)
+2. Deactivates membership: `UPDATE team_members SET is_active=false WHERE user_id=...`
+3. Optionally deletes auth user: `DELETE /auth/v1/admin/users/{id}` (requires explicit flag)
+
+**Safety features**:
+- Default `DRY_RUN=1` (no changes)
+- Requires `CONFIRM=1` to apply changes
+- Requires `CONFIRM_DELETE_USER=1` to delete auth user
+- Never prints service keys or secrets to stdout
+- Shows clear plan before executing destructive actions
+
+### Security Notes
+
+**CRITICAL - Never paste service keys in chat/logs**:
+- The cleanup script requires `SB_SERVICE_KEY` (Supabase service role key)
+- Script auto-detects from docker if not set: `docker exec supabase-kong printenv SUPABASE_SERVICE_KEY`
+- Never echo or log the service key
+- Only print key length for confirmation (e.g., "length: 274")
+
+**Service key usage**:
+- Used only for GoTrue Admin API calls (list/delete users)
+- Passed via Authorization header (not in URL)
+- Never logged or stored by the script
+
+**Best practices**:
+1. Always run dry-run first to verify target user
+2. Use `USER_ID` override if you know the specific user to clean
+3. Prefer membership deactivation over auth user deletion (less destructive)
+4. Keep service keys in docker environment or 1Password (never in shell history)
+
+### Related Documentation
+
+- [Smoke User Cleanup Script](../scripts/README.md#smoke-user-cleanup-pms_smoke_user_cleanupsh) - Full script documentation
+- [GoTrue Admin API](https://supabase.com/docs/reference/cli/global-flags#admin-api) - User management endpoints
+- [Project Status](../docs/project_status.md) - Implementation status
+
+---
+
+
 | Date | Change | Author |
 |------|--------|--------|
 | 2025-12-26 | Initial runbook creation (Phase 24) | System |
