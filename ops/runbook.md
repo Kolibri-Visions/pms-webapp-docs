@@ -19060,12 +19060,37 @@ requested → under_review → confirmed (approved)
 
 **Troubleshooting**:
 
-**Problem**: Cannot approve booking request (409 Conflict)
+**Problem**: Cannot approve booking request (409 Conflict - Invalid Transition)
 
 **Solution**:
 1. Check current status: `GET /api/v1/booking-requests/{id}` → verify status is requested/under_review
 2. If status=cancelled: cannot approve cancelled requests (invalid transition)
 3. If status=confirmed: already approved (idempotent, returns 200 with booking_id)
+
+---
+
+**Problem**: Approve returns 409 Conflict - Booking Overlap (no_double_bookings)
+
+**Cause**: The requested date range overlaps with an existing confirmed booking for the same property. The database exclusion constraint `no_double_bookings` prevents double bookings.
+
+**Solution**:
+1. Check for existing bookings in the date range:
+   ```sql
+   SELECT id, check_in, check_out, status
+   FROM bookings
+   WHERE property_id = '<property_id>'
+   AND daterange(check_in, check_out, '[)') && daterange('<check_in>', '<check_out>', '[)')
+   AND status = 'confirmed'
+   AND deleted_at IS NULL;
+   ```
+2. Options:
+   - Choose a different date range (modify the booking request before approving)
+   - Cancel the conflicting booking first (if appropriate)
+   - Decline this booking request with appropriate reason
+
+**Related**: The smoke test (`pms_public_booking_requests_workflow_smoke.sh`) automatically finds available windows using `/api/v1/public/availability` with configurable `MAX_WINDOW_TRIES` and `SHIFT_DAYS` to avoid this issue.
+
+---
 
 **Problem**: Decline fails with 422 Validation
 
