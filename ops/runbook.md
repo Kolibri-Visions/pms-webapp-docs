@@ -19001,48 +19001,57 @@ Rate limit decisions logged with structured context:
 
 **Scope**: Internal review workflow for public booking requests (submitted → under_review → approved/declined)
 
+**Architecture Note**: Booking requests are stored directly in the `bookings` table (booking_request_id == bookings.id). The P1 workflow operates on existing bookings table columns:
+- `status`: requested → under_review → confirmed OR cancelled
+- `confirmed_at`: Set when approved (maps to API field `approved_at`)
+- `cancelled_at`, `cancelled_by`, `cancellation_reason`: Set when declined (map to API fields `reviewed_at`, `reviewed_by`, `decline_reason`)
+- `internal_notes`: Append-only log of review actions with timestamps
+- No separate workflow-specific columns required (uses existing bookings schema)
+
 **Endpoints** (authenticated, requires manager/admin role):
 
 1. **List Booking Requests**:
    - `GET /api/v1/booking-requests?status=requested&limit=50&offset=0`
-   - Filter by status: requested, under_review, confirmed, declined
-   - Returns paginated list with review/approval timestamps
+   - Filter by status: requested, under_review, confirmed, cancelled
+   - Returns paginated list with confirmation/cancellation timestamps
 
 2. **Get Booking Request Detail**:
    - `GET /api/v1/booking-requests/{id}`
-   - Returns full booking request details including internal notes, decline reason
+   - Returns full booking request details including internal notes, decline reason (cancellation_reason)
 
 3. **Review Booking Request**:
    - `POST /api/v1/booking-requests/{id}/review`
    - Transitions: requested → under_review, under_review → under_review (update note)
    - Body: `{"internal_note": "optional note"}`
-   - Sets: reviewed_at, reviewed_by
+   - Sets: status=under_review, internal_notes (appends timestamped note)
 
 4. **Approve Booking Request**:
    - `POST /api/v1/booking-requests/{id}/approve`
    - Transitions: requested/under_review → confirmed
    - Body: `{"internal_note": "optional note"}`
-   - Sets: approved_at, approved_by, confirmed_at, status=confirmed
+   - Sets: status=confirmed, confirmed_at, cancelled_by (as actor field), internal_notes
    - Idempotent: re-approving returns 200 with existing booking_id
 
 5. **Decline Booking Request**:
    - `POST /api/v1/booking-requests/{id}/decline`
-   - Transitions: requested/under_review → declined
+   - Transitions: requested/under_review → cancelled
    - Body: `{"decline_reason": "required reason", "internal_note": "optional note"}`
-   - Sets: decline_reason, reviewed_at, reviewed_by, status=declined
+   - Sets: status=cancelled, cancelled_at, cancelled_by (as actor field), cancellation_reason, internal_notes
+   - Idempotent: re-declining returns 200 with existing state
 
 **Status Lifecycle**:
 ```
 requested → under_review → confirmed (approved)
-         ↘               ↘ declined
+         ↘               ↘ cancelled (declined)
 ```
 
 **Error Codes**:
 - **401 Unauthorized**: Missing or invalid JWT token
 - **403 Forbidden**: User lacks manager/admin role or agency access
 - **404 Not Found**: Booking request not found or deleted
-- **409 Conflict**: Invalid status transition (e.g., cannot approve declined request)
+- **409 Conflict**: Invalid status transition (e.g., cannot approve cancelled request)
 - **422 Validation**: Missing required fields (e.g., decline_reason)
+- **500 Internal Server Error**: Database error (check logs for column availability issues)
 
 **Troubleshooting**:
 
@@ -19050,7 +19059,7 @@ requested → under_review → confirmed (approved)
 
 **Solution**:
 1. Check current status: `GET /api/v1/booking-requests/{id}` → verify status is requested/under_review
-2. If status=declined: cannot approve declined requests (invalid transition)
+2. If status=cancelled: cannot approve cancelled requests (invalid transition)
 3. If status=confirmed: already approved (idempotent, returns 200 with booking_id)
 
 **Problem**: Decline fails with 422 Validation
@@ -19058,6 +19067,14 @@ requested → under_review → confirmed (approved)
 **Solution**:
 1. Ensure `decline_reason` is provided and non-empty in request body
 2. Example: `{"decline_reason": "Property unavailable", "internal_note": "..."}`
+
+**Problem**: Endpoints return 500 Internal Server Error
+
+**Solution**:
+1. Check backend logs for asyncpg errors (column not found, relation not found)
+2. Verify bookings table has required columns: confirmed_at, cancelled_at, cancelled_by, cancellation_reason, internal_notes
+3. P1 workflow uses EXISTING bookings columns (no separate workflow table/columns required)
+4. If columns missing: check that Phase 17B migration was applied (initial bookings schema)
 
 **Problem**: All endpoints return 404 Not Found (router not mounted)
 
@@ -19100,3 +19117,4 @@ JWT_TOKEN=<token> \
 | 2025-12-27 | Phase 36 — Redis + Celery worker setup runbook (password encoding, deployment steps, verification, troubleshooting) | System |
 | 2025-12-30 | Admin UI authentication verification - Cookie-based SSR login, curl checks for /ops/* access | System |
 | 2026-01-01 | Full Sync batching (batch_id) - Group 3 operations, API exposure, UI grouping, verification queries | System |
+| 2026-01-06 | P1 Booking Request Workflow - Fixed to operate on bookings table using existing columns (confirmed_at, cancelled_at, cancelled_by, cancellation_reason, internal_notes). Status: cancelled instead of declined. | System |
