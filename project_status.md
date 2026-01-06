@@ -1889,7 +1889,26 @@ Verified in production on **2026-01-06** (Europe/Berlin timezone):
 - Ops audit-log endpoint limited to 500 records per query (performance)
 - Smoke script requires admin JWT (unlike P3a/P3b which test public endpoints)
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
+
+**PROD Evidence:**
+- **Verification Date:** 2026-01-06
+- **API Base URL:** https://api.fewo.kolibri-visions.de
+- **Source Commit:** e1f68a1f2b0625b431dd8af4ee0b8f50efee7039
+- **Started At:** 2026-01-06T23:06:04.444134+00:00
+- **Deploy Verify:** `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=e1f68a1` → rc=0
+- **Smoke Test:** `backend/scripts/pms_p3c_audit_review_smoke.sh` → rc=0
+  - Property ID: 700bb4bf-c20e-400d-96b4-c3fadb2e2e20
+  - Test 1: Create public booking request (for approval) → 201 Created ✅
+  - Test 2: Approve with Idempotency-Key → 200 OK ✅
+  - Test 2b: Idempotent replay (same key) → 200 OK (cached response) ✅
+  - Test 3: Create second booking request (for decline) → 201 Created ✅
+  - Test 4: Decline with Idempotency-Key → 200 OK ✅
+  - Test 5: Audit log verification via `GET /api/v1/ops/audit-log`:
+    - booking_request_approved: count=1 for entity_id=d7654850-ae11-42dc-8c1d-5ed96149f401 ✅
+    - booking_request_declined: count=1 for entity_id=307fccbd-de59-4e15-ab49-421946075d39 ✅
+- **Endpoint Verification:** `GET /api/v1/ops/version` confirmed commit e1f68a1 deployed and running
+- **Health Checks:** Database, Redis, Celery worker all operational at verification time
 
 **Integration Points:**
 - Review endpoints: `POST /api/v1/booking-requests/{id}/approve`, `POST /api/v1/booking-requests/{id}/decline`
