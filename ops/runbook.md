@@ -19279,6 +19279,72 @@ JWT_TOKEN=<token> \
 
 ---
 
+**Problem**: Create rate plan fails with "Missing agency_id in token claims"
+
+**Symptoms**:
+- POST /api/v1/pricing/rate-plans returns 403 with `{"detail":"Missing agency_id in token claims"}`
+- JWT is valid (authenticated successfully, len=616, parts=3)
+- Endpoints are mounted correctly (pricing routes exist in OpenAPI)
+- Issue occurs when JWT doesn't have agency_id claim
+
+**Root Cause**:
+- Pricing endpoints require agency context for multi-tenancy
+- JWT token doesn't include agency_id claim (depends on auth provider/Supabase setup)
+- Backend needs agency_id to scope rate plans to correct tenant
+
+**Solution**:
+
+Strategy 1: Provide agency_id via x-agency-id header (recommended for multi-agency users)
+```bash
+# Create rate plan with x-agency-id header
+curl -X POST "$HOST/api/v1/pricing/rate-plans" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "x-agency-id: $AGENCY_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"property_id": "...", "name": "...", ...}'
+
+# Smoke script with AGENCY_ID
+HOST=$HOST JWT_TOKEN=$JWT_TOKEN AGENCY_ID=$AGENCY_ID ./backend/scripts/pms_pricing_quote_smoke.sh
+```
+
+Strategy 2: Use single-agency fallback (if user belongs to exactly 1 agency)
+- Backend automatically resolves to user's first/only agency membership
+- Queries `team_members` table for user's active memberships
+- Updates `profiles.last_active_agency_id` for future requests
+- No header needed if user has only 1 agency
+
+Strategy 3: Verify JWT includes agency_id claim (auth provider configuration)
+```bash
+# Decode JWT to check for agency_id claim
+echo "$JWT_TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq '.'
+# Should include: {"sub": "...", "agency_id": "...", "role": "..."}
+```
+
+**How Tenant Resolution Works** (backend/app/api/deps.py:get_current_agency_id):
+1. Check x-agency-id header (if present, validate user membership)
+2. Check JWT claim agency_id (if present)
+3. Query user's last_active_agency_id from profiles table
+4. Fallback to first agency membership from team_members table
+5. If no memberships: return 404 with actionable error
+
+**Prevention**:
+- For multi-agency environments: Always send x-agency-id header in requests
+- Update smoke scripts to support AGENCY_ID env var
+- Document x-agency-id requirement for multi-tenant API clients
+
+**Verification**:
+```bash
+# Verify user has agency membership
+psql $DATABASE_URL -c "SELECT agency_id, role FROM team_members WHERE user_id = '$USER_ID' AND is_active = true;"
+
+# Test with x-agency-id header
+curl "$HOST/api/v1/pricing/rate-plans" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "x-agency-id: $AGENCY_ID"
+```
+
+---
+
 **Problem**: PROD restart loop - ImportError: cannot import name 'get_current_agency_id' from 'app.core.auth'
 
 **Symptoms**:
