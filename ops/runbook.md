@@ -19234,6 +19234,17 @@ All pricing fields are nullable/optional for gradual adoption. If property_id is
 
 ---
 
+**Problem**: Smoke script fails with "Cannot index object with number" or JSONDecodeError during property auto-pick
+
+**Solution**:
+1. Properties list endpoint returns paginated response: `{items: [...], total: N, ...}`
+2. Script auto-pick uses: `GET /api/v1/properties/?limit=1&offset=0` → parses `.items[0].id`
+3. If you see 307 redirects: Script already uses `curl -L` to follow redirects automatically
+4. If no properties exist: Create one first or export `PROPERTY_ID=<uuid>` and rerun (script exits with rc=2)
+5. Verify API is reachable: `curl -L "$HOST/api/v1/properties/?limit=1" -H "Authorization: Bearer <token>"`
+
+---
+
 **Problem**: Endpoints return 404 Not Found (router not mounted)
 
 **Solution**:
