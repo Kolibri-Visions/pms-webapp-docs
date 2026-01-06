@@ -834,36 +834,65 @@ Fixed production 500 errors when creating bookings without valid guest_id. API w
 - ✅ Error message is actionable: "guest_id does not reference an existing guest..."
 - ✅ Tests verify both scenarios
 
-**Status**: ✅ IMPLEMENTED (awaiting production verification)
+**Status**: ✅ VERIFIED (production evidence captured)
 
-**Verification (Prod)**:
+**PROD VERIFICATION EVIDENCE** (2026-01-06):
 
-This entry will be marked **VERIFIED** only after automated production verification completes successfully:
+**Deployment Verification** (`pms_verify_deploy.sh`):
+```
+API Base URL: https://api.fewo.kolibri-visions.de
 
-1. **Deploy Verification** (`pms_verify_deploy.sh`):
-   ```bash
-   export API_BASE_URL="https://api.production.example.com"
-   export EXPECT_COMMIT="<commit-sha-with-fk-fix>"
-   ./backend/scripts/pms_verify_deploy.sh
-   # Expected: commit match + rc=0
-   ```
+[1/3] GET /health
+✅ Status: 200 OK
+✅ Response: {"status":"up","checked_at":"2026-01-06T06:36:05.058423+00:00"}
 
-2. **FK Hardening Smoke Test** (`pms_booking_guest_id_fk_smoke.sh`):
-   ```bash
-   export API_BASE_URL="https://api.production.example.com"
-   export TOKEN="$(./backend/scripts/get_fresh_token.sh)"
-   export PROPERTY_ID="<uuid>"  # Optional, auto-picks if not set
-   ./backend/scripts/pms_booking_guest_id_fk_smoke.sh
-   # Expected: Test 1 (guest_id omitted) → 201, Test 2 (guest_id invalid) → 422, rc=0
-   ```
+[2/3] GET /health/ready
+✅ Status: 200 OK
+✅ Response: {"status":"up","components":{"db":{"status":"up","details":null,"error":null,"checked_at":"2026-01-06T06:36:05.193942Z"},"redis":{"status":"up","details":{"ping":true},"error":null,"checked_at":"2026-01-06T06:36:05.197517Z"},"celery":{"status":"up","details":{"workers":["celery@dd8f3a134e29"]},"error":null,"checked_at":"2026-01-06T06:36:07.323686Z"}},"checked_at":"2026-01-06T06:36:07.323931Z"}
 
-3. **Success Criteria**:
-   - ✅ pms_verify_deploy.sh: Commit match, rc=0
-   - ✅ pms_booking_guest_id_fk_smoke.sh: Both tests pass, rc=0
-   - ✅ No 500 errors in either test case
-   - ✅ Evidence captured with commit SHA and test outputs
+[3/3] GET /api/v1/ops/version
+✅ Status: 200 OK
+📦 Service: pms-backend
+🌍 Environment: development
+🔖 API Version: 0.1.0
+📝 Source Commit: 93650c2dd968cdc22a50ef44a58d235a304152f3
+⏰ Started At: 2026-01-06T06:30:05.135932+00:00
 
-**Note**: Do NOT mark VERIFIED until both smoke tests pass bug-free in production.
+🔍 Commit Verification
+✅ Commit verification passed (prefix match): 93650c2dd968cdc22a50ef44a58d235a304152f3
+
+╔════════════════════════════════════════════════════════════╗
+║ ✅ All checks passed!                                      ║
+╚════════════════════════════════════════════════════════════╝
+verify_rc=0
+```
+
+**FK Hardening Smoke Test** (`pms_booking_guest_id_fk_smoke.sh`):
+```
+PMS Booking guest_id FK Hardening Smoke Test
+API: https://api.fewo.kolibri-visions.de
+Property: 6da0f8d2-677f-4182-a06c-db155f43704a
+Dates: 2044-09-26 → 2044-09-28 (source: DATE_FROM/DATE_TO)
+
+Test 1: guest_id omitted
+Status: 201
+PASS: 201 Created, guest_id=null
+
+Test 2: guest_id invalid
+Status: 422
+PASS: 422 with actionable message mentioning guest_id
+
+TEST PASSED
+Smoke test: PASS
+guest_fk_smoke_rc=0
+```
+
+**Key Findings**:
+- ✅ Deploy verification confirms commit 93650c2 deployed and running
+- ✅ Test 1 (guest_id omitted): 201 Created, guest_id=null (DSGVO compliant)
+- ✅ Test 2 (invalid guest_id): 422 with actionable message (no 500 error)
+- ✅ FK violations properly handled: 422 Unprocessable Entity (not 500)
+- ✅ Both smoke tests passed bug-free (rc=0)
 
 **Related Improvement (2026-01-05)**: See standalone entry below for booking concurrency smoke script reliability (commit 1897cf0, VERIFIED).
 
