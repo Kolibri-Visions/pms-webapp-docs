@@ -2506,6 +2506,44 @@ All criteria met for VERIFIED status:
 6. ✅ CORS preflight test passes (200 with correct Allow-Origin header)
 7. ✅ No false positives/negatives observed in script output
 
+**Historical Acceptance Criteria** (restored add-only; originally removed in f9e62c9):
+
+**Status**: ✅ IMPLEMENTED (awaiting production verification)
+
+This entry will be marked **VERIFIED** only after:
+4. ⬜ Real customer domain onboarded using SOP (manual test)
+5. ⬜ Script verification passes on production domain (rc=0)
+6. ⬜ CORS preflight test passes (if applicable)
+7. ⬜ No false positives/negatives observed in script output
+
+**Production Evidence Required:**
+- Customer domain onboarded (domain name, agency_id)
+- Script execution output (sanitized, no secrets)
+- Health check + CORS preflight results
+- Commit SHA when VERIFIED
+
+**Note**: Do NOT mark VERIFIED until real customer domain onboarded and script validated on production.
+
+**Re-verified Evidence** (post-deploy commit match; 2026-01-07):
+- **Verification Date**: 2026-01-07 (post-deploy verification after commit f9e62c9)
+- **Source Commit**: f9e62c9f66e3f39cf973573715bf06eff8b5dbaf
+- **Process Started**: 2026-01-07T12:24:05.216750+00:00
+- **Deploy Verification** (`pms_verify_deploy.sh`):
+  - Result: `rc=0`
+  - Health endpoint: HTTP 200
+  - Readiness endpoint: HTTP 200
+  - /api/v1/ops/version: HTTP 200
+  - Commit prefix match: f9e62c9 ✅ PASSED
+- **Domain Onboarding Verification** (`pms_domain_onboarding_verify.sh`):
+  - Result: `rc=0` (all checks passed)
+  - Domain: api.fewo.kolibri-visions.de
+  - Test Origin: https://fewo.kolibri-visions.de
+  - Agency ID: ffd0123a-10b6-40cd-8ad5-66eee9757ab7
+  - Health check: HTTP 200
+  - CORS preflight: PASS (Access-Control-Allow-Origin: https://fewo.kolibri-visions.de)
+- **Conclusion**: Domain onboarding SOP and verification script confirmed working on production deployment f9e62c9
+
+
 ---
 
 ### OPS - 1 VPS per Customer (Single-Tenant Install Playbook + Verify Script) ✅
