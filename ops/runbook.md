@@ -19381,6 +19381,74 @@ JWT_TOKEN=<token> \
 
 ---
 
+---
+
+**Problem**: GET /api/v1/ops/modules doesn't show channel-connections routes (hyphenated prefixes missing)
+
+**Symptoms**:
+- `/api/v1/ops/modules` returns `mounted_prefixes` list that's missing `/api/v1/channel-connections`
+- `mounted_has_channel_connections: false` even though routes exist in OpenAPI schema
+- Hyphenated path segments (e.g., `channel-connections`, `rate-plans`) not detected in prefix extraction
+- Module registry shows routes but actual mounted paths are incomplete
+
+**Root Cause**:
+- Old prefix extraction used word-boundary regex `\w+` which doesn't match hyphens
+- Pattern `^(/api/v1/\w+)` only matched alphanumeric + underscore (not hyphens)
+- Routes like `/api/v1/channel-connections/*` were skipped during inspection
+- Result: ops/modules output was incomplete and not authoritative
+
+**Solution**:
+Fixed prefix extraction to use robust regex: `^(/api/v1/[^/]+)`
+- Matches any character except forward slash (includes hyphens, underscores, alphanumeric)
+- Extracts first three path segments: `/api/v1/<prefix>`
+- Handles hyphenated prefixes: `channel-connections`, `booking-requests`, etc.
+- Deduplicates paths automatically (uses set internally)
+
+**New Fields (added 2026-01-07)**:
+- `mounted_has_channel_connections: bool` - True if `/api/v1/channel-connections/*` routes exist
+- `channel_connections_paths: list[str]` - All channel-connections paths (sorted, deduplicated)
+- `pricing_paths: list[str]` - Now deduplicated (previously could contain duplicates)
+
+**Verification**:
+```bash
+# Check channel-connections detection
+curl https://api.example.com/api/v1/ops/modules | jq '{
+  mounted_has_channel_connections,
+  channel_connections_paths,
+  mounted_prefixes: .mounted_prefixes | map(select(contains("channel")))
+}'
+
+# Expected output (if channel-connections routes exist):
+# {
+#   "mounted_has_channel_connections": true,
+#   "channel_connections_paths": [
+#     "/api/v1/channel-connections/sync",
+#     "/api/v1/channel-connections/availability",
+#     "/api/v1/channel-connections/pricing"
+#   ],
+#   "mounted_prefixes": ["/api/v1/channel-connections"]
+# }
+```
+
+**Use Cases**:
+1. **Deploy Verification**: Confirm channel-connections module is mounted after deploy
+2. **Troubleshooting 404s**: Check if routes are actually mounted vs just registered
+3. **Module Registry vs Reality**: Compare registry metadata with actual app.routes
+4. **Smoke Tests**: Verify specific route families exist before running tests
+
+**Related Helpers** (internal, tested):
+- `extract_mounted_prefixes(routes)` - Extract unique API prefixes with regex `^(/api/v1/[^/]+)`
+- `extract_paths_by_prefix(routes, prefix)` - Get all paths matching prefix (deduplicated, sorted)
+- Unit tests: `tests/unit/test_ops_helpers.py`
+
+**Important Notes**:
+- `/ops/modules` is **authoritative** - reads from `request.app.routes` (not registry)
+- No database calls, no authentication required (safe metadata only)
+- Response reflects actual FastAPI routing table at request time
+- If `modules_enabled=false` but routes exist: routes were mounted directly (bypass module system)
+- Use this endpoint for ops verification, not `/openapi.json` (OpenAPI may lag behind reality)
+
+
 **Problem**: Create rate plan fails with "Missing agency_id in token claims"
 
 **Symptoms**:
