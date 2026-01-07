@@ -104,6 +104,91 @@ Verification passes if `source_commit` from production starts with the expected 
 ## Completed Phases
 
 
+
+### Admin UI — Booking & Property Detail Pages ✅
+
+**Date Completed:** 2026-01-07
+
+**Overview:**
+Implemented booking and property detail pages in Admin UI with comprehensive field display, German error handling, retry functionality, and automated smoke testing script. Detail pages provide full entity views with proper error states and navigation.
+
+**Problem:**
+- Booking detail page (`/bookings/{id}`) had English error messages and no retry button
+- Property detail page (`/properties/{id}`) didn't exist
+- Properties list page had no row click navigation to detail pages
+- No automated smoke testing for detail endpoints
+- Insufficient troubleshooting documentation for detail page errors
+
+**Solution:**
+- **Booking Detail Page** (`frontend/app/bookings/[id]/page.tsx`):
+  - Updated error messages to German (401, 403, 404, 503)
+  - Added retry button with `handleRetry()` function
+  - Status badge colors: requested (blue), under_review (purple), confirmed (green), pending (yellow), cancelled (red)
+  - Guest ID link to `/guests/{id}` with graceful null handling
+  - Price breakdown: nightly_rate, subtotal, cleaning_fee, service_fee, tax, total_price
+  - Special requests and internal notes sections
+
+- **Property Detail Page** (`frontend/app/properties/[id]/page.tsx`) - NEW:
+  - Full detail view with 6 sections: Objektinformationen, Adresse, Kapazität, Zeiten & Preise, IDs, Zeitstempel
+  - German error messages and retry button (same pattern as booking detail)
+  - Status badge: Aktiv (green), Inaktiv (gray), Gelöscht (red)
+  - Address fields: address_line1/2, postal_code, city, country
+  - Capacity: max_guests, bedrooms, beds, bathrooms
+  - Pricing: base_price, cleaning_fee, currency, min_stay, booking_window_days
+  - Displays "—" for missing optional fields
+
+- **Properties List Navigation** (`frontend/app/properties/page.tsx`):
+  - Added `cursor-pointer` class and `onClick` handler to table rows
+  - Row click navigates to `/properties/{id}` detail page
+
+- **Smoke Test Script** (`backend/scripts/pms_admin_detail_endpoints_smoke.sh`) - NEW:
+  - Tests: GET booking detail, GET property detail, CORS headers
+  - Auto-discovers booking/property IDs from list endpoints if not provided
+  - Exit codes: 0=success, 1=failure (404, 401, 403), 2=server error (500 regression)
+  - TOKEN sanity check: length ~616, parts=3
+  - Usage: `TOKEN=... ./backend/scripts/pms_admin_detail_endpoints_smoke.sh`
+
+**Implementation:**
+
+**Files Changed:**
+- `frontend/app/bookings/[id]/page.tsx` - German error messages, retry button
+- `frontend/app/properties/[id]/page.tsx` - NEW: Property detail page (407 lines)
+- `frontend/app/properties/page.tsx` - Added row click navigation
+- `backend/scripts/pms_admin_detail_endpoints_smoke.sh` - NEW: Smoke test script (252 lines)
+- `backend/scripts/README.md` - Added smoke script documentation
+- `backend/docs/ops/runbook.md` - Added "Admin UI: Booking & Property Detail Pages" section (268 lines, DOCS SAFE MODE)
+
+**Key Features:**
+- **Consistent error handling**: German error messages across all detail pages (401/403/404/503)
+- **Retry functionality**: Users can retry failed requests without page reload
+- **Auto-discovery**: Smoke script automatically finds IDs from list endpoints
+- **CORS validation**: Smoke script checks admin origin is allowed
+- **Comprehensive troubleshooting**: Runbook includes JWT token debugging, RLS policy checks, backend health verification
+- **Browser + Server verification**: Manual browser steps + automated curl commands
+
+**Testing:**
+- Smoke script: `./backend/scripts/pms_admin_detail_endpoints_smoke.sh`
+- Browser verification checklist in runbook (status badges, error states, retry button)
+- Server-side curl verification commands with TOKEN examples
+
+**Status**: ✅ IMPLEMENTED
+
+**Runbook Reference:**
+- Section: "Admin UI: Booking & Property Detail Pages" in `backend/docs/ops/runbook.md` (line ~15276)
+- Includes: Overview, Features, Browser verification, Troubleshooting (401/403/404/503), Server-side verification
+
+**Operational Impact:**
+- Admin users can view full booking and property details with retry on errors
+- Consistent German UX across all pages
+- Automated smoke testing reduces manual verification time
+- Troubleshooting guide reduces support ticket resolution time
+- Property detail page closes feature parity gap with bookings/guests
+
+**Related Entries:**
+- [Admin UI — Bookings & Properties Listing] - List pages that navigate to these detail pages
+- [API - Allow Booking Status 'requested' in Responses] - Backend fix for status field validation
+
+---
 ### Admin UI — Bookings & Properties Listing ✅
 
 **Date Completed:** 2026-01-07

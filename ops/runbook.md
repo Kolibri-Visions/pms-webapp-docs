@@ -15273,6 +15273,274 @@ bash /app/scripts/pms_phase23_smoke.sh
 
 ---
 
+
+---
+
+## Admin UI: Booking & Property Detail Pages
+
+### Overview
+
+The Admin UI provides detail pages for individual bookings and properties. These pages fetch full entity data via single-item GET endpoints and display comprehensive information.
+
+### Booking Detail Page
+
+**URL**: `https://admin.fewo.kolibri-visions.de/bookings/{id}`
+
+**API Endpoint**: `GET /api/v1/bookings/{id}`
+
+**Requires**: JWT authentication (session cookie or Authorization header)
+
+**Features**:
+- **Header**: booking_reference, status badge (includes "requested" and "under_review")
+- **Dates & Stay**: check_in, check_out, num_nights
+- **Guest Info**: guest_id with link to `/guests/{guest_id}` (handles null guest gracefully)
+- **Price Breakdown**: nightly_rate, subtotal, cleaning_fee, service_fee, tax, total_price, currency
+- **IDs**: booking id, property_id, guest_id, channel_booking_id (if present)
+- **Metadata**: created_at, updated_at
+- **Special Requests / Internal Notes**: displayed if present
+- **Navigation**: "← Zurück zur Buchungsliste" link
+- **Error States**: German messages for 401, 403, 404, 503 with retry button
+
+### Property Detail Page
+
+**URL**: `https://admin.fewo.kolibri-visions.de/properties/{id}`
+
+**API Endpoint**: `GET /api/v1/properties/{id}`
+
+**Requires**: JWT authentication
+
+**Features**:
+- **Header**: internal_name/name/title, status badge (aktiv/inaktiv/gelöscht)
+- **Address**: address_line1/2, postal_code, city, country
+- **Capacity**: max_guests, bedrooms, beds, bathrooms
+- **Times**: check_in_time, check_out_time
+- **Pricing**: base_price, cleaning_fee, currency, min_stay, booking_window_days
+- **IDs**: property id, agency_id
+- **Metadata**: created_at, updated_at, deleted_at (if soft-deleted)
+- **Navigation**: "← Zurück zur Objektliste" link
+- **Error States**: German messages for 401, 403, 404, 503 with retry button
+
+### Browser Verification Steps
+
+**Step 1: Verify Booking Detail**
+
+```bash
+# Login to Admin UI
+open https://admin.fewo.kolibri-visions.de/login
+# Login with admin credentials
+
+# Navigate to bookings list
+open https://admin.fewo.kolibri-visions.de/bookings
+
+# Click on any booking row
+
+# Expected:
+# - Navigates to /bookings/{id} detail page
+# - Page loads without "Failed to fetch" error
+# - Status badge shows correct color:
+#   - "requested" → blue
+#   - "under_review" → purple
+#   - "confirmed" → green
+#   - "pending" → yellow
+#   - "cancelled" → red
+# - Guest section handles null guest gracefully (shows guest_id + link, no crash)
+# - Price breakdown shows all fields with correct formatting
+# - Retry button appears if error occurs
+```
+
+**Step 2: Verify Property Detail**
+
+```bash
+# Navigate to properties list
+open https://admin.fewo.kolibri-visions.de/properties
+
+# Click on any property row
+
+# Expected:
+# - Navigates to /properties/{id} detail page
+# - Page loads without error
+# - Status badge shows: Aktiv (green) / Inaktiv (gray) / Gelöscht (red)
+# - Address section shows all available address fields
+# - Capacity and pricing sections display available data
+# - "—" shown for missing optional fields
+# - Retry button appears if error occurs
+```
+
+### Troubleshooting
+
+**Problem**: Detail page returns "Session abgelaufen. Bitte melden Sie sich erneut an." (401)
+
+**Root Cause**: JWT token expired or missing
+
+**Solution**:
+```bash
+# 1. Check if session cookie exists
+# Browser DevTools → Application → Cookies → admin.fewo.kolibri-visions.de
+# Should see: sb-*-auth-token cookies
+
+# 2. Re-login via /login page if cookies missing or expired
+open https://admin.fewo.kolibri-visions.de/login
+
+# 3. If cookies exist but still 401, check token in Authorization header
+# Network tab → Request Headers → Authorization: Bearer <token>
+# TOKEN must be access_token (not refresh_token)
+# Expected length: ~616 characters
+# JWT parts: 3 (header.payload.signature)
+
+# 4. Verify JWT claims:
+# Open browser console:
+const token = localStorage.getItem('supabase.auth.token');
+# Decode at jwt.io - should include: sub, email, role, agency_id
+```
+
+**Problem**: Detail page returns "Keine Berechtigung, dieses Objekt/diese Buchung anzuzeigen." (403)
+
+**Root Cause**: User role lacks permission or agency_id mismatch
+
+**Solution**:
+```bash
+# 1. Check user role in JWT claims
+# Network tab → Response Headers from any API call
+# Or decode TOKEN and check "role" claim
+
+# 2. Verify RLS policies allow access
+# Database console:
+SELECT * FROM pg_policies WHERE tablename IN ('bookings', 'properties');
+# Ensure policy allows current user's role and agency_id
+
+# 3. Check agency_id in JWT matches entity's agency_id
+# Decode JWT → check agency_id claim
+# Compare with entity: SELECT agency_id FROM bookings WHERE id = '...';
+```
+
+**Problem**: Detail page returns "Objekt/Buchung nicht gefunden." (404)
+
+**Root Cause**: Entity doesn't exist or was soft-deleted
+
+**Solution**:
+```bash
+# 1. Verify entity exists in database
+# Database console:
+SELECT id, deleted_at FROM bookings WHERE id = '...';
+SELECT id, deleted_at FROM properties WHERE id = '...';
+
+# 2. If soft-deleted (deleted_at NOT NULL), entity is hidden from detail view
+# Admin UI doesn't show deleted entities by design
+
+# 3. Check if ID was copied correctly from list page
+# Compare URL: /bookings/{id} with database ID
+```
+
+**Problem**: Detail page returns "Service vorübergehend nicht verfügbar." (503)
+
+**Root Cause**: Backend database unavailable or schema drift
+
+**Solution**:
+```bash
+# 1. Check backend health
+curl -s https://api.fewo.kolibri-visions.de/health/ready | jq .
+
+# Expected: {"status": "up", "components": {"db": {"status": "up"}, ...}}
+# If db: "down", see [DB DNS / Degraded Mode](#db-dns--degraded-mode)
+
+# 2. Check backend logs for schema errors
+docker logs pms-backend --tail 100 | grep -i "error\|503"
+
+# Look for: "Relation does not exist", "column ... does not exist"
+# If schema errors, see [Schema Drift](#schema-drift)
+
+# 3. Verify detail endpoint works via curl
+export TOKEN="..."
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+
+curl -sS -i -H "Authorization: Bearer $TOKEN" \
+  "$API_BASE_URL/api/v1/bookings/{id}" | head -20
+# Expected: HTTP/2 200
+
+curl -sS -i -H "Authorization: Bearer $TOKEN" \
+  "$API_BASE_URL/api/v1/properties/{id}" | head -20
+# Expected: HTTP/2 200
+```
+
+### Verification (SERVER-SIDE)
+
+**Automated Smoke Test**:
+
+```bash
+# HOST-SERVER-TERMINAL
+
+# Set TOKEN (obtain from Admin UI login or Supabase dashboard)
+export TOKEN="eyJhbGc..."
+
+# Run smoke test (auto-discovers booking and property IDs)
+./backend/scripts/pms_admin_detail_endpoints_smoke.sh
+
+# Expected output:
+# [INFO] All tests passed! ✓
+# [INFO] Booking detail endpoint: OK
+# [INFO] Property detail endpoint: OK
+# [INFO] CORS headers: OK
+
+# Exit code 0 = success
+# Exit code 1 = failure (404, 401, 403, or missing data)
+# Exit code 2 = server error (500 - regression!)
+```
+
+**Manual API Verification**:
+
+```bash
+# HOST-SERVER-TERMINAL
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export TOKEN="..."
+
+# Get booking ID from list
+BID=$(curl -sS -H "Authorization: Bearer $TOKEN" \
+  "$API_BASE_URL/api/v1/bookings?limit=1&offset=0" | jq -r '.items[0].id // .[0].id')
+
+echo "Testing booking ID: $BID"
+
+# Test booking detail endpoint
+curl -sS -i -H "Authorization: Bearer $TOKEN" \
+  "$API_BASE_URL/api/v1/bookings/$BID" | head -30
+
+# Expected: HTTP/2 200
+# Body includes: booking_reference, status, total_price, etc.
+
+# Get property ID from list
+PID=$(curl -sS -H "Authorization: Bearer $TOKEN" \
+  "$API_BASE_URL/api/v1/properties?limit=1&offset=0" | jq -r '.items[0].id // .[0].id')
+
+echo "Testing property ID: $PID"
+
+# Test property detail endpoint
+curl -sS -i -H "Authorization: Bearer $TOKEN" \
+  "$API_BASE_URL/api/v1/properties/$PID" | head -30
+
+# Expected: HTTP/2 200
+# Body includes: internal_name, address fields, capacity, pricing, etc.
+```
+
+**Deploy Verification**:
+
+```bash
+# HOST-SERVER-TERMINAL
+
+# Verify deployed commit
+curl -s "$API_BASE_URL/api/v1/ops/version" | jq -r '.source_commit, .started_at'
+
+# Run deploy verification script (checks commit match + modules)
+EXPECT_COMMIT=<commit-sha> ./backend/scripts/pms_verify_deploy.sh
+
+# Exit code 0 = commit matches and backend healthy
+```
+
+### Related Sections
+
+- [Admin UI: Bookings & Properties Lists](#admin-ui-bookings--properties-lists) - List pages that link to these detail pages
+- [Booking Status Validation Error (500)](#booking-status-validation-error-500) - For status field validation issues
+- [Admin UI Authentication Verification](#admin-ui-authentication-verification) - For cookie-based SSR auth checks
+- [CORS Errors (Admin Console Blocked)](#cors-errors-admin-console-blocked) - For CORS configuration
+
 ## Full Sync Batching (batch_id)
 
 **Purpose:** Full Sync operations trigger 3 concurrent tasks (availability_update, pricing_update, bookings_sync) grouped by a shared `batch_id` for easier tracking and verification.
