@@ -123,12 +123,14 @@ Applied a cohesive "soft beige premium backoffice" visual theme to the Admin UI,
 
 **Design Tokens & Theming:**
 - Added CSS variables for backoffice theme in `frontend/app/globals.css`:
-  - `--bo-bg`: #F5F1E8 (warm beige background)
+  - `--bo-bg`: #FAF8F3 (soft cream background - refined from initial beige)
   - `--bo-surface`: #FFFFFF (white cards)
-  - `--bo-surface-2`: #FBFAF7 (secondary surface)
-  - `--bo-border`: #E7E3DA (light borders)
-  - `--bo-shadow`: Subtle shadow tokens
-  - `--bo-radius-*`: Border radius tokens (sm/default/lg/xl)
+  - `--bo-surface-2`: #F7F5F0 (secondary surface - refined)
+  - `--bo-border`: #E8E6E1 (light borders - refined)
+  - `--bo-accent-sage`: #9CA896 (sage green accent - added in refinement)
+  - `--bo-accent-sage-light`: #E8ECE7 (light sage - added in refinement)
+  - `--bo-shadow`: Subtle shadow tokens (softer in refinement)
+  - `--bo-radius-*`: Border radius tokens (sm/default/lg/xl/2xl)
 - Extended Tailwind config with `bo-*` utility classes
 - Preserved existing branding tokens (`--t-*`) for per-tenant customization
 
@@ -139,11 +141,12 @@ Applied a cohesive "soft beige premium backoffice" visual theme to the Admin UI,
 - Typography hierarchy: H1 = 3xl, H2 = xl, Body = base/sm
 
 **Shell Layout:**
-- Warm beige app background (`bg-bo-bg`)
-- Sidebar: Pill-style container with `rounded-bo-xl`, shadow, white background
-- Navigation items: `rounded-full` pills with gradient active state
-- Topbar: Frosted glass effect with `backdrop-blur-sm`, rounded container
-- User indicator: Pill with green online dot
+- Soft cream app background (`bg-bo-bg`)
+- Sidebar: Icon-only by default (collapsible), pill-style container with `rounded-bo-2xl`, shadow, white background
+- Navigation items: Circular icon backgrounds (`w-10 h-10 rounded-full`) with sage green gradient on active state
+- Topbar: Transparent background with greeting header ("Hello, User!"), integrated search bar, circular notification buttons
+- Search: Pill-shaped input with icon in topbar
+- Notifications: Circular buttons with red badge indicator
 
 **Component Styling:**
 - **Cards/Tables**: `rounded-bo-xl` (2rem corners), `shadow-bo-md`, white background
@@ -155,23 +158,25 @@ Applied a cohesive "soft beige premium backoffice" visual theme to the Admin UI,
 - **Pagination**: Pill buttons with consistent spacing
 
 **Files Changed:**
-- `frontend/app/globals.css` - Added backoffice CSS variables
+- `frontend/app/globals.css` - Added backoffice CSS variables (refined with lighter cream + sage green)
 - `frontend/app/layout.tsx` - Added Plus Jakarta Sans font, updated body className
-- `frontend/tailwind.config.ts` - Extended theme with bo-* utilities
-- `frontend/app/components/AdminShell.tsx` - Applied pill navigation, warm beige background, frosted topbar
+- `frontend/tailwind.config.ts` - Extended theme with bo-* utilities (added sage accent colors in refinement)
+- `frontend/app/components/AdminShell.tsx` - Applied icon-only sidebar, circular icons, sage gradient, greeting header
 - `frontend/app/bookings/page.tsx` - Updated cards, tables, inputs, badges to new style
 - `frontend/app/bookings/[id]/page.tsx` - Applied card/text styling
 - `frontend/app/properties/page.tsx` - Updated cards, tables, inputs to new style
 - `frontend/app/properties/[id]/page.tsx` - Applied card/text styling
 
 **Key Features:**
-- **Warm beige background**: Premium feel vs stark white
-- **Pill navigation**: Modern, friendly UI with rounded elements
-- **Consistent shadows**: Subtle depth without overwhelming
-- **Typography hierarchy**: Clear visual structure with dual fonts
-- **Frosted glass topbar**: Modern backdrop blur effect
-- **Soft status badges**: Rounded pills instead of sharp rectangles
-- **Generous padding**: Breathing room for content
+- **Soft cream background**: Lighter, airier premium feel (#FAF8F3)
+- **Icon-only sidebar**: Default collapsed state with circular icon backgrounds
+- **Sage green accents**: Natural color for active states and highlights
+- **Greeting header**: Personalized "Hello, User!" with contextual subtitle
+- **Integrated search**: Pill-shaped search bar in topbar with icon
+- **Circular notifications**: Message and notification buttons with badge indicators
+- **Consistent shadows**: Softer, more subtle depth throughout
+- **Typography hierarchy**: Clear visual structure with Plus Jakarta Sans + Inter
+- **Generous spacing**: Breathing room for content with better visual hierarchy
 - **High contrast**: Readable text with proper color tokens
 
 **Browser Verification Checklist:**
@@ -180,13 +185,15 @@ Applied a cohesive "soft beige premium backoffice" visual theme to the Admin UI,
 open https://admin.fewo.kolibri-visions.de/login
 
 # Visual verification:
-✓ Background is warm beige (#F5F1E8)
-✓ Sidebar has pill shape with rounded corners and shadow
-✓ Navigation items are pill-shaped (rounded-full)
-✓ Active nav item has gradient background
-✓ Topbar has frosted glass effect
-✓ Search input is pill-shaped
-✓ Cards/tables have large rounded corners
+✓ Background is soft cream (#FAF8F3)
+✓ Sidebar is icon-only by default (collapsible)
+✓ Sidebar has pill shape with rounded-bo-2xl corners and soft shadow
+✓ Navigation icons have circular backgrounds (w-10 h-10 rounded-full)
+✓ Active nav icon has sage green gradient background (#9CA896)
+✓ Topbar shows greeting "Hello, User!" with subtitle
+✓ Search bar is integrated in topbar (pill-shaped with icon)
+✓ Notification buttons are circular with red badge
+✓ Cards/tables have large rounded corners (rounded-bo-xl)
 ✓ Status badges are pill-shaped
 ✓ Buttons are rounded-full
 ✓ Headings use Plus Jakarta Sans

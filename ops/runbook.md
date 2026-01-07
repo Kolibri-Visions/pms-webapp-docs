@@ -15281,20 +15281,23 @@ bash /app/scripts/pms_phase23_smoke.sh
 
 ### Overview
 
-The Admin UI uses a premium "soft beige backoffice" visual theme to provide a modern, cohesive user experience. The theme features warm colors, generous spacing, and rounded UI elements for a professional look.
+The Admin UI uses a premium "soft cream backoffice" visual theme to provide a modern, cohesive user experience. The theme features a lighter cream background, sage green accents, icon-only sidebar, and rounded UI elements for a professional, airy look.
 
 ### Theme Tokens
 
 **CSS Variables** (defined in `frontend/app/globals.css`):
-- `--bo-bg`: #F5F1E8 (warm beige background)
+- `--bo-bg`: #FAF8F3 (soft cream background)
 - `--bo-surface`: #FFFFFF (white cards/surfaces)
-- `--bo-surface-2`: #FBFAF7 (secondary surface tint)
-- `--bo-border`: #E7E3DA (light borders)
-- `--bo-text`: #111827 (primary text)
+- `--bo-surface-2`: #F7F5F0 (secondary surface tint)
+- `--bo-border`: #E8E6E1 (light borders)
+- `--bo-text`: #1F2937 (primary text)
 - `--bo-text-muted`: #6B7280 (secondary text)
-- `--bo-shadow`: Subtle shadow for cards
+- `--bo-accent-sage`: #9CA896 (sage green accent)
+- `--bo-accent-sage-light`: #E8ECE7 (light sage)
+- `--bo-shadow`: Subtle shadow for cards (softer)
 - `--bo-shadow-md`: Medium shadow for elevated elements
-- `--bo-radius-*`: Border radius tokens (sm: 0.5rem, default: 1rem, lg: 1.5rem, xl: 2rem)
+- `--bo-shadow-lg`: Large shadow for prominent elements
+- `--bo-radius-*`: Border radius tokens (sm: 0.5rem, default: 1rem, lg: 1.5rem, xl: 1.75rem, 2xl: 2rem)
 
 **Typography**:
 - Headings: Plus Jakarta Sans (via `font-heading` class)
@@ -15304,15 +15307,16 @@ The Admin UI uses a premium "soft beige backoffice" visual theme to provide a mo
 ### Design Patterns
 
 **Shell Layout**:
-- Background: Warm beige (`bg-bo-bg`)
-- Sidebar: Pill-style container with rounded corners, soft shadow, white background
-- Topbar: Frosted glass effect with backdrop blur, rounded container
+- Background: Soft cream (`bg-bo-bg` - #FAF8F3)
+- Sidebar: Icon-only by default (collapsible), pill-style container with `rounded-bo-2xl`, soft shadow, white background
+- Topbar: Transparent background with greeting header ("Hello, User!"), integrated search bar, circular notification buttons
 - Content area: Generous padding (p-6 to p-8)
 
 **Navigation**:
-- Active items: Gradient background (indigo-50 to indigo-100) with subtle shadow
-- Inactive items: Hover state with bg-bo-surface-2
-- Pills: Full rounded (`rounded-full`) for interactive elements
+- Icon backgrounds: Circular (`w-10 h-10 rounded-full`) with `bg-bo-surface-2` default
+- Active items: Sage green gradient background (`from-bo-accent-sage to-bo-accent-sage/80`) with subtle shadow
+- Inactive items: Hover state with text color change
+- Expandable sidebar: Shows labels when expanded, icon-only when collapsed
 
 **Cards & Tables**:
 - Cards: `rounded-bo-xl` (2rem), white background, border, shadow
@@ -15333,18 +15337,20 @@ The Admin UI uses a premium "soft beige backoffice" visual theme to provide a mo
 open https://admin.fewo.kolibri-visions.de/login
 
 # After login, verify:
-1. Background is warm beige (#F5F1E8)
-2. Sidebar has pill shape with rounded corners and shadow
-3. Navigation items are pill-shaped (rounded-full)
-4. Active nav item has gradient background
-5. Topbar has frosted glass effect
-6. Search input is pill-shaped
-7. Cards/tables have large rounded corners (rounded-bo-xl)
-8. Status badges are pill-shaped
-9. Buttons are rounded-full
-10. All text is readable (good contrast)
-11. Headings use Plus Jakarta Sans font
-12. Body text uses Inter font
+1. Background is soft cream (#FAF8F3)
+2. Sidebar is icon-only by default (collapsible with expand button)
+3. Sidebar has pill shape with rounded-bo-2xl corners and soft shadow
+4. Navigation icons have circular backgrounds (w-10 h-10 rounded-full)
+5. Active nav icon has sage green gradient background (#9CA896)
+6. Topbar shows greeting "Hello, User!" with contextual subtitle
+7. Search bar is integrated in topbar (pill-shaped with icon)
+8. Notification buttons are circular with red badge indicator
+9. Cards/tables have large rounded corners (rounded-bo-xl)
+10. Status badges are pill-shaped
+11. Buttons are rounded-full
+12. All text is readable (good contrast)
+13. Headings use Plus Jakarta Sans font
+14. Body text uses Inter font
 
 # Test pages:
 - /dashboard
