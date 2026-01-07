@@ -15625,6 +15625,36 @@ curl -sS -i -H "Authorization: Bearer $TOKEN" \
 # Expected: HTTP/2 200
 ```
 
+**Problem**: Booking detail returns "500 Internal Server Error" with "ResponseValidationError: cancelled_by"
+
+**Root Cause**: Legacy data in database has UUID values in `cancelled_by` field instead of expected actor enum ('guest', 'host', 'platform', 'system').
+
+**Solution**:
+```bash
+# This is now fixed via backward-compatible normalization.
+# The service layer automatically maps:
+# - UUID values → actor='host', cancelled_by_user_id=<uuid>
+# - Valid actors → preserved as-is
+# - Invalid values → actor='system' (safe fallback)
+
+# Verify fix is deployed:
+curl -sS -H "Authorization: Bearer $TOKEN" \
+  "$API_BASE_URL/api/v1/bookings/{id}" | jq -r '.cancelled_by, .cancelled_by_user_id'
+
+# Expected output for legacy UUID data:
+# "host"
+# "8036f477-1234-5678-9abc-def012345678"
+
+# Expected output for standard actor data:
+# "guest"
+# null
+
+# If still seeing 500 errors, check backend logs for ResponseValidationError
+docker logs pms-backend --tail 50 | grep -i "validationerror"
+```
+
+**Prevention**: All new cancellations should use actor enum values. The `cancelled_by_user_id` field preserves user identity when needed.
+
 ### Verification (SERVER-SIDE)
 
 **Automated Smoke Test**:

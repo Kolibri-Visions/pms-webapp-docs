@@ -103,7 +103,70 @@ Verification passes if `source_commit` from production starts with the expected 
 
 ## Completed Phases
 
+### Booking API — cancelled_by Backward Compatibility Fix ✅ IMPLEMENTED
 
+**Date Completed:** 2026-01-08
+
+**Overview:**
+Fixed production 500 error (ResponseValidationError) when GET /api/v1/bookings/{id} returns bookings with legacy UUID values in the `cancelled_by` field. Implemented backward-compatible normalization that preserves API semantics while handling historical data gracefully.
+
+**Problem:**
+- Production endpoint returning 500 errors due to Pydantic validation failure
+- Database contained UUID values in `cancelled_by` field (e.g., '8036f477-...')
+- Response model expected Literal['guest', 'host', 'platform', 'system']
+- Booking detail and list endpoints both affected
+
+**Solution:**
+
+**1. Added New Response Field:**
+- `cancelled_by_user_id: Optional[UUID]` - Preserves user ID when DB had UUID in cancelled_by
+
+**2. Created Normalization Helper:**
+- `normalize_cancelled_by(raw_value)` in `backend/app/services/booking_service.py`
+- Mapping rules:
+  - Valid actor literal ('guest', 'host', etc.) → preserved as-is, user_id=None
+  - UUID value → actor='host', user_id=<uuid>
+  - Invalid/None → actor='system', user_id=None (safe fallback, never crashes)
+- Includes comprehensive docstring with examples
+
+**3. Applied Normalization in Services:**
+- `BookingService.get_booking()` - Single booking detail endpoint
+- `BookingService.list_bookings()` - Paginated booking list endpoint
+- Both methods normalize before returning dict to avoid Pydantic validation errors
+
+**4. Unit Tests:**
+- 15 test cases covering all scenarios:
+  - Valid actors preserved
+  - UUID strings/objects mapped to 'host'
+  - None/empty/invalid values fallback to 'system'
+  - Whitespace handling
+  - Case sensitivity
+- All tests passing (backend/tests/unit/test_cancelled_by_normalization.py)
+
+**5. Python 3.9 Compatibility:**
+- Fixed type annotation `UUID | None` → `Optional[UUID]`
+- Ensures compatibility with production Python version
+
+**Files Changed:**
+- `backend/app/schemas/bookings.py` - Added `cancelled_by_user_id` field to BookingResponse
+- `backend/app/services/booking_service.py` - Added normalization helper + applied in get_booking() and list_bookings()
+- `backend/tests/unit/test_cancelled_by_normalization.py` - Unit tests for normalization logic
+- `backend/docs/ops/runbook.md` - Troubleshooting section under "Admin UI: Booking & Property Detail Pages"
+- `backend/docs/project_status.md` - This entry
+
+**API Contract:**
+- Response model now includes: `cancelled_by` (actor enum) + `cancelled_by_user_id` (optional UUID)
+- Backward compatible - existing API consumers unaffected
+- Legacy data: Returns actor='host' + user_id populated
+- Modern data: Returns actor as-is + user_id=null
+
+**Status:** ✅ IMPLEMENTED (awaiting production verification)
+
+**Next Steps:**
+- Deploy to production
+- Run smoke test: `./backend/scripts/pms_admin_detail_endpoints_smoke.sh`
+- Verify endpoints return 200 (not 500)
+- Update status to VERIFIED after prod confirmation
 
 
 ### Admin UI — Backoffice Visual Style ✅
