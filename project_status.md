@@ -2474,25 +2474,37 @@ Comprehensive Standard Operating Procedure (SOP) and automated verification scri
 - Pre-DNS test: DOMAIN=new.example.com SERVER_IP=1.2.3.4 ./script.sh
 - CORS test: DOMAIN=api.example.com TEST_ORIGIN=https://app.example.com ./script.sh
 
-**Status**: ✅ IMPLEMENTED (awaiting production verification)
+**Status**: ✅ VERIFIED
+
+**Production Evidence** (Verified: 2026-01-07):
+- **Verification Date**: 2026-01-07
+- **API Domain**: api.fewo.kolibri-visions.de
+- **Public Origin (CORS)**: https://fewo.kolibri-visions.de
+- **Agency ID**: ffd0123a-10b6-40cd-8ad5-66eee9757ab7
+- **agency_domains row** (verified in Supabase SQL):
+  - id: `7d1baaf5-0a6a-4e73-bd5a-10b5344a9924`
+  - domain: `api.fewo.kolibri-visions.de`
+  - is_primary: `true`
+  - created_at: `2026-01-07 12:07:39.451274+00`
+  - validated_at: `2026-01-07 12:07:39.451274+00`
+- **Script Execution** (`backend/scripts/pms_domain_onboarding_verify.sh`):
+  - Result: `rc=0` (all checks passed)
+  - Health endpoint: HTTP 200
+  - CORS preflight: HTTP 200 with `Access-Control-Allow-Origin: https://fewo.kolibri-visions.de`
+- **PROD Deploy Verification** (automated):
+  - `/api/v1/ops/version` Source Commit: `a69105f6391078b0a0c4ecdc7bad8646af640e2c`
+  - EXPECT_COMMIT prefix match: `a69105f` ✅ PASSED
+  - Overall verify result: `rc=0`
 
 **Verification Criteria:**
-This entry will be marked **VERIFIED** only after:
+All criteria met for VERIFIED status:
 1. ✅ Script exists and is executable
 2. ✅ SOP documented in runbook.md
 3. ✅ Script documented in scripts/README.md
-4. ⬜ Real customer domain onboarded using SOP (manual test)
-5. ⬜ Script verification passes on production domain (rc=0)
-6. ⬜ CORS preflight test passes (if applicable)
-7. ⬜ No false positives/negatives observed in script output
-
-**Production Evidence Required:**
-- Customer domain onboarded (domain name, agency_id)
-- Script execution output (sanitized, no secrets)
-- Health check + CORS preflight results
-- Commit SHA when VERIFIED
-
-**Note**: Do NOT mark VERIFIED until real customer domain onboarded and script validated on production.
+4. ✅ Real customer domain onboarded using SOP (api.fewo.kolibri-visions.de)
+5. ✅ Script verification passes on production domain (rc=0)
+6. ✅ CORS preflight test passes (200 with correct Allow-Origin header)
+7. ✅ No false positives/negatives observed in script output
 
 ---
 
