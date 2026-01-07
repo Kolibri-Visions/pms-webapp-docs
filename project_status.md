@@ -2896,3 +2896,104 @@ curl -k -sS -H "Authorization: Bearer $TOKEN" \
 - [OPS B: Single-Tenant VPS Playbook] - Uses `/api/v1/ops/version` in pms_customer_vps_verify.sh
 
 ---
+
+### API Security: Protect /ops/modules Endpoint (Auth Required) ✅
+
+**Date Completed:** 2026-01-07
+
+**Overview:**
+Added JWT authentication requirement to `/api/v1/ops/modules` endpoint to protect sensitive operational metadata (mounted routes, module registry) from unauthorized access. The endpoint now requires a valid JWT token, using signature verification only (no database dependency).
+
+**Purpose:**
+- Protect sensitive operational metadata from unauthorized disclosure
+- Reduce API surface exposure to unauthenticated users
+- Maintain DB-free auth for operational endpoints (JWT verification only)
+- Keep `/api/v1/ops/version` public for deploy verification and monitoring
+
+**Problem:**
+- `/api/v1/ops/modules` was public and exposed full route table and module registry
+- Could reveal API structure to unauthorized parties
+- No authentication barrier for operational diagnostics endpoint
+
+**Solution:**
+1. **API Changes** (`backend/app/api/routes/ops.py`):
+   - Added `user: dict = Depends(get_current_user)` dependency to `/ops/modules` endpoint
+   - Imported `get_current_user` from `app.core.auth`
+   - Updated docstring: "Authentication required" (was "No authentication required")
+   - JWT verification uses signature check only (no DB lookup, works even if DB is down)
+   - `/ops/version` remains public (no auth) for deploy verification
+   - `/ops/audit-log` remains protected (JWT + admin role + DB)
+
+2. **Documentation** (`backend/docs/ops/runbook.md`):
+   - Added "OPS endpoints: Auth & Zugriff" section
+   - Current behavior documented: /ops/version PUBLIC, /ops/modules PUBLIC (pre-deploy state)
+   - Future/optional hardening documented with verification commands
+   - PROD evidence: commit ae589e4, started_at 2026-01-07T14:55:04.858297+00:00
+   - Verification commands for current behavior (all return 200)
+   - Optional hardening section with expected 401/403 behavior
+   - DOCS SAFE MODE: 63 lines added, 0 deletions
+
+**Implementation:**
+
+**Files Changed:**
+- `backend/app/api/routes/ops.py` - Added get_current_user dependency to /ops/modules endpoint
+- `backend/docs/ops/runbook.md` - Added OPS endpoint auth documentation (DOCS SAFE MODE: 63 lines added)
+
+**Key Changes:**
+- `/ops/version`: Remains PUBLIC (no auth) - for deploy verification and monitoring
+- `/ops/modules`: Now requires JWT auth - protects operational metadata
+- `/ops/audit-log`: Remains AUTH REQUIRED (admin-only) - unchanged
+- Auth mechanism: JWT signature verification only (no DB dependency)
+
+**Status**: ✅ IMPLEMENTED (awaiting production verification)
+
+**PROD Verification (pending):**
+
+When marking VERIFIED, must provide:
+- Deployed commit SHA
+- Verification date
+- API base URL (e.g., https://api.fewo.kolibri-visions.de)
+- Test results:
+
+```bash
+# HOST-SERVER-TERMINAL
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export TOKEN="..."  # valid JWT token
+
+# Test 1: /ops/version WITHOUT auth (should succeed - PUBLIC)
+curl -k -sS -i "$API_BASE_URL/api/v1/ops/version" | head -20
+# Expected: HTTP 200, body includes source_commit
+
+# Test 2: /ops/modules WITHOUT auth (should FAIL - AUTH REQUIRED)
+curl -k -sS -i "$API_BASE_URL/api/v1/ops/modules" | head -20
+# Expected: HTTP 401 or 403, {"detail":"Not authenticated"}
+
+# Test 3: /ops/modules with empty Bearer (should FAIL)
+curl -k -sS -i -H "Authorization: Bearer " "$API_BASE_URL/api/v1/ops/modules" | head -20
+# Expected: HTTP 401 or 403
+
+# Test 4: /ops/modules WITH valid JWT (should succeed)
+curl -k -sS -i -H "Authorization: Bearer $TOKEN" "$API_BASE_URL/api/v1/ops/modules" | head -20
+# Expected: HTTP 200, body includes mounted_has_channel_connections
+```
+
+**Verification Checklist:**
+- ⬜ `/ops/version` returns 200 without auth (PUBLIC, unchanged)
+- ⬜ `/ops/modules` returns 401/403 without auth (AUTH REQUIRED, new)
+- ⬜ `/ops/modules` returns 401/403 with empty Bearer
+- ⬜ `/ops/modules` returns 200 with valid JWT token
+- ⬜ Response includes expected fields: mounted_has_channel_connections, channel_connections_paths, pricing_paths
+- ⬜ No database errors (auth is JWT-only, no DB dependency)
+- ⬜ OpenAPI schema shows security requirement for /ops/modules
+
+**Operational Impact:**
+- `/ops/version` remains accessible for monitoring systems without auth
+- `/ops/modules` now requires authenticated operators only
+- DB-free JWT verification ensures endpoint works even during DB outages
+- Reduced risk of API structure disclosure to unauthorized parties
+
+**Related Entries:**
+- [API - Fix /ops/modules Route Inspection] - Hyphenated prefixes detection
+- [P3c: Audit Logging + Idempotency] - Uses /ops/audit-log endpoint (admin-only)
+
+---

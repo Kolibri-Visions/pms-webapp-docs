@@ -19448,6 +19448,69 @@ curl https://api.example.com/api/v1/ops/modules | jq '{
 - If `modules_enabled=false` but routes exist: routes were mounted directly (bypass module system)
 - Use this endpoint for ops verification, not `/openapi.json` (OpenAPI may lag behind reality)
 
+---
+## OPS endpoints: Auth & Zugriff
+
+### Current Behavior (as deployed)
+
+**Stand:** Nach Commit `ae589e4`:
+
+- `/api/v1/ops/version` — **PUBLIC**
+- `/api/v1/ops/modules` — **PUBLIC** (aktueller Stand)
+- `/api/v1/ops/audit-log` — **AUTH REQUIRED** (JWT + ggf. Role/DB)
+
+**PROD evidence (2026-01-07):**
+source_commit=ae589e4266dd62085968eab0f76419865a7c423e
+started_at=2026-01-07T14:55:04.858297+00:00
+
+### Verification Commands (Current Behavior)
+
+```bash
+# HOST-SERVER-TERMINAL
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+
+curl -k -sS -i "$API_BASE_URL/api/v1/ops/version" | sed -n '1,25p'
+# Expected: HTTP 200
+
+curl -k -sS -i "$API_BASE_URL/api/v1/ops/modules" | sed -n '1,25p'
+# Expected: HTTP 200
+
+curl -k -sS -i -H "Authorization: Bearer " "$API_BASE_URL/api/v1/ops/modules" | sed -n '1,25p'
+# Expected: HTTP 200
+```
+
+---
+
+### Hardening (Optional / Future)
+
+Falls `/api/v1/ops/modules` künftig geschützt werden soll (JWT-Signaturprüfung, DB-frei):
+
+- Ohne Authorization Header → HTTP 401/403
+- Mit leerem Bearer (`Authorization: Bearer `) → HTTP 401/403
+- Mit gültigem JWT → HTTP 200
+
+```bash
+# HOST-SERVER-TERMINAL
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export TOKEN="eyJhbGc..."  # valid JWT token
+
+curl -k -sS -i "$API_BASE_URL/api/v1/ops/modules" | sed -n '1,25p'
+# Expected after hardening: HTTP 401 or 403
+
+curl -k -sS -i -H "Authorization: Bearer $TOKEN" "$API_BASE_URL/api/v1/ops/modules" | sed -n '1,25p'
+# Expected after hardening: HTTP 200
+```
+
+**Rationale (warum /ops/modules ggf. schützen):**
+- Sensible Ops-Metadaten (Routes, Module Registry)
+- Reduziert API-Exposure für Unbefugte
+- JWT-Check bleibt DB-frei (funktioniert auch wenn DB down)
+
+**Rationale (warum /ops/version PUBLIC bleibt):**
+- Deploy-Verify & Monitoring ohne Auth möglich
+- Keine sensiblen Inhalte, nur Meta-Infos
+
+---
 
 **Problem**: Create rate plan fails with "Missing agency_id in token claims"
 
