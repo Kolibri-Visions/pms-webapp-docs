@@ -2997,3 +2997,80 @@ curl -k -sS -i -H "Authorization: Bearer $TOKEN" "$API_BASE_URL/api/v1/ops/modul
 - [P3c: Audit Logging + Idempotency] - Uses /ops/audit-log endpoint (admin-only)
 
 ---
+
+### DOCS: OPS Endpoints Auth & Access (Current PROD Behavior) ✅
+
+**Date Completed:** 2026-01-07
+
+**Overview:**
+Documented current PROD behavior of OPS endpoints regarding authentication requirements. Clarifies that `/api/v1/ops/version` and `/api/v1/ops/modules` are currently PUBLIC (no auth required), while `/api/v1/ops/audit-log` requires authentication.
+
+**Purpose:**
+- Provide accurate reference for current PROD endpoint behavior
+- Clarify which endpoints require authentication vs public access
+- Document PROD evidence (source_commit + timestamp) for verification
+- Establish baseline before any future security hardening
+
+**Current PROD Behavior (evidence 2026-01-07):**
+- **Deployed source_commit:** `ae589e4266dd62085968eab0f76419865a7c423e`
+- **started_at:** `2026-01-07T14:55:04.858297+00:00`
+
+**Endpoints:**
+1. **`/api/v1/ops/version`** — PUBLIC (200 ohne Auth)
+   - Purpose: Deploy verification, monitoring, health checks
+   - Returns: source_commit, environment, api_version, started_at
+   
+2. **`/api/v1/ops/modules`** — PUBLIC (200 ohne Auth, current)
+   - Purpose: Route inspection, troubleshooting, diagnostics
+   - Returns: mounted_prefixes, pricing_paths, channel_connections_paths, module registry
+   - Note: Even `Authorization: Bearer ` (empty) returns 200 because endpoint is not protected
+   
+3. **`/api/v1/ops/audit-log`** — AUTH REQUIRED (401/403 ohne JWT; role/DB checks)
+   - Purpose: Audit log inspection
+   - Returns: Recent audit entries for current agency
+
+**Implementation:**
+
+**Files Changed:**
+- `backend/docs/ops/runbook.md` - Added "OPS endpoints: Auth & Zugriff" section documenting current PROD behavior
+
+**Documentation Location:**
+- Section: "## OPS endpoints: Auth & Zugriff" in `backend/docs/ops/runbook.md` (line ~19452)
+- Includes PROD evidence, endpoint list, and HOST-SERVER-TERMINAL verification commands
+
+**Status**: ✅ IMPLEMENTED (PROD evidence captured)
+
+**PROD Verification (confirmed 2026-01-07):**
+
+```bash
+# HOST-SERVER-TERMINAL
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+
+# Test 1: /ops/version PUBLIC (200)
+curl -k -sS -i "$API_BASE_URL/api/v1/ops/version" | sed -n '1,25p'
+# Result: HTTP 200, body includes source_commit=ae589e4...
+
+# Test 2: /ops/modules PUBLIC (200) — ohne Auth
+curl -k -sS -i "$API_BASE_URL/api/v1/ops/modules" | sed -n '1,25p'
+# Result: HTTP 200, body includes mounted_prefixes
+
+# Test 3: /ops/modules PUBLIC (200) — mit leerem Bearer
+curl -k -sS -i -H "Authorization: Bearer " "$API_BASE_URL/api/v1/ops/modules" | sed -n '1,25p'
+# Result: HTTP 200 (endpoint not protected)
+
+# Test 4: /ops/audit-log AUTH REQUIRED (401/403)
+curl -k -sS -i "$API_BASE_URL/api/v1/ops/audit-log" | sed -n '1,25p'
+# Result: HTTP 401 or 403
+```
+
+**Operational Impact:**
+- Clear documentation of which OPS endpoints are public vs protected
+- Monitoring systems can safely poll /ops/version without authentication
+- Operators know /ops/modules is currently accessible without auth
+- Establishes baseline for future security hardening decisions
+
+**Related Entries:**
+- [API - Fix /ops/modules Route Inspection] - Hyphenated prefixes detection (ae589e4)
+- [P3c: Audit Logging + Idempotency] - Uses /ops/audit-log endpoint (admin-only)
+
+---
