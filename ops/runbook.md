@@ -15,6 +15,7 @@
 | API returns 503 after deploy | "Service degraded" or "Database unavailable" | [DB DNS / Degraded Mode](#db-dns--degraded-mode) |
 | JWT auth fails | 401 Unauthorized despite valid token | [Token Validation](#token-validation-apikey-header) |
 | API returns 503 with schema error | "Schema not installed/out of date" | [Schema Drift](#schema-drift) |
+| Booking detail returns 500 | ResponseValidationError on status field | [Booking Status Validation](#booking-status-validation-error-500) |
 | Smoke script fails | Empty TOKEN/PID, bash errors | [Smoke Script Pitfalls](#smoke-script-pitfalls) |
 
 ---
@@ -2592,6 +2593,113 @@ If env var is not set, these defaults will be used.
 - Always include admin and frontend origins in `ALLOWED_ORIGINS`
 - Test CORS with `curl -X OPTIONS` before deploying frontend changes
 - Document required origins in deployment checklist
+
+---
+
+## Booking Status Validation Error (500)
+
+### Symptom
+
+- Admin UI shows "Failed to fetch" when viewing booking details
+- Browser console shows: `GET /api/v1/bookings/{id}` returns HTTP 500
+- Backend logs show: `ResponseValidationError` with `literal_error` on `response.status`
+- Error message: `Input should be 'inquiry', 'pending', 'confirmed', ... (value='requested')`
+- CORS headers missing on 500 response (FastAPI behavior)
+
+### Root Cause
+
+Database contains booking status values (e.g., `'requested'`, `'under_review'`) that are not in the `BookingStatus` Literal type definition in `backend/app/schemas/bookings.py`.
+
+**Why this happens:**
+- Booking request workflow creates bookings with status `'requested'`
+- Schema Literal was not updated when new statuses were added to database
+- Pydantic validation fails when serializing response, causing 500 before CORS middleware runs
+
+### Verify
+
+Check backend logs for validation error:
+
+```bash
+docker logs pms-backend | grep -A 5 "ResponseValidationError"
+# Look for: "literal_error" on "response.status"
+# Input value causing error: 'requested' or 'under_review'
+```
+
+Test booking detail endpoint:
+
+```bash
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export TOKEN="..."  # valid JWT token
+export BOOKING_ID="..."  # booking ID with 'requested' status
+
+curl -k -sS -i -H "Authorization: Bearer $TOKEN" "$API_BASE_URL/api/v1/bookings/$BOOKING_ID" | head -20
+# Expected before fix: HTTP 500, no CORS headers
+# Expected after fix: HTTP 200, booking details with status='requested'
+```
+
+Check database for affected bookings:
+
+```bash
+# Connect to database
+docker exec -it <supabase-db-container> psql -U postgres
+
+# Find bookings with non-standard statuses
+SELECT id, status, created_at FROM bookings WHERE status NOT IN ('inquiry', 'pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled', 'declined', 'no_show');
+```
+
+### Fix
+
+**Solution:** Extend `BookingStatus` Literal in `backend/app/schemas/bookings.py` to include all valid database statuses.
+
+**Code Change:**
+
+```python
+# backend/app/schemas/bookings.py (line ~35)
+
+# Before:
+BookingStatus = Literal[
+    "inquiry", "pending", "confirmed", "checked_in",
+    "checked_out", "cancelled", "declined", "no_show"
+]
+
+# After:
+BookingStatus = Literal[
+    "requested", "under_review",  # Booking request lifecycle
+    "inquiry", "pending", "confirmed", "checked_in",
+    "checked_out", "cancelled", "declined", "no_show"
+]
+```
+
+**Deploy:**
+
+```bash
+# Commit fix
+git add backend/app/schemas/bookings.py backend/tests/unit/test_booking_schemas.py
+git commit -m "fix: allow booking status 'requested' in API responses"
+git push origin main
+
+# Verify deploy
+curl -s "https://api.fewo.kolibri-visions.de/api/v1/ops/version" | jq -r .source_commit
+```
+
+### Test
+
+After deploy, verify booking detail endpoint returns 200:
+
+```bash
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export TOKEN="..."
+export BOOKING_ID="..."
+
+curl -k -sS -i -H "Authorization: Bearer $TOKEN" "$API_BASE_URL/api/v1/bookings/$BOOKING_ID" | head -30
+# Expected: HTTP 200, body includes "status": "requested"
+```
+
+### Prevention
+
+- When adding new booking statuses to database, update `BookingStatus` Literal in schemas
+- Add unit tests for new status values in `backend/tests/unit/test_booking_schemas.py`
+- Use database migrations to document valid status values with CHECK constraints
 
 ---
 

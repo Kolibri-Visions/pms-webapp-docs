@@ -103,6 +103,65 @@ Verification passes if `source_commit` from production starts with the expected 
 
 ## Completed Phases
 
+### API - Allow Booking Status 'requested' in Responses ✅
+
+**Date Completed:** 2026-01-07
+
+**Overview:**
+Fixed 500 ResponseValidationError when fetching booking details for bookings with status='requested' or status='under_review'. Extended BookingStatus Literal type to include booking request lifecycle statuses.
+
+**Problem:**
+- Admin UI showed "Failed to fetch" when viewing booking details
+- GET /api/v1/bookings/{id} returned HTTP 500 with ResponseValidationError
+- Backend logs: `literal_error` on `response.status`, input value 'requested' not in Literal
+- CORS headers missing on 500 response (FastAPI validation fails before CORS middleware)
+
+**Solution:**
+- Extended `BookingStatus` Literal in `backend/app/schemas/bookings.py` to include:
+  - `"requested"` - Initial status when booking request is created
+  - `"under_review"` - Status when property owner is reviewing the request
+- Added unit tests in `backend/tests/unit/test_booking_schemas.py` validating all status values
+- Updated runbook with troubleshooting entry for booking status validation errors
+
+**Implementation:**
+
+**Files Changed:**
+- `backend/app/schemas/bookings.py` - Extended BookingStatus Literal (line ~35-40)
+- `backend/tests/unit/test_booking_schemas.py` - New unit test file with 12 test cases
+- `backend/docs/ops/runbook.md` - Added "Booking Status Validation Error (500)" section with Quick Reference entry
+
+**Key Changes:**
+```python
+# backend/app/schemas/bookings.py
+BookingStatus = Literal[
+    "requested", "under_review",  # Booking request lifecycle
+    "inquiry", "pending", "confirmed", "checked_in",
+    "checked_out", "cancelled", "declined", "no_show"
+]
+```
+
+**Testing:**
+- Unit tests validate all 10 status values are accepted by BookingResponse
+- Tests verify invalid status values are rejected with ValueError
+- Fixture provides reusable base booking data for test isolation
+
+**Status**: ✅ IMPLEMENTED
+
+**Runbook Reference:**
+- Quick Reference entry: "Booking detail returns 500" → [Booking Status Validation](#booking-status-validation-error-500)
+- Detailed section includes: Symptom, Root Cause, Verify commands, Fix, Test, Prevention
+
+**Impact:**
+- Booking details endpoint now returns 200 for 'requested' status bookings
+- Admin UI can successfully fetch and display booking request details
+- Prevents future 500 errors when new booking statuses are added to database
+
+**Related Entries:**
+- [Booking Request Review Workflow] - Uses 'requested' status for initial state
+- [Schema Drift] - General pattern for keeping schemas in sync with database
+
+---
+
 ### Phase 20: Inventory/Availability Final Validation ✅
 
 **Date Completed:** 2025-12-27 to 2026-01-03
