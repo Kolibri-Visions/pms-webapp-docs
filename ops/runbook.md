@@ -15432,6 +15432,7 @@ cd frontend && npm run build
 
 ## Admin UI: Booking & Property Detail Pages
 
+✅ **Verified in PROD on 2026-01-07** (source_commit a22da6660b7ad24a309429249c1255e575be37bc, smoke script exit code 0)
 
 **Autodiscovery Note**:
 - Autodiscovery requires list endpoints (`GET /api/v1/bookings?limit=1&offset=0`, `GET /api/v1/properties?limit=1&offset=0`) to return valid JSON with at least one item.
@@ -15626,6 +15627,8 @@ curl -sS -i -H "Authorization: Bearer $TOKEN" \
 ```
 
 **Problem**: Booking detail returns "500 Internal Server Error" with "ResponseValidationError: cancelled_by"
+
+✅ **Fixed and Verified in PROD on 2026-01-07** (source_commit a22da6660b7ad24a309429249c1255e575be37bc, smoke script exit code 0)
 
 **Root Cause**: Legacy data in database has UUID values in `cancelled_by` field instead of expected actor enum ('guest', 'host', 'platform', 'system').
 

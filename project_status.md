@@ -103,7 +103,7 @@ Verification passes if `source_commit` from production starts with the expected 
 
 ## Completed Phases
 
-### Booking API — cancelled_by Backward Compatibility Fix ✅ IMPLEMENTED
+### Booking API — cancelled_by Backward Compatibility Fix ✅ VERIFIED
 
 **Date Completed:** 2026-01-08
 
@@ -160,13 +160,22 @@ Fixed production 500 error (ResponseValidationError) when GET /api/v1/bookings/{
 - Legacy data: Returns actor='host' + user_id populated
 - Modern data: Returns actor as-is + user_id=null
 
-**Status:** ✅ IMPLEMENTED (awaiting production verification)
+**Status:** ✅ VERIFIED
 
-**Next Steps:**
-- Deploy to production
-- Run smoke test: `./backend/scripts/pms_admin_detail_endpoints_smoke.sh`
-- Verify endpoints return 200 (not 500)
-- Update status to VERIFIED after prod confirmation
+**Production Evidence:**
+- **Verification Date:** 2026-01-07
+- **API Base URL:** https://api.fewo.kolibri-visions.de
+- **Deployed Commit:** a22da6660b7ad24a309429249c1255e575be37bc
+- **Backend Started:** 2026-01-07T23:39:05.093802+00:00
+- **Smoke Test:** `./backend/scripts/pms_admin_detail_endpoints_smoke.sh` - Exit code 0 ✓
+- **Sample Test IDs:**
+  - Booking: 8cefa87e-eb30-416a-aa56-1de869029c14
+  - Property: 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
+- **Verified Endpoints:**
+  - GET /api/v1/bookings/{id} → HTTP 200 (cancelled_by normalization working)
+  - GET /api/v1/bookings (list) → HTTP 200 (cancelled_by normalization working)
+  - CORS headers present and valid
+- **Result:** No more 500 ResponseValidationError on cancelled_by field. Legacy UUID values correctly mapped to actor='host' with cancelled_by_user_id populated.
 
 
 ### Admin UI — Backoffice Visual Style ✅
@@ -289,7 +298,7 @@ open https://admin.fewo.kolibri-visions.de/login
 
 ---
 
-### Admin UI — Booking & Property Detail Pages ✅
+### Admin UI — Booking & Property Detail Pages ✅ VERIFIED
 
 **Date Completed:** 2026-01-07
 
@@ -355,7 +364,23 @@ Implemented booking and property detail pages in Admin UI with comprehensive fie
 - Browser verification checklist in runbook (status badges, error states, retry button)
 - Server-side curl verification commands with TOKEN examples
 
-**Status**: ✅ IMPLEMENTED
+**Status**: ✅ VERIFIED
+
+**Production Evidence:**
+- **Verification Date:** 2026-01-07
+- **API Base URL:** https://api.fewo.kolibri-visions.de
+- **Deployed Commit:** a22da6660b7ad24a309429249c1255e575be37bc
+- **Backend Started:** 2026-01-07T23:39:05.093802+00:00
+- **Smoke Test:** `./backend/scripts/pms_admin_detail_endpoints_smoke.sh` - Exit code 0 ✓
+- **Autodiscovery:** Successful (fetched first booking/property from list endpoints)
+- **Sample Test IDs:**
+  - Booking: 8cefa87e-eb30-416a-aa56-1de869029c14
+  - Property: 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
+- **Verified Endpoints:**
+  - GET /api/v1/bookings/{id} → HTTP 200
+  - GET /api/v1/properties/{id} → HTTP 200
+  - CORS headers present and valid
+- **Result:** Both detail endpoints returning 200 with complete entity data. German error states tested via manual browser verification. Retry buttons functional.
 
 **Runbook Reference:**
 - Section: "Admin UI: Booking & Property Detail Pages" in `backend/docs/ops/runbook.md` (line ~15276)
