@@ -1550,7 +1550,7 @@ Verified in production on **2026-01-06** (Europe/Berlin timezone):
    - Real-time status updates after actions
    - Uses existing design patterns (Tailwind CSS, responsive table)
 
-**Status:** ✅ IMPLEMENTED (awaiting production verification)
+**Status:** ✅ VERIFIED
 
 **Verification Criteria:**
 This entry will be marked **VERIFIED** only after:
@@ -1579,6 +1579,24 @@ This entry will be marked **VERIFIED** only after:
   - Availability window selection succeeded (auto-shifted until available)
 - **Router Mounted:** /api/v1/booking-requests found in OpenAPI (preflight PASS)
 - **Note:** UI component added 2026-01-07, requires re-verification with UI workflow
+
+**PROD Evidence (Verified: 2026-01-07)**:
+- **Verification Date**: 2026-01-07
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Deployed Commit**: 649587698f3a89bf962eaf47f3c4c71d8e3b3111 (prefix: 6495876)
+- **Process Started**: 2026-01-07T13:26:04.816718+00:00
+- **Deploy Verification**: pms_verify_deploy.sh (rc=0, commit match PASS)
+- **Workflow Smoke Test**: pms_public_booking_requests_workflow_smoke.sh (rc=0)
+- **Key Verification Results**:
+  - Health checks: /health (200), /health/ready (200)
+  - API endpoints accessible: /api/v1/booking-requests/* (200)
+  - Review workflow: requested → under_review ✅
+  - Approve workflow: requested/under_review → confirmed ✅
+  - Decline workflow: requested/under_review → cancelled ✅
+  - Idempotency: Re-approve returns same booking_id ✅
+  - Audit events: booking_request_approved/declined logged ✅
+  - Admin UI: Loads and displays booking requests ✅
+- **Verification Criteria**: All 9 criteria met (see Verification Criteria section above)
 
 ---
 
