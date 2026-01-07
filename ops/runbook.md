@@ -20337,3 +20337,388 @@ Ensure the script uses the correct BookingRequestInput schema:
 
 If schema changed, update the smoke script payload builder to match current API requirements.
 
+
+
+---
+
+## Customer Domain Onboarding SOP
+
+**Purpose**: Step-by-step procedure for onboarding new customer domains to the PMS multi-tenant system.
+
+**Target Audience**: Junior admins, ops engineers, support staff
+
+**Estimated Time**: 15-30 minutes (including DNS propagation wait if not using pre-DNS verification)
+
+### Pre-requisites
+
+**Required Access:**
+- ✅ Domain registrar access (or customer cooperation for DNS changes)
+- ✅ Plesk admin access (for DNS zone management)
+- ✅ Supabase owner/admin access (for SQL Editor and agency_domains table)
+- ✅ Coolify admin access (for environment variable updates)
+- ✅ Backend server SSH/shell access (for verification script execution)
+
+**Required Information:**
+- Customer domain (e.g., `customer.example.com`)
+- Agency UUID (from agencies table in Supabase)
+- Server IP address (for pre-DNS testing, from Coolify or server config)
+- Frontend origin (e.g., `https://app.customer.example.com`, if applicable for CORS)
+
+### Step-by-Step Procedure
+
+#### Step 1: DNS Configuration (Plesk or Registrar)
+
+**Goal**: Point customer domain to PMS backend server IP.
+
+**Option A: CNAME Record (Recommended)**
+```dns
+customer.example.com.  3600  IN  CNAME  pms.your-server.com.
+```
+
+**Option B: A/AAAA Record (Direct IP)**
+```dns
+customer.example.com.  3600  IN  A      1.2.3.4
+customer.example.com.  3600  IN  AAAA   2001:db8::1
+```
+
+**Important Notes:**
+- Use **lowercase** domain names (backend normalizes to lowercase)
+- **NO trailing dot** in Supabase/ENV vars (Plesk DNS may require it, but app does not)
+- TTL 3600 (1 hour) is safe default
+- If using Plesk DNS: Add record in domain zone file editor
+- If using external DNS: Provide DNS change instructions to customer
+
+**Validation:**
+```bash
+# Wait for DNS propagation (or skip if using pre-DNS verification)
+nslookup customer.example.com
+# Should resolve to server IP
+
+# Test with dig (more detailed)
+dig customer.example.com A
+dig customer.example.com AAAA
+```
+
+#### Step 2: Supabase Database Mapping
+
+**Goal**: Map customer domain to agency_id in agency_domains table.
+
+**SQL Editor Query:**
+```sql
+-- Replace with actual values (NO trailing dots, lowercase)
+INSERT INTO agency_domains (agency_id, domain)
+VALUES (
+  '12345678-1234-1234-1234-123456789abc',  -- Agency UUID from agencies table
+  'customer.example.com'                     -- Customer domain (lowercase, no trailing dot)
+)
+ON CONFLICT (domain) DO NOTHING;
+```
+
+**Important Notes:**
+- Domain must be **lowercase** and **no trailing dot**
+- Agency UUID must exist in agencies table (verify first)
+- ON CONFLICT prevents duplicate errors if domain already mapped
+- RLS policies enforce tenant isolation (domain cannot be shared across agencies)
+
+**Validation:**
+```sql
+-- Verify mapping exists
+SELECT * FROM agency_domains WHERE domain = 'customer.example.com';
+-- Should return one row with correct agency_id
+```
+
+#### Step 3: Coolify Environment Variables
+
+**Goal**: Update backend ENV vars to allow customer domain in host allowlist and CORS.
+
+**ENV Var Updates in Coolify:**
+
+1. **ALLOWED_HOSTS** (Host Allowlist):
+```bash
+# Add customer domain to comma-separated list (NO trailing dots, lowercase)
+ALLOWED_HOSTS=localhost,pms.your-server.com,customer.example.com
+```
+
+2. **CORS_ALLOWED_ORIGINS** (CORS Allow List):
+```bash
+# Add frontend origin if applicable (e.g., for SPA/React)
+CORS_ALLOWED_ORIGINS=http://localhost:3000,https://app.customer.example.com
+```
+
+3. **TRUST_PROXY_HEADERS** (Required for X-Forwarded-Host):
+```bash
+# Must be "true" for domain routing to work behind proxy
+TRUST_PROXY_HEADERS=true
+```
+
+**Important Notes:**
+- ENV var changes require **backend restart** (Coolify auto-restarts on ENV change)
+- Domain in ALLOWED_HOSTS must **exactly match** request Host header (lowercase, no port)
+- CORS origin must include **protocol** (https://) and **no trailing slash**
+- Coolify may take 30-60 seconds to restart backend after ENV change
+
+**Validation:**
+```bash
+# Check ENV vars are applied (SSH to backend container)
+echo $ALLOWED_HOSTS
+echo $CORS_ALLOWED_ORIGINS
+echo $TRUST_PROXY_HEADERS
+```
+
+#### Step 4: TLS/Certificate Provisioning (Let's Encrypt)
+
+**Goal**: Ensure HTTPS works for customer domain.
+
+**Coolify Automatic Provisioning:**
+1. Navigate to Coolify project → Domains tab
+2. Add customer domain to domain list
+3. Enable "Let's Encrypt" toggle
+4. Coolify will automatically provision certificate via ACME challenge
+5. Wait 1-2 minutes for certificate issuance
+
+**Manual Validation (if needed):**
+```bash
+# Test TLS handshake
+curl -v https://customer.example.com/api/v1/ops/version 2>&1 | grep -i "SSL certificate"
+# Should show valid certificate (not self-signed)
+
+# Check certificate expiry
+echo | openssl s_client -connect customer.example.com:443 -servername customer.example.com 2>/dev/null | openssl x509 -noout -dates
+```
+
+**Common Issues:**
+- **DNS not propagated**: Let's Encrypt ACME challenge fails → Wait for DNS TTL or use pre-DNS testing
+- **Coolify domain not added**: Certificate not provisioned → Add domain in Coolify UI
+- **Port 80 blocked**: ACME HTTP-01 challenge fails → Verify firewall allows port 80
+
+#### Step 5: Verification (Pre-DNS or Post-DNS)
+
+**Goal**: Verify domain routing, tenant isolation, and CORS before go-live.
+
+**Option A: Pre-DNS Verification (Recommended)**
+```bash
+# Test before DNS propagation using curl --resolve
+DOMAIN=customer.example.com \
+SERVER_IP=1.2.3.4 \
+./backend/scripts/pms_domain_onboarding_verify.sh
+```
+
+**Option B: Post-DNS Verification**
+```bash
+# Test after DNS propagation (omit SERVER_IP)
+DOMAIN=customer.example.com \
+./backend/scripts/pms_domain_onboarding_verify.sh
+```
+
+**Option C: With CORS Testing**
+```bash
+# Test CORS preflight for SPA/frontend
+DOMAIN=customer.example.com \
+TEST_ORIGIN=https://app.customer.example.com \
+./backend/scripts/pms_domain_onboarding_verify.sh
+```
+
+**Expected Output:**
+```
+🔍 Verifying domain onboarding: customer.example.com
+Using direct IP bypass (pre-DNS): 1.2.3.4
+✅ Health check passed (HTTP 200)
+✅ TLS certificate valid
+✅ Agency ID confirmed: 12345678-1234-1234-1234-123456789abc
+✅ CORS preflight passed (origin: https://app.customer.example.com)
+✅ All checks passed - domain is ready for production traffic
+```
+
+**Troubleshooting:**
+- See verification script output for actionable hints
+- Common failures documented in script header comments
+- Refer to "Customer Domain Onboarding Troubleshooting" section below
+
+### Post-Onboarding Checklist
+
+**Before Go-Live:**
+- ✅ DNS resolves to correct IP (nslookup/dig)
+- ✅ HTTPS works (valid certificate, not self-signed)
+- ✅ Health endpoint returns 200 (not 403 host_not_allowed)
+- ✅ Agency ID matches expected value
+- ✅ CORS preflight passes (if applicable)
+- ✅ Customer notified of go-live (if external domain)
+
+**Documentation:**
+- ✅ Record domain onboarding in ops log (domain, agency_id, date, operator)
+- ✅ Update customer documentation with API base URL
+- ✅ Provide customer with health endpoint for their monitoring: `https://customer.example.com/api/v1/ops/version`
+
+**Monitoring:**
+- ✅ Add domain to uptime monitoring (e.g., Pingdom, UptimeRobot)
+- ✅ Set up alerts for certificate expiry (Let's Encrypt renews at 60 days)
+- ✅ Monitor backend logs for 403 host_not_allowed errors
+
+### Rollback Procedure
+
+**If onboarding fails or needs to be reverted:**
+
+1. **Remove Coolify ENV Vars:**
+   - Remove customer domain from ALLOWED_HOSTS
+   - Remove frontend origin from CORS_ALLOWED_ORIGINS
+   - Coolify will auto-restart backend
+
+2. **Delete Supabase Mapping:**
+```sql
+DELETE FROM agency_domains WHERE domain = 'customer.example.com';
+```
+
+3. **Revert DNS (if needed):**
+   - Remove CNAME/A/AAAA record in Plesk or registrar
+   - Wait for DNS TTL expiry (or flush caches)
+
+4. **Remove Coolify Domain (if added):**
+   - Remove domain from Coolify domains list
+   - Let's Encrypt certificate will auto-expire (90 days)
+
+**Rollback is safe and idempotent** - no data loss, only routing changes.
+
+### Customer Domain Onboarding Troubleshooting
+
+#### Problem: Verification Script Returns 403 host_not_allowed
+
+**Symptom:**
+```
+❌ Health check failed: HTTP 403
+Response: {"detail":"Host not allowed: customer.example.com"}
+```
+
+**Root Cause:**
+- Customer domain not in ALLOWED_HOSTS environment variable
+- ENV var change not applied (backend not restarted)
+- Domain case mismatch (customer.example.com vs CUSTOMER.EXAMPLE.COM)
+
+**Solution:**
+1. Verify ALLOWED_HOSTS includes customer domain (lowercase, no port, no trailing dot)
+2. Restart backend in Coolify (or wait for auto-restart)
+3. Retry verification script
+
+**Verification:**
+```bash
+# SSH to backend container
+echo $ALLOWED_HOSTS | grep -i customer.example.com
+# Should return the domain
+```
+
+#### Problem: Verification Script Returns 503 No Available Server
+
+**Symptom:**
+```
+❌ Health check failed: HTTP 503
+Response: <html>503 Service Temporarily Unavailable</html>
+```
+
+**Root Cause:**
+- Backend is down (crashed, restart loop, deployment in progress)
+- Proxy/load balancer cannot reach backend (network issue)
+- TLS/certificate provisioning in progress (Coolify blocking traffic)
+
+**Solution:**
+1. Check backend health: `curl http://localhost:8000/api/v1/ops/version` (from server)
+2. Check Coolify deployment logs for errors
+3. Verify backend is running: `docker ps | grep backend`
+4. Wait for deployment to complete (Coolify shows "Running" status)
+5. Retry verification script
+
+#### Problem: CORS Preflight Fails (403 or Missing Headers)
+
+**Symptom:**
+```
+❌ CORS preflight failed: HTTP 403 (or missing Access-Control-Allow-Origin header)
+```
+
+**Root Cause:**
+- Frontend origin not in CORS_ALLOWED_ORIGINS
+- ENV var change not applied
+- Origin format mismatch (http vs https, trailing slash, case)
+
+**Solution:**
+1. Verify CORS_ALLOWED_ORIGINS includes frontend origin (exact match, with protocol)
+2. Restart backend in Coolify
+3. Test with exact origin: `TEST_ORIGIN=https://app.customer.example.com ./script.sh`
+
+**Verification:**
+```bash
+# Manual CORS preflight test
+curl -X OPTIONS https://customer.example.com/api/v1/health \
+  -H "Origin: https://app.customer.example.com" \
+  -H "Access-Control-Request-Method: GET" \
+  -v 2>&1 | grep -i "access-control"
+# Should return Access-Control-Allow-Origin: https://app.customer.example.com
+```
+
+#### Problem: TLS Certificate Invalid or Self-Signed
+
+**Symptom:**
+```
+❌ TLS error: self signed certificate
+curl: (60) SSL certificate problem: self signed certificate
+```
+
+**Root Cause:**
+- Let's Encrypt certificate not provisioned yet (Coolify in progress)
+- DNS not propagated (ACME challenge fails)
+- Domain not added to Coolify domains list
+
+**Solution:**
+1. Wait 2-5 minutes for Let's Encrypt provisioning
+2. Verify DNS propagation: `nslookup customer.example.com`
+3. Check Coolify logs for ACME errors
+4. Ensure domain added to Coolify domains list with Let's Encrypt enabled
+5. Retry verification script (or skip TLS check for pre-DNS testing)
+
+**Workaround for Pre-DNS Testing:**
+```bash
+# Skip TLS verification (for testing only, not production)
+curl -k https://customer.example.com/api/v1/ops/version
+```
+
+#### Problem: Agency ID Mismatch
+
+**Symptom:**
+```
+⚠️  WARNING: Agency ID mismatch
+Expected: 12345678-1234-1234-1234-123456789abc
+Actual:   87654321-4321-4321-4321-cba987654321
+```
+
+**Root Cause:**
+- Wrong agency_id in Supabase agency_domains mapping
+- Database mapping not created (using default/fallback agency)
+- Domain typo in Supabase (customer.example.com vs customer.exmaple.com)
+
+**Solution:**
+1. Verify agency_domains mapping: `SELECT * FROM agency_domains WHERE domain = 'customer.example.com';`
+2. Update mapping if wrong: `UPDATE agency_domains SET agency_id = '...' WHERE domain = '...';`
+3. Verify domain spelling (lowercase, no trailing dot)
+4. Retry verification script
+
+**Note**: Agency ID warning does not fail verification (exit code still 0), but should be investigated.
+
+### Related Scripts
+
+- **pms_domain_onboarding_verify.sh**: Automated verification script (this SOP)
+- **pms_verify_deploy.sh**: Deployment verification (checks version/modules, not domain-specific)
+
+### Related Documentation
+
+- [Backend Configuration](../app/core/config.py) - ALLOWED_HOSTS, CORS_ALLOWED_ORIGINS, TRUST_PROXY_HEADERS
+- [Domain Middleware](../app/middleware/domain.py) - Domain-to-tenant resolution logic
+- [Database Schema](../../supabase/migrations/20250106000005_agency_domains.sql) - agency_domains table structure
+
+### Maintenance
+
+**Regular Tasks:**
+- Monitor certificate expiry (Let's Encrypt auto-renews, but verify)
+- Review agency_domains table for orphaned mappings (agency deleted but domain remains)
+- Update ALLOWED_HOSTS when domains change or are removed
+
+**Deprecation:**
+- If domain is no longer needed, follow rollback procedure
+- Archive ops log entry for domain removal (date, reason, operator)
+

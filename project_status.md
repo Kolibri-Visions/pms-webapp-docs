@@ -2397,3 +2397,101 @@ All required environment variables configured:
 | 2026-01-02 | Admin UI | Added sync batches history view with direction indicators |
 | 2026-01-02 | API | Extended BatchOperation model with detailed fields |
 | 2025-12-27 | Phase 30 | Inventory final validation (blocks, B2B, concurrency) PASS |
+
+### OPS - Customer Domain Onboarding SOP + Verify Script ✅
+
+**Date Completed:** 2026-01-07
+
+**Overview:**
+Comprehensive Standard Operating Procedure (SOP) and automated verification script for onboarding new customer domains. Enables junior admins to safely configure DNS, database mappings, and environment variables for multi-tenant domain routing.
+
+**Purpose:**
+- Provide step-by-step checklist for domain onboarding (Plesk DNS, Supabase, Coolify ENV)
+- Automate verification before DNS propagation using curl --resolve
+- Reduce onboarding errors and troubleshooting time
+- Enable safe pre-go-live testing without waiting for DNS TTL
+
+**Implementation:**
+
+1. **Verification Script** (`backend/scripts/pms_domain_onboarding_verify.sh`):
+   - Environment variables:
+     - DOMAIN (required): Customer domain to verify (e.g., customer.example.com)
+     - SERVER_IP (optional): Direct IP for pre-DNS testing via curl --resolve
+     - TEST_ORIGIN (optional): Origin for CORS preflight check
+     - AGENCY_ID (optional): Expected agency UUID for validation
+   - Automated checks:
+     - Health endpoint test (direct DNS or --resolve bypass)
+     - TLS/certificate validation
+     - Host allowlist verification (detects 403 host_not_allowed)
+     - CORS preflight verification (OPTIONS request)
+     - Agency ID confirmation (if provided)
+   - Actionable troubleshooting hints for common failures:
+     - TLS errors → Check Let's Encrypt provisioning in Coolify
+     - 403 host_not_allowed → Verify ALLOWED_HOSTS ENV var
+     - 503 no available server → Check proxy config and backend health
+     - CORS errors → Verify CORS_ALLOWED_ORIGINS ENV var
+   - Exit codes: 0 = pass, 1 = actionable failure
+
+2. **SOP Checklist** (embedded in script header):
+   - Step 1: DNS Configuration (CNAME or A/AAAA record in Plesk)
+   - Step 2: Supabase SQL mapping (INSERT into agency_domains)
+   - Step 3: Coolify ENV vars (ALLOWED_HOSTS, CORS_ALLOWED_ORIGINS)
+   - Step 4: TLS/Certificate provisioning (Let's Encrypt via Coolify)
+   - Copy/paste blocks provided for each step
+   - Normalization guidance (lowercase, no trailing dots)
+
+3. **Runbook Documentation** (`backend/docs/ops/runbook.md`):
+   - New section: "Customer Domain Onboarding SOP"
+   - Pre-requisites: Domain registrar access, Plesk admin, Supabase owner, Coolify admin
+   - Detailed walkthrough with screenshots references
+   - Common pitfalls and solutions
+   - Rollback procedure (remove domain mapping, revert ENV vars)
+
+4. **Script Documentation** (`backend/scripts/README.md`):
+   - Added entry for pms_domain_onboarding_verify.sh
+   - Usage examples with and without SERVER_IP
+   - CORS testing workflow
+   - Expected output format
+   - Troubleshooting quick reference
+
+**Key Features:**
+- Pre-DNS testing via curl --resolve (no waiting for propagation)
+- TLS/certificate error detection with actionable hints
+- CORS preflight verification for SPA/cross-origin setups
+- Idempotent (safe to re-run, no side effects)
+- No external dependencies beyond curl/jq (standard in CI/CD)
+- Color-coded output (green pass, red fail, yellow warnings)
+
+**Architecture Notes:**
+- Domain normalization: lowercase, strip trailing dots (matches backend logic)
+- Host allowlist enforcement: ALLOWED_HOSTS must include customer domain
+- CORS enforcement: CORS_ALLOWED_ORIGINS must include frontend origin
+- Trust proxy headers: TRUST_PROXY_HEADERS=true required for X-Forwarded-Host
+- Tenant isolation: agency_domains table maps domain → agency_id (RLS enforced)
+
+**Testing:**
+- Manual test: ./backend/scripts/pms_domain_onboarding_verify.sh with test domain
+- Pre-DNS test: DOMAIN=new.example.com SERVER_IP=1.2.3.4 ./script.sh
+- CORS test: DOMAIN=api.example.com TEST_ORIGIN=https://app.example.com ./script.sh
+
+**Status**: ✅ IMPLEMENTED (awaiting production verification)
+
+**Verification Criteria:**
+This entry will be marked **VERIFIED** only after:
+1. ✅ Script exists and is executable
+2. ✅ SOP documented in runbook.md
+3. ✅ Script documented in scripts/README.md
+4. ⬜ Real customer domain onboarded using SOP (manual test)
+5. ⬜ Script verification passes on production domain (rc=0)
+6. ⬜ CORS preflight test passes (if applicable)
+7. ⬜ No false positives/negatives observed in script output
+
+**Production Evidence Required:**
+- Customer domain onboarded (domain name, agency_id)
+- Script execution output (sanitized, no secrets)
+- Health check + CORS preflight results
+- Commit SHA when VERIFIED
+
+**Note**: Do NOT mark VERIFIED until real customer domain onboarded and script validated on production.
+
+---
