@@ -1542,10 +1542,30 @@ Verified in production on **2026-01-06** (Europe/Berlin timezone):
 - Mounted in backend/app/main.py at /api/v1/booking-requests
 - Tagged as "Booking Requests" in OpenAPI
 
-**Status:** ✅ VERIFIED
+9. **Admin UI** (frontend/app/booking-requests/page.tsx):
+   - Table list view with status filter (requested, under_review, confirmed, cancelled)
+   - Displays: reference, check-in/out, guests, total, status, created date
+   - Inline actions: Review, Approve, Decline (with reason modal)
+   - Status-based action visibility (requested/under_review show actions)
+   - Real-time status updates after actions
+   - Uses existing design patterns (Tailwind CSS, responsive table)
 
-**PROD Evidence:**
-- **Verification Date:** 2026-01-06T14:53:04+00:00
+**Status:** ✅ IMPLEMENTED (awaiting production verification)
+
+**Verification Criteria:**
+This entry will be marked **VERIFIED** only after:
+1. ✅ Database migration applied (booking workflow columns exist)
+2. ✅ API endpoints accessible (/api/v1/booking-requests/*)
+3. ✅ Smoke test passes (pms_public_booking_requests_workflow_smoke.sh rc=0)
+4. ✅ Admin UI loads and displays booking requests
+5. ⬜ Review action tested on production (status transition verified)
+6. ⬜ Approve action tested on production (booking created/confirmed)
+7. ⬜ Decline action tested on production (decline reason stored)
+8. ⬜ Idempotency verified (re-approve returns same booking_id)
+9. ⬜ Audit events written (booking_request_approved/declined in audit_log)
+
+**Previous PROD Evidence** (API verified 2026-01-06, UI added 2026-01-07):
+- **Previous Verification Date:** 2026-01-06T14:53:04+00:00
 - **API Base URL:** https://api.fewo.kolibri-visions.de
 - **Source Commit:** 3dea97cc8e864855e433d81fc808dfed363b4fa3
 - **Health Checks:** /health (200), /health/ready (200)
@@ -1558,6 +1578,7 @@ Verified in production on **2026-01-06** (Europe/Berlin timezone):
   - Decline → cancelled ✅
   - Availability window selection succeeded (auto-shifted until available)
 - **Router Mounted:** /api/v1/booking-requests found in OpenAPI (preflight PASS)
+- **Note:** UI component added 2026-01-07, requires re-verification with UI workflow
 
 ---
 
