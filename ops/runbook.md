@@ -2701,6 +2701,35 @@ curl -k -sS -i -H "Authorization: Bearer $TOKEN" "$API_BASE_URL/api/v1/bookings/
 - Add unit tests for new status values in `backend/tests/unit/test_booking_schemas.py`
 - Use database migrations to document valid status values with CHECK constraints
 
+### PROD Verified (2026-01-07)
+
+**Deployed Commit:** cb8da7f18b4fb19f9d68908afcaf52c8f8ca4645
+
+**Verification Evidence:**
+```bash
+# HOST-SERVER-TERMINAL
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+
+# Verify deployed commit
+curl -s "$API_BASE_URL/api/v1/ops/version" | jq -r .source_commit
+# Output: cb8da7f18b4fb19f9d68908afcaf52c8f8ca4645
+
+# Verify booking with status='requested' returns 200
+curl -k -sS -i -H "Authorization: Bearer $TOKEN" \
+  "$API_BASE_URL/api/v1/bookings/de5aac06-486e-4c22-a6cf-0c7708d603d1" | head -20
+# Output: HTTP/2 200
+# Body includes: "status":"requested"
+
+# Verify CORS headers present
+curl -sS -i -H "Origin: https://admin.fewo.kolibri-visions.de" \
+  "$API_BASE_URL/api/v1/branding" | grep -i access-control-allow-origin
+# Output: access-control-allow-origin: https://admin.fewo.kolibri-visions.de
+```
+
+**Backend Started At:** 2026-01-07T17:49:04.742363+00:00
+
+**Result:** ✅ Fix verified in production - booking detail endpoint returns 200 for status='requested'
+
 ---
 
 ## Schema Drift
@@ -15048,6 +15077,15 @@ curl -s https://api.fewo.kolibri-visions.de/api/v1/ops/version | jq -r .source_c
 # Network tab → Request Headers → Authorization: Bearer <token>
 # If no Authorization header, check that apiClient uses accessToken from useAuth()
 
+# TOKEN SANITY CHECK:
+# - TOKEN must be access_token (not refresh_token)
+# - Expected length: ~616 characters
+# - JWT parts: 3 (header.payload.signature)
+# - When calling Kong auth endpoints (e.g., Supabase token endpoint at sb-pms.kolibri-visions.de):
+#   Include "apikey" header with anon/service_role key
+# - Verify JWT: echo "$TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq .
+#   Should include: sub (user_id), email, role, agency_id (for multi-tenant)
+
 # 4. Check CORS configuration
 # Network tab → Failed request → Response Headers
 # If missing Access-Control-Allow-Origin, backend CORS misconfigured
@@ -15077,6 +15115,48 @@ docker ps | grep pms-backend
 
 # If not running, restart via Coolify UI or docker start
 ```
+
+### PROD Verified (2026-01-07)
+
+**Deployed Commit:** 17448496c88810a32be44bc76b2ca36dac87f072
+
+**Verification Evidence:**
+```bash
+# HOST-SERVER-TERMINAL
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+
+# Verify deployed commit
+curl -s "$API_BASE_URL/api/v1/ops/version" | jq -r .source_commit
+# Output: 17448496c88810a32be44bc76b2ca36dac87f072
+
+# Verify bookings list endpoint
+curl -k -sS -i -H "Authorization: Bearer $TOKEN" \
+  "$API_BASE_URL/api/v1/bookings?limit=1&offset=0" | head -20
+# Output: HTTP/2 200
+# Body includes: items array with booking objects
+
+# Verify properties list endpoint
+curl -k -sS -i -H "Authorization: Bearer $TOKEN" \
+  "$API_BASE_URL/api/v1/properties?limit=1&offset=0" | head -20
+# Output: HTTP/2 200
+# Body includes: items array with property objects
+
+# Verify CORS headers present
+curl -sS -i -H "Origin: https://admin.fewo.kolibri-visions.de" \
+  -H "Authorization: Bearer $TOKEN" \
+  "$API_BASE_URL/api/v1/bookings?limit=1&offset=0" | grep -i access-control-allow-origin
+# Output: access-control-allow-origin: https://admin.fewo.kolibri-visions.de
+```
+
+**Backend Started At:** 2026-01-07T19:13:03.928023+00:00
+
+**Browser Verification:**
+- ✅ https://admin.fewo.kolibri-visions.de/bookings shows real table (not "Buchungen kommt bald" placeholder)
+- ✅ https://admin.fewo.kolibri-visions.de/properties shows real table (not "Objekte kommt bald" placeholder)
+- ✅ Search, filtering, and pagination work as expected
+- ✅ Booking detail page displays status='requested' with blue badge
+
+**Result:** ✅ Admin UI list pages verified in production - real tables with full functionality
 
 ### Related Sections
 

@@ -159,7 +159,24 @@ Replaced "coming soon" placeholder pages with real booking and property list pag
 - Error state scenarios documented with curl examples
 - Troubleshooting guide for common issues (empty results, 401, 503)
 
-**Status**: ✅ IMPLEMENTED
+**Status**: ✅ VERIFIED
+
+**PROD Evidence:**
+
+**Verification Date:** 2026-01-07
+
+**Deployed Commit:** 17448496c88810a32be44bc76b2ca36dac87f072
+
+**API Base URL:** https://api.fewo.kolibri-visions.de
+
+**Backend Started At:** 2026-01-07T19:13:03.928023+00:00
+
+**Live Verification Checks (HOST-SERVER-TERMINAL):**
+- ✅ `GET /api/v1/ops/version` → HTTP 200 (source_commit=1744849, confirms deployment)
+- ✅ `GET /api/v1/bookings?limit=1&offset=0` → HTTP 200 (bookings list endpoint works)
+- ✅ `GET /api/v1/properties?limit=1&offset=0` → HTTP 200 (properties list endpoint works)
+- ✅ CORS check with `Origin: https://admin.fewo.kolibri-visions.de` on bookings list → HTTP 200 with `access-control-allow-origin` header
+- ✅ Browser verification: https://admin.fewo.kolibri-visions.de/bookings shows real table (not placeholder), https://admin.fewo.kolibri-visions.de/properties shows real table
 
 **Runbook Reference:**
 - Section: "Admin UI: Bookings & Properties Lists" in `backend/docs/ops/runbook.md` (line ~14869)
@@ -219,7 +236,23 @@ BookingStatus = Literal[
 - Tests verify invalid status values are rejected with ValueError
 - Fixture provides reusable base booking data for test isolation
 
-**Status**: ✅ IMPLEMENTED
+**Status**: ✅ VERIFIED
+
+**PROD Evidence:**
+
+**Verification Date:** 2026-01-07
+
+**Deployed Commit:** cb8da7f18b4fb19f9d68908afcaf52c8f8ca4645
+
+**API Base URL:** https://api.fewo.kolibri-visions.de
+
+**Backend Started At:** 2026-01-07T17:49:04.742363+00:00
+
+**Live Verification Checks (HOST-SERVER-TERMINAL):**
+- ✅ `GET /api/v1/ops/version` → HTTP 200 (source_commit=cb8da7f, confirms deployment)
+- ✅ `GET /api/v1/branding` → HTTP 200 (API healthy)
+- ✅ `GET /api/v1/bookings/de5aac06-486e-4c22-a6cf-0c7708d603d1` → HTTP 200 with `"status":"requested"` (schema accepts new status)
+- ✅ CORS check with `Origin: https://admin.fewo.kolibri-visions.de` → HTTP 200 with `access-control-allow-origin` header
 
 **Runbook Reference:**
 - Quick Reference entry: "Booking detail returns 500" → [Booking Status Validation](#booking-status-validation-error-500)
