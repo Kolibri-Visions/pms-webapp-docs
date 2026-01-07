@@ -3038,7 +3038,14 @@ Documented current PROD behavior of OPS endpoints regarding authentication requi
 - Section: "## OPS endpoints: Auth & Zugriff" in `backend/docs/ops/runbook.md` (line ~19452)
 - Includes PROD evidence, endpoint list, and HOST-SERVER-TERMINAL verification commands
 
-**Status**: ✅ IMPLEMENTED (PROD evidence captured)
+**Status**: ✅ VERIFIED
+
+**PROD Evidence (Verified: 2026-01-07):**
+- **Verification Date**: 2026-01-07
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **source_commit**: 02996c2e9f753d16e00c63100cd4c35c677f10b2
+- **started_at**: 2026-01-07T16:17:04.593109+00:00
+- **Verification**: pms_verify_deploy.sh rc=0 and EXPECT_COMMIT prefix match 02996c2e9f75
 
 **PROD Verification (confirmed 2026-01-07):**
 
