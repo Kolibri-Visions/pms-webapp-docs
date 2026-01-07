@@ -2760,3 +2760,139 @@ When marking VERIFIED, must provide:
 - Backup encryption: Encrypt database backups at rest
 
 ---
+
+### API - Fix /ops/modules Route Inspection (Hyphenated Prefixes + Channel-Connections) ✅
+
+**Date Completed:** 2026-01-07
+
+**Overview:**
+Fixed `/api/v1/ops/modules` endpoint to correctly detect and report hyphenated API prefixes (e.g., `channel-connections`, `booking-requests`) in mounted route inspection. Previously, the regex pattern `\w+` only matched alphanumeric + underscore, causing routes with hyphens to be silently skipped from the response.
+
+**Purpose:**
+- Make `/api/v1/ops/modules` truly authoritative for route inspection
+- Enable troubleshooting of channel-connections module mount status
+- Provide accurate prefix detection for deployment verification scripts
+- Support automated smoke testing that relies on route existence checks
+- Deduplicate `pricing_paths` for cleaner output
+
+**Problem:**
+- Old regex `^(/api/v1/\w+)` didn't match hyphens in path segments
+- Routes like `/api/v1/channel-connections/*` were missing from `mounted_prefixes`
+- `mounted_has_pricing` worked, but no equivalent for `channel-connections`
+- `pricing_paths` could contain duplicates (no deduplication)
+- Module registry showed routes, but actual mounted inspection was incomplete
+
+**Solution:**
+1. **Refactored Route Inspection** (`backend/app/api/routes/ops.py`):
+   - New helper functions:
+     - `extract_mounted_prefixes(routes)` → uses regex `^(/api/v1/[^/]+)` (matches hyphens)
+     - `extract_paths_by_prefix(routes, prefix)` → deduplicated, sorted path extraction
+   - Pattern `[^/]+` matches any character except forward slash (includes hyphens, underscores, etc.)
+   - Automatic deduplication via set internally
+
+2. **New Response Fields**:
+   - `mounted_has_channel_connections: bool` → True if `/api/v1/channel-connections/*` routes exist
+   - `channel_connections_paths: list[str]` → All channel-connections paths (sorted, deduplicated)
+   - `pricing_paths: list[str]` → Now deduplicated (previously could contain duplicates)
+
+3. **Unit Tests** (`backend/tests/unit/test_ops_helpers.py`):
+   - Test standard prefixes extraction
+   - Test hyphenated prefixes (channel-connections)
+   - Test underscored prefixes (booking_requests, rate_plans)
+   - Test deduplication of prefixes and paths
+   - Test routes without path attribute (safe handling)
+   - Test empty routes list
+   - Test alphabetical sorting
+
+4. **Documentation** (`backend/docs/ops/runbook.md`):
+   - Added troubleshooting section: "GET /api/v1/ops/modules doesn't show channel-connections routes"
+   - Root cause explanation (regex pattern limitation)
+   - Verification examples with curl + jq
+   - Use cases (deploy verification, troubleshooting 404s, smoke tests)
+   - Documented new fields and helpers
+
+**Implementation:**
+
+**Files Changed:**
+- `backend/app/api/routes/ops.py` - Refactored route inspection with helper functions + new fields
+- `backend/tests/unit/test_ops_helpers.py` - Unit tests for prefix extraction logic (16 test cases)
+- `backend/docs/ops/runbook.md` - Troubleshooting guide (DOCS SAFE MODE: 68 lines added)
+
+**Key Changes:**
+- Regex pattern: `\w+` → `[^/]+` (now matches hyphens)
+- Deduplication: pricing_paths now uses set internally (no duplicates)
+- New detection: `mounted_has_channel_connections` flag + `channel_connections_paths` list
+- Helper functions: extract_mounted_prefixes(), extract_paths_by_prefix()
+
+**Testing:**
+- Unit tests: 16 test cases covering prefix extraction, deduplication, edge cases
+- Manual verification: `/api/v1/ops/modules` on PROD shows channel-connections
+
+**Status**: ✅ VERIFIED (production evidence below)
+
+**PROD Evidence (Verified: 2026-01-07):**
+- **Verification Date**: 2026-01-07
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Deployed Commit**: 2c23143ca29c140c92152de182be68c1a0009f2c (prefix: 2c23143)
+- **Process Started**: 2026-01-07T14:37:04.489222+00:00
+- **Evidence**: GET /api/v1/ops/version commit match ✅ + GET /api/v1/ops/modules checks ✅
+
+**Key Results:**
+1. **Commit Match**: `/api/v1/ops/version` returns `source_commit: 2c23143ca29c...` (matches deployed commit)
+2. **Channel-Connections Detection**: `mounted_has_channel_connections: true` ✅
+3. **Hyphenated Prefixes Present**:
+   - `/api/v1/booking-requests` ✅
+   - `/api/v1/channel-connections` ✅
+4. **Channel-Connections Paths** (9 routes detected):
+   - `/api/v1/channel-connections/`
+   - `/api/v1/channel-connections/{connection_id}`
+   - `/api/v1/channel-connections/{connection_id}/sync`
+   - `/api/v1/channel-connections/{connection_id}/sync-batches`
+   - `/api/v1/channel-connections/{connection_id}/sync-batches/{batch_id}`
+   - `/api/v1/channel-connections/{connection_id}/sync-logs`
+   - `/api/v1/channel-connections/{connection_id}/sync-logs/purge`
+   - `/api/v1/channel-connections/{connection_id}/sync-logs/purge/preview`
+   - `/api/v1/channel-connections/{connection_id}/test`
+5. **Pricing Paths Deduplication**: lengths `[2, 2]` (total vs unique) → no duplicates ✅
+
+**Verification Commands:**
+```bash
+# HOST-SERVER-TERMINAL
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+# export TOKEN="..."  # must already be set
+
+# Verify commit match
+curl -k -sS -H "Authorization: Bearer $TOKEN" \
+  "$API_BASE_URL/api/v1/ops/version" | jq -r '.source_commit'
+# Expected: 2c23143ca29c140c92152de182be68c1a0009f2c
+
+# Verify channel-connections detection + hyphenated prefixes
+curl -k -sS -H "Authorization: Bearer $TOKEN" \
+  "$API_BASE_URL/api/v1/ops/modules" | jq '{
+    mounted_has_channel_connections,
+    channel_connections_count: (.channel_connections_paths | length),
+    hyphenated_prefixes: (.mounted_prefixes | map(select(contains("-"))))
+  }'
+# Expected:
+# mounted_has_channel_connections=true
+# channel_connections_count=9
+# hyphenated_prefixes includes "/api/v1/booking-requests" and "/api/v1/channel-connections"
+
+# Verify pricing_paths deduplication
+curl -k -sS -H "Authorization: Bearer $TOKEN" \
+  "$API_BASE_URL/api/v1/ops/modules" | jq '.pricing_paths | [length, (unique|length)]'
+# Expected: [2, 2]
+```
+
+**Operational Impact:**
+- Deploy verification scripts can now check for channel-connections presence
+- Smoke tests can verify route mounting before attempting API calls
+- Troubleshooting 404s is faster (definitive route inspection)
+- OpenAPI schema verification is no longer needed (ops/modules is authoritative)
+
+**Related Entries:**
+- [P3c: Audit Logging + Idempotency] - Uses `/api/v1/ops/audit-log` endpoint
+- [OPS A: Customer Domain Onboarding SOP] - Uses `/api/v1/ops/version` for commit verification
+- [OPS B: Single-Tenant VPS Playbook] - Uses `/api/v1/ops/version` in pms_customer_vps_verify.sh
+
+---
