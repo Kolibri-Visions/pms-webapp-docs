@@ -15278,6 +15278,15 @@ bash /app/scripts/pms_phase23_smoke.sh
 
 ## Admin UI: Booking & Property Detail Pages
 
+
+**Autodiscovery Note**:
+- Autodiscovery requires list endpoints (`GET /api/v1/bookings?limit=1&offset=0`, `GET /api/v1/properties?limit=1&offset=0`) to return valid JSON with at least one item.
+- If autodiscovery fails (empty database, auth error, session termination), bypass with explicit IDs:
+  ```bash
+  BID=your-booking-id PID=your-property-id TOKEN=... ./backend/scripts/pms_admin_detail_endpoints_smoke.sh
+  ```
+- For troubleshooting details, see [Scripts README: Troubleshooting Autodiscovery](../../scripts/README.md#troubleshooting-autodiscovery).
+
 ### Overview
 
 The Admin UI provides detail pages for individual bookings and properties. These pages fetch full entity data via single-item GET endpoints and display comprehensive information.
