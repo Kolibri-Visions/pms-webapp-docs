@@ -2495,3 +2495,179 @@ This entry will be marked **VERIFIED** only after:
 **Note**: Do NOT mark VERIFIED until real customer domain onboarded and script validated on production.
 
 ---
+
+### OPS - 1 VPS per Customer (Single-Tenant Install Playbook + Verify Script) ✅
+
+**Date Completed:** 2026-01-07
+
+**Overview:**
+Complete step-by-step playbook and automated verification script for provisioning dedicated VPS instances for single customers (single-tenant deployments). Enables junior admins to reliably set up isolated customer instances with their own domains, database, and infrastructure.
+
+**Purpose:**
+- Provide comprehensive playbook for 1 VPS per customer deployment model
+- Automate verification of customer VPS deployments before go-live
+- Enable white-label deployments with customer domains (www/admin/api)
+- Reduce deployment errors and troubleshooting time for single-tenant installs
+- Support pre-DNS testing to bypass propagation delays
+
+**Deployment Model:**
+- **Single-Tenant**: One VPS per customer, one agency per VPS
+- **Isolation**: Dedicated infrastructure (compute, database, domains)
+- **White-Label**: Customer domains (e.g., www.kunde1.de, admin.kunde1.de, api.kunde1.de)
+- **Architecture**: Full stack per VPS (Supabase/Postgres, Backend, Worker, Admin UI)
+
+**Implementation:**
+
+1. **Verification Script** (`backend/scripts/pms_customer_vps_verify.sh`):
+   - Environment variables:
+     - API_BASE_URL (required): API endpoint to verify
+     - ADMIN_BASE_URL (optional): Admin UI URL
+     - PUBLIC_BASE_URL / WWW_BASE_URL (optional): Public site URL
+     - EXPECT_COMMIT (optional): Enforce source_commit prefix match
+     - TEST_ORIGIN (optional): Origin for CORS preflight verification
+     - SERVER_IP (optional): Direct IP for pre-DNS testing (IPv4/IPv6)
+     - RESOLVE_HOST (optional): Host to resolve via curl --resolve
+   - Automated checks:
+     - GET /health → must return 200 (liveness)
+     - GET /health/ready → must return 200 (readiness with dependencies)
+     - GET /api/v1/ops/version → validates source_commit if EXPECT_COMMIT set
+     - Public router preflight → checks /openapi.json or endpoint (not 404)
+     - CORS preflight → OPTIONS with Origin header if TEST_ORIGIN set
+     - Pre-DNS support → curl --resolve for IPv4/IPv6
+   - Actionable error messages with troubleshooting hints
+   - Exit codes: 0 = pass, 1 = failed, 2 = config error
+
+2. **Comprehensive Playbook** (`backend/docs/ops/runbook.md`):
+   - Step 1: Provision VPS (Hetzner Cloud UI) - VPS selection, firewall, SSH keys
+   - Step 2: DNS Configuration (Plesk/DNS Provider) - A/AAAA records for www/admin/api
+   - Step 3: Install Coolify (Host Terminal) - One-line installer, proxy setup
+   - Step 4: Deploy Database Stack (Coolify UI) - Supabase or standalone Postgres
+   - Step 5: Deploy Backend Stack (Coolify UI) - Backend, worker, admin UI with Traefik labels
+   - Step 6: Run Database Migrations (Host Terminal) - Alembic/SQL migrations
+   - Step 7: Bootstrap Single-Tenant Data (SQL Editor) - Create agency, admin user
+   - Step 8: Configure SSL/TLS (Coolify UI) - Let's Encrypt automatic provisioning
+   - Step 9: Verification (Host Terminal) - Run pms_customer_vps_verify.sh
+   - Step 10: Customer Handoff (Documentation) - Access credentials, docs, support contacts
+   - Step 11: Monitoring and Maintenance (Optional) - Uptime, backups, updates
+   - Explicit execution locations: Hetzner UI, Host Terminal, Coolify UI, SQL Editor
+
+3. **Troubleshooting Guides**:
+   - 503 Service Unavailable (Traefik labels, Docker network, Host rule syntax)
+   - 403 Host Not Allowed (ALLOWED_HOSTS environment variable)
+   - CORS Errors (CORS_ALLOWED_ORIGINS configuration)
+   - Database Connection Refused (DATABASE_URL, container status)
+   - Worker Not Processing Jobs (Celery, Redis connection)
+   - Let's Encrypt Certificate Failures (DNS propagation, port 80, rate limits)
+
+4. **Rollback Procedures**:
+   - Revert backend deployment (Coolify rollback feature)
+   - Revert database migrations (Alembic downgrade or restore backup)
+   - Revert environment variables (Coolify ENV history)
+   - Revert DNS (remove or update records)
+   - Remove VPS (catastrophic failure)
+
+5. **Script Documentation** (`backend/scripts/README.md`):
+   - Usage examples: basic, pre-DNS, commit enforcement, full verification, IPv6
+   - Environment variables reference
+   - Expected output (success and failure scenarios)
+   - Exit codes and common failures with solutions
+   - Use cases and design notes
+
+6. **Project Status Entry** (`backend/docs/project_status.md`):
+   - Ops B documented as ✅ IMPLEMENTED (NOT VERIFIED)
+   - Strict verification criteria defined (real customer deployment required)
+
+**Key Features:**
+- Pre-DNS testing via curl --resolve (no waiting for DNS propagation)
+- IPv4 and IPv6 support (automatic detection and correct curl syntax)
+- Health and readiness checks (basic liveness + dependency validation)
+- Public router verification (ensures public booking endpoints available)
+- CORS preflight testing (validates cross-origin configuration)
+- Commit enforcement (optional SOURCE_COMMIT prefix matching)
+- Actionable error messages (every failure includes where to fix)
+- Color-coded output (green/red/yellow/blue for easy scanning)
+- No secrets printed (sanitized outputs for logs)
+- Safe to re-run (read-only checks, idempotent)
+
+**Architecture Notes:**
+- Single-tenant operationally: one agency per VPS
+- Multi-tenant code remains enabled (tenant isolation via agency_id)
+- Domain routing: agency_domains table maps customer domains to agency
+- Traefik labels critical: traefik.docker.network=coolify (label, not env var)
+- Host allowlist: ALLOWED_HOSTS must include all customer domains
+- CORS configuration: CORS_ALLOWED_ORIGINS must include frontend origins
+- Trust proxy headers: TRUST_PROXY_HEADERS=true for X-Forwarded-Host
+- SSL/TLS automatic: Let's Encrypt via Coolify (90-day certs, auto-renew at 60 days)
+
+**Environment Variables Checklist** (required for backend):
+- DATABASE_URL (Postgres connection string)
+- SUPABASE_JWT_SECRET / JWT_SECRET (auth token signing, must match GoTrue)
+- JWT_AUDIENCE=authenticated (token validation)
+- REDIS_URL / CELERY_BROKER_URL / CELERY_RESULT_BACKEND (task queue)
+- TRUST_PROXY_HEADERS=true (reverse proxy detection)
+- ALLOWED_HOSTS (customer domains: api, admin, www)
+- CORS_ALLOWED_ORIGINS (frontend origins: https://www.kunde1.de, https://admin.kunde1.de)
+- ENVIRONMENT=production (environment name)
+- SOURCE_COMMIT=<git_sha> (optional, deployment tracking)
+- MODULES_ENABLED=true (optional, feature flags)
+
+**Testing:**
+- Manual test: API_BASE_URL=https://api.kunde1.de ./pms_customer_vps_verify.sh
+- Pre-DNS test: API_BASE_URL=... SERVER_IP=1.2.3.4 ./script.sh
+- CORS test: API_BASE_URL=... TEST_ORIGIN=https://www.kunde1.de ./script.sh
+- Commit enforcement: API_BASE_URL=... EXPECT_COMMIT=caabb0b ./script.sh
+- Full test: All env vars set, verify all 5 checks pass (rc=0)
+
+**Status**: ✅ IMPLEMENTED (awaiting production verification)
+
+**Verification Criteria:**
+This entry will be marked **VERIFIED** only after:
+1. ✅ Script exists and is executable
+2. ✅ Playbook documented in runbook.md (comprehensive, execution locations explicit)
+3. ✅ Script documented in scripts/README.md (usage, examples, troubleshooting)
+4. ⬜ Real customer domain onboarded on dedicated VPS (not test/demo domain)
+5. ⬜ Script verification passes on production customer VPS (rc=0, all 5 checks pass)
+6. ⬜ /api/v1/ops/version commit match evidence (EXPECT_COMMIT + output screenshot/log)
+7. ⬜ CORS preflight test passes (if separate frontend origin exists)
+8. ⬜ Customer handoff completed (credentials delivered, customer can log in)
+9. ⬜ No false positives/negatives observed in script output
+10. ⬜ At least one production customer successfully onboarded using this playbook
+
+**Production Evidence Required:**
+When marking VERIFIED, must provide:
+- Customer identifier (sanitized, e.g., "Customer K1")
+- VPS IP address (sanitized if sensitive)
+- Customer domains (e.g., www.kunde1.de, admin.kunde1.de, api.kunde1.de)
+- Agency UUID from bootstrap
+- Script execution output (sanitized, rc=0)
+- /api/v1/ops/version output with commit match
+- CORS preflight result (if applicable)
+- Date of customer handoff
+- Commit SHA when VERIFIED
+- Any deviations from playbook (document workarounds or improvements)
+
+**Note**: Do NOT mark VERIFIED until real customer domain onboarded on dedicated VPS and script validated on production with successful customer handoff.
+
+**Operational Impact**:
+- Enables white-label SaaS model (each customer gets dedicated infrastructure)
+- Reduces operational complexity for single-tenant customers (no tenant isolation concerns)
+- Improves performance isolation (one customer cannot impact another)
+- Simplifies pricing model (per-VPS billing vs per-tenant/usage billing)
+- Allows customer-specific customizations (code, config, branding per VPS)
+
+**Cost Considerations**:
+- VPS cost per customer: €5-30/month (Hetzner CPX11-CPX31)
+- Recommended minimum: CPX21 (3 vCPU, 4GB RAM) = €10/month
+- High-load customers: CPX31 (4 vCPU, 8GB RAM) = €18/month
+- Additional costs: Backups (~€3/month), snapshots (pay-per-use)
+- Economies of scale: 10+ customers → consider reserved instances (Hetzner discounts)
+
+**Security Hardening** (recommended post-deployment):
+- UFW firewall: Allow only 22/80/443, block all other ports
+- SSH key-only auth: Disable password authentication
+- Fail2ban: Protect against SSH brute-force
+- Database: No public exposure (SSH tunnel or VPN only)
+- Regular updates: Security patches within 7 days
+- Backup encryption: Encrypt database backups at rest
+
+---

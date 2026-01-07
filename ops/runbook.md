@@ -20722,3 +20722,941 @@ Actual:   87654321-4321-4321-4321-cba987654321
 - If domain is no longer needed, follow rollback procedure
 - Archive ops log entry for domain removal (date, reason, operator)
 
+
+
+---
+
+## 1 VPS per Customer (Single-Tenant Installations Playbook)
+
+**Purpose**: Complete step-by-step procedure for provisioning a dedicated VPS for a single customer (single-tenant deployment). This playbook enables junior admins to reliably set up isolated customer instances with their own domains, database, and infrastructure.
+
+**Target Audience**: Junior admins, ops engineers, DevOps staff
+
+**Estimated Time**: 2-4 hours (including DNS propagation and Let's Encrypt provisioning)
+
+**Deployment Model**:
+- **Single-Tenant**: One VPS per customer, one agency per VPS
+- **Isolation**: Dedicated infrastructure (compute, database, domains)
+- **White-Label**: Customer domains (www.kunde1.de, admin.kunde1.de, api.kunde1.de)
+- **Architecture**: Full stack per VPS (Supabase/Postgres, Backend, Worker, Admin UI)
+
+### Pre-requisites
+
+**Required Access**:
+- ✅ Hetzner Cloud account (or equivalent VPS provider)
+- ✅ Coolify admin access (for app deployment and proxy configuration)
+- ✅ Customer domain registrar access (or customer cooperation for DNS changes)
+- ✅ Plesk admin access (for DNS zone management, if applicable)
+- ✅ SSH access to customer VPS (root or sudo privileges)
+- ✅ Git repository access (for source code deployment)
+
+**Required Information**:
+- Customer name/identifier (e.g., "kunde1")
+- Customer domains (e.g., www.kunde1.de, admin.kunde1.de, api.kunde1.de)
+- VPS size requirements (CPU, RAM, disk based on expected load)
+- Database credentials strategy (auto-generated or customer-provided)
+- SSL/TLS certificate requirements (Let's Encrypt recommended)
+
+**Recommended Customer Domain Layout**:
+```
+www.kunde1.de        → Public-facing website/booking interface
+admin.kunde1.de      → Backoffice/admin UI (staff access)
+api.kunde1.de        → Backend API (used by admin UI and public site)
+```
+
+**Note**: API under customer domain is supported and recommended for white-label deployments. This differs from the internal/owner instance which uses `api.fewo.kolibri-visions.de`.
+
+### Step-by-Step Procedure
+
+#### Step 1: Provision VPS (HETZNER CLOUD UI)
+
+**Goal**: Create a new dedicated VPS for the customer.
+
+**Hetzner Cloud Console**:
+1. Navigate to: https://console.hetzner.cloud/
+2. Select project (or create new project for customer)
+3. Click "Add Server"
+4. Configuration:
+   - **Location**: Select region closest to customer (e.g., Falkenstein, Nuremberg, Helsinki)
+   - **Image**: Ubuntu 22.04 LTS (recommended) or Ubuntu 24.04 LTS
+   - **Type**: 
+     - **Starter**: CPX11 (2 vCPU, 2GB RAM) - for testing/small deployments
+     - **Production**: CPX21 (3 vCPU, 4GB RAM) - recommended minimum
+     - **High Load**: CPX31 (4 vCPU, 8GB RAM) - for high-traffic sites
+   - **Networking**: 
+     - Enable IPv4 and IPv6 (both recommended)
+     - No additional networks required (unless customer has special requirements)
+   - **Firewall**: 
+     - Create firewall rule: Allow TCP 22 (SSH), 80 (HTTP), 443 (HTTPS)
+     - Block all other inbound traffic
+   - **SSH Keys**: Add your SSH public key for root access
+   - **Name**: customer-vps-kunde1 (or similar descriptive name)
+5. Click "Create & Buy Now"
+6. Wait 1-2 minutes for provisioning
+7. **Record VPS IP addresses** (IPv4 and IPv6) for DNS configuration
+
+**Validation**:
+```bash
+# Test SSH access (from your local machine)
+ssh root@<VPS_IPv4>
+# Should connect successfully
+
+# Check system info
+uname -a
+# Should show Ubuntu 22.04 or 24.04
+
+# Check available resources
+free -h
+df -h
+```
+
+**Important**: Keep VPS IP addresses handy for Step 2 (DNS configuration).
+
+#### Step 2: DNS Configuration (PLESK UI or DNS PROVIDER)
+
+**Goal**: Point customer domains to the new VPS IP addresses.
+
+**Recommended DNS Records** (using Plesk or customer DNS provider):
+
+```dns
+# Apex domain (A record for IPv4, AAAA for IPv6)
+www.kunde1.de.       3600  IN  A      <VPS_IPv4>
+www.kunde1.de.       3600  IN  AAAA   <VPS_IPv6>
+
+# Admin subdomain
+admin.kunde1.de.     3600  IN  A      <VPS_IPv4>
+admin.kunde1.de.     3600  IN  AAAA   <VPS_IPv6>
+
+# API subdomain
+api.kunde1.de.       3600  IN  A      <VPS_IPv4>
+api.kunde1.de.       3600  IN  AAAA   <VPS_IPv6>
+```
+
+**Alternative (CNAME for subdomains)**:
+```dns
+# If you prefer CNAME for subdomains (points to apex)
+admin.kunde1.de.     3600  IN  CNAME  www.kunde1.de.
+api.kunde1.de.       3600  IN  CNAME  www.kunde1.de.
+
+# Note: Apex (www) must still use A/AAAA records
+www.kunde1.de.       3600  IN  A      <VPS_IPv4>
+www.kunde1.de.       3600  IN  AAAA   <VPS_IPv6>
+```
+
+**Plesk Configuration**:
+1. Log in to Plesk: https://plesk.your-dns-server.com/
+2. Navigate to: Domains → kunde1.de → DNS Settings
+3. Add DNS records as shown above
+4. Click "Apply" or "Update"
+5. Wait for DNS propagation (typically 5-30 minutes, up to 24 hours for global propagation)
+
+**Important Notes**:
+- Use **lowercase** domain names (DNS is case-insensitive, but consistency helps)
+- **NO trailing dot** in application configs (Plesk DNS editor may require it, but app does not)
+- TTL 3600 (1 hour) is a safe default for production
+- For testing, use TTL 300 (5 minutes) to allow faster changes
+
+**Validation**:
+```bash
+# Check DNS propagation (wait 5-30 minutes after DNS changes)
+dig www.kunde1.de A
+dig www.kunde1.de AAAA
+dig admin.kunde1.de A
+dig api.kunde1.de A
+
+# All should resolve to VPS IP addresses
+
+# Quick test from multiple locations
+nslookup www.kunde1.de 8.8.8.8  # Google DNS
+nslookup www.kunde1.de 1.1.1.1  # Cloudflare DNS
+```
+
+**Pre-DNS Testing Option**: You can proceed with Steps 3-5 and use `pms_customer_vps_verify.sh` with `SERVER_IP` parameter to bypass DNS propagation (see Step 6).
+
+#### Step 3: Install Coolify on Customer VPS (HOST-SERVER-TERMINAL)
+
+**Goal**: Install Coolify as the deployment platform on the customer VPS.
+
+**SSH to Customer VPS**:
+```bash
+ssh root@<VPS_IPv4>
+```
+
+**Install Coolify** (one-line installer):
+```bash
+# Run Coolify installer (official script)
+curl -fsSL https://cdn.coollabs.io/coolify/install.sh | bash
+
+# Installation takes 5-10 minutes
+# Follow prompts (typically defaults are OK)
+```
+
+**Post-Installation**:
+```bash
+# Verify Coolify is running
+docker ps | grep coolify
+# Should show multiple Coolify containers (coolify, postgres, redis, proxy)
+
+# Get Coolify web UI URL
+echo "Coolify UI: http://<VPS_IPv4>:8000"
+
+# Get initial admin password (shown during installation, or reset if needed)
+# First-time setup: Navigate to http://<VPS_IPv4>:8000 and create admin account
+```
+
+**Coolify Initial Setup** (COOLIFY UI):
+1. Open browser: http://<VPS_IPv4>:8000
+2. Create admin account (email + password)
+3. Configure server settings:
+   - **Server Name**: customer-vps-kunde1
+   - **Server IP**: <VPS_IPv4>
+   - **Wildcard Domain**: (leave empty for now)
+4. Configure proxy (Traefik):
+   - Coolify automatically installs Traefik as reverse proxy
+   - No additional configuration needed at this stage
+
+**Validation**:
+```bash
+# Check Coolify proxy (Traefik) is running
+docker ps | grep coolify-proxy
+# Should show coolify-proxy container
+
+# Check Traefik logs (should show no errors)
+docker logs coolify-proxy --tail 50
+
+# Verify Docker network exists
+docker network ls | grep coolify
+# Should show 'coolify' network
+```
+
+**Important**: Record Coolify admin credentials securely (password manager recommended).
+
+#### Step 4: Deploy Database Stack (COOLIFY UI + HOST-SERVER-TERMINAL)
+
+**Goal**: Deploy Supabase (or standalone Postgres) for customer data.
+
+**Option A: Supabase Self-Hosted (Recommended for Full Stack)**
+
+**Coolify UI**:
+1. Navigate to: Projects → Create New Project
+2. Project Name: `kunde1-supabase`
+3. Add Service → Docker Compose
+4. Paste Supabase docker-compose.yml (from Supabase self-hosting docs)
+5. Configure environment variables:
+   - `POSTGRES_PASSWORD`: Generate strong password (save securely)
+   - `JWT_SECRET`: Generate 32+ character secret (save securely)
+   - `ANON_KEY`: Generate JWT with anon role (use Supabase JWT generator)
+   - `SERVICE_ROLE_KEY`: Generate JWT with service_role (save securely)
+6. Deploy → Start
+
+**Option B: Standalone Postgres (Simpler, Database Only)**
+
+**Coolify UI**:
+1. Navigate to: Projects → Create New Project
+2. Project Name: `kunde1-database`
+3. Add Service → Postgres (from Coolify templates)
+4. Configure:
+   - `POSTGRES_DB`: `pms_kunde1`
+   - `POSTGRES_USER`: `pms_user`
+   - `POSTGRES_PASSWORD`: Generate strong password (save securely)
+   - **Persistent Volume**: `/var/lib/postgresql/data` (ensure data persistence)
+5. Deploy → Start
+
+**Validation**:
+```bash
+# SSH to customer VPS
+ssh root@<VPS_IPv4>
+
+# For Supabase: Check all services are running
+docker ps | grep supabase
+# Should show: postgres, kong, auth, rest, realtime, storage, etc.
+
+# For standalone Postgres: Check container is running
+docker ps | grep postgres
+
+# Test database connection
+docker exec -it <postgres_container_id> psql -U <user> -d <database>
+# Should connect successfully
+
+# Run \dt to list tables (empty initially)
+\dt
+
+# Exit psql
+\q
+```
+
+**Important**: 
+- **Save DATABASE_URL** for backend configuration: `postgresql://<user>:<password>@<host>:<port>/<database>`
+- **Save JWT_SECRET** (must match between Supabase/GoTrue and backend)
+- For Supabase: Expose Kong API Gateway port (default 8000) internally only (no public access)
+
+#### Step 5: Deploy Backend Stack (COOLIFY UI)
+
+**Goal**: Deploy PMS backend API, worker, and admin UI on customer VPS.
+
+**5a. Create Backend API Service (COOLIFY UI)**
+
+1. Navigate to: Projects → Create New Project
+2. Project Name: `kunde1-pms-backend`
+3. Add Service → Docker Image or Git Repository
+   - **Source**: Git repository (your PMS backend repo)
+   - **Branch**: main (or specific release tag)
+   - **Dockerfile Path**: `backend/Dockerfile`
+4. Configure Domains:
+   - Click "Add Domain"
+   - Enter: `api.kunde1.de`
+   - Enable HTTPS: ✅ (Let's Encrypt automatic)
+5. Configure Traefik Labels (IMPORTANT):
+   - Click "Labels" tab
+   - Add custom label:
+     - **Key**: `traefik.docker.network`
+     - **Value**: `coolify`
+   - Verify Host rule (auto-generated by Coolify):
+     - `traefik.http.routers.<service>.rule=Host(\`api.kunde1.de\`)`
+   - **Note**: Backticks in Host() rule are critical (not single quotes)
+6. Configure Environment Variables:
+   ```bash
+   # Database
+   DATABASE_URL=postgresql://pms_user:<password>@<postgres_host>:5432/pms_kunde1
+   
+   # JWT/Auth (must match Supabase/GoTrue)
+   SUPABASE_JWT_SECRET=<jwt_secret_from_supabase>
+   JWT_SECRET=<jwt_secret_from_supabase>
+   JWT_AUDIENCE=authenticated
+   
+   # Redis/Celery
+   REDIS_URL=redis://<redis_host>:6379/0
+   CELERY_BROKER_URL=redis://<redis_host>:6379/0
+   CELERY_RESULT_BACKEND=redis://<redis_host>:6379/1
+   
+   # Proxy Configuration
+   TRUST_PROXY_HEADERS=true
+   
+   # Host Allowlist (IMPORTANT)
+   ALLOWED_HOSTS=api.kunde1.de,admin.kunde1.de,www.kunde1.de
+   
+   # CORS Configuration
+   CORS_ALLOWED_ORIGINS=https://www.kunde1.de,https://admin.kunde1.de
+   
+   # Environment
+   ENVIRONMENT=production
+   SOURCE_COMMIT=<git_commit_sha>  # Optional but recommended for tracking
+   
+   # Feature Flags (if applicable)
+   MODULES_ENABLED=true
+   ```
+7. Deploy → Start
+8. Monitor deployment logs (Coolify UI → Logs tab)
+
+**5b. Create Worker Service (COOLIFY UI)**
+
+1. Projects → kunde1-pms-backend → Add Service
+2. **Source**: Same Git repository as backend
+   - **Branch**: main
+   - **Dockerfile Path**: `backend/Dockerfile` (or `backend/worker.Dockerfile` if separate)
+   - **Command Override**: `celery -A app.celery_app worker -l info`
+3. Configure Environment Variables:
+   - Use **same environment variables** as backend API
+   - No domain configuration needed (worker is internal only)
+4. **No Traefik labels** needed (worker doesn't serve HTTP traffic)
+5. Deploy → Start
+
+**5c. Create Admin UI Service (COOLIFY UI)**
+
+1. Projects → kunde1-pms-backend → Add Service (or separate project)
+2. **Source**: Git repository (frontend/admin)
+   - **Branch**: main
+   - **Dockerfile Path**: `frontend/Dockerfile` (or appropriate path)
+3. Configure Domains:
+   - Add Domain: `admin.kunde1.de`
+   - Enable HTTPS: ✅
+4. Configure Traefik Labels:
+   - Add: `traefik.docker.network=coolify`
+5. Configure Environment Variables:
+   ```bash
+   # API endpoint (points to backend)
+   NEXT_PUBLIC_API_URL=https://api.kunde1.de
+   NEXT_PUBLIC_SUPABASE_URL=https://api.kunde1.de  # or Supabase Kong URL
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon_key>
+   
+   # Environment
+   NODE_ENV=production
+   ```
+6. Deploy → Start
+
+**Validation**:
+```bash
+# Check all services are running
+docker ps | grep kunde1
+# Should show: backend, worker, admin
+
+# Test backend health
+curl https://api.kunde1.de/health
+# Should return: {"status": "healthy"} or similar
+
+# Test backend version
+curl https://api.kunde1.de/api/v1/ops/version
+# Should return JSON with service, source_commit, environment, etc.
+
+# Test admin UI (browser)
+# Open: https://admin.kunde1.de
+# Should load admin interface (may show login screen)
+```
+
+**Common Failure: 503 Service Unavailable**
+
+**Symptoms**: Curl returns 503 error or "no available server" message
+
+**Possible Causes**:
+1. **Invalid Traefik Host rule**: Backticks missing or escaped incorrectly
+   - ✅ Correct: `Host(\`api.kunde1.de\`)`
+   - ❌ Wrong: `Host('api.kunde1.de')` or `Host(api.kunde1.de)`
+2. **Wrong Docker network**: Service not on `coolify` network
+   - Fix: Add label `traefik.docker.network=coolify`
+3. **Service not running**: Container crashed or failed to start
+   - Check: `docker ps -a | grep kunde1`
+   - Check logs: `docker logs <container_id>`
+4. **Wrong port exposed**: Traefik trying to reach wrong service port
+   - Fix: Add label `traefik.http.services.<service>.loadbalancer.server.port=8000`
+5. **Firewall blocking**: VPS firewall blocking traffic
+   - Check: `ufw status` (if UFW enabled)
+   - Allow: `ufw allow 80/tcp && ufw allow 443/tcp`
+
+**Troubleshooting Checklist**:
+```bash
+# 1. Verify Traefik can see the service
+docker logs coolify-proxy 2>&1 | grep -i "kunde1"
+# Should show backend service registration
+
+# 2. Check service is on coolify network
+docker inspect <container_id> | grep -i network
+# Should include "coolify" network
+
+# 3. Test service directly (bypass Traefik)
+docker exec -it <backend_container> curl localhost:8000/health
+# Should return healthy response
+
+# 4. Check Traefik configuration
+docker exec coolify-proxy cat /etc/traefik/traefik.toml
+# Verify providers.docker.network = "coolify"
+
+# 5. Restart Traefik if needed
+docker restart coolify-proxy
+```
+
+#### Step 6: Run Database Migrations (HOST-SERVER-TERMINAL)
+
+**Goal**: Apply database schema migrations to create tables and seed data.
+
+**SSH to Customer VPS**:
+```bash
+ssh root@<VPS_IPv4>
+
+# Get backend container ID
+docker ps | grep kunde1.*backend
+BACKEND_CONTAINER=<container_id>
+```
+
+**Apply Migrations** (using Alembic or custom migration tool):
+
+**Option A: Alembic Migrations**:
+```bash
+# Run migrations inside backend container
+docker exec -it $BACKEND_CONTAINER alembic upgrade head
+
+# Verify migrations applied
+docker exec -it $BACKEND_CONTAINER alembic current
+# Should show current revision
+```
+
+**Option B: SQL Migrations (Supabase SQL Editor)**:
+
+1. Navigate to Supabase UI (if using Supabase):
+   - URL: http://<VPS_IPv4>:8000 (Supabase Kong Gateway, internal only)
+   - Or use Supabase Studio if deployed
+2. SQL Editor → New Query
+3. Copy/paste migration files from `supabase/migrations/` (in order)
+4. Execute each migration file
+5. Verify tables created:
+   ```sql
+   SELECT table_name FROM information_schema.tables 
+   WHERE table_schema = 'public' 
+   ORDER BY table_name;
+   ```
+
+**Option C: Manual Psql Migration**:
+```bash
+# Copy migration files to VPS
+scp -r supabase/migrations/ root@<VPS_IPv4>:/tmp/
+
+# SSH to VPS and run migrations
+ssh root@<VPS_IPv4>
+
+# Find postgres container
+POSTGRES_CONTAINER=$(docker ps | grep postgres | awk '{print $1}')
+
+# Apply migrations in order
+for file in /tmp/migrations/*.sql; do
+    echo "Applying $file..."
+    docker exec -i $POSTGRES_CONTAINER psql -U <user> -d <database> < "$file"
+done
+
+# Verify schema
+docker exec -it $POSTGRES_CONTAINER psql -U <user> -d <database> -c '\dt'
+```
+
+**Validation**:
+```bash
+# Check critical tables exist
+docker exec -it $POSTGRES_CONTAINER psql -U <user> -d <database> -c "
+SELECT table_name FROM information_schema.tables 
+WHERE table_schema = 'public' AND table_name IN (
+    'agencies', 'users', 'properties', 'bookings', 
+    'guests', 'audit_log', 'agency_domains'
+);"
+# Should return all critical tables
+```
+
+#### Step 7: Bootstrap Single-Tenant Data (SUPABASE SQL EDITOR or HOST-TERMINAL)
+
+**Goal**: Create initial agency, admin user, and optional seed data for customer.
+
+**Important**: Single-tenant deployment means **one agency per VPS**. The multi-tenant code remains enabled, but operationally there's only one agency.
+
+**Bootstrap SQL** (run in Supabase SQL Editor or psql):
+
+```sql
+-- 1. Create customer agency
+INSERT INTO agencies (id, name, created_at, updated_at)
+VALUES (
+    gen_random_uuid(),  -- Or use specific UUID for tracking
+    'Kunde1 GmbH',      -- Customer company name
+    NOW(),
+    NOW()
+)
+RETURNING id;  -- Save this agency_id for next steps
+
+-- Record agency_id from above (e.g., 'a1b2c3d4-...')
+
+-- 2. Create admin user for customer
+INSERT INTO users (id, agency_id, email, role, first_name, last_name, created_at, updated_at)
+VALUES (
+    gen_random_uuid(),
+    '<agency_id_from_step1>',
+    'admin@kunde1.de',
+    'admin',
+    'Admin',
+    'Kunde1',
+    NOW(),
+    NOW()
+);
+
+-- 3. (Optional) Map customer domain to agency
+INSERT INTO agency_domains (agency_id, domain)
+VALUES 
+    ('<agency_id>', 'api.kunde1.de'),
+    ('<agency_id>', 'admin.kunde1.de'),
+    ('<agency_id>', 'www.kunde1.de')
+ON CONFLICT (domain) DO NOTHING;
+
+-- 4. (Optional) Seed a test property
+INSERT INTO properties (id, agency_id, name, address, max_guests, created_at, updated_at)
+VALUES (
+    gen_random_uuid(),
+    '<agency_id>',
+    'Test Property - Kunde1',
+    'Teststraße 1, 12345 Berlin',
+    4,
+    NOW(),
+    NOW()
+);
+
+-- Verify bootstrap
+SELECT id, name FROM agencies;
+SELECT id, email, role FROM users WHERE agency_id = '<agency_id>';
+SELECT id, name FROM properties WHERE agency_id = '<agency_id>';
+```
+
+**Alternative: Bootstrap Script** (if available):
+```bash
+# SSH to VPS
+ssh root@<VPS_IPv4>
+
+# Run bootstrap script (if exists in your repo)
+docker exec -it $BACKEND_CONTAINER python scripts/bootstrap_tenant.py \
+    --agency-name "Kunde1 GmbH" \
+    --admin-email "admin@kunde1.de" \
+    --admin-password "<secure_password>"
+
+# Script should output agency_id and admin credentials
+```
+
+**Validation**:
+```sql
+-- Verify agency exists
+SELECT * FROM agencies WHERE name = 'Kunde1 GmbH';
+
+-- Verify admin user exists
+SELECT * FROM users WHERE email = 'admin@kunde1.de';
+
+-- Verify domain mapping (if used)
+SELECT * FROM agency_domains WHERE domain LIKE '%kunde1.de%';
+```
+
+**Important**: 
+- **Save agency_id** for verification step
+- **Save admin credentials** securely (share with customer via secure channel)
+- If using Supabase Auth, create user in GoTrue as well (via Supabase UI or API)
+
+#### Step 8: Configure SSL/TLS Certificates (COOLIFY UI - Automatic)
+
+**Goal**: Ensure all customer domains have valid HTTPS certificates.
+
+**Coolify Automatic Certificate Provisioning**:
+
+Coolify automatically provisions Let's Encrypt certificates for all domains configured in Step 5. No manual intervention required if:
+1. DNS is properly configured (domains resolve to VPS IP)
+2. Ports 80 and 443 are open on VPS firewall
+3. Domains are added to Coolify service configuration with HTTPS enabled
+
+**Validation**:
+```bash
+# Test HTTPS for all customer domains
+curl -I https://api.kunde1.de
+curl -I https://admin.kunde1.de
+curl -I https://www.kunde1.de
+
+# All should return HTTP 200 or 30x (not certificate errors)
+
+# Check certificate details
+echo | openssl s_client -connect api.kunde1.de:443 -servername api.kunde1.de 2>/dev/null | openssl x509 -noout -dates -issuer
+# Should show Let's Encrypt issuer and valid dates
+```
+
+**Manual Certificate Check (Coolify UI)**:
+1. Navigate to: Project → Service → Domains tab
+2. Each domain should show: ✅ HTTPS Enabled, Certificate Valid
+3. Expiry date should be ~90 days from now (Let's Encrypt default)
+
+**Troubleshooting Certificate Issues**:
+
+**Symptom**: Certificate provisioning fails or self-signed certificate error
+
+**Possible Causes**:
+1. **DNS not propagated**: Let's Encrypt ACME challenge fails
+   - Fix: Wait for DNS TTL expiry (1-24 hours) or use lower TTL
+   - Verify: `dig api.kunde1.de` should resolve to VPS IP
+2. **Port 80 blocked**: ACME HTTP-01 challenge requires port 80
+   - Fix: Ensure VPS firewall allows port 80 (ufw allow 80/tcp)
+3. **Domain not added in Coolify**: Certificate not requested
+   - Fix: Add domain in Coolify service config, enable HTTPS
+4. **Rate limit hit**: Let's Encrypt has rate limits (50 certs per domain per week)
+   - Fix: Wait 1 week or use staging environment for testing
+
+**Certificate Renewal**:
+- Let's Encrypt certificates expire after 90 days
+- Coolify automatically renews certificates at 60 days (no manual intervention)
+- Monitor certificate expiry via monitoring tools (UptimeRobot, Pingdom)
+
+#### Step 9: Verification (HOST-SERVER-TERMINAL or LOCAL)
+
+**Goal**: Verify customer VPS is ready for production traffic using automated verification script.
+
+**Run Verification Script**:
+
+**Option A: Post-DNS Verification** (after DNS propagation):
+```bash
+# From your local machine or CI/CD
+API_BASE_URL=https://api.kunde1.de \
+./backend/scripts/pms_customer_vps_verify.sh
+```
+
+**Option B: Pre-DNS Verification** (before DNS propagation, recommended during setup):
+```bash
+# Use direct IP to bypass DNS
+API_BASE_URL=https://api.kunde1.de \
+SERVER_IP=<VPS_IPv4> \
+./backend/scripts/pms_customer_vps_verify.sh
+```
+
+**Option C: Full Verification** (with commit check and CORS):
+```bash
+API_BASE_URL=https://api.kunde1.de \
+ADMIN_BASE_URL=https://admin.kunde1.de \
+PUBLIC_BASE_URL=https://www.kunde1.de \
+EXPECT_COMMIT=caabb0b \
+TEST_ORIGIN=https://www.kunde1.de \
+./backend/scripts/pms_customer_vps_verify.sh
+```
+
+**Expected Output** (Success):
+```
+ℹ Verifying customer VPS deployment: https://api.kunde1.de
+
+ℹ Check 1/5: GET /health (liveness)
+✅ Health check passed (HTTP 200)
+
+ℹ Check 2/5: GET /health/ready (readiness)
+✅ Readiness check passed (HTTP 200)
+
+ℹ Check 3/5: GET /api/v1/ops/version (deployment metadata)
+✅ Version endpoint accessible
+ℹ   Environment: production
+ℹ   API Version: 0.1.0
+ℹ   Source Commit: caabb0b...
+✅ Source commit matches expected prefix: caabb0b
+
+ℹ Check 4/5: Public router preflight
+✅ Public router mounted (endpoint returned HTTP 422, not 404)
+
+ℹ Check 5/5: CORS preflight (Origin: https://www.kunde1.de)
+✅ CORS preflight passed (Allow-Origin: https://www.kunde1.de)
+
+✅ All checks passed - customer VPS is ready for production traffic
+ℹ Admin UI: https://admin.kunde1.de
+ℹ Public Site: https://www.kunde1.de
+```
+
+**If Verification Fails**:
+- Review error messages in script output (actionable hints provided)
+- Check troubleshooting sections above for specific error codes
+- Common issues: DNS not propagated, CORS misconfiguration, missing env vars
+
+**Optional: Run Smoke Tests** (additional validation):
+```bash
+# Set up environment for smoke tests
+export HOST=https://api.kunde1.de
+export JWT_TOKEN=<admin_jwt_token>  # Generate via auth endpoint
+export AGENCY_ID=<agency_id_from_bootstrap>
+
+# Run public booking smoke test
+./backend/scripts/pms_direct_booking_public_smoke.sh
+
+# Run pricing quote smoke test (if pricing module enabled)
+./backend/scripts/pms_pricing_quote_smoke.sh
+```
+
+#### Step 10: Customer Handoff (DOCUMENTATION)
+
+**Goal**: Provide customer with access credentials and documentation.
+
+**Handoff Package** (secure delivery via encrypted email or password manager):
+
+1. **Access URLs**:
+   - Admin UI: https://admin.kunde1.de
+   - API Docs: https://api.kunde1.de/docs (FastAPI auto-generated docs)
+   - Health Check: https://api.kunde1.de/health (for customer monitoring)
+
+2. **Admin Credentials**:
+   - Email: admin@kunde1.de
+   - Password: <secure_password_from_bootstrap>
+   - Role: admin (full access)
+
+3. **Database Access** (optional, only if customer needs direct access):
+   - Host: <VPS_IP> (not publicly exposed, VPN or SSH tunnel required)
+   - Database: pms_kunde1
+   - User: pms_user
+   - Password: <postgres_password>
+   - **Security Note**: Database should NOT be publicly accessible
+
+4. **VPS Access** (optional, only for technical customers):
+   - SSH: root@<VPS_IP> (add customer SSH key if requested)
+   - Coolify UI: http://<VPS_IP>:8000 (create separate Coolify admin if needed)
+
+5. **Support Contacts**:
+   - Technical Support: support@your-company.com
+   - Emergency Hotline: +49 xxx xxx xxxx (if applicable)
+
+6. **Documentation Links**:
+   - API Documentation: https://api.kunde1.de/docs
+   - Admin User Guide: [Link to customer-facing docs]
+   - FAQ: [Link to FAQ]
+
+**Post-Handoff Checklist**:
+- ✅ Customer can log in to admin UI
+- ✅ Customer can create test booking (if applicable)
+- ✅ Customer understands how to add properties/users
+- ✅ Customer has emergency contact info
+- ✅ Monitoring set up for customer VPS (see Step 11)
+
+#### Step 11: Monitoring and Maintenance (OPTIONAL)
+
+**Goal**: Set up monitoring and establish maintenance schedule for customer VPS.
+
+**Uptime Monitoring** (recommended):
+- Use UptimeRobot, Pingdom, or similar service
+- Monitor endpoints:
+  - https://api.kunde1.de/health (should return 200)
+  - https://admin.kunde1.de (should return 200)
+  - https://www.kunde1.de (should return 200)
+- Alert on: HTTP 500/503 errors, downtime >5 minutes, certificate expiry
+
+**Resource Monitoring** (Coolify built-in):
+- Coolify UI → Server → Metrics
+- Monitor: CPU usage, RAM usage, disk space
+- Set up alerts: >80% CPU for 10+ minutes, >90% RAM, <10% disk free
+
+**Certificate Expiry Monitoring**:
+- Let's Encrypt certificates auto-renew at 60 days
+- Set up alert at 30 days (if auto-renewal fails)
+- Check manually: `openssl s_client -connect api.kunde1.de:443 -servername api.kunde1.de | openssl x509 -noout -dates`
+
+**Backup Strategy**:
+- Database backups (automated):
+  - Coolify can enable automatic Postgres backups
+  - Configure: Project → Service → Backups tab
+  - Retention: 7 daily, 4 weekly, 12 monthly (adjust based on customer SLA)
+- VPS snapshots (Hetzner):
+  - Hetzner Cloud → Server → Snapshots
+  - Create weekly snapshot (manual or via Hetzner API)
+  - Keep 4 snapshots (1 month history)
+
+**Update Schedule**:
+- **Security Patches**: Apply within 7 days of release (OS + Docker images)
+- **Application Updates**: Monthly or quarterly (coordinate with customer)
+- **Database Migrations**: Test in staging before applying to production
+
+**Maintenance Window**:
+- Recommended: Weekly maintenance window (e.g., Sunday 2-4 AM local time)
+- Notify customer 48 hours in advance for major updates
+- Use Coolify zero-downtime deployments where possible
+
+### Rollback Procedure
+
+**If deployment fails or needs to be reverted**:
+
+**1. Revert Backend Deployment (COOLIFY UI)**:
+- Navigate to: Project → Service → Deployments tab
+- Click "Rollback" next to previous successful deployment
+- Wait for rollback to complete (2-5 minutes)
+- Verify: `curl https://api.kunde1.de/api/v1/ops/version` (should show old commit)
+
+**2. Revert Database Migrations (HOST-SERVER-TERMINAL)**:
+```bash
+# SSH to VPS
+ssh root@<VPS_IPv4>
+
+# Downgrade migrations (Alembic)
+docker exec -it $BACKEND_CONTAINER alembic downgrade -1
+
+# Or restore from database backup
+docker exec -i $POSTGRES_CONTAINER psql -U <user> -d <database> < /backups/backup_YYYYMMDD.sql
+```
+
+**3. Revert Environment Variables (COOLIFY UI)**:
+- Project → Service → Environment tab
+- Restore previous values (Coolify keeps history)
+- Redeploy service
+
+**4. Revert DNS (if needed)**:
+- Plesk → Domains → DNS Settings
+- Remove or update DNS records
+- Wait for TTL expiry (or flush local DNS cache)
+
+**5. Remove VPS (if catastrophic failure)**:
+- Hetzner Cloud → Server → Delete
+- Update DNS to remove customer domains
+- Notify customer and reschedule deployment
+
+**Rollback is safe and tested** - practice rollback procedure during staging deployments.
+
+### Troubleshooting Guide
+
+#### Problem: Backend Returns 403 "Host not allowed"
+
+**Symptom**: API requests return HTTP 403 with `{"detail": "Host not allowed: api.kunde1.de"}`
+
+**Root Cause**: Customer domain not in ALLOWED_HOSTS environment variable
+
+**Solution**:
+1. Coolify UI → Project → Backend Service → Environment tab
+2. Update ALLOWED_HOSTS: `api.kunde1.de,admin.kunde1.de,www.kunde1.de`
+3. Redeploy service (Coolify auto-restarts on ENV change)
+4. Verify: `curl https://api.kunde1.de/health` (should return 200)
+
+#### Problem: CORS Errors in Browser Console
+
+**Symptom**: Browser shows "CORS policy blocked" errors when accessing API from admin UI
+
+**Root Cause**: Admin UI origin not in CORS_ALLOWED_ORIGINS
+
+**Solution**:
+1. Coolify UI → Backend Service → Environment tab
+2. Update CORS_ALLOWED_ORIGINS: `https://admin.kunde1.de,https://www.kunde1.de`
+3. Ensure TRUST_PROXY_HEADERS=true (for correct Origin detection)
+4. Redeploy service
+5. Test CORS: `curl -X OPTIONS https://api.kunde1.de/api/v1/public/booking-requests -H "Origin: https://admin.kunde1.de" -i`
+
+#### Problem: Database Connection Refused
+
+**Symptom**: Backend logs show "Connection refused" or "Database unavailable"
+
+**Root Cause**: DATABASE_URL incorrect or database container not running
+
+**Solution**:
+1. Verify database container is running: `docker ps | grep postgres`
+2. If stopped, start via Coolify UI or `docker start <container_id>`
+3. Check DATABASE_URL format: `postgresql://user:password@host:5432/database`
+4. For internal Docker networking, use container name as host (e.g., `postgres-kunde1`)
+5. Test connection: `docker exec -it $BACKEND_CONTAINER curl postgres-kunde1:5432` (should connect)
+
+#### Problem: Worker Not Processing Jobs
+
+**Symptom**: Celery tasks stuck in pending state, never processed
+
+**Root Cause**: Worker container not running or Redis connection failed
+
+**Solution**:
+1. Check worker container: `docker ps | grep worker`
+2. Check worker logs: `docker logs <worker_container_id>`
+3. Verify REDIS_URL in worker environment matches backend
+4. Verify Redis container running: `docker ps | grep redis`
+5. Restart worker: Coolify UI → Worker Service → Restart
+
+#### Problem: Let's Encrypt Certificate Provisioning Fails
+
+**Symptom**: HTTPS returns self-signed certificate error or ERR_CERT_AUTHORITY_INVALID
+
+**Root Cause**: ACME challenge failed (DNS not propagated, port 80 blocked, rate limit)
+
+**Solution**:
+1. Verify DNS propagation: `dig api.kunde1.de` (should resolve to VPS IP)
+2. Verify port 80 open: `curl http://api.kunde1.de/.well-known/acme-challenge/test` (should not timeout)
+3. Check Coolify proxy logs: `docker logs coolify-proxy | grep -i acme`
+4. If rate limited, wait 1 week or use Let's Encrypt staging for testing
+5. Manual retry: Coolify UI → Service → Domains → Re-provision Certificate
+
+### Related Scripts
+
+- **pms_customer_vps_verify.sh**: Automated verification script for customer VPS deployments
+- **pms_verify_deploy.sh**: General deployment verification (commit matching, module checks)
+- **pms_direct_booking_public_smoke.sh**: Public booking flow smoke test
+- **pms_pricing_quote_smoke.sh**: Pricing quote smoke test
+
+### Related Documentation
+
+- [Customer Domain Onboarding SOP](runbook.md#customer-domain-onboarding-sop) - For multi-tenant domain mapping
+- [Database Schema](../../supabase/migrations/) - Database structure and migrations
+- [API Documentation](../../backend/app/api/) - API endpoints and business logic
+- [Project Status](../project_status.md) - Implementation status and verification criteria
+
+### Maintenance
+
+**Regular Tasks**:
+- Weekly: Check uptime monitoring alerts
+- Monthly: Review resource usage (CPU, RAM, disk)
+- Quarterly: Review and rotate database backups
+- Annually: Review and update SSL/TLS certificates (auto-renew, but verify)
+
+**Security Hardening** (recommended post-deployment):
+- Enable UFW firewall: `ufw enable && ufw allow 22,80,443/tcp`
+- Disable root SSH login (use key-based auth only)
+- Set up fail2ban for SSH brute-force protection
+- Regular security updates: `apt update && apt upgrade -y`
+- Database access: Only via SSH tunnel (no public exposure)
+
+**Cost Optimization**:
+- Monitor VPS usage: Right-size VPS based on actual load
+- Consider reserved instances for long-term customers (Hetzner discounts)
+- Archive old backups to object storage (Hetzner S3-compatible storage)
+
