@@ -105,6 +105,120 @@ Verification passes if `source_commit` from production starts with the expected 
 
 
 
+
+### Admin UI — Backoffice Visual Style ✅
+
+**Date Completed:** 2026-01-07
+
+**Overview:**
+Applied a cohesive "soft beige premium backoffice" visual theme to the Admin UI, featuring warm colors, rounded UI elements, pill-style navigation, and improved typography. All existing functionality preserved.
+
+**Problem:**
+- Admin UI lacked visual cohesion and premium feel
+- Generic gray/white design didn't reflect modern backoffice UX standards
+- No consistent design tokens or typography hierarchy
+- UI elements felt disconnected and utilitarian
+
+**Solution:**
+
+**Design Tokens & Theming:**
+- Added CSS variables for backoffice theme in `frontend/app/globals.css`:
+  - `--bo-bg`: #F5F1E8 (warm beige background)
+  - `--bo-surface`: #FFFFFF (white cards)
+  - `--bo-surface-2`: #FBFAF7 (secondary surface)
+  - `--bo-border`: #E7E3DA (light borders)
+  - `--bo-shadow`: Subtle shadow tokens
+  - `--bo-radius-*`: Border radius tokens (sm/default/lg/xl)
+- Extended Tailwind config with `bo-*` utility classes
+- Preserved existing branding tokens (`--t-*`) for per-tenant customization
+
+**Typography:**
+- Added Plus Jakarta Sans for headings (`font-heading`)
+- Configured Inter for body text (`font-sans`)
+- Implemented via `next/font/google` with CSS variables
+- Typography hierarchy: H1 = 3xl, H2 = xl, Body = base/sm
+
+**Shell Layout:**
+- Warm beige app background (`bg-bo-bg`)
+- Sidebar: Pill-style container with `rounded-bo-xl`, shadow, white background
+- Navigation items: `rounded-full` pills with gradient active state
+- Topbar: Frosted glass effect with `backdrop-blur-sm`, rounded container
+- User indicator: Pill with green online dot
+
+**Component Styling:**
+- **Cards/Tables**: `rounded-bo-xl` (2rem corners), `shadow-bo-md`, white background
+- **Table headers**: `bg-bo-surface-2` with muted text, increased padding
+- **Table rows**: Hover effect with `hover:bg-bo-surface-2`
+- **Inputs**: `rounded-full` pills with shadow, white background
+- **Buttons**: `rounded-full` with transitions, subtle shadows
+- **Status badges**: `rounded-full` pills with soft background colors
+- **Pagination**: Pill buttons with consistent spacing
+
+**Files Changed:**
+- `frontend/app/globals.css` - Added backoffice CSS variables
+- `frontend/app/layout.tsx` - Added Plus Jakarta Sans font, updated body className
+- `frontend/tailwind.config.ts` - Extended theme with bo-* utilities
+- `frontend/app/components/AdminShell.tsx` - Applied pill navigation, warm beige background, frosted topbar
+- `frontend/app/bookings/page.tsx` - Updated cards, tables, inputs, badges to new style
+- `frontend/app/bookings/[id]/page.tsx` - Applied card/text styling
+- `frontend/app/properties/page.tsx` - Updated cards, tables, inputs to new style
+- `frontend/app/properties/[id]/page.tsx` - Applied card/text styling
+
+**Key Features:**
+- **Warm beige background**: Premium feel vs stark white
+- **Pill navigation**: Modern, friendly UI with rounded elements
+- **Consistent shadows**: Subtle depth without overwhelming
+- **Typography hierarchy**: Clear visual structure with dual fonts
+- **Frosted glass topbar**: Modern backdrop blur effect
+- **Soft status badges**: Rounded pills instead of sharp rectangles
+- **Generous padding**: Breathing room for content
+- **High contrast**: Readable text with proper color tokens
+
+**Browser Verification Checklist:**
+```bash
+# Navigate to Admin UI
+open https://admin.fewo.kolibri-visions.de/login
+
+# Visual verification:
+✓ Background is warm beige (#F5F1E8)
+✓ Sidebar has pill shape with rounded corners and shadow
+✓ Navigation items are pill-shaped (rounded-full)
+✓ Active nav item has gradient background
+✓ Topbar has frosted glass effect
+✓ Search input is pill-shaped
+✓ Cards/tables have large rounded corners
+✓ Status badges are pill-shaped
+✓ Buttons are rounded-full
+✓ Headings use Plus Jakarta Sans
+✓ Body text uses Inter
+
+# Test key pages:
+- /dashboard
+- /bookings + /bookings/{id}
+- /properties + /properties/{id}
+- /guests
+- /connections
+```
+
+**Status**: ✅ IMPLEMENTED
+
+**Runbook Reference:**
+- Section: "Admin UI Visual Style (Backoffice Theme)" in `backend/docs/ops/runbook.md` (line ~15280)
+- Includes: Theme tokens, design patterns, browser verification, troubleshooting (fonts, CSS variables, cache)
+
+**Operational Impact:**
+- Improved perceived quality of Admin UI
+- Consistent visual language across all pages
+- Better UX with clear hierarchy and generous spacing
+- Modern feel aligns with 2025+ design trends
+- No functionality changes - purely visual enhancement
+
+**Related Entries:**
+- [Admin UI — Bookings & Properties Listing] - Uses new card/table styling
+- [Admin UI — Booking & Property Detail Pages] - Uses new card styling
+
+---
+
 ### Admin UI — Booking & Property Detail Pages ✅
 
 **Date Completed:** 2026-01-07

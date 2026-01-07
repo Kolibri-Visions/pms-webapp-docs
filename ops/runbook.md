@@ -15276,6 +15276,154 @@ bash /app/scripts/pms_phase23_smoke.sh
 
 ---
 
+
+## Admin UI Visual Style (Backoffice Theme)
+
+### Overview
+
+The Admin UI uses a premium "soft beige backoffice" visual theme to provide a modern, cohesive user experience. The theme features warm colors, generous spacing, and rounded UI elements for a professional look.
+
+### Theme Tokens
+
+**CSS Variables** (defined in `frontend/app/globals.css`):
+- `--bo-bg`: #F5F1E8 (warm beige background)
+- `--bo-surface`: #FFFFFF (white cards/surfaces)
+- `--bo-surface-2`: #FBFAF7 (secondary surface tint)
+- `--bo-border`: #E7E3DA (light borders)
+- `--bo-text`: #111827 (primary text)
+- `--bo-text-muted`: #6B7280 (secondary text)
+- `--bo-shadow`: Subtle shadow for cards
+- `--bo-shadow-md`: Medium shadow for elevated elements
+- `--bo-radius-*`: Border radius tokens (sm: 0.5rem, default: 1rem, lg: 1.5rem, xl: 2rem)
+
+**Typography**:
+- Headings: Plus Jakarta Sans (via `font-heading` class)
+- Body: Inter (via `font-sans` class)
+- Sizes: H1 = 3xl, Section headers = xl, Body = base/sm
+
+### Design Patterns
+
+**Shell Layout**:
+- Background: Warm beige (`bg-bo-bg`)
+- Sidebar: Pill-style container with rounded corners, soft shadow, white background
+- Topbar: Frosted glass effect with backdrop blur, rounded container
+- Content area: Generous padding (p-6 to p-8)
+
+**Navigation**:
+- Active items: Gradient background (indigo-50 to indigo-100) with subtle shadow
+- Inactive items: Hover state with bg-bo-surface-2
+- Pills: Full rounded (`rounded-full`) for interactive elements
+
+**Cards & Tables**:
+- Cards: `rounded-bo-xl` (2rem), white background, border, shadow
+- Table headers: `bg-bo-surface-2` with muted text
+- Table rows: Hover effect with `hover:bg-bo-surface-2`
+- Status badges: `rounded-full` pills with soft background colors
+
+**Form Elements**:
+- Inputs: `rounded-full` with shadow, white background, bo-border
+- Buttons: `rounded-full` with transitions, subtle shadows
+- Focus: 2px ring with primary color
+
+### Browser Verification
+
+**Visual Checklist**:
+```bash
+# Navigate to Admin UI
+open https://admin.fewo.kolibri-visions.de/login
+
+# After login, verify:
+1. Background is warm beige (#F5F1E8)
+2. Sidebar has pill shape with rounded corners and shadow
+3. Navigation items are pill-shaped (rounded-full)
+4. Active nav item has gradient background
+5. Topbar has frosted glass effect
+6. Search input is pill-shaped
+7. Cards/tables have large rounded corners (rounded-bo-xl)
+8. Status badges are pill-shaped
+9. Buttons are rounded-full
+10. All text is readable (good contrast)
+11. Headings use Plus Jakarta Sans font
+12. Body text uses Inter font
+
+# Test pages:
+- /dashboard
+- /bookings
+- /bookings/{id}
+- /properties
+- /properties/{id}
+- /guests
+- /connections
+```
+
+### Troubleshooting
+
+**Problem**: Fonts not loading or fallback to system fonts
+
+**Solution**:
+```bash
+# 1. Check browser network tab for font download
+# Fonts should load from fonts.gstatic.com
+
+# 2. Hard refresh to clear cache
+# Browser: Cmd+Shift+R (Mac) / Ctrl+Shift+R (Windows)
+
+# 3. Verify font variables in DevTools
+# Elements → <body> → Should see --font-inter and --font-heading variables
+
+# 4. Check Next.js font optimization
+# Fonts are loaded via next/font/google, preloaded automatically
+```
+
+**Problem**: CSS variables not applied (colors look wrong)
+
+**Solution**:
+```bash
+# 1. Check if globals.css is loaded
+# DevTools → Network → Filter CSS → Should see globals.css
+
+# 2. Verify CSS variable values
+# DevTools → Elements → :root → Styles panel → Should see --bo-* variables
+
+# 3. Hard refresh browser cache
+# Sometimes Tailwind purge cache needs clearing
+
+# 4. Check Tailwind config
+# Ensure tailwind.config.ts extends theme with bo-* utilities
+```
+
+**Problem**: Components still show old styling
+
+**Solution**:
+```bash
+# 1. Check if page was updated
+# View source → Search for "bg-bo-surface" or "font-heading"
+
+# 2. Clear Next.js cache
+cd frontend && rm -rf .next && npm run dev
+
+# 3. Verify deployment
+# Check if latest commit is deployed via git log
+```
+
+**Problem**: Rounded corners too aggressive / not matching design
+
+**Solution**:
+```bash
+# Adjust CSS variables in frontend/app/globals.css
+# --bo-radius-xl: 2rem → Reduce to 1.5rem for less rounding
+# --bo-radius: 1rem → Adjust for standard cards
+
+# Then rebuild frontend
+cd frontend && npm run build
+```
+
+### Related Sections
+
+- [Admin UI Authentication Verification](#admin-ui-authentication-verification)
+- [Admin UI: Bookings & Properties Lists](#admin-ui-bookings--properties-lists)
+- [Admin UI: Booking & Property Detail Pages](#admin-ui-booking--property-detail-pages)
+
 ## Admin UI: Booking & Property Detail Pages
 
 
