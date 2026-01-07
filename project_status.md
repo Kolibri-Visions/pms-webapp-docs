@@ -103,6 +103,80 @@ Verification passes if `source_commit` from production starts with the expected 
 
 ## Completed Phases
 
+
+### Admin UI — Bookings & Properties Listing ✅
+
+**Date Completed:** 2026-01-07
+
+**Overview:**
+Replaced "coming soon" placeholder pages with real booking and property list pages in Admin UI. Implemented search, filtering, pagination, and comprehensive error handling for both list and detail views.
+
+**Problem:**
+- `/bookings` page showed "Buchungen kommt bald" placeholder
+- `/properties` page showed "Objekte kommt bald" placeholder
+- Admin users could not view or manage bookings/properties through UI
+- Booking detail page existed but status colors didn't support new "requested"/"under_review" statuses
+
+**Solution:**
+- **Bookings List** (`frontend/app/bookings/page.tsx`):
+  - Real table with API integration: `GET /api/v1/bookings?limit=50&offset=0`
+  - Client-side search: booking_reference, property_id, guest_id
+  - Status filter dropdown: All, requested, under_review, inquiry, pending, confirmed, checked_in, checked_out, cancelled, declined
+  - Pagination: 50 items per page with Zurück/Weiter buttons
+  - Row click navigation to `/bookings/{id}` detail page
+  - Error handling: 401 (session expired), 403 (forbidden), 503 (service unavailable)
+  - Empty state with helpful hints
+
+- **Properties List** (`frontend/app/properties/page.tsx`):
+  - Real table with API integration: `GET /api/v1/properties?limit=50&offset=0`
+  - Client-side search: internal_name, name, title, id
+  - Pagination: 50 items per page
+  - Same error/loading/empty state patterns as bookings
+
+- **Booking Detail** (`frontend/app/bookings/[id]/page.tsx`):
+  - Added status colors for "requested" (blue) and "under_review" (purple)
+  - Existing detail page now handles new booking statuses without crashes
+
+**Implementation:**
+
+**Files Changed:**
+- `frontend/app/bookings/page.tsx` - Real list implementation (replaced placeholder)
+- `frontend/app/properties/page.tsx` - Real list implementation (replaced placeholder)
+- `frontend/app/bookings/[id]/page.tsx` - Updated status colors for new statuses
+- `backend/docs/ops/runbook.md` - Added "Admin UI: Bookings & Properties Lists" section (221 lines, DOCS SAFE MODE)
+
+**Key Features:**
+- **Response format flexibility**: Handles both array and `{ items, total, limit, offset }` response shapes
+- **Debounced search**: 300ms delay prevents excessive re-renders
+- **Client-side filtering**: Works even if backend doesn't support search params
+- **Consistent error messages**: German translations, specific messages per HTTP status
+- **Accessible UI**: Text inputs have proper contrast (text-gray-900 bg-white)
+- **Loading states**: Spinner with descriptive text
+- **Empty states**: Context-aware messages (different for filtered vs unfiltered)
+
+**Testing:**
+- Manual browser verification checklist in runbook
+- Error state scenarios documented with curl examples
+- Troubleshooting guide for common issues (empty results, 401, 503)
+
+**Status**: ✅ IMPLEMENTED
+
+**Runbook Reference:**
+- Section: "Admin UI: Bookings & Properties Lists" in `backend/docs/ops/runbook.md` (line ~14869)
+- Includes: Overview, Features, API endpoints, Browser verification steps, Troubleshooting
+
+**Operational Impact:**
+- Admin users can now view and search bookings/properties through UI
+- No more "coming soon" placeholders
+- Consistent UX patterns across all list pages (Guests, Bookings, Properties)
+- Reduced support requests for "where are my bookings?"
+
+**Related Entries:**
+- [API - Allow Booking Status 'requested' in Responses] - Backend fix that enables booking detail page to work
+- [Admin UI Navigation + Guests CRM Interface] - Established UI patterns for list pages
+- [Booking Request Review Workflow] - Uses bookings list to review requested bookings
+
+---
 ### API - Allow Booking Status 'requested' in Responses ✅
 
 **Date Completed:** 2026-01-07

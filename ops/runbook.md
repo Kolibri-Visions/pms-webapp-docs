@@ -14864,6 +14864,227 @@ curl -sS -I -b /tmp/admin.cookies \
 ---
 
 ## Additional Resources
+---
+
+## Admin UI: Bookings & Properties Lists
+
+### Overview
+
+The Admin UI provides real list pages for `/bookings` and `/properties` with search, filtering, pagination, and error handling. These pages replace the previous "coming soon" placeholders.
+
+### Bookings List Page
+
+**URL**: `https://admin.fewo.kolibri-visions.de/bookings`
+
+**Requires**: JWT authentication (session cookie or Authorization header)
+
+**Features**:
+- **Table view** with columns: Referenz, Check-in, Check-out, Status, Preis, Erstellt
+- **Search** (client-side): Filters by booking_reference, property_id, or guest_id
+- **Status filter** dropdown: All, Angefragt (requested), In Prüfung (under_review), Anfrage (inquiry), Ausstehend (pending), Bestätigt (confirmed), Eingecheckt (checked_in), Ausgecheckt (checked_out), Storniert (cancelled), Abgelehnt (declined)
+- **Pagination**: 50 items per page with "Zurück" / "Weiter" buttons
+- **Row click**: Navigate to `/bookings/{id}` detail page
+- **Loading state**: Spinner with "Lade Buchungen..."
+- **Error states**:
+  - 401: "Session abgelaufen. Bitte melden Sie sich erneut an."
+  - 403: "Zugriff verweigert. Sie haben keine Berechtigung, Buchungen anzuzeigen."
+  - 503: "Service vorübergehend nicht verfügbar. Bitte versuchen Sie es später erneut."
+- **Empty state**: "Keine Buchungen gefunden" with hint about Public Booking Requests / Channel Manager Sync
+
+**API Endpoint**: `GET /api/v1/bookings?limit=50&offset=0`
+
+**Response Format**: Supports both array and `{ items: [], total: number, limit: number, offset: number }`
+
+### Properties List Page
+
+**URL**: `https://admin.fewo.kolibri-visions.de/properties`
+
+**Requires**: JWT authentication
+
+**Features**:
+- **Table view** with columns: Name, Interner Name, Status, ID, Erstellt
+- **Search** (client-side): Filters by internal_name, name, title, or id
+- **Pagination**: 50 items per page
+- **Loading/Error/Empty states**: Same pattern as bookings list
+- **No detail page link**: Properties detail page not yet implemented
+
+**API Endpoint**: `GET /api/v1/properties?limit=50&offset=0`
+
+**Response Format**: Same as bookings (supports array or object with items)
+
+### Booking Detail Page
+
+**URL**: `https://admin.fewo.kolibri-visions.de/bookings/{id}`
+
+**Features**:
+- **Status badges** with color coding:
+  - "requested" → Blue (bg-blue-100 text-blue-800)
+  - "under_review" → Purple (bg-purple-100 text-purple-800)
+  - "confirmed" → Green
+  - "pending" → Yellow
+  - "cancelled" → Red
+  - "checked_in" → Indigo
+  - "checked_out" → Gray
+- **Grid layout** with sections: Aufenthaltsinformationen, Preisinformationen, IDs und Referenzen, Zeitstempel, Notizen
+- **Guest link**: "Zum Gast →" button if guest_id exists and guest record found
+- **Error handling**: 401/403/404/503 with clear German messages
+
+**API Endpoint**: `GET /api/v1/bookings/{id}`
+
+### Browser Verification Steps
+
+**Step 1: Login to Admin UI**
+
+```bash
+# Open browser
+open https://admin.fewo.kolibri-visions.de/login
+
+# Login with admin credentials
+# Email: test1@example.com
+# Password: 12345678
+```
+
+**Step 2: Navigate to Properties**
+
+```bash
+# Click "Objekte" in sidebar navigation
+# Or directly: https://admin.fewo.kolibri-visions.de/properties
+
+# Expected:
+# - Table loads with property list (not "Objekte kommt bald" placeholder)
+# - Columns show: Name, Interner Name, Status, ID, Erstellt
+# - Search field works (type partial name, table filters client-side)
+# - Pagination buttons enabled if > 50 properties
+```
+
+**Step 3: Navigate to Bookings**
+
+```bash
+# Click "Buchungen" in sidebar navigation
+# Or directly: https://admin.fewo.kolibri-visions.de/bookings
+
+# Expected:
+# - Table loads with booking list (not "Buchungen kommt bald" placeholder)
+# - Columns show: Referenz, Check-in, Check-out, Status, Preis, Erstellt
+# - Status filter dropdown works (select "Angefragt" → shows only requested bookings)
+# - Search field works (type booking_reference → filters results)
+# - Pagination buttons enabled if > 50 bookings
+```
+
+**Step 4: Click on a Booking Row**
+
+```bash
+# Click any booking row in the table
+
+# Expected:
+# - Navigate to /bookings/{id} detail page
+# - Page loads booking details (no "Failed to fetch" error)
+# - Status badge displays correctly (e.g., "requested" shows blue badge)
+# - All sections render: Aufenthaltsinformationen, Preisinformationen, etc.
+# - "Zurück zur Buchungsliste" link works
+```
+
+### Troubleshooting
+
+**Problem**: Bookings or Properties page shows "Keine ... gefunden" (empty state) despite data in database
+
+**Root Causes**:
+1. **API returns empty array**: Backend query filters results (e.g., agency_id mismatch, RLS policy)
+2. **Client-side filters too restrictive**: Search query or status filter excludes all results
+3. **Pagination offset too high**: Requesting offset=500 when only 50 records exist
+
+**Solution**:
+```bash
+# 1. Check browser DevTools Network tab
+# Look for: GET /api/v1/bookings?limit=50&offset=0
+# Response should be: { items: [...], total: N } or [...]
+# If items is empty, issue is backend
+
+# 2. Verify JWT agency_id claim matches data in database
+# Open browser console: localStorage.getItem('supabase.auth.token')
+# Decode JWT (jwt.io): Check agency_id claim
+# Query database: SELECT COUNT(*) FROM bookings WHERE agency_id = '<claim-value>'
+
+# 3. Check RLS policies
+# Database console:
+SELECT * FROM pg_policies WHERE tablename = 'bookings';
+# Ensure policy allows current user's role and agency_id
+
+# 4. Reset filters in UI
+# Clear search field (click X button)
+# Set status filter to "Alle Status"
+# Reset pagination to page 1
+```
+
+**Problem**: Booking detail page returns HTTP 500 with ResponseValidationError
+
+**Root Cause**: Booking status value in database not in allowed Literal types (e.g., "requested" not in schema)
+
+**Solution**: Fixed in backend commit cb8da7f - Extended BookingStatus Literal to include "requested" and "under_review"
+
+**Verification**:
+```bash
+# Check deployed commit
+curl -s https://api.fewo.kolibri-visions.de/api/v1/ops/version | jq -r .source_commit
+
+# Should be cb8da7f or later (2026-01-07+)
+# If earlier commit, trigger deployment or wait for auto-deploy
+```
+
+**Problem**: Properties or Bookings page shows "Session abgelaufen" (401 error)
+
+**Root Cause**: JWT token expired or not present in request
+
+**Solution**:
+```bash
+# 1. Check if cookies are set
+# Browser DevTools → Application → Cookies → admin.fewo.kolibri-visions.de
+# Should see: sb-*-auth-token cookies
+
+# 2. If no cookies, re-login via /login page
+# Login sets new session cookies
+
+# 3. If cookies exist but still 401, check token validity
+# Network tab → Request Headers → Authorization: Bearer <token>
+# If no Authorization header, check that apiClient uses accessToken from useAuth()
+
+# 4. Check CORS configuration
+# Network tab → Failed request → Response Headers
+# If missing Access-Control-Allow-Origin, backend CORS misconfigured
+# See: [CORS Errors](#cors-errors-admin-console-blocked)
+```
+
+**Problem**: Properties or Bookings page shows "Service vorübergehend nicht verfügbar" (503 error)
+
+**Root Cause**: Backend database unavailable or schema drift
+
+**Solution**:
+```bash
+# 1. Check backend health
+curl -s https://api.fewo.kolibri-visions.de/health/ready | jq .
+
+# Expected: {"status": "up", "components": {"db": {"status": "up"}, ...}}
+# If db: "down", check [DB DNS / Degraded Mode](#db-dns--degraded-mode)
+
+# 2. Check backend logs
+docker logs pms-backend --tail 100 | grep -i "error\|503"
+
+# Look for: "Database unavailable", "Schema not installed", "Relation does not exist"
+# If schema errors, see [Schema Drift](#schema-drift)
+
+# 3. Verify backend container is running
+docker ps | grep pms-backend
+
+# If not running, restart via Coolify UI or docker start
+```
+
+### Related Sections
+
+- [Admin UI Authentication Verification](#admin-ui-authentication-verification) - For cookie-based SSR auth checks
+- [CORS Errors (Admin Console Blocked)](#cors-errors-admin-console-blocked) - For CORS configuration
+- [Booking Status Validation Error (500)](#booking-status-validation-error-500) - For status field validation errors
+- [Schema Drift](#schema-drift) - For database schema issues
+
 
 ### Smoke Scripts
 
