@@ -22494,6 +22494,11 @@ If schema changed, update the smoke script payload builder to match current API 
 - `JWT_TOKEN`: JWT with manager/admin role
 - Optional: `AGENCY_ID`, `PROPERTY_ID`, `ALLOWED_ORIGIN`
 
+**Public Booking Requests Payload Format:**
+- The `/api/v1/public/booking-requests` endpoint requires `date_from` and `date_to` fields (YYYY-MM-DD format)
+- Do NOT use `check_in`/`check_out` - these will cause validation errors
+- Example: `{"property_id": "...", "date_from": "2026-02-01", "date_to": "2026-02-05", "adults": 2, "children": 0, "guest": {...}}`
+
 **Usage:**
 ```bash
 HOST=https://pms-backend.production.example.com \
