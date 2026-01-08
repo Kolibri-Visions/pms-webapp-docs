@@ -3321,12 +3321,29 @@ echo "rc=$?"
 - `backend/docs/ops/runbook.md` - "P3 Public Direct Booking Hardening (Consolidated)" section with common issues, debugging steps, production testing checklist
 - Related individual P3 smoke scripts: `pms_p3a_idempotency_smoke.sh`, `pms_p3b_domain_host_cors_smoke.sh`, `pms_p3c_audit_review_smoke.sh`
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
+
+**PROD Evidence:**
+- **Verification Date:** 2026-01-08
+- **API Base URL:** https://api.fewo.kolibri-visions.de
+- **Source Commit:** 7be5dac3f36f63aaff6b865e610bde7e7bbc06e1
+- **Started At:** 2026-01-08T19:54:04.786115+00:00
+- **Smoke Script:** `backend/scripts/pms_public_direct_booking_hardening_smoke.sh`
+- **Smoke Result:** rc=0 (all tests PASS)
+- **Property ID:** 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
+- **Agency ID:** ffd0123a-10b6-40cd-8ad5-66eee9757ab7
+- **Tests Verified:**
+  - Test 1: CORS preflight with allowed origin ✅
+  - Test 2: Create booking request with Idempotency-Key (first request) ✅
+  - Test 3: Idempotency - retry same request returns same booking ID ✅
+  - Test 4: Idempotency - conflict detection returns HTTP 409 ✅
+  - Test 5: Audit log contains booking request created event ✅
+- **Audit Log Verification:** GET /api/v1/ops/audit-log returned HTTP 200 with action="public_booking_request_created"
 
 **Notes:**
 - This is a convenience wrapper that consolidates P3a/b/c tests for quick production validation
 - Individual P3a, P3b, P3c components are already ✅ VERIFIED separately
-- Status is IMPLEMENTED (not VERIFIED) until user provides PROD evidence of consolidated script execution
+- Consolidated script verified in production with all 5 tests passing
 
 ---
 
