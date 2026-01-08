@@ -3030,6 +3030,94 @@ echo "rc=$?"
 
 ---
 
+# P2 Pricing Management UI (Fees & Taxes)
+
+**Implementation Date:** 2026-01-08
+
+**Scope:** Admin UI for managing pricing fees and taxes with create/list/toggle active capabilities
+
+**Features Implemented:**
+
+1. **API PATCH Endpoints** (backend/app/api/routes/pricing.py):
+   - PATCH /api/v1/pricing/fees/{id} - Update fee (name, value_cents, value_percent, taxable, active)
+   - PATCH /api/v1/pricing/taxes/{id} - Update tax (name, percent, active)
+   - Validation: Ensures type-specific value fields (percent type requires value_percent, others require value_cents)
+   - RBAC: Requires manager/admin role
+   - Tenant scoping: Verifies fee/tax belongs to user's agency
+   - Immutable fields: type, property_id cannot be changed after creation
+
+2. **UI Page** (frontend/app/pricing/page.tsx):
+   - Property selector: Auto-picks first property, allows manual selection
+   - Tabs: Separate views for Fees and Taxes
+   - List view: Displays name, type, value, taxable, scope (property/agency), active status
+   - Create forms:
+     - Fee: name, type (per_stay/per_night/per_person/percent), value (€ or %), taxable checkbox, scope selector
+     - Tax: name, percent (%), scope selector
+   - Toggle active: Click status badge to PATCH active=true/false
+   - Toast notifications: Success/error feedback for all operations
+   - Loading states: Spinners during API calls
+   - Empty states: Helpful messages when no fees/taxes exist
+   - Client-side validation: Type-specific value field requirements
+
+3. **Smoke Script** (backend/scripts/pms_pricing_management_ui_smoke.sh):
+   - Test 1: Create fee (per_stay, €10.00, property-specific)
+   - Test 2: Create tax (7%, property-specific)
+   - Test 3: List fees (verify creation)
+   - Test 4: List taxes (verify creation)
+   - Test 5: PATCH fee active=false
+   - Test 6: PATCH tax active=false
+   - Test 7: Verify active filter (active=true excludes inactive items)
+   - Test 8: Test quote endpoint integration (demonstrates fee/tax impact)
+   - Auto-picks property if PROPERTY_ID not provided
+   - Uses curl_auth() helper for reliable HTTP calls
+   - Exit codes: rc=0 success, rc=1+ failures
+
+4. **Documentation** (add-only):
+   - backend/scripts/README.md: Complete smoke script documentation with usage, env vars, troubleshooting
+   - backend/docs/ops/runbook.md: "P2 Pricing Management UI" section with features, verification commands, common issues
+   - Both docs include HOST-SERVER-TERMINAL verification commands
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- UI route: `/pricing` (accessible to manager/admin roles)
+- PATCH endpoints enable active toggle without full re-creation
+- Smoke script validates API flows used by UI (not UI itself)
+- VERIFIED status requires: PROD deployment + smoke script rc=0 + UI manual verification
+
+**Dependencies:**
+- P2 Pricing v1 Foundation (rate plans, quote calculation)
+- P2 Extension: Fees & Taxes (tables, GET/POST endpoints) ✅ VERIFIED
+- Migration 20260104200000 (pricing_fees, pricing_taxes tables)
+
+**Verification Commands (for VERIFIED status later):**
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify deploy (optional)
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# Run smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<manager/admin JWT>>>"
+./backend/scripts/pms_pricing_management_ui_smoke.sh
+echo "rc=$?"
+
+# Manual UI verification
+# 1. Login as manager/admin
+# 2. Navigate to /pricing
+# 3. Verify property selector works
+# 4. Create fee: name="Cleaning", type=per_stay, value=€50, taxable=yes
+# 5. Create tax: name="VAT", percent=19%
+# 6. Toggle active status for both
+# 7. Verify list updates correctly
+```
+
+---
+
 # P3a: Idempotency + Audit Log (Public Booking Requests)
 
 **Implementation Date:** 2026-01-06

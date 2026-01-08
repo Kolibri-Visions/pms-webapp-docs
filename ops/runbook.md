@@ -21446,6 +21446,168 @@ AGENCY_ID="<uuid>" \
 ```
 
 ---
+
+## P2 Pricing Management UI
+
+**Overview:** Admin UI for managing fees and taxes with create/list/toggle capabilities.
+
+**Purpose:** Provide property managers and admins a web interface to configure pricing fees (cleaning, service, etc.) and taxes without backend access.
+
+**UI Routes:**
+- `/pricing` - Main pricing management page with fees/taxes tabs
+
+**API Endpoints Used:**
+- `GET /api/v1/properties` - List properties (for selector)
+- `GET /api/v1/pricing/fees?property_id=&active=&limit=&offset=` - List fees
+- `POST /api/v1/pricing/fees` - Create fee
+- `PATCH /api/v1/pricing/fees/{id}` - Update fee (toggle active, edit values)
+- `GET /api/v1/pricing/taxes?property_id=&active=&limit=&offset=` - List taxes
+- `POST /api/v1/pricing/taxes` - Create tax
+- `PATCH /api/v1/pricing/taxes/{id}` - Update tax (toggle active, edit values)
+- `POST /api/v1/pricing/quote` - Calculate quote with fees/taxes (optional test)
+
+**Database Tables:**
+- `pricing_fees` - Property-specific or agency-wide fees (per_stay, per_night, per_person, percent types)
+- `pricing_taxes` - Property-specific or agency-wide taxes (percent type)
+- Migration: `20260104200000_add_pricing_fees_and_taxes.sql`
+
+**Features:**
+1. **Property Selector**: Auto-picks first property, allows manual selection
+2. **Tabs**: Separate views for Fees and Taxes
+3. **List View**: Paginated list with name, type, value, taxable, scope, active status
+4. **Create Forms**:
+   - Fee: name, type (per_stay/per_night/per_person/percent), value (cents or percent), taxable checkbox, scope (property/agency)
+   - Tax: name, percent, scope (property/agency)
+5. **Toggle Active**: Click status badge to toggle active=true/false using PATCH
+6. **Validation**: Client-side validation for required fields, type-specific value fields
+7. **Toast Notifications**: Success/error messages for CRUD operations
+
+**Verification Commands:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# [HOST-SERVER-TERMINAL] Optional: Verify deploy after Coolify redeploy
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# [HOST-SERVER-TERMINAL] Run pricing management UI smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<manager/admin JWT>>>"
+# Optional:
+# export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
+# export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+./backend/scripts/pms_pricing_management_ui_smoke.sh
+echo "rc=$?"
+
+# Expected output: All 8 tests pass, rc=0
+```
+
+**Common Issues:**
+
+### PATCH Endpoints Return 404
+
+**Symptom:** UI shows error when toggling active status: "Failed to update fee/tax".
+
+**Cause:** PATCH endpoints not deployed yet (added in this release).
+
+**How to Debug:**
+```bash
+# Check if PATCH endpoints exist in OpenAPI schema
+curl -sS "$HOST/openapi.json" | jq '.paths["/api/v1/pricing/fees/{fee_id}"]'
+curl -sS "$HOST/openapi.json" | jq '.paths["/api/v1/pricing/taxes/{tax_id}"]'
+
+# Should return method "patch" with parameters
+```
+
+**Solution:** Ensure latest backend deployed with commit containing PATCH endpoints.
+
+### UI Shows "Failed to load fees/taxes"
+
+**Symptom:** UI displays error toast, browser console shows 401/403/500.
+
+**Possible Causes:**
+1. JWT token expired (401)
+2. User lacks manager/admin role (403)
+3. Migrations not applied - pricing_fees/pricing_taxes tables missing (500)
+
+**How to Debug:**
+```bash
+# Check JWT expiration
+echo $JWT_TOKEN | cut -d'.' -f2 | base64 -d | jq '.exp'
+date -r $(echo $JWT_TOKEN | cut -d'.' -f2 | base64 -d | jq -r '.exp')
+
+# Check JWT role
+echo $JWT_TOKEN | cut -d'.' -f2 | base64 -d | jq '.role'
+# Should be "manager" or "admin"
+
+# Check tables exist
+psql $DATABASE_URL -c "\dt pricing_*"
+# Should show: pricing_fees, pricing_taxes
+
+# Check backend logs
+docker logs pms-backend --tail 50 | grep -E "pricing|fees|taxes"
+```
+
+**Solution:**
+- Refresh JWT token if expired
+- Verify user has manager/admin role
+- Apply migration 20260104200000 if tables missing
+
+### Create Fee/Tax Returns Validation Error
+
+**Symptom:** UI shows "Failed to create fee: value_percent is required for percent type fees" or similar.
+
+**Cause:** Client-side validation mismatch with backend requirements.
+
+**Validation Rules:**
+- **Fee (percent type)**: Must have `value_percent` (0-100), `value_cents` must be null
+- **Fee (other types)**: Must have `value_cents` (≥0), `value_percent` must be null
+- **Tax**: Must have `percent` (0-100)
+- **All**: `name` required (1-255 chars), `active` defaults to true
+
+**Solution:** Check form inputs match type-specific requirements, ensure UI sends correct payload shape.
+
+### Active Toggle Doesn't Filter List
+
+**Symptom:** After toggling fee/tax to inactive, it still appears in active=true filtered list.
+
+**Cause:** Frontend may not be re-fetching list after PATCH, or active filter query param not working.
+
+**How to Debug:**
+```bash
+# Verify PATCH worked
+curl -X GET "$HOST/api/v1/pricing/fees?property_id=<uuid>" \
+  -H "Authorization: Bearer $JWT_TOKEN" | jq '.[] | {id, name, active}'
+
+# Verify active filter works
+curl -X GET "$HOST/api/v1/pricing/fees?property_id=<uuid>&active=true" \
+  -H "Authorization: Bearer $JWT_TOKEN" | jq 'length'
+
+curl -X GET "$HOST/api/v1/pricing/fees?property_id=<uuid>&active=false" \
+  -H "Authorization: Bearer $JWT_TOKEN" | jq 'length'
+```
+
+**Solution:** Ensure UI re-fetches list after PATCH, verify backend active filter logic.
+
+### No Properties Found
+
+**Symptom:** UI shows "No properties found. Create one to get started."
+
+**Cause:** Agency has no properties, or JWT agency_id doesn't match any properties.
+
+**Solution:**
+- Create a property first via `/properties` UI or API
+- Verify JWT agency_id matches property agency_id
+- Check backend logs for tenant scoping issues
+
+**Related Documentation:**
+- [Scripts README: P2 Pricing Management UI](../../scripts/README.md#p2-pricing-management-ui-smoke-test-pms_pricing_management_ui_smokesh) - Smoke script usage
+- [Project Status: P2 Pricing Management UI](../project_status.md) - Implementation status
+
+---
 ## OPS endpoints: Auth & Zugriff
 
 ### Current Behavior (as deployed)
