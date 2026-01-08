@@ -3549,6 +3549,27 @@ To mark Phase 21 as VERIFIED in production:
   - Booking window rules (max future days)
   - Malformed date handling
 
+**Production Hotfix (2026-01-08) - Phase 21C Bugfix:**
+- 🐛 Fixed availability block overlap returning HTTP 500 instead of 409
+  - Root cause: Exception conversion layer (`ConflictException` → `ConflictError`) didn't properly propagate
+  - Fix: Removed conversion, let `ConflictException` propagate naturally (already has status_code=409 and registered handler)
+  - Impact: Smoke test TEST 3 (overlap detection) now passes with 409 Conflict
+  - Location: `backend/app/api/routes/availability.py:311-314`
+- ✅ Added missing `GET /api/v1/availability/blocks/{block_id}` endpoint
+  - Returns 200 with block details when found, 404 when not found
+  - Required by smoke test TEST 4 (was returning 405 Method Not Allowed)
+  - Service method: `AvailabilityService.get_block()` in `backend/app/services/availability_service.py:216-246`
+  - Route handler: `availability.py:329-368`
+- ✅ Added automated tests for bugfix validation
+  - `test_get_block_by_id_success()` - validates GET returns 200 with correct data
+  - `test_get_block_by_id_not_found()` - validates GET returns 404 for non-existent block
+  - Existing `test_create_overlapping_blocks_returns_409()` now passes (overlap returns 409, not 500)
+  - Location: `backend/tests/integration/test_availability.py:299-356`
+- ✅ Documentation updates (DOCS SAFE MODE - add-only)
+  - Runbook: Added "Availability Block Overlap Returns 500 Instead of 409" troubleshooting entry
+  - Location: `backend/docs/ops/runbook.md:3523-3554`
+- 📝 Status: Phase 21 remains **IMPLEMENTED (NOT VERIFIED)** - smoke script must pass in production before marking VERIFIED
+
 ## Test Coverage Status
 
 ### Smoke Scripts

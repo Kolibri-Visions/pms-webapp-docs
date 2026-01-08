@@ -3520,7 +3520,40 @@ curl -H "Authorization: Bearer $TOKEN" \
   "$API/api/v1/availability?property_id=$PID"
 ```
 
-#### 2. Schema Drift Symptoms
+#### 2. Availability Block Overlap Returns 500 Instead of 409
+
+**Date Added:** 2026-01-08 (Phase 21C Bugfix)
+
+**Symptom:** `POST /api/v1/availability/blocks` with overlapping dates returns HTTP 500 Internal Server Error instead of 409 Conflict
+
+**Root Cause:** Exception handler for `ConflictException` was converting to `ConflictError` which didn't properly propagate to FastAPI's exception handling system
+
+**Fix Applied:** Removed exception conversion layer - `ConflictException` now propagates naturally (already has status_code=409 and registered exception handler)
+
+**Verification:**
+```bash
+# Create first block
+curl -X POST "$API/api/v1/availability/blocks" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"property_id":"'$PID'","start_date":"2026-02-01","end_date":"2026-02-08","reason":"Test"}'
+# → HTTP 201 Created
+
+# Create overlapping block (should return 409, not 500)
+curl -X POST "$API/api/v1/availability/blocks" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"property_id":"'$PID'","start_date":"2026-02-05","end_date":"2026-02-10","reason":"Overlap"}'
+# → HTTP 409 Conflict (NOT 500)
+```
+
+**Related Endpoints:**
+- `GET /api/v1/availability/blocks/{block_id}` - Retrieve single block (added in Phase 21C)
+- `DELETE /api/v1/availability/blocks/{block_id}` - Delete block (existing)
+
+**Smoke Test:** `backend/scripts/pms_availability_phase21_smoke.sh` validates all block operations including overlap detection
+
+#### 3. Schema Drift Symptoms
 
 **Symptom:** API returns `503 Service Unavailable` with error message `"Schema not installed"` or `"Schema out of date"`
 
