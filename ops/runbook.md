@@ -21524,6 +21524,51 @@ curl -sS "$HOST/openapi.json" | jq '.paths["/api/v1/pricing/taxes/{tax_id}"]'
 
 **Solution:** Ensure latest backend deployed with commit containing PATCH endpoints.
 
+### PATCH Toggle Returns 500 Database Error
+
+**Symptom:** Smoke test Test 5/6 fails with 500 Database error when calling PATCH `/api/v1/pricing/fees/{id}` or `/api/v1/pricing/taxes/{id}` to toggle active status. Response: `{"detail":{"error":"internal_server_error","message":"Database error occurred","path":null}}`
+
+**Root Cause:** Bug in dynamic UPDATE query builder in `backend/app/api/routes/pricing.py`. The code incorrectly incremented `param_count` before adding `updated_at = NOW()`, causing parameter count mismatch. PostgreSQL expects N parameters but only N-1 were provided.
+
+**Example Flow (Buggy Code):**
+```python
+# When only updating active field:
+param_count = 1  # for active
+update_fields = ["active = $1"]
+params = [False]
+
+# Bug: Increment param_count for NOW() (which needs no param!)
+param_count = 2  # WRONG
+update_fields.append("updated_at = NOW()")
+
+# Add fee_id as final param
+param_count = 3  # WRONG - should be 2
+params.append(fee_id)
+
+# Query: WHERE id = $3
+# Params: [False, fee_id]  # Only 2 params!
+# PostgreSQL error: $3 doesn't exist
+```
+
+**How to Debug:**
+```bash
+# Check backend logs for asyncpg parameter errors
+docker logs pms-backend --tail 100 | grep -E "pricing|Parameter|asyncpg"
+
+# Verify pricing.py has fix (param_count should NOT increment before NOW())
+grep -A 2 "updated_at = NOW()" backend/app/api/routes/pricing.py
+# Expected: No param_count += 1 on line before NOW()
+```
+
+**Solution:** Fixed in commit that removed incorrect `param_count += 1` on lines 464 and 673 (for fees and taxes respectively). The `NOW()` function doesn't use a parameter, so param_count should not be incremented. Ensure backend code is updated and redeployed.
+
+**Verification:**
+```bash
+# Run smoke test to verify fix
+HOST="$PROD_API" JWT_TOKEN="$TOKEN" ./backend/scripts/pms_pricing_management_ui_smoke.sh
+# Expected: Test 5 PASSED, Test 6 PASSED
+```
+
 ### UI Shows "Failed to load fees/taxes"
 
 **Symptom:** UI displays error toast, browser console shows 401/403/500.

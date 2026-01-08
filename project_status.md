@@ -3084,6 +3084,7 @@ echo "rc=$?"
 - PATCH endpoints enable active toggle without full re-creation
 - Smoke script validates API flows used by UI (not UI itself)
 - VERIFIED status requires: PROD deployment + smoke script rc=0 + UI manual verification
+- Bug fix 2026-01-08: Fixed PATCH 500 Database error caused by incorrect param_count increment before `updated_at = NOW()` in dynamic UPDATE query builder (lines 464, 673 in pricing.py)
 
 **Dependencies:**
 - P2 Pricing v1 Foundation (rate plans, quote calculation)
