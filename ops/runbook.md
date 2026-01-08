@@ -3524,27 +3524,37 @@ curl -H "Authorization: Bearer $TOKEN" \
 
 **Date Added:** 2026-01-08 (Phase 21C Bugfix)
 
-**Symptom:** `POST /api/v1/availability/blocks` with overlapping dates returns HTTP 500 Internal Server Error instead of 409 Conflict
+**Symptom:** `POST /api/v1/availability/blocks` with overlapping dates returns HTTP 500 Internal Server Error with `{"detail":"Failed to create availability block"}` instead of 409 Conflict (observed in Phase 21 smoke test TEST 3)
 
-**Root Cause:** Exception handler for `ConflictException` was converting to `ConflictError` which didn't properly propagate to FastAPI's exception handling system
+**Root Cause:** PostgreSQL EXCLUSION constraint violation (SQLSTATE 23P01 on `inventory_ranges_no_overlap`) was being raised as generic `asyncpg.PostgresError` instead of specific `asyncpg.exceptions.ExclusionViolationError`. Original exception handler only caught the specific type, causing overlap errors to fall through to generic 500 handler.
 
-**Fix Applied:** Removed exception conversion layer - `ConflictException` now propagates naturally (already has status_code=409 and registered exception handler)
+**Fix Applied:** Made exception handling robust by catching broader `asyncpg.PostgresError` and checking `e.sqlstate == '23P01'` to detect exclusion violations regardless of specific exception subclass. Logs constraint name and sqlstate for ops debugging.
 
-**Verification:**
+**Location:** `backend/app/services/availability_service.py:357-380` (`_create_inventory_range` method)
+
+**Verification (HOST-SERVER-TERMINAL):**
 ```bash
-# Create first block
-curl -X POST "$API/api/v1/availability/blocks" \
+# 1. Verify deployed commit includes fix (check /api/v1/ops/version)
+curl -k -sS https://api.fewo.kolibri-visions.de/api/v1/ops/version | jq -r '.commit'
+# → Should show commit hash containing this fix (post-cc42fe7)
+
+# 2. Run Phase 21 smoke test (all 6 tests should pass, especially TEST 3 overlap → 409)
+JWT_TOKEN="<admin-or-manager-token>" PID="<property-id>" ./backend/scripts/pms_availability_phase21_smoke.sh ; echo "Exit code: $?"
+# → Exit code: 0 (all tests passed)
+# → TEST 3: Create overlapping block → ✓ PASS: HTTP 409 - overlap correctly rejected
+
+# 3. Manual verification (optional)
+curl -k -X POST "https://api.fewo.kolibri-visions.de/api/v1/availability/blocks" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"property_id":"'$PID'","start_date":"2026-02-01","end_date":"2026-02-08","reason":"Test"}'
+  -d '{"property_id":"'$PID'","start_date":"2026-02-01","end_date":"2026-02-08","reason":"Test"}' ; echo ""
 # → HTTP 201 Created
 
-# Create overlapping block (should return 409, not 500)
-curl -X POST "$API/api/v1/availability/blocks" \
+curl -k -X POST "https://api.fewo.kolibri-visions.de/api/v1/availability/blocks" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"property_id":"'$PID'","start_date":"2026-02-05","end_date":"2026-02-10","reason":"Overlap"}'
-# → HTTP 409 Conflict (NOT 500)
+  -d '{"property_id":"'$PID'","start_date":"2026-02-05","end_date":"2026-02-10","reason":"Overlap"}' ; echo ""
+# → HTTP 409 Conflict (NOT 500) with {"error":"conflict","message":"Availability block overlaps..."}
 ```
 
 **Related Endpoints:**

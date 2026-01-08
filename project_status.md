@@ -3551,24 +3551,32 @@ To mark Phase 21 as VERIFIED in production:
 
 **Production Hotfix (2026-01-08) - Phase 21C Bugfix:**
 - 🐛 Fixed availability block overlap returning HTTP 500 instead of 409
-  - Root cause: Exception conversion layer (`ConflictException` → `ConflictError`) didn't properly propagate
-  - Fix: Removed conversion, let `ConflictException` propagate naturally (already has status_code=409 and registered handler)
-  - Impact: Smoke test TEST 3 (overlap detection) now passes with 409 Conflict
-  - Location: `backend/app/api/routes/availability.py:311-314`
-- ✅ Added missing `GET /api/v1/availability/blocks/{block_id}` endpoint
+  - **Symptom:** POST /api/v1/availability/blocks with overlapping dates returned 500 with `{"detail":"Failed to create availability block"}` (observed in Phase 21 smoke test TEST 3)
+  - **Root cause:** PostgreSQL EXCLUSION constraint violation (SQLSTATE 23P01 on `inventory_ranges_no_overlap`) was raised as generic `asyncpg.PostgresError` instead of specific `ExclusionViolationError`. Original exception handler only caught specific type, causing overlap errors to fall through to generic 500 handler.
+  - **Fix:** Made exception handling robust by catching broader `asyncpg.PostgresError` and checking `e.sqlstate == '23P01'` to detect exclusion violations regardless of specific exception subclass. Logs constraint name and sqlstate for ops debugging.
+  - **Location:** `backend/app/services/availability_service.py:357-380` (`_create_inventory_range` method)
+  - **Impact:** Smoke test TEST 3 (overlap detection) should now pass with 409 Conflict
+  - **Exception types handled:** `asyncpg.PostgresError` with sqlstate check for 23P01 (exclusion violation)
+- ✅ Added missing `GET /api/v1/availability/blocks/{block_id}` endpoint (first hotfix iteration, commit cc42fe7)
   - Returns 200 with block details when found, 404 when not found
   - Required by smoke test TEST 4 (was returning 405 Method Not Allowed)
   - Service method: `AvailabilityService.get_block()` in `backend/app/services/availability_service.py:216-246`
   - Route handler: `availability.py:329-368`
-- ✅ Added automated tests for bugfix validation
+- ✅ Automated test coverage
   - `test_get_block_by_id_success()` - validates GET returns 200 with correct data
   - `test_get_block_by_id_not_found()` - validates GET returns 404 for non-existent block
-  - Existing `test_create_overlapping_blocks_returns_409()` now passes (overlap returns 409, not 500)
-  - Location: `backend/tests/integration/test_availability.py:299-356`
+  - `test_create_overlapping_blocks_returns_409()` - validates overlap returns 409 (existing test, should now pass)
+  - Location: `backend/tests/integration/test_availability.py:93-141, 299-356`
 - ✅ Documentation updates (DOCS SAFE MODE - add-only)
-  - Runbook: Added "Availability Block Overlap Returns 500 Instead of 409" troubleshooting entry
-  - Location: `backend/docs/ops/runbook.md:3523-3554`
-- 📝 Status: Phase 21 remains **IMPLEMENTED (NOT VERIFIED)** - smoke script must pass in production before marking VERIFIED
+  - Runbook: "Availability Block Overlap Returns 500 Instead of 409" troubleshooting entry with verification commands
+  - Location: `backend/docs/ops/runbook.md:3523-3564`
+- 📝 **Status:** Phase 21 remains **IMPLEMENTED (NOT VERIFIED)** - awaiting production verification after this hotfix
+- 🔧 **Verification after deployment:**
+  ```bash
+  # HOST-SERVER-TERMINAL
+  curl -k -sS https://api.fewo.kolibri-visions.de/api/v1/ops/version | jq -r '.commit'  # Check commit hash includes fix
+  JWT_TOKEN="<token>" PID="<property-id>" ./backend/scripts/pms_availability_phase21_smoke.sh ; echo "Exit code: $?"  # Should be 0 (all tests pass)
+  ```
 
 ## Test Coverage Status
 
