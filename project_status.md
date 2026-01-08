@@ -4723,9 +4723,11 @@ curl -k -sS -i "$API_BASE_URL/api/v1/ops/audit-log" | sed -n '1,25p'
 **Notes:**
 - Owner portal is read-only in O1 MVP (no create/edit operations for owners)
 - RBAC enforced: Staff endpoints blocked for owners (403), owner endpoints blocked for non-owners (403)
-- Tenant isolation: All queries scoped by agency_id from JWT claims
+- Tenant resolution: Robust fallback chain (JWT claim → x-agency-id header → auto-detect single membership)
+- Tenant isolation: All queries scoped by agency_id (resolved via fallback chain)
 - Property ownership: properties.owner_id NULL = agency-owned, non-NULL = owner-assigned
 - get_current_owner() dependency checks is_active=true before granting access
+- Tenant resolution fix (2026-01-09): Modified get_current_agency_id() to support standard Supabase JWTs without agency_id claim. Validates x-agency-id header via team_members membership check. Auto-detects single agency membership. Smoke script auto-derives AGENCY_ID from PROPERTY_ID.
 - VERIFIED status requires: PROD deployment + smoke script rc=0 + UI manual verification + PROD evidence
 
 **Dependencies:**

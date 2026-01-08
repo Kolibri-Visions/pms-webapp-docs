@@ -24239,6 +24239,50 @@ echo "rc=$?"
 
 **Common Issues:**
 
+### Tenant Resolution and x-agency-id Header
+
+**Symptom:** API returns errors like "Missing agency_id in token claims" or "Cannot resolve agency: user has N agency memberships".
+
+**Root Cause:** Standard Supabase JWTs don't contain `agency_id` claim. API uses robust tenant resolution with fallback chain.
+
+**Tenant Resolution Order:**
+1. **JWT claim** `agency_id` (if present, used directly)
+2. **x-agency-id header** (validated via team_members membership check)
+3. **Auto-detect** (if user has exactly one agency membership)
+4. **Error 400** (if user has 0 or multiple memberships without explicit header)
+
+**How to Use x-agency-id Header:**
+
+For users with multiple agency memberships or when JWT doesn't contain agency_id:
+
+```bash
+# Get user's agency memberships
+psql $DATABASE_URL -c "SELECT agency_id, role FROM team_members WHERE user_id = '<auth_user_id>';"
+
+# Include x-agency-id header in API requests
+curl -X GET "$HOST/api/v1/owners" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "x-agency-id: <agency_uuid>"
+```
+
+**Smoke Script Usage:**
+
+The `pms_owner_portal_smoke.sh` script automatically:
+- Derives AGENCY_ID from PROPERTY_ID (fetches property details)
+- Includes x-agency-id header in manager calls when AGENCY_ID is set
+- Falls back to auto-detection if AGENCY_ID not set (works for single-agency users)
+
+To manually set AGENCY_ID:
+```bash
+export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+./backend/scripts/pms_owner_portal_smoke.sh
+```
+
+**Troubleshooting:**
+- **"Cannot resolve agency: user has N agency memberships"**: Set x-agency-id header or export AGENCY_ID for smoke script
+- **403 "not a member of agency"**: x-agency-id header provided but user is not in team_members for that agency
+- **Auto-detect works**: User has exactly one agency membership, no header needed
+
 ### Owner Endpoints Return 403 (Not Registered)
 
 **Symptom:** Owner user gets 403 Forbidden when accessing `/api/v1/owner/properties` or `/api/v1/owner/bookings`. Error message: "Access denied: user is not registered as an owner".
