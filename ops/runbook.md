@@ -15482,6 +15482,7 @@ Layout v2.1 adds comprehensive polish to the Admin UI with language switcher (RT
   - Profil (`/profile`)
   - Profil bearbeiten (`/profile/edit`)
   - Sicherheit (`/profile/security`)
+  - Abmelden (`performLogout()` - client-side signOut with redirect to /login)
 - Stub pages created with AdminShell layout
 
 **Sidebar Collapsed Polish**:

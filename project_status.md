@@ -430,6 +430,113 @@ open https://admin.fewo.kolibri-visions.de/dashboard
 - [Admin UI — Backoffice Theme v2] - Layout foundation with blue palette and Lucide icons
 - [Admin UI — Build Hotfix (LucideIcon Typing)] - TypeScript compatibility
 
+
+### Admin UI — Profile Dropdown: Abmelden (Logout) ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-08
+
+**Overview:**
+Added "Abmelden" (logout) as the last item in the profile dropdown menu with proper divider separation. Implements client-side logout using centralized `performLogout()` utility that clears session, signs out from Supabase, and redirects to login page.
+
+**Problem:**
+- No logout option in the Admin UI topbar
+- Users had to manually clear cookies or navigate to /auth/logout URL
+- No visible way to sign out without leaving the admin interface
+- Profile dropdown felt incomplete without logout action
+
+**Solution:**
+
+**Profile Dropdown Enhancement:**
+- Added "Abmelden" as the last menu item (after Profil, Profil bearbeiten, Sicherheit)
+- Separated with visual divider (`border-t border-bo-border`) for clear distinction
+- Uses LogOut icon from lucide-react (consistent with icon system)
+- Same styling as other menu items (hover:bg-bo-surface-2 transition)
+
+**Logout Implementation:**
+- Reuses existing centralized logout utility: `performLogout()` from `app/lib/logout.ts`
+- Logout flow:
+  1. Close profile dropdown
+  2. Clear localStorage (access_token, user)
+  3. Clear cookies (access_token, user_id)
+  4. Call `supabase.auth.signOut()` to invalidate Supabase session
+  5. Hard redirect to `/login` (window.location.assign for reliability)
+- Error handling: forces redirect even if signOut fails
+
+**Files Changed:**
+- `frontend/app/components/AdminShell.tsx`:
+  - Added LogOut import from lucide-react
+  - Imported performLogout from "../lib/logout"
+  - Added handleLogout async function
+  - Added divider + Abmelden button in profile dropdown JSX
+
+**Implementation Details:**
+```tsx
+// Import
+import { LogOut, type LucideIcon } from "lucide-react";
+import { performLogout } from "../lib/logout";
+
+// Handler
+const handleLogout = async () => {
+  setIsProfileDropdownOpen(false);
+  await performLogout();
+};
+
+// Menu item (after divider)
+<button
+  onClick={handleLogout}
+  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-bo-surface-2 transition-colors text-sm text-bo-text"
+>
+  <LogOut className="w-4 h-4 text-bo-text-muted" strokeWidth={1.75} />
+  Abmelden
+</button>
+```
+
+**Key Features:**
+- **Centralized logout:** Uses existing performLogout() utility (no duplication)
+- **Reliable redirect:** Hard window.location.assign (not Next.js router cache)
+- **Complete cleanup:** Clears localStorage, cookies, and Supabase session
+- **Error resilient:** Redirects to login even if signOut fails
+- **Visual separation:** Clear divider before logout action
+- **Consistent styling:** Matches existing profile menu items
+
+**Browser Verification Required:**
+```bash
+# Navigate to Admin UI
+open https://admin.fewo.kolibri-visions.de/dashboard
+
+# Profile dropdown checks:
+□ Click profile icon (User icon in topbar)
+□ Dropdown shows menu items:
+  - Profil
+  - Profil bearbeiten
+  - Sicherheit
+  - (divider line)
+  - Abmelden (with LogOut icon)
+□ Hover over Abmelden → bg changes to bo-surface-2
+□ Click Abmelden → redirects to /login
+□ Verify logged out: localStorage cleared, session ended
+□ Try accessing /dashboard → redirects back to /login (auth check)
+```
+
+**Status**: ✅ IMPLEMENTED (NOT VERIFIED)
+
+**Runbook Reference:**
+- Section: "Admin UI Layout Polish v2.1 (Profile + Language + Sidebar Polish)" in `backend/docs/ops/runbook.md` (line ~15478)
+- Note added: "Abmelden (performLogout() - client-side signOut with redirect to /login)"
+
+**Operational Impact:**
+- Users can now sign out directly from the UI (no need to manually clear cookies)
+- Improved UX: logout is where users expect it (profile dropdown)
+- Consistent with standard web app patterns (profile menu contains logout)
+- Reliable session cleanup (prevents stale auth states)
+- No breaking changes to existing auth flow
+
+**Related Entries:**
+- [Admin UI — Topbar + Sidebar Polish v2.1] - Profile dropdown foundation
+- [Admin UI — Header: Profile Dropdown + Language Switch] - Initial profile dropdown implementation
+- [Admin UI Authentication Verification] - Auth flow and login page
+
+---
 ---
 
 ### Admin UI — Build Hotfix (LucideIcon Typing) ✅ IMPLEMENTED
