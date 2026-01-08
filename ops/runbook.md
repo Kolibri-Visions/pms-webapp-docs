@@ -18590,6 +18590,160 @@ WHERE b.guest_id = $1 AND b.agency_id = $2 AND b.deleted_at IS NULL
 
 ---
 
+## Admin UI — Visual QA Checklist (Layout v2)
+
+**Purpose:** Browser-based verification checklist for Admin UI layout and visual quality after Theme v2 updates.
+
+**What Changed in v2:**
+- Primary palette: Blue/indigo (#2563eb) instead of green (trustworthy, modern)
+- Icons: Lucide React icons (professional, consistent) instead of emojis
+- Sidebar scrollbar: Hidden (scrollbar-hide utility) but scroll still works
+- Header overlap: Fixed with sticky + blur background (no content overlap)
+- Sidebar animation: Removed width transitions to eliminate jank on navigation
+- Brand header: Improved with gradient avatar + divider
+- Collapsed state: Better tooltips, rounded-2xl icon containers, professional spacing
+
+**Browser Verification Checklist:**
+
+```bash
+# Navigate to Admin UI
+open https://admin.fewo.kolibri-visions.de/login
+
+# After login, verify Layout v2:
+□ Background is very light slate (#f8fafc)
+□ Sidebar uses Lucide icons (not emojis)
+□ Sidebar scrollbar is hidden (but scroll works if needed)
+□ Sidebar has NO width animation jank when navigating between pages
+□ Brand header shows gradient avatar + agency name with divider below
+□ Active nav item has blue background (#2563eb) with white icon
+□ Inactive nav items have rounded-2xl light backgrounds
+□ Topbar is sticky with blur background (bg-bo-bg/80 backdrop-blur-md)
+□ Topbar does NOT overlap content when scrolling
+□ Primary buttons use blue (#2563eb)
+□ Status badges use semantic colors (green=success, red=danger, blue=info)
+□ Collapsed sidebar shows tooltips on hover
+□ Collapsed sidebar icons are in rounded-2xl containers (not circles)
+□ Search bar in topbar uses Lucide Search icon
+□ Notification buttons use Lucide icons (MessageSquare, Bell)
+
+# Test navigation between pages (NO sidebar jank):
+- Click Dashboard → no sidebar width animation
+- Click Buchungen → no sidebar width animation
+- Click Objekte → no sidebar width animation
+- Click Verbindungen → no sidebar width animation
+- Sidebar should feel stable, only color changes on active item
+
+# Test scrolling (header doesn't overlap):
+- Go to /bookings (list page with table)
+- Scroll down → header stays at top with blur, table rows visible below header
+- Header NEVER covers table content
+
+# Test collapsed mode:
+- Click collapse button (ChevronLeft icon)
+- Sidebar width changes to narrow (w-24)
+- Only icons visible, text hidden
+- Hover over nav icons → tooltips appear with labels
+- No visible scrollbar in collapsed mode
+- Icons in rounded-2xl containers with proper spacing
+
+# Test palette consistency:
+- Check buttons: should use blue primary (#2563eb)
+- Check active states: blue not green
+- Check status chips: green for confirmed, red for cancelled, blue for requested
+```
+
+**Common Issues:**
+
+**Problem:** Sidebar still shows scrollbar
+
+**Solution:**
+```bash
+# Check if scrollbar-hide class is applied
+# DevTools → Inspect nav element → Should have class "scrollbar-hide"
+# CSS should have:
+#   -ms-overflow-style: none;
+#   scrollbar-width: none;
+#   ::-webkit-scrollbar { display: none; }
+
+# If missing, rebuild frontend:
+cd frontend && rm -rf .next && npm run dev
+```
+
+**Problem:** Sidebar still animates/janks on navigation
+
+**Solution:**
+```bash
+# Check sidebar aside element in DevTools
+# Should NOT have "transition-all" or "transition-width" classes
+# Only collapse state changes width: isCollapsed ? "w-24" : "w-72"
+# No duration/animation on width change
+
+# Verify AdminShell.tsx line ~287-291:
+# Should be: className={`hidden lg:block flex-shrink-0 ${isCollapsed ? "w-24" : "w-72"}`}
+# NOT: className="... transition-all duration-300 ..."
+```
+
+**Problem:** Header overlaps content when scrolling
+
+**Solution:**
+```bash
+# Check header element in DevTools
+# Should have: "sticky top-0 z-30 bg-bo-bg/80 backdrop-blur-md"
+# Ensure main content is NOT using negative margin or absolute positioning
+# Content should flow naturally below header
+
+# Verify layout structure:
+# <div flex flex-col>
+#   <header sticky> ... header content
+#   <main flex-1> ... page content (starts AFTER header, not under it)
+```
+
+**Problem:** Icons still showing as emojis
+
+**Solution:**
+```bash
+# Check if lucide-react is installed:
+cd frontend && npm list lucide-react
+# Should show: lucide-react@x.x.x
+
+# If not installed:
+npm install lucide-react
+
+# Check AdminShell.tsx imports (lines 6-25):
+# Should import from "lucide-react" (LayoutDashboard, Home, Calendar, etc.)
+
+# Check NAV_GROUPS icon properties (lines 54-93):
+# Should be: icon: LayoutDashboard (not icon: "📊")
+
+# Rebuild:
+rm -rf .next && npm run dev
+```
+
+**Problem:** Primary color still green instead of blue
+
+**Solution:**
+```bash
+# Check globals.css Theme v2 palette (lines 24-60)
+# Should have:
+#   --bo-primary: #2563eb;  /* Primary blue (trustworthy) */
+#   --bo-primary-hover: #1e3a8a;
+
+# NOT:
+#   --bo-primary: #4C6C5A;  /* Primary green */
+
+# Check DevTools → Elements → :root → Styles
+# Verify --bo-primary is #2563eb
+
+# If wrong, ensure latest commit is deployed
+# Hard refresh browser: Cmd+Shift+R
+```
+
+**Related Sections:**
+- [Admin UI Sidebar Architecture (Single Source of Truth)](#admin-ui-sidebar-architecture-single-source-of-truth)
+- [Admin UI Visual Style (Backoffice Theme v1)](#admin-ui-visual-style-backoffice-theme-v1)
+
+---
+
 ## Frontend Build Failures (TSX/JSX Syntax Errors)
 
 **Problem:** Coolify deployment fails with TypeScript/JSX syntax errors like:

@@ -178,6 +178,161 @@ Fixed production 500 error (ResponseValidationError) when GET /api/v1/bookings/{
 - **Result:** No more 500 ResponseValidationError on cancelled_by field. Legacy UUID values correctly mapped to actor='host' with cancelled_by_user_id populated.
 
 
+### Admin UI — Backoffice Theme v2 (Layout + Sidebar Polish) ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-08
+
+**Overview:**
+Applied comprehensive layout and sidebar polish to Admin UI (Theme v2), addressing production UX issues: header overlap on scroll, sidebar animation jank, cheap emoji icons, untrustworthy green palette, visible scrollbar, and unprofessional collapsed state. Replaced green primary with blue/indigo for trustworthiness, upgraded to Lucide React icons, removed sidebar animations, and improved overall visual quality.
+
+**Problems Fixed:**
+1. Header/topbar overlapped content when scrolling (sticky positioning without proper background)
+2. Sidebar had annoying animation/jank when navigating between pages (transition-all on width changes)
+3. Brand (logo + agency name) lacked visual separation from navigation
+4. Green accent (#4C6C5A) felt untrustworthy and dated for a business dashboard
+5. Sidebar icons looked cheap and inconsistent (emoji-based: 📊 🏠 📅)
+6. Sidebar showed visible scrollbar (unprofessional appearance)
+7. Collapsed sidebar looked cheap with floating circle icons and no tooltips
+
+**Solution:**
+
+**Palette Update (Green → Blue/Indigo):**
+Updated `frontend/app/globals.css` with new Theme v2 palette:
+- **Background:** #f8fafc (very light slate) - cleaner than greenish #E8EFEA
+- **Primary:** #2563eb (trustworthy blue) - replaced green #4C6C5A
+- **Primary Hover:** #1e3a8a (darker blue) - replaced green #395917
+- **Text:** #0f172a (slate-900) - high contrast, professional
+- **Muted Text:** #64748b (slate-500) - better readability than previous gray
+- **Success:** #10b981 (green) - semantic for confirmed bookings
+- **Danger:** #dc2626 (red) - semantic for cancelled/errors
+- **Info:** #0ea5e9 (cyan) - new semantic color for information
+- **Accent:** #475569 (slate) - neutral accent replacing purple
+
+**Icon Upgrade (Emoji → Lucide React):**
+- Installed `lucide-react` package
+- Updated `AdminShell.tsx` to import and use Lucide icons:
+  - Dashboard: `LayoutDashboard` (replaced 📊)
+  - Properties: `Home` (replaced 🏠)
+  - Bookings: `Calendar` (replaced 📅)
+  - Availability: `TrendingUp` (replaced 📈)
+  - Connections: `Link` (replaced 🔗)
+  - Sync: `RefreshCw` (replaced 🔄)
+  - Guests: `Users` (replaced 👥)
+  - Settings icons: `Palette`, `Shield`, `CreditCard`
+  - Topbar icons: `Search`, `MessageSquare`, `Bell`, `Menu`
+  - Collapse icons: `ChevronLeft`, `ChevronRight`
+- All icons use consistent size (w-5 h-5) and strokeWidth (1.75)
+
+**Header Overlap Fix:**
+- Updated header to use sticky with blur background: `sticky top-0 z-30 bg-bo-bg/80 backdrop-blur-md`
+- Added border-b for subtle separation: `border-b border-bo-border/50`
+- Content flows naturally below header (no negative margins or absolute positioning)
+- Header never covers table rows/content when scrolling
+
+**Sidebar Animation Removal:**
+- Removed `transition-all duration-300` from sidebar aside element
+- Sidebar width changes instantly on collapse toggle (no animation jank)
+- Only color transitions on active state changes (transition-colors)
+- Sidebar feels stable and professional during navigation
+
+**Brand Header Improvement:**
+- Added gradient avatar: `bg-gradient-to-br from-bo-primary to-bo-primary-light`
+- Clear divider below brand section: `border-b border-bo-border bg-bo-surface`
+- Shows "Property Management" subtitle when expanded
+- In collapsed mode: only gradient avatar visible, agency name in tooltip
+
+**Scrollbar Hidden:**
+- Added `scrollbar-hide` utility class in `frontend/app/globals.css`:
+  ```css
+  @layer utilities {
+    .scrollbar-hide {
+      -ms-overflow-style: none;  /* IE and Edge */
+      scrollbar-width: none;  /* Firefox */
+    }
+    .scrollbar-hide::-webkit-scrollbar {
+      display: none;  /* Chrome, Safari, Opera */
+    }
+  }
+  ```
+- Applied to sidebar nav: `overflow-y-auto scrollbar-hide`
+- Scroll functionality preserved, scrollbar invisible
+
+**Collapsed State Polish:**
+- Icon containers: `rounded-2xl` (professional squares) instead of `rounded-full` (circles)
+- Active state: `bg-bo-primary text-white shadow-md` (blue background with white icon)
+- Inactive state: `bg-bo-surface-2 text-bo-text-muted` with hover effects
+- Tooltips: `title={isCollapsed ? item.label : undefined}` on all nav links
+- Width: Fixed `w-24` for collapsed, `w-72` for expanded
+- Proper spacing and shadows for professional appearance
+
+**Files Changed:**
+- `frontend/package.json` - Added `lucide-react` dependency
+- `frontend/app/globals.css` - Updated Theme v2 palette (blue primary), added scrollbar-hide utility
+- `frontend/app/components/AdminShell.tsx` - Complete rewrite with:
+  - Lucide React icon imports and usage
+  - Removed sidebar width transitions
+  - Improved brand header with gradient avatar
+  - Better collapsed state with tooltips
+  - Sticky header with blur background
+  - All nav items use Lucide icons
+  - Professional spacing and styling
+
+**Key Features:**
+- **Trustworthy palette:** Blue/indigo primary (#2563eb) instead of green
+- **Professional icons:** Lucide React icons with consistent sizing (w-5 h-5, strokeWidth 1.75)
+- **No header overlap:** Sticky + blur background, content flows below header
+- **No sidebar jank:** Width changes instantly, only color transitions
+- **Hidden scrollbar:** Functional scroll, invisible scrollbar
+- **Better collapsed state:** Rounded-2xl containers, tooltips, professional spacing
+- **Gradient brand avatar:** Modern gradient (blue primary → light blue)
+- **Semantic colors:** Green for success, red for danger, blue for info/primary
+
+**Browser Verification Required:**
+```bash
+# Navigate to Admin UI
+open https://admin.fewo.kolibri-visions.de/login
+
+# Visual QA checklist:
+□ Background is light slate (#f8fafc)
+□ Sidebar uses Lucide icons (not emojis)
+□ Sidebar scrollbar is hidden
+□ Sidebar has NO animation jank when navigating
+□ Brand header shows gradient avatar + divider
+□ Active nav item has blue background (#2563eb)
+□ Topbar sticky with blur, no content overlap
+□ Primary buttons use blue (#2563eb)
+□ Collapsed sidebar shows tooltips on hover
+
+# Test navigation (no jank):
+- Click between Dashboard, Bookings, Properties → sidebar stable, no width animation
+
+# Test scrolling (no overlap):
+- Go to /bookings → scroll down → header doesn't cover table rows
+
+# Test collapsed mode:
+- Click collapse → icons in rounded-2xl containers, tooltips work
+```
+
+**Status**: ✅ IMPLEMENTED (NOT VERIFIED)
+
+**Runbook Reference:**
+- Section: "Admin UI — Visual QA Checklist (Layout v2)" in `backend/docs/ops/runbook.md` (line ~18593)
+- Includes: Complete verification checklist, common issues, troubleshooting steps
+
+**Operational Impact:**
+- Significantly improved trust and professionalism (blue palette)
+- Better UX with stable sidebar (no jank/animation)
+- Cleaner, more modern appearance (Lucide icons)
+- Fixed content overlap issue (sticky header with blur)
+- Improved accessibility (better tooltips, semantic colors)
+- No functionality changes - purely visual/UX enhancement
+
+**Related Entries:**
+- [Admin UI — Backoffice Theme v1] - Superseded by v2 palette and improvements
+- [Admin UI Sidebar Architecture (Single Source of Truth)] - Navigation configuration unchanged
+
+---
+
 ### Admin UI — Backoffice Theme v1 ✅ IMPLEMENTED
 
 **Date Completed:** 2026-01-08
