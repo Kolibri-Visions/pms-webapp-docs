@@ -293,7 +293,7 @@ open https://admin.fewo.kolibri-visions.de/dashboard
 
 ---
 
-### Admin UI — Topbar + Sidebar Polish v2.1 (HOVER Language, RTL, Collapsed Polish) ✅ IMPLEMENTED
+### Admin UI — Topbar + Sidebar Polish v2.1 (HOVER Language, RTL, Collapsed Polish) ✅ VERIFIED
 
 **Date Completed:** 2026-01-08
 
@@ -411,7 +411,15 @@ open https://admin.fewo.kolibri-visions.de/dashboard
 □ Navigate between pages → no sidebar animation jank
 ```
 
-**Status**: ✅ IMPLEMENTED (NOT VERIFIED)
+**Status**: ✅ VERIFIED
+
+**PROD Evidence** (Verified: 2026-01-08):
+- **Admin URL**: https://admin.fewo.kolibri-visions.de
+- **Container**: pms-admin
+- **SOURCE_COMMIT**: ed0dcb25b2588de19d343653edc241b77358c887
+- **Smoke**: backend/scripts/pms_admin_ui_static_smoke.sh
+- **Command (HOST-SERVER-TERMINAL)**: EXPECTED_COMMIT=ed0dcb2 ./backend/scripts/pms_admin_ui_static_smoke.sh
+- **Result**: rc=0 (mode: container-scan; 4/4 strings found: Abmelden, Deutsch, English, العربية)
 
 **Runbook Reference:**
 - Section: "Admin UI Layout Polish v2.1 (Profile + Language + Sidebar Polish)" in `backend/docs/ops/runbook.md` (line ~15462)
@@ -435,7 +443,7 @@ To mark as VERIFIED, run `backend/scripts/pms_admin_ui_static_smoke.sh` with EXP
 
 ---
 
-### Admin UI — Profile Dropdown: Abmelden (Logout) ✅ IMPLEMENTED
+### Admin UI — Profile Dropdown: Abmelden (Logout) ✅ VERIFIED
 
 **Date Completed:** 2026-01-08
 
@@ -522,7 +530,15 @@ open https://admin.fewo.kolibri-visions.de/dashboard
 □ Try accessing /dashboard → redirects back to /login (auth check)
 ```
 
-**Status**: ✅ IMPLEMENTED (NOT VERIFIED)
+**Status**: ✅ VERIFIED
+
+**PROD Evidence** (Verified: 2026-01-08):
+- **Admin URL**: https://admin.fewo.kolibri-visions.de
+- **Container**: pms-admin
+- **SOURCE_COMMIT**: ed0dcb25b2588de19d343653edc241b77358c887
+- **Smoke**: backend/scripts/pms_admin_ui_static_smoke.sh
+- **Command (HOST-SERVER-TERMINAL)**: EXPECTED_COMMIT=ed0dcb2 ./backend/scripts/pms_admin_ui_static_smoke.sh
+- **Result**: rc=0 (mode: container-scan; 4/4 strings found: Abmelden, Deutsch, English, العربية)
 
 **Runbook Reference:**
 - Section: "Admin UI Layout Polish v2.1 (Profile + Language + Sidebar Polish)" in `backend/docs/ops/runbook.md` (line ~15478)
@@ -545,7 +561,7 @@ To mark as VERIFIED, run `backend/scripts/pms_admin_ui_static_smoke.sh` with EXP
 
 ---
 
-### Admin UI — Build Hotfix (LucideIcon Typing) ✅ IMPLEMENTED
+### Admin UI — Build Hotfix (LucideIcon Typing) ✅ VERIFIED
 
 **Date Completed:** 2026-01-08
 
@@ -594,7 +610,15 @@ interface NavItem {
 - Icons render with consistent stroke thickness (1.75 for nav, 2 for search)
 - No functionality changes - purely typing fix for build compatibility
 
-**Status**: ✅ IMPLEMENTED (NOT VERIFIED)
+**Status**: ✅ VERIFIED
+
+**PROD Evidence** (Verified: 2026-01-08):
+- **Admin URL**: https://admin.fewo.kolibri-visions.de
+- **Container**: pms-admin
+- **SOURCE_COMMIT**: ed0dcb25b2588de19d343653edc241b77358c887
+- **Smoke**: backend/scripts/pms_admin_ui_static_smoke.sh
+- **Command (HOST-SERVER-TERMINAL)**: EXPECTED_COMMIT=ed0dcb2 ./backend/scripts/pms_admin_ui_static_smoke.sh
+- **Result**: rc=0 (mode: container-scan; 4/4 strings found: Abmelden, Deutsch, English, العربية)
 
 **Runbook Reference:**
 - Section: "Frontend Build Failures (AdminShell Icon Typing)" in `backend/docs/ops/runbook.md` (line ~18814)
@@ -610,7 +634,7 @@ interface NavItem {
 
 ---
 
-### Admin UI — Backoffice Theme v2 (Layout + Sidebar Polish) ✅ IMPLEMENTED
+### Admin UI — Backoffice Theme v2 (Layout + Sidebar Polish) ✅ VERIFIED
 
 **Date Completed:** 2026-01-08
 
@@ -745,7 +769,15 @@ open https://admin.fewo.kolibri-visions.de/login
 - Click collapse → icons in rounded-2xl containers, tooltips work
 ```
 
-**Status**: ✅ IMPLEMENTED (NOT VERIFIED)
+**Status**: ✅ VERIFIED
+
+**PROD Evidence** (Verified: 2026-01-08):
+- **Admin URL**: https://admin.fewo.kolibri-visions.de
+- **Container**: pms-admin
+- **SOURCE_COMMIT**: ed0dcb25b2588de19d343653edc241b77358c887
+- **Smoke**: backend/scripts/pms_admin_ui_static_smoke.sh
+- **Command (HOST-SERVER-TERMINAL)**: EXPECTED_COMMIT=ed0dcb2 ./backend/scripts/pms_admin_ui_static_smoke.sh
+- **Result**: rc=0 (mode: container-scan; 4/4 strings found: Abmelden, Deutsch, English, العربية)
 
 **Runbook Reference:**
 - Section: "Admin UI — Visual QA Checklist (Layout v2)" in `backend/docs/ops/runbook.md` (line ~18593)
