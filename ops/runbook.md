@@ -18744,6 +18744,75 @@ rm -rf .next && npm run dev
 
 ---
 
+## Admin UI — Header: Language Switch + Profile Dropdown
+
+**Purpose:** Document the header changes that replaced search with language dropdown and added profile menu.
+
+**What Changed:**
+- **Search field removed** - Previously occupied center of topbar
+- **Language dropdown added** - Shows current language flag (🇩🇪/🇬🇧/🇸🇦) with dropdown to switch
+- **Profile dropdown added** - User icon in top-right opens menu with profile links
+- **Page title simplified** - Left side shows only page name (e.g. "Verbindungen"), removed "Hello, email!" greeting
+
+**Language Switcher:**
+- **Location:** Top-right area, before notification icons
+- **Display:** Current language flag + code (e.g. 🇩🇪 DE)
+- **Dropdown:** Click to show all languages (Deutsch, English, العربية)
+- **Persistence:** Selection saved in localStorage with key `bo_lang`
+- **Supported languages:**
+  - `de` - Deutsch (🇩🇪)
+  - `en` - English (🇬🇧)
+  - `ar` - العربية (🇸🇦)
+
+**Profile Dropdown:**
+- **Location:** Far right of topbar, after notifications
+- **Icon:** User icon (Lucide `User` component)
+- **Dropdown content:**
+  - User display name (extracted from email if needed)
+  - Role badge (e.g. "Admin", "User")
+  - Links:
+    - Profil → `/profile`
+    - Profil bearbeiten → `/profile/edit`
+    - Sicherheit → `/profile/security`
+
+**Profile Routes:**
+All profile routes use AdminShell layout with authentication:
+- `/profile` - Profile overview (stub page)
+- `/profile/edit` - Edit profile settings (stub page)
+- `/profile/security` - Security settings (stub page)
+
+Note: Profile pages are currently minimal stubs showing "Demnächst verfügbar" (Coming soon). Full implementation planned for future phase.
+
+**localStorage Keys:**
+- `bo_lang` - Stores selected language code (de/en/ar)
+- `sidebar-collapsed` - Stores sidebar collapse state (unchanged)
+
+**Verification Checklist:**
+```bash
+# Open Admin UI
+open https://admin.fewo.kolibri-visions.de/dashboard
+
+# Visual checks:
+□ Header left shows only page title (e.g. "Dashboard")
+□ No "Hello, email!" greeting visible
+□ Language dropdown visible (flag + code)
+□ Click language dropdown → shows all 3 languages
+□ Select language → persists after page reload
+□ Profile icon visible (User icon)
+□ Click profile → dropdown opens with name, role, and 3 links
+□ Profile links navigate to correct routes
+□ Profile pages load (even if showing "Coming soon")
+
+# localStorage verification:
+# DevTools → Application → localStorage → Check for "bo_lang" key after switching language
+```
+
+**Related Sections:**
+- [Admin UI — Visual QA Checklist (Layout v2)](#admin-ui--visual-qa-checklist-layout-v2)
+- [Admin UI Sidebar Architecture (Single Source of Truth)](#admin-ui-sidebar-architecture-single-source-of-truth)
+
+---
+
 ## Frontend Build Failures (TSX/JSX Syntax Errors)
 
 **Problem:** Coolify deployment fails with TypeScript/JSX syntax errors like:

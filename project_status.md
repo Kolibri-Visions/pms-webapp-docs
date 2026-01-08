@@ -178,6 +178,121 @@ Fixed production 500 error (ResponseValidationError) when GET /api/v1/bookings/{
 - **Result:** No more 500 ResponseValidationError on cancelled_by field. Legacy UUID values correctly mapped to actor='host' with cancelled_by_user_id populated.
 
 
+### Admin UI — Header: Profile Dropdown + Language Switch ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-08
+
+**Overview:**
+Improved Admin UI header UX by removing the redundant "Hello, email!" greeting, replacing the search field with a language switcher dropdown (DE/EN/AR flags), and adding a profile dropdown menu with user info and settings links. Maintains existing color palette and design tokens.
+
+**Problem:**
+- Header showed redundant "Hello, email!" greeting that took up space
+- Search field in header was not functional and took valuable real estate
+- No easy way to switch language in the UI
+- No profile/settings access in the topbar (users had to navigate via sidebar)
+- Page context unclear when greeting dominated the left side
+
+**Solution:**
+
+**Header Simplification:**
+- Removed "Hello, {userName}!" greeting and subtitle
+- Left side now shows only the current page title (e.g. "Verbindungen", "Dashboard")
+- Page title derived from active route using existing NAV_GROUPS configuration
+- Cleaner, more focused header layout
+
+**Language Switcher (Replaces Search):**
+- Added language dropdown component in top-right area
+- Shows current language as flag + code (🇩🇪 DE, 🇬🇧 EN, 🇸🇦 AR)
+- Click to expand dropdown showing all 3 supported languages
+- Selecting a language:
+  - Updates UI state immediately
+  - Persists in localStorage with key `bo_lang`
+  - Survives page reloads
+- Supported languages:
+  - `de` - Deutsch (German) 🇩🇪
+  - `en` - English 🇬🇧
+  - `ar` - العربية (Arabic) 🇸🇦
+- UI structure ready for future i18n integration (no translations yet)
+
+**Profile Dropdown (New):**
+- Added profile button with User icon (Lucide) in top-right
+- Click to open dropdown menu showing:
+  - User display name (extracted from email if userName contains @)
+  - Role badge (e.g. "Admin", "User")
+  - Three menu items:
+    - "Profil" → `/profile`
+    - "Profil bearbeiten" → `/profile/edit`
+    - "Sicherheit" → `/profile/security`
+- Dropdown styled with existing bo-* tokens (no new colors)
+- Closes automatically when clicking a link or outside
+
+**Profile Routes (New Stub Pages):**
+Created minimal authenticated pages for profile links:
+- `/profile` - Profile overview page (stub: "Demnächst verfügbar")
+- `/profile/edit` - Edit profile settings (stub: "Demnächst verfügbar")
+- `/profile/security` - Security settings (stub: "Demnächst verfügbar")
+- All routes use AdminShell layout with authentication via getAuthenticatedUser
+- Layout file: `frontend/app/profile/layout.tsx`
+
+**Files Changed:**
+- `frontend/app/components/AdminShell.tsx` - Updated header with language dropdown, profile dropdown, simplified title
+- `frontend/app/profile/page.tsx` - Created profile overview stub page
+- `frontend/app/profile/edit/page.tsx` - Created profile edit stub page
+- `frontend/app/profile/security/page.tsx` - Created security settings stub page
+- `frontend/app/profile/layout.tsx` - Created profile layout with AdminShell
+
+**Key Features:**
+- **Language switcher:** Flag-based dropdown with localStorage persistence (`bo_lang` key)
+- **Profile access:** Quick access to user settings from any page
+- **Simplified header:** Page title only, no redundant greeting
+- **Stub routes:** Profile pages work immediately (even if showing "Coming soon")
+- **Existing palette maintained:** All styling uses bo-* tokens, no color changes
+- **Build fix included:** LucideIcon type already correct (previous fix)
+
+**localStorage Keys:**
+- `bo_lang` - Selected language code (de/en/ar)
+- `sidebar-collapsed` - Sidebar state (unchanged)
+
+**Browser Verification Required:**
+```bash
+# Navigate to Admin UI
+open https://admin.fewo.kolibri-visions.de/dashboard
+
+# Header checks:
+□ Left side shows only "Dashboard" (no "Hello, email!")
+□ Language dropdown shows flag + code (🇩🇪 DE)
+□ Click language → dropdown opens with 3 options
+□ Select English → flag changes to 🇬🇧, localStorage updated
+□ Reload page → language selection persists
+□ Profile icon visible (User icon)
+□ Click profile → dropdown opens with name, role, 3 links
+□ Click "Profil" → navigates to /profile (stub page)
+□ All profile links work and load pages
+
+# Navigation test:
+- Switch between pages → header title updates correctly
+- Language and profile dropdowns work on all pages
+```
+
+**Status**: ✅ IMPLEMENTED (NOT VERIFIED)
+
+**Runbook Reference:**
+- Section: "Admin UI — Header: Language Switch + Profile Dropdown" in `backend/docs/ops/runbook.md` (line ~18747)
+- Includes: What changed, language switcher details, profile dropdown, verification checklist
+
+**Operational Impact:**
+- Improved UX with cleaner, more focused header
+- Language switching now easily accessible
+- Profile/settings accessible from anywhere (no sidebar navigation needed)
+- Reduced cognitive load (page title more prominent)
+- No palette/design changes - maintains visual consistency
+
+**Related Entries:**
+- [Admin UI — Backoffice Theme v2] - Uses same bo-* color tokens
+- [Admin UI — Build Hotfix (LucideIcon Typing)] - Build compatibility maintained
+
+---
+
 ### Admin UI — Build Hotfix (LucideIcon Typing) ✅ IMPLEMENTED
 
 **Date Completed:** 2026-01-08
