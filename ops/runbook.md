@@ -22469,6 +22469,170 @@ If schema changed, update the smoke script payload builder to match current API 
 
 ---
 
+## P3 Public Direct Booking Hardening (Consolidated)
+
+**Overview:** This section covers the consolidated P3 Direct Booking Hardening smoke test that verifies all P3 components (P3a, P3b, P3c) in a single test workflow.
+
+**Purpose:** Validate that public direct booking endpoints are properly hardened with idempotency, CORS/origin controls, and comprehensive audit logging.
+
+**Components Included:**
+- **P3a**: Idempotency-Key support for `/api/v1/public/booking-requests`
+- **P3b**: CORS/Origin/Host allowlist for public endpoints
+- **P3c**: Audit log for booking request lifecycle events
+
+**Smoke Test Script:** `backend/scripts/pms_public_direct_booking_hardening_smoke.sh`
+
+**What The Consolidated Test Verifies:**
+1. CORS preflight with allowed origin returns proper headers
+2. First booking request with Idempotency-Key succeeds
+3. Retry with same Idempotency-Key + same payload returns same booking ID
+4. Retry with same Idempotency-Key + different payload returns HTTP 409
+5. Audit log contains `public.booking_request.created` event
+
+**Required Environment:**
+- `HOST`: PMS backend base URL
+- `JWT_TOKEN`: JWT with manager/admin role
+- Optional: `AGENCY_ID`, `PROPERTY_ID`, `ALLOWED_ORIGIN`
+
+**Usage:**
+```bash
+HOST=https://pms-backend.production.example.com \
+JWT_TOKEN="eyJ..." \
+./backend/scripts/pms_public_direct_booking_hardening_smoke.sh
+```
+
+**Expected Success Output:**
+```
+✅ Test 1 PASSED: CORS preflight returned allow-origin header
+✅ Test 2 PASSED: Created booking request with idempotency key: 770e8400-...
+✅ Test 3 PASSED: Idempotency works - same booking ID returned: 770e8400-...
+✅ Test 4 PASSED: Idempotency conflict returned 409 as expected
+✅ Test 5 PASSED: Found audit log event for booking request created
+✅ All P3 Public Direct Booking Hardening smoke tests passed! 🎉
+```
+
+### Common Issues
+
+#### Test 1 Skipped (CORS)
+
+**Symptom:** Test 1 reports "SKIPPED: CORS may not be configured".
+
+**Cause:** CORS middleware not configured in test environment or allowed origin mismatch.
+
+**Impact:** Non-critical for functionality testing. Production should have CORS configured.
+
+**Solution:** Verify `ALLOWED_ORIGINS` environment variable in production matches `ALLOWED_ORIGIN` test value.
+
+#### Test 2 Fails (Create Booking Request)
+
+**Symptom:** Test 2 fails with 400/404/500 error.
+
+**Possible Causes:**
+1. Property doesn't exist or user lacks access
+2. JWT token invalid/expired
+3. Required booking fields missing/invalid
+4. Database connectivity issue
+
+**How to Debug:**
+```bash
+# Verify property exists and is accessible
+curl -X GET "$HOST/api/v1/properties/?limit=1" \
+  -H "Authorization: Bearer $JWT_TOKEN"
+
+# Check JWT expiration
+echo $JWT_TOKEN | cut -d'.' -f2 | base64 -d | jq '.exp'
+
+# Test minimal booking request
+curl -X POST "$HOST/api/v1/public/booking-requests" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: test-$(date +%s)" \
+  -d '{"property_id":"<uuid>","check_in":"2026-02-01","check_out":"2026-02-05","adults":2,"children":0,"guest":{"email":"test@example.com","first_name":"Test","last_name":"User"}}'
+```
+
+**Solution:** Fix property access, refresh JWT, or correct booking payload.
+
+#### Test 3 Fails (Idempotency Retry)
+
+**Symptom:** Retry returns different booking ID instead of same ID.
+
+**Cause:** Idempotency middleware not enabled or migration not applied.
+
+**How to Debug:**
+```bash
+# Check if idempotency middleware is active (should see Idempotency-Key in response headers)
+curl -v -X POST "$HOST/api/v1/public/booking-requests" \
+  -H "Idempotency-Key: test-123" \
+  -d '...' 2>&1 | grep -i idempotency
+
+# Verify migration applied
+psql $DATABASE_URL -c "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'idempotency_keys');"
+```
+
+**Solution:** Enable idempotency middleware in app startup, apply migration 20260106160000.
+
+#### Test 4 Fails (Expected 409 Conflict)
+
+**Symptom:** Retry with different payload returns 200/201 instead of 409.
+
+**Cause:** Payload hash comparison not working or idempotency key TTL expired.
+
+**How to Debug:**
+```bash
+# Check idempotency_keys table for stored payload hash
+psql $DATABASE_URL -c "SELECT idempotency_key, payload_hash, created_at FROM idempotency_keys ORDER BY created_at DESC LIMIT 5;"
+
+# Verify tests run within 24h TTL window
+# If payload_hash is NULL, hash calculation is broken
+```
+
+**Solution:** Check `app/core/idempotency.py` hash calculation logic, ensure tests complete within TTL.
+
+#### Test 5 Skipped (Audit Log)
+
+**Symptom:** Test 5 reports "SKIPPED: Could not verify specific audit event".
+
+**Possible Causes:**
+1. JWT lacks admin role (audit-log endpoint requires admin)
+2. Audit emission failed (database issue)
+3. Timing issue (audit not yet committed)
+
+**How to Debug:**
+```bash
+# Verify JWT role
+echo $JWT_TOKEN | cut -d'.' -f2 | base64 -d | jq '.role'
+# Should return: "admin" (manager is NOT sufficient)
+
+# Check audit_log table directly
+psql $DATABASE_URL -c "SELECT action, actor_type, created_at FROM audit_log WHERE action = 'public.booking_request.created' ORDER BY created_at DESC LIMIT 5;"
+
+# Check backend logs for audit emission errors
+docker logs pms-backend --tail 100 | grep -i audit
+```
+
+**Solution:** Use admin JWT, verify audit_log migration applied (20260106170000), check database connectivity.
+
+### Testing Against Production
+
+**Pre-flight Checklist:**
+- [ ] JWT token has valid admin role
+- [ ] `HOST` points to production backend URL
+- [ ] `PROPERTY_ID` exists and belongs to agency (or omit for auto-pick)
+- [ ] `ALLOWED_ORIGIN` matches production CORS config (default: `https://fewo.kolibri-visions.de`)
+- [ ] Production database has migrations 20260106160000 (idempotency) and 20260106170000 (audit) applied
+
+**Recommended Workflow:**
+1. Run consolidated smoke script first for quick validation
+2. If any test fails, run individual P3a/b/c scripts for detailed debugging
+3. Check specific runbook sections (P3a, P3b, P3c) for component-specific issues
+
+**Related Documentation:**
+- [P3a Runbook Section](#p3a-idempotency--audit-log-public-booking-requests) - Idempotency details
+- [P3b Runbook Section](#p3b-domain-tenant-resolution--host-allowlist--cors-public-endpoints) - CORS/domain details
+- [P3c Runbook Section](#p3c-audit-review-actions--requestcorrelation-id--idempotency-review-endpoints) - Audit details
+- [Scripts README](../../scripts/README.md#p3-public-direct-booking-hardening-smoke-test-consolidated) - Script usage guide
+
+---
+
 ## Customer Domain Onboarding SOP
 
 **Purpose**: Step-by-step procedure for onboarding new customer domains to the PMS multi-tenant system.

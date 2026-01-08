@@ -3302,6 +3302,34 @@ echo "rc=$?"
 
 ---
 
+# P3 Public Direct Booking Hardening (Consolidated Smoke Test)
+
+**Summary:** Consolidated smoke test that verifies all P3 Direct Booking Hardening components (P3a, P3b, P3c) in a single test workflow for production validation.
+
+**Components Verified:**
+- P3a: Idempotency-Key support for `/api/v1/public/booking-requests`
+- P3b: CORS/Origin/Host allowlist for public endpoints
+- P3c: Audit log for booking request lifecycle events
+
+**Implementation:**
+- Script: `backend/scripts/pms_public_direct_booking_hardening_smoke.sh`
+- Tests: CORS preflight, Idempotency (first/retry/conflict), Audit log events
+- Reuses existing P3a/b/c infrastructure (no new migrations or API endpoints)
+
+**Documentation:**
+- `backend/scripts/README.md` - Script usage, environment variables, expected output, troubleshooting
+- `backend/docs/ops/runbook.md` - "P3 Public Direct Booking Hardening (Consolidated)" section with common issues, debugging steps, production testing checklist
+- Related individual P3 smoke scripts: `pms_p3a_idempotency_smoke.sh`, `pms_p3b_domain_host_cors_smoke.sh`, `pms_p3c_audit_review_smoke.sh`
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- This is a convenience wrapper that consolidates P3a/b/c tests for quick production validation
+- Individual P3a, P3b, P3c components are already ✅ VERIFIED separately
+- Status is IMPLEMENTED (not VERIFIED) until user provides PROD evidence of consolidated script execution
+
+---
+
 
 **Date Completed:** 2026-01-02 to 2026-01-03
 
