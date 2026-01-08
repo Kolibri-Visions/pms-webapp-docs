@@ -15643,6 +15643,165 @@ cd frontend && rm -rf .next && npm run dev
 - [Admin UI Visual Style (Backoffice Theme v1)](#admin-ui-visual-style-backoffice-theme-v1)
 - [Admin UI Authentication Verification](#admin-ui-authentication-verification)
 
+
+## Admin UI Static Verification (Smoke Test)
+
+### Overview
+
+Automated smoke test that verifies Admin UI deployment and expected UI content without requiring authentication. Checks that critical UI components (language switcher, logout menu) are present in the deployed JavaScript bundles.
+
+### Script
+
+**Location**: `backend/scripts/pms_admin_ui_static_smoke.sh`
+
+**Execution**: HOST-SERVER-TERMINAL (where Coolify/Docker is running)
+
+**Purpose**: Verify that:
+1. Admin UI container is running with expected SOURCE_COMMIT
+2. `/login` endpoint returns HTTP 200
+3. Next.js static chunks contain expected UI strings (Abmelden, Deutsch, English, العربية)
+
+### Usage
+
+```bash
+# Basic usage (default: https://admin.fewo.kolibri-visions.de)
+./backend/scripts/pms_admin_ui_static_smoke.sh
+
+# With custom base URL
+ADMIN_BASE_URL=https://admin.example.com ./backend/scripts/pms_admin_ui_static_smoke.sh
+
+# With expected commit verification
+EXPECTED_COMMIT=abc1234567 ./backend/scripts/pms_admin_ui_static_smoke.sh
+
+# Full configuration
+ADMIN_BASE_URL=https://admin.example.com CONTAINER_NAME=pms-admin EXPECTED_COMMIT=abc1234567 ./backend/scripts/pms_admin_ui_static_smoke.sh
+```
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ADMIN_BASE_URL` | `https://admin.fewo.kolibri-visions.de` | Base URL of Admin UI |
+| `CONTAINER_NAME` | `pms-admin` | Docker container name to inspect |
+| `EXPECTED_COMMIT` | (empty) | Expected SOURCE_COMMIT (if set, script fails on mismatch) |
+
+### Expected Output (PASS)
+
+```
+======================================================================
+Admin UI Static Smoke Test
+======================================================================
+
+[INFO] Configuration:
+[INFO]   ADMIN_BASE_URL: https://admin.fewo.kolibri-visions.de
+[INFO]   CONTAINER_NAME: pms-admin
+[INFO]   EXPECTED_COMMIT: 0572b72f059a71dc280c564a194dd279d9a7ab6d
+
+[INFO] Step 1: Checking Docker container...
+[INFO]   Container SOURCE_COMMIT: 0572b72f059a71dc280c564a194dd279d9a7ab6d
+[INFO]   ✓ Commit matches expected: 0572b72f059a71dc280c564a194dd279d9a7ab6d
+
+[INFO] Step 2: Checking https://admin.fewo.kolibri-visions.de/login ...
+[INFO]   ✓ HTTP 200 OK
+
+[INFO] Step 3: Extracting _next/static/chunks/*.js URLs...
+[INFO]   Found 20 chunk URLs
+
+[INFO] Step 4: Verifying chunk content...
+[INFO]   ✓ Found 'Abmelden' in app-pages-1a2b3c4d5e.js
+[INFO]   ✓ Found 'Deutsch' in app-pages-1a2b3c4d5e.js
+[INFO]   ✓ Found 'English' in app-pages-1a2b3c4d5e.js
+[INFO]   ✓ Found 'العربية' in app-pages-1a2b3c4d5e.js
+
+[INFO] Summary: Found 4/4 expected strings
+
+======================================================================
+[INFO] ✓ PASS: All checks passed
+======================================================================
+```
+
+Exit code: `0`
+
+### Production Verification Procedure
+
+To mark Admin UI features as **VERIFIED** in project_status.md:
+
+1. **Collect commit hash** from Coolify deployment or Docker:
+   ```bash
+   docker inspect pms-admin --format '{{range .Config.Env}}{{println .}}{{end}}' | grep '^SOURCE_COMMIT='
+   ```
+
+2. **Run smoke script** with expected commit:
+   ```bash
+   EXPECTED_COMMIT=abc1234567 ./backend/scripts/pms_admin_ui_static_smoke.sh
+   ```
+
+3. **Verify exit code** is `0` and output shows all checks passing
+
+4. **Update project_status.md**: Change status from "IMPLEMENTED (NOT VERIFIED)" to "VERIFIED" and add verification evidence:
+   ```markdown
+   **Status**: ✅ VERIFIED
+
+   **Verification Evidence** (HOST-SERVER-TERMINAL):
+   - Date: 2026-01-08
+   - Container: pms-admin
+   - SOURCE_COMMIT: 0572b72f059a71dc280c564a194dd279d9a7ab6d
+   - Smoke script: pms_admin_ui_static_smoke.sh rc=0
+   - All expected UI strings found in static bundles
+   ```
+
+### Troubleshooting
+
+**Problem**: Script fails with "No chunk URLs found in HTML"
+
+**Solution**:
+```bash
+# 1. Check if Next.js is using different build output structure (find chunk URLs manually)
+curl -k -sS https://admin.fewo.kolibri-visions.de/login | grep -oE '/_next/static/[^"]+\.js' | head -5
+
+# 2. Download first chunk and verify content structure
+CHUNK="$(curl -k -sS https://admin.fewo.kolibri-visions.de/login | grep -oE '/_next/static/[^"]+\.js' | head -1)" && echo "Chunk: $CHUNK" && curl -k -sS "https://admin.fewo.kolibri-visions.de${CHUNK}" | head -20
+
+# 3. Check if Next.js version changed (different chunk structure)
+docker exec pms-admin sh -c "cat package.json | grep '\"next\"'"
+```
+
+**Problem**: Script fails with "Missing expected strings"
+
+**Solution**:
+```bash
+# 1. Download first chunk manually and search for expected strings
+CHUNK="$(curl -k -sS https://admin.fewo.kolibri-visions.de/login | grep -oE '/_next/static/[^"]+\.js' | head -1)" && curl -k -sS "https://admin.fewo.kolibri-visions.de${CHUNK}" -o /tmp/chunk.js && grep -E 'Abmelden|Deutsch|English|العربية' /tmp/chunk.js
+
+# 2. If strings not found, check if deployment is correct commit
+docker inspect pms-admin --format '{{range .Config.Env}}{{println .}}{{end}}' | grep '^SOURCE_COMMIT='
+
+# 3. Check if UI code was actually deployed (cache issue) - force browser hard refresh: Cmd+Shift+R (Mac) or Ctrl+Shift+R (Windows)
+
+# 4. If still missing, check if feature was actually merged
+git log --oneline | grep -Ei 'logout|language|abmelden' | head -20
+```
+
+**Problem**: Commit mismatch error
+
+**Solution**:
+```bash
+# 1. Check what commit is actually deployed
+docker inspect pms-admin --format '{{range .Config.Env}}{{println .}}{{end}}' | grep '^SOURCE_COMMIT='
+
+# 2. Check Coolify deployment logs (via Coolify UI or docker logs pms-admin)
+
+# 3. If Coolify hasn't picked up latest commit yet: trigger manual redeploy in Coolify or wait for automatic deployment
+
+# 4. Verify local repo is up to date
+git fetch origin main && git log origin/main --oneline -5
+```
+
+### Related Sections
+
+- [Admin UI Layout Polish v2.1 (Profile + Language + Sidebar Polish)](#admin-ui-layout-polish-v21-profile--language--sidebar-polish)
+- [Admin UI Authentication Verification](#admin-ui-authentication-verification)
+
 ## Admin UI: Booking & Property Detail Pages
 
 ✅ **Verified in PROD on 2026-01-07** (source_commit a22da6660b7ad24a309429249c1255e575be37bc, smoke script exit code 0)

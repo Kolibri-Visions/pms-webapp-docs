@@ -425,11 +425,15 @@ open https://admin.fewo.kolibri-visions.de/dashboard
 - Professional appearance (consistent icon alignment)
 - No animation jank on route changes (already fixed in v2)
 
+**Verification Procedure:**
+To mark as VERIFIED, run `backend/scripts/pms_admin_ui_static_smoke.sh` with EXPECTED_COMMIT and verify rc=0. See [Admin UI Static Verification](../ops/runbook.md#admin-ui-static-verification-smoke-test) in runbook for details.
+
 **Related Entries:**
 - [Admin UI — Header: Profile Dropdown + Language Switch] - Initial language switcher implementation
 - [Admin UI — Backoffice Theme v2] - Layout foundation with blue palette and Lucide icons
 - [Admin UI — Build Hotfix (LucideIcon Typing)] - TypeScript compatibility
 
+---
 
 ### Admin UI — Profile Dropdown: Abmelden (Logout) ✅ IMPLEMENTED
 
@@ -531,12 +535,14 @@ open https://admin.fewo.kolibri-visions.de/dashboard
 - Reliable session cleanup (prevents stale auth states)
 - No breaking changes to existing auth flow
 
+**Verification Procedure:**
+To mark as VERIFIED, run `backend/scripts/pms_admin_ui_static_smoke.sh` with EXPECTED_COMMIT and verify rc=0. Script checks for "Abmelden" string in deployed chunks. See [Admin UI Static Verification](../ops/runbook.md#admin-ui-static-verification-smoke-test) in runbook.
+
 **Related Entries:**
 - [Admin UI — Topbar + Sidebar Polish v2.1] - Profile dropdown foundation
 - [Admin UI — Header: Profile Dropdown + Language Switch] - Initial profile dropdown implementation
 - [Admin UI Authentication Verification] - Auth flow and login page
 
----
 ---
 
 ### Admin UI — Build Hotfix (LucideIcon Typing) ✅ IMPLEMENTED
