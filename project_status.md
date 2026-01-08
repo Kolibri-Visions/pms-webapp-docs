@@ -178,6 +178,71 @@ Fixed production 500 error (ResponseValidationError) when GET /api/v1/bookings/{
 - **Result:** No more 500 ResponseValidationError on cancelled_by field. Legacy UUID values correctly mapped to actor='host' with cancelled_by_user_id populated.
 
 
+### Admin UI — Build Hotfix (LucideIcon Typing) ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-08
+
+**Overview:**
+Fixed production build failure in AdminShell.tsx caused by incorrect TypeScript typing for icon components. The `NavItem` interface defined icons too narrowly (`React.ComponentType<{ className?: string }>`), preventing use of `strokeWidth` and other valid Lucide icon props.
+
+**Problem:**
+Coolify deployment failed during `npm run build` with:
+```
+./app/components/AdminShell.tsx:169:37
+Type error: Property 'strokeWidth' does not exist on type '{ className?: string }'
+<Icon className="w-5 h-5" strokeWidth={1.75} />
+```
+
+**Root Cause:**
+- NavItem interface used narrow type: `icon: React.ComponentType<{ className?: string }>`
+- This only allowed `className` prop, blocking all other Lucide icon props
+- `strokeWidth` is a valid Lucide icon prop (controls line thickness)
+- TypeScript correctly rejected the invalid prop usage
+
+**Solution:**
+- Imported `LucideIcon` type from lucide-react
+- Updated NavItem interface: `icon: LucideIcon` instead of narrow ComponentType
+- LucideIcon type accepts all valid Lucide props: className, strokeWidth, size, color, etc.
+
+**Files Changed:**
+- `frontend/app/components/AdminShell.tsx` - Added `type LucideIcon` import, updated NavItem.icon type
+
+**Technical Details:**
+```ts
+// Before (WRONG):
+import { LayoutDashboard, Home, ... } from "lucide-react";
+interface NavItem {
+  icon: React.ComponentType<{ className?: string }>;  // ✗ Too narrow
+}
+
+// After (CORRECT):
+import { LayoutDashboard, Home, ..., type LucideIcon } from "lucide-react";
+interface NavItem {
+  icon: LucideIcon;  // ✓ Accepts all Lucide props
+}
+```
+
+**Impact:**
+- All strokeWidth usages now type-check correctly (lines 170, 341, 349, 352)
+- Icons render with consistent stroke thickness (1.75 for nav, 2 for search)
+- No functionality changes - purely typing fix for build compatibility
+
+**Status**: ✅ IMPLEMENTED (NOT VERIFIED)
+
+**Runbook Reference:**
+- Section: "Frontend Build Failures (AdminShell Icon Typing)" in `backend/docs/ops/runbook.md` (line ~18814)
+- Includes: Problem, root cause, fix, verification steps
+
+**Verification Required:**
+- Coolify build must pass (no TypeScript errors)
+- Admin UI pages render correctly (sidebar icons visible)
+- No runtime crashes or missing icons
+
+**Related Entries:**
+- [Admin UI — Backoffice Theme v2] - Original implementation that introduced Lucide icons
+
+---
+
 ### Admin UI — Backoffice Theme v2 (Layout + Sidebar Polish) ✅ IMPLEMENTED
 
 **Date Completed:** 2026-01-08

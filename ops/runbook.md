@@ -18810,6 +18810,58 @@ npm run build
 - Coolify deployment has env vars configured via settings
 
 ---
+
+## Frontend Build Failures (AdminShell Icon Typing)
+
+**Problem:** Coolify deployment fails during `npm run build` with TypeScript error in AdminShell.tsx:
+```
+./app/components/AdminShell.tsx:169:37
+Type error: Property 'strokeWidth' does not exist on type '{ className?: string }'
+<Icon className="w-5 h-5" strokeWidth={1.75} />
+```
+
+**Root Cause:**
+The `icon` property in `NavItem` interface was typed too narrowly:
+```ts
+// WRONG - only accepts className prop
+icon: React.ComponentType<{ className?: string }>;
+```
+
+This prevented passing `strokeWidth` and other Lucide icon props like `size`, `color`, etc.
+
+**Fix:**
+Import and use the proper `LucideIcon` type from lucide-react:
+```ts
+// Correct typing
+import { type LucideIcon } from "lucide-react";
+
+interface NavItem {
+  label: string;
+  href: string;
+  icon: LucideIcon;  // ✓ Accepts all Lucide props including strokeWidth
+  roles?: string[];
+  planLocked?: boolean;
+}
+```
+
+**Verification:**
+```bash
+# Local build test
+cd frontend && npm run build
+
+# Should compile successfully with no strokeWidth errors
+# All icon usages with strokeWidth={1.75} will now type-check correctly
+```
+
+**Files Changed:**
+- `frontend/app/components/AdminShell.tsx` - Updated NavItem interface to use LucideIcon type
+
+**Related:**
+- All icons in AdminShell are Lucide React icons (LayoutDashboard, Home, Calendar, etc.)
+- strokeWidth is a valid prop for all Lucide icons (controls line thickness)
+
+---
+
 ## Deploy Verification + Implemented vs Verified
 
 ### Overview
