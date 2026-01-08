@@ -15683,7 +15683,11 @@ ADMIN_BASE_URL=https://admin.example.com CONTAINER_NAME=pms-admin EXPECTED_COMMI
 |----------|---------|-------------|
 | `ADMIN_BASE_URL` | `https://admin.fewo.kolibri-visions.de` | Base URL of Admin UI |
 | `CONTAINER_NAME` | `pms-admin` | Docker container name to inspect |
-| `EXPECTED_COMMIT` | (empty) | Expected SOURCE_COMMIT (if set, script fails on mismatch) |
+| `EXPECTED_COMMIT` | (empty) | Expected SOURCE_COMMIT; accepts short prefix (e.g., 7 chars) or full 40-char SHA |
+
+**Notes**:
+- `EXPECTED_COMMIT` supports short SHA prefixes (e.g., `18d76f2`) for convenience; full 40-char SHA also accepted
+- Script checks numeric HTTP status code (`%{http_code}`), so HTTP/2 200 responses work correctly
 
 ### Expected Output (PASS)
 
