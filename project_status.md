@@ -3364,10 +3364,11 @@ This entry will be marked **VERIFIED** only after:
 
 ## Current Phase
 
-### Phase 21: Inventory/Availability Production Hardening 🟡
+### Phase 21: Inventory/Availability Production Hardening ✅ IMPLEMENTED
 
 **Date Started:** 2026-01-03
-**Status:** In Progress (Docs + Scaffolding)
+**Date Completed:** 2026-01-08
+**Status**: ✅ IMPLEMENTED (NOT VERIFIED)
 
 **Goals:**
 - Document common gotchas and operational guidance
@@ -3505,6 +3506,40 @@ This entry will be marked **VERIFIED** only after:
   - `test_bookings_exclusion_constraint_allows_inquiry_overlap()` in `test_booking_deadlock.py`
   - Verifies inquiry can be created, then confirmed booking overlaps inquiry (succeeds), then second confirmed fails
   - Tests database constraint behavior at unit level
+
+**Completed in Phase 21C (Availability API Hardening + Smoke Test):**
+- ✅ Production hardening validation for Availability API endpoints
+  - Validated existing error taxonomy: 401/403 (auth), 404 (not found), 409 (overlap conflict), 422 (validation), 503 (DB degraded)
+  - Confirmed PostgreSQL EXCLUSION constraint prevents overlapping blocks: `inventory_ranges_no_overlap` (migration 20251225190000)
+  - Verified date validation at multiple layers: Pydantic schema (@field_validator end_date > start_date), route layer (MAX_DATE_RANGE_DAYS = 365 days), DB CHECK constraint
+  - Validated retry logic with exponential backoff for /availability/sync endpoint (automatic 3 retries with 1s, 2s, 4s delays)
+  - Confirmed 409 conflict mapping from ConflictException for overlapping blocks (route layer lines 311-317)
+  - Located in: `app/api/routes/availability.py`, `app/services/availability_service.py`, `app/schemas/availability.py`, `supabase/migrations/20251225190000_availability_inventory_system.sql`
+- ✅ Comprehensive smoke test script: `pms_availability_phase21_smoke.sh`
+  - Tests full lifecycle: query → create block → detect overlap (409) → read block → delete → verify deletion (404)
+  - 6 automated tests with HTTP status code validation (200, 201, 204, 404, 409)
+  - Idempotent: creates test block + cleans up via DELETE (safe to run multiple times)
+  - Uses future dates by default (tomorrow + 7 days) to avoid past-date validation errors
+  - Requires JWT_TOKEN (admin/manager role) and PID (property ID)
+  - Environment variables: JWT_TOKEN (required), PID (required), API_BASE_URL (default: https://api.fewo.kolibri-visions.de), AVAIL_FROM (default: tomorrow), AVAIL_TO (default: tomorrow + 7 days)
+  - Located in: `backend/scripts/pms_availability_phase21_smoke.sh`
+- ✅ Runbook documentation: "Phase 21 — Availability Hardening Verification"
+  - Complete usage guide with exact one-liner commands (HOST-SERVER-TERMINAL)
+  - Troubleshooting scenarios: 401 (invalid JWT), 404 (property not found), 409 failure (constraint missing), 422 (invalid dates), 503 (DB degraded)
+  - Production verification procedure (get JWT, get PID, run smoke, verify rc=0)
+  - Located in: `backend/docs/ops/runbook.md` (line ~15822)
+- ✅ Scripts README documentation
+  - New section: `pms_availability_phase21_smoke.sh` with usage examples and expected output
+  - Requirements, exit codes, notes on safety and idempotency
+  - Located in: `backend/scripts/README.md` (line ~6714)
+
+**Verification Procedure:**
+To mark Phase 21 as VERIFIED in production:
+1. Obtain JWT token with admin or manager role from authenticated session or /api/v1/auth/login
+2. Get valid property ID: `curl -H "Authorization: Bearer $JWT_TOKEN" https://api.fewo.kolibri-visions.de/api/v1/properties | jq -r '.items[0].id'`
+3. Run smoke script: `JWT_TOKEN="eyJhbG..." PID="550e8400-..." ./backend/scripts/pms_availability_phase21_smoke.sh`
+4. Verify exit code is 0 and all 6 tests pass
+5. Update this entry: change "IMPLEMENTED" to "VERIFIED" and add verification evidence with date, JWT payload (role only), PID, and smoke script rc=0
 
 **What's Next:**
 - Edge cases validation:

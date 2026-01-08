@@ -15817,6 +15817,197 @@ git fetch origin main && git log origin/main --oneline -5
 - [Admin UI Layout Polish v2.1 (Profile + Language + Sidebar Polish)](#admin-ui-layout-polish-v21-profile--language--sidebar-polish)
 - [Admin UI Authentication Verification](#admin-ui-authentication-verification)
 
+---
+
+## Phase 21 — Availability Hardening Verification
+
+### Overview
+
+Phase 21 production hardening for Availability API endpoints. Validates availability query, block creation/deletion, overlap conflict detection (409), and proper error handling.
+
+### Script
+
+**Location**: `backend/scripts/pms_availability_phase21_smoke.sh`
+
+**Execution**: HOST-SERVER-TERMINAL
+
+**Purpose**: Verify that:
+1. Availability query works (GET /api/v1/availability)
+2. Block creation succeeds with 201 (POST /api/v1/availability/blocks)
+3. Overlapping block returns 409 conflict (DB EXCLUSION constraint working)
+4. Block read works (GET /api/v1/availability/blocks/{block_id})
+5. Block deletion succeeds with 204 (DELETE /api/v1/availability/blocks/{block_id})
+6. Deleted block returns 404 (verification)
+
+### Usage
+
+```bash
+# Basic usage (requires JWT_TOKEN and PID)
+JWT_TOKEN="eyJhbG..." PID="550e8400-e29b-..." ./backend/scripts/pms_availability_phase21_smoke.sh
+
+# With custom API URL
+API_BASE_URL=https://api.test.example.com JWT_TOKEN="eyJhbG..." PID="550e8400-..." ./backend/scripts/pms_availability_phase21_smoke.sh
+
+# With custom date range
+JWT_TOKEN="eyJhbG..." PID="550e8400-..." AVAIL_FROM=2026-02-01 AVAIL_TO=2026-02-08 ./backend/scripts/pms_availability_phase21_smoke.sh
+```
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `JWT_TOKEN` | (required) | Valid JWT token with admin or manager role |
+| `PID` | (required) | Property ID (UUID) to test with |
+| `API_BASE_URL` | `https://api.fewo.kolibri-visions.de` | API base URL |
+| `AVAIL_FROM` | tomorrow (YYYY-MM-DD) | Block start date |
+| `AVAIL_TO` | tomorrow + 7 days (YYYY-MM-DD) | Block end date |
+
+**Notes**:
+- Script uses future dates by default to avoid past-date validation errors
+- Property must exist and belong to authenticated user's agency
+- Script creates test block, verifies overlap protection (409), then cleans up via DELETE
+- Safe to run multiple times (idempotent: creates + deletes block each run)
+- All HTTP status codes validated: 200 (query/read), 201 (create), 204 (delete), 404 (not found), 409 (conflict)
+
+### Expected Output (PASS)
+
+```
+======================================================================
+Availability API Phase 21 - Smoke Test
+======================================================================
+
+Configuration:
+  API_BASE_URL: https://api.fewo.kolibri-visions.de
+  PID: 550e8400-e29b-41d4-a716-446655440000
+  AVAIL_FROM: 2026-01-09
+  AVAIL_TO: 2026-01-16
+  JWT_TOKEN: <set (hidden)>
+
+[TEST 1] Query availability for property
+  ✓ PASS: HTTP 200 - availability query successful
+  ✓ PASS: Response has valid structure (property_id, from_date, to_date, ranges)
+
+[TEST 2] Create availability block
+  ✓ PASS: HTTP 201 - block created successfully
+  ✓ PASS: Block ID extracted: 123e4567-e89b-12d3-a456-426614174000
+
+[TEST 3] Create overlapping block (expect 409 conflict)
+  ✓ PASS: HTTP 409 - overlap correctly rejected
+
+[TEST 4] Read single availability block
+  ✓ PASS: HTTP 200 - block retrieved successfully
+  ✓ PASS: Block ID matches created block
+
+[TEST 5] Delete availability block (cleanup)
+  ✓ PASS: HTTP 204 - block deleted successfully
+
+[TEST 6] Verify block deletion (expect 404)
+  ✓ PASS: HTTP 404 - block no longer exists (verified)
+
+======================================================================
+Test Summary
+======================================================================
+
+Tests run:    6
+Tests passed: 6
+Tests failed: 0
+
+  ✓ PASS: ✓ ALL TESTS PASSED
+```
+
+Exit code: `0`
+
+### Troubleshooting
+
+**Problem**: Test 1 fails with 401 Unauthorized
+
+**Solution**:
+```bash
+# 1. Verify JWT_TOKEN is valid and not expired
+echo $JWT_TOKEN | cut -d'.' -f2 | base64 -d 2>/dev/null | jq .exp
+
+# 2. Check JWT has admin or manager role
+echo $JWT_TOKEN | cut -d'.' -f2 | base64 -d 2>/dev/null | jq .role
+
+# 3. Get fresh token from /api/v1/auth/login
+curl -X POST https://api.fewo.kolibri-visions.de/api/v1/auth/login -H "Content-Type: application/json" -d '{"email":"admin@example.com","password":"..."}'
+```
+
+**Problem**: Test 1 fails with 404 Property not found
+
+**Solution**:
+```bash
+# 1. Verify property exists and belongs to your agency
+curl -H "Authorization: Bearer $JWT_TOKEN" https://api.fewo.kolibri-visions.de/api/v1/properties
+
+# 2. Use a valid PID from the response
+PID=<valid-property-uuid> JWT_TOKEN="..." ./backend/scripts/pms_availability_phase21_smoke.sh
+```
+
+**Problem**: Test 3 fails - overlap not rejected (expected 409, got 201)
+
+**Cause**: Database EXCLUSION constraint not working or migration not applied
+
+**Solution**:
+```bash
+# 1. Verify btree_gist extension enabled
+psql $DATABASE_URL -c "SELECT * FROM pg_extension WHERE extname='btree_gist';"
+
+# 2. Verify EXCLUSION constraint exists
+psql $DATABASE_URL -c "SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint WHERE conname='inventory_ranges_no_overlap';"
+
+# 3. Re-apply migration if missing
+psql $DATABASE_URL -f supabase/migrations/20251225190000_availability_inventory_system.sql
+```
+
+**Problem**: Test 2 fails with 422 Validation Error (invalid date range)
+
+**Cause**: AVAIL_FROM is in the past or AVAIL_TO <= AVAIL_FROM
+
+**Solution**:
+```bash
+# Use explicit future dates
+AVAIL_FROM=2026-06-01 AVAIL_TO=2026-06-08 JWT_TOKEN="..." PID="..." ./backend/scripts/pms_availability_phase21_smoke.sh
+```
+
+**Problem**: Test 5 fails with 503 Service Unavailable
+
+**Cause**: Database temporarily unavailable or connection pool exhausted
+
+**Solution**:
+```bash
+# 1. Check database connectivity
+psql $DATABASE_URL -c "SELECT 1;"
+
+# 2. Check API health
+curl https://api.fewo.kolibri-visions.de/health
+
+# 3. Wait 30 seconds and retry (automatic retry with exponential backoff already in API)
+```
+
+### Production Verification Procedure
+
+To mark Phase 21 as **VERIFIED** in project_status.md:
+
+1. **Get JWT token** from authenticated session or login endpoint
+2. **Get valid PID** from properties list:
+   ```bash
+   curl -H "Authorization: Bearer $JWT_TOKEN" https://api.fewo.kolibri-visions.de/api/v1/properties | jq -r '.items[0].id'
+   ```
+3. **Run smoke script**:
+   ```bash
+   JWT_TOKEN="eyJhbG..." PID="550e8400-..." ./backend/scripts/pms_availability_phase21_smoke.sh
+   ```
+4. **Verify exit code** is `0` and all 6 tests pass
+5. **Update project_status.md**: Change status from "IMPLEMENTED" to "VERIFIED" and add verification evidence
+
+### Related Sections
+
+- [Availability API Documentation](#availability-api) (if exists)
+- [Database Schema - Availability Tables](#database-schema) (if exists)
+
+---
+
 ## Admin UI: Booking & Property Detail Pages
 
 ✅ **Verified in PROD on 2026-01-07** (source_commit a22da6660b7ad24a309429249c1255e575be37bc, smoke script exit code 0)
