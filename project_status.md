@@ -178,6 +178,129 @@ Fixed production 500 error (ResponseValidationError) when GET /api/v1/bookings/{
 - **Result:** No more 500 ResponseValidationError on cancelled_by field. Legacy UUID values correctly mapped to actor='host' with cancelled_by_user_id populated.
 
 
+### Admin UI — Backoffice Theme v1 ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-08
+
+**Overview:**
+Applied Backoffice Theme v1 (Paperpillar-inspired modern dashboard) to Admin UI with a refined color palette featuring base neutrals, green accents, purple highlights, and warm tones. Replaced previous soft beige theme with a more professional, structured design system using dark text on light neutral backgrounds.
+
+**Problem:**
+- Previous visual theme used soft beige/cream colors that lacked professional polish
+- Inconsistent color system without structured palette
+- Sage green accents were too muted for clear interactive feedback
+- Typography used multiple fonts (Plus Jakarta Sans + Inter) adding complexity
+
+**Solution:**
+
+**Design Tokens & Theme v1 Palette:**
+Added comprehensive CSS variable system in `frontend/app/globals.css`:
+- **Base Colors**: #121212 (darkest), #201F23, #45515C, #596269, #FFFFFF
+- **Green Palette**: #395917 (darkest), #4C6C5A (primary), #617C6C, #A4C8AE, #E8EFEA (lightest - bg)
+- **Purple Palette**: #595D75 (accent), #BBBED5, #E3E4EA
+- **Warm Accents**: Beige (#A39170, #E5D6B8), Tosca (#C1DBDA), Red (#9B140B)
+- **Key Tokens**:
+  - `--bo-bg`: #E8EFEA (soft neutral background)
+  - `--bo-card`: #FFFFFF (white cards)
+  - `--bo-text`: #121212 (primary text - high contrast)
+  - `--bo-text-muted`: #596269 (secondary text)
+  - `--bo-primary`: #4C6C5A (primary green)
+  - `--bo-primary-hover`: #395917 (darker green)
+  - `--bo-danger`: #9B140B (red for warnings/errors)
+  - `--bo-accent`: #595D75 (purple for highlights)
+  - `--bo-radius-lg`: 1.5rem (24px rounded corners)
+  - `--bo-radius-full`: 9999px (pills and circles)
+
+**Typography:**
+- Unified to Inter font for all text (headings + body)
+- Removed Plus Jakarta Sans to simplify font loading
+- Configured via `next/font/google` with CSS variable `--font-inter`
+- Typography hierarchy maintained with font-weight and size variations
+
+**Shell Layout:**
+- App background: Soft neutral #E8EFEA
+- Sidebar: Icon-only vertical layout (left side), white background with soft shadow
+- Navigation icons: Circular backgrounds (w-10 h-10 rounded-full)
+  - **Active state**: Dark circle (#121212) with white icon - high contrast
+  - **Inactive state**: Light background (bg-bo-surface-2) with muted icon
+- Topbar: White background with pill-shaped search input, round icon buttons (notifications, profile)
+- Clean, modern spacing with generous padding
+
+**Component Styling:**
+- **Cards**: White background (#FFFFFF), rounded-bo-lg/xl corners, soft shadows (shadow-bo-soft/md)
+- **Tables**: Headers use bg-bo-surface-2, rows have hover:bg-bo-surface-2 transition
+- **Inputs**: Pill-shaped (rounded-full) with border-bo-border
+- **Buttons**: Rounded-full with primary green (bg-bo-primary hover:bg-bo-primary-hover)
+- **Status badges**: Pill-shaped with semantic colors (green for success, red for errors, purple for info)
+- **Text colors**: Consistent use of text-bo-text (primary) and text-bo-text-muted (secondary)
+
+**Files Changed (Batch Update via sed):**
+- `frontend/app/globals.css` - Complete Theme v1 palette with CSS variables
+- `frontend/tailwind.config.ts` - Extended theme.colors.bo and boxShadow utilities
+- `frontend/app/components/AdminShell.tsx` - Updated active state to dark circle, adjusted spacing
+- `frontend/app/dashboard/page.tsx` - Updated to Theme v1 classes
+- `frontend/app/bookings/page.tsx` - Batch sed: bg-white→bg-bo-card, text-gray→text-bo-text, etc.
+- `frontend/app/bookings/[id]/page.tsx` - Applied card/text styling with Theme v1 tokens
+- `frontend/app/properties/page.tsx` - Updated table, cards, inputs to Theme v1
+- `frontend/app/properties/[id]/page.tsx` - Applied Theme v1 card styling
+- `frontend/app/channel-sync/page.tsx` - Updated sync dashboard styling
+
+**Key Features:**
+- **Structured color palette**: Professional base/green/purple/warm accent system
+- **High contrast text**: Dark #121212 on light backgrounds for readability
+- **Active state clarity**: Dark circle (#121212) with white icon for unmistakable feedback
+- **Unified typography**: Single font (Inter) reduces complexity and load time
+- **Consistent shadows**: Soft, subtle depth throughout (shadow-bo-soft/md)
+- **Modern radius system**: Pills (rounded-full) and cards (rounded-bo-lg/xl)
+- **Semantic colors**: Clear meaning for status indicators and interactive elements
+- **Generous spacing**: Better visual hierarchy and breathing room
+
+**Browser Verification Checklist:**
+```bash
+# Navigate to Admin UI
+open https://admin.fewo.kolibri-visions.de/login
+
+# Visual verification for Theme v1:
+□ Background is soft neutral (#E8EFEA)
+□ Sidebar is icon-only vertical layout (left side)
+□ Active nav icon has dark circle (#121212) with white icon
+□ Inactive nav icons have light background (bg-bo-surface-2)
+□ Cards are white (#FFFFFF) with soft shadows
+□ Buttons use primary green (#4C6C5A)
+□ Text is high contrast (primary #121212, muted #596269)
+□ All text uses Inter font
+□ Pill-shaped inputs and buttons (rounded-full)
+□ Status badges have semantic colors
+
+# Test Theme v1 on pages:
+- /dashboard         → White cards on soft green background
+- /bookings          → Table with Theme v1 palette
+- /bookings/{id}     → Detail cards with new styling
+- /properties        → Table and search with Theme v1
+- /properties/{id}   → Detail page with multiple sections
+- /channel-sync      → Sync dashboard with connection cards
+```
+
+**Status**: ✅ IMPLEMENTED (NOT VERIFIED)
+
+**Runbook Reference:**
+- Section: "Admin UI Visual Style (Backoffice Theme v1)" in `backend/docs/ops/runbook.md` (line ~15280)
+- Includes: Theme v1 Palette, Theme Tokens, Design Patterns, Browser Verification, Troubleshooting
+
+**Operational Impact:**
+- Professional, polished dashboard aesthetic aligned with modern design trends
+- Clear visual hierarchy with high-contrast text improves usability
+- Simplified font system (single font) reduces page load complexity
+- Structured color palette enables consistent future development
+- Active state clarity improves navigation confidence
+- No functionality changes - purely visual enhancement
+
+**Related Entries:**
+- [Admin UI — Bookings & Properties Listing] - Updated with Theme v1 styling
+- [Admin UI — Booking & Property Detail Pages] - Updated with Theme v1 cards
+
+---
+
 ### Admin UI — Backoffice Visual Style ✅
 
 **Date Completed:** 2026-01-07

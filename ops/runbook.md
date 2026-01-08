@@ -15277,57 +15277,76 @@ bash /app/scripts/pms_phase23_smoke.sh
 ---
 
 
-## Admin UI Visual Style (Backoffice Theme)
+## Admin UI Visual Style (Backoffice Theme v1)
 
 ### Overview
 
-The Admin UI uses a premium "soft cream backoffice" visual theme to provide a modern, cohesive user experience. The theme features a lighter cream background, sage green accents, icon-only sidebar, and rounded UI elements for a professional, airy look.
+The Admin UI uses a modern "Backoffice Theme v1" inspired by Paperpillar dashboard design. The theme features a soft neutral background (#E8EFEA), white cards with generous radius, icon-only sidebar with dark active states, and a cohesive green-purple-beige color system.
+
+### Theme v1 Palette
+
+**Base Colors**:
+- #121212 #201F23 #45515C #596269 #FFFFFF
+
+**Green Palette** (Primary actions, success states):
+- #395917 (dark green) #4C6C5A (primary) #617C6C #A4C8AE #E8EFEA (background)
+
+**Purple Palette** (Accents, borders):
+- #595D75 (accent) #BBBED5 (light) #E3E4EA (borders)
+
+**Additional Accents**:
+- Beige: #A39170 #E5D6B8
+- Tosca: #C1DBDA
+- Red: #9B140B (danger)
 
 ### Theme Tokens
 
 **CSS Variables** (defined in `frontend/app/globals.css`):
-- `--bo-bg`: #FAF8F3 (soft cream background)
-- `--bo-surface`: #FFFFFF (white cards/surfaces)
-- `--bo-surface-2`: #F7F5F0 (secondary surface tint)
-- `--bo-border`: #E8E6E1 (light borders)
-- `--bo-text`: #1F2937 (primary text)
-- `--bo-text-muted`: #6B7280 (secondary text)
-- `--bo-accent-sage`: #9CA896 (sage green accent)
-- `--bo-accent-sage-light`: #E8ECE7 (light sage)
-- `--bo-shadow`: Subtle shadow for cards (softer)
-- `--bo-shadow-md`: Medium shadow for elevated elements
-- `--bo-shadow-lg`: Large shadow for prominent elements
-- `--bo-radius-*`: Border radius tokens (sm: 0.5rem, default: 1rem, lg: 1.5rem, xl: 1.75rem, 2xl: 2rem)
+- `--bo-bg`: #E8EFEA (soft neutral background - lightest green)
+- `--bo-card`: #FFFFFF (white cards)
+- `--bo-border`: #E3E4EA (subtle borders - light purple)
+- `--bo-text`: #121212 (primary text - darkest base)
+- `--bo-text-muted`: #596269 (muted text)
+- `--bo-primary`: #4C6C5A (primary green for actions)
+- `--bo-success`: #A4C8AE (success states)
+- `--bo-danger`: #9B140B (danger/error states)
+- `--bo-accent`: #595D75 (purple accents)
+- `--bo-shadow-soft`: Soft shadows for pills/buttons
+- `--bo-shadow`: Standard card shadows
+- `--bo-shadow-md`: Medium elevation shadows
+- `--bo-radius-lg`: 1.5rem (24px) for main cards
+- `--bo-radius-full`: 9999px for pills/circles
 
 **Typography**:
-- Headings: Plus Jakarta Sans (via `font-heading` class)
+- Headings: Plus Jakarta Sans (via `font-heading` class) - fallback for General Sans
 - Body: Inter (via `font-sans` class)
-- Sizes: H1 = 3xl, Section headers = xl, Body = base/sm
+- Hierarchy: H1 = 2xl-3xl, H2 = xl, Body = base/sm
 
 ### Design Patterns
 
 **Shell Layout**:
-- Background: Soft cream (`bg-bo-bg` - #FAF8F3)
-- Sidebar: Icon-only by default (collapsible), pill-style container with `rounded-bo-2xl`, soft shadow, white background
-- Topbar: Transparent background with greeting header ("Hello, User!"), integrated search bar, circular notification buttons
-- Content area: Generous padding (p-6 to p-8)
+- Background: Soft neutral (`bg-bo-bg` - #E8EFEA, lightest green)
+- Sidebar: Icon-only by default, pill container with `rounded-bo-lg`, white background, soft shadow
+- Topbar: Transparent background with greeting header ("Hello, User!"), pill search input, circular icon buttons
+- Content area: Generous padding (p-6 to p-8), cards with large radius
 
 **Navigation**:
-- Icon backgrounds: Circular (`w-10 h-10 rounded-full`) with `bg-bo-surface-2` default
-- Active items: Sage green gradient background (`from-bo-accent-sage to-bo-accent-sage/80`) with subtle shadow
-- Inactive items: Hover state with text color change
+- Icon backgrounds: Circular (`w-10 h-10 rounded-full`) with light purple background
+- Active state: Dark circle (#121212 - darkest base) with white icon and shadow
+- Inactive state: Light purple background, hover transitions to lighter purple
 - Expandable sidebar: Shows labels when expanded, icon-only when collapsed
 
 **Cards & Tables**:
-- Cards: `rounded-bo-xl` (2rem), white background, border, shadow
-- Table headers: `bg-bo-surface-2` with muted text
+- Cards: White (`bg-bo-card`), `rounded-bo-lg` (24px), subtle border (#E3E4EA), soft shadow
 - Table rows: Hover effect with `hover:bg-bo-surface-2`
-- Status badges: `rounded-full` pills with soft background colors
+- Status badges: `rounded-full` pills with semantic colors
+- Card spacing: Generous internal padding (p-6 to p-12)
 
 **Form Elements**:
-- Inputs: `rounded-full` with shadow, white background, bo-border
-- Buttons: `rounded-full` with transitions, subtle shadows
-- Focus: 2px ring with primary color
+- Inputs: Pill style (`rounded-full`), white background, light purple border, soft shadow
+- Buttons: Primary uses green (`bg-bo-primary`), rounded-xl to rounded-2xl, soft shadows
+- Focus rings: Use primary green color
+- Search bar: Pill-shaped with icon, integrated in topbar
 
 ### Browser Verification
 
@@ -15336,30 +15355,31 @@ The Admin UI uses a premium "soft cream backoffice" visual theme to provide a mo
 # Navigate to Admin UI
 open https://admin.fewo.kolibri-visions.de/login
 
-# After login, verify:
-1. Background is soft cream (#FAF8F3)
-2. Sidebar is icon-only by default (collapsible with expand button)
-3. Sidebar has pill shape with rounded-bo-2xl corners and soft shadow
-4. Navigation icons have circular backgrounds (w-10 h-10 rounded-full)
-5. Active nav icon has sage green gradient background (#9CA896)
-6. Topbar shows greeting "Hello, User!" with contextual subtitle
-7. Search bar is integrated in topbar (pill-shaped with icon)
-8. Notification buttons are circular with red badge indicator
-9. Cards/tables have large rounded corners (rounded-bo-xl)
-10. Status badges are pill-shaped
-11. Buttons are rounded-full
-12. All text is readable (good contrast)
-13. Headings use Plus Jakarta Sans font
-14. Body text uses Inter font
+# After login, verify Theme v1 styling:
+1. Background is soft neutral (#E8EFEA - lightest green)
+2. Sidebar is icon-only vertical layout (left side)
+3. Navigation icons have circular backgrounds (w-10 h-10 rounded-full)
+4. Active nav icon has dark circle (#121212) with white icon
+5. Inactive nav icons have light background (bg-bo-surface-2)
+6. Topbar has white background with pill-shaped search input
+7. Topbar shows round icon buttons (notifications, profile)
+8. Cards are white (#FFFFFF) with soft shadows (shadow-bo-soft)
+9. Cards have large rounded corners (rounded-bo-lg or rounded-bo-xl)
+10. Status badges are pill-shaped with semantic colors
+11. Buttons are rounded-full with primary green (#4C6C5A)
+12. Text colors: primary #121212, muted #596269
+13. All text uses Inter font (next/font/google optimization)
+14. Good contrast on all interactive elements
 
-# Test pages:
-- /dashboard
-- /bookings
-- /bookings/{id}
-- /properties
-- /properties/{id}
-- /guests
-- /connections
+# Test pages for Theme v1:
+- /dashboard         → White cards on soft green background
+- /bookings          → Table with new color palette
+- /bookings/{id}     → Detail page with info cards
+- /properties        → Table with search filter
+- /properties/{id}   → Detail page with multiple sections
+- /channel-sync      → Sync dashboard with connection cards
+- /guests            → Guest list
+- /connections       → Connection management
 ```
 
 ### Troubleshooting
@@ -15369,16 +15389,17 @@ open https://admin.fewo.kolibri-visions.de/login
 **Solution**:
 ```bash
 # 1. Check browser network tab for font download
-# Fonts should load from fonts.gstatic.com
+# Inter font should load from fonts.gstatic.com
 
 # 2. Hard refresh to clear cache
 # Browser: Cmd+Shift+R (Mac) / Ctrl+Shift+R (Windows)
 
 # 3. Verify font variables in DevTools
-# Elements → <body> → Should see --font-inter and --font-heading variables
+# Elements → <body> → Should see --font-inter variable
+# Theme v1 uses Inter for all text (body and headings)
 
 # 4. Check Next.js font optimization
-# Fonts are loaded via next/font/google, preloaded automatically
+# Inter is loaded via next/font/google with automatic preloading
 ```
 
 **Problem**: CSS variables not applied (colors look wrong)
@@ -15388,28 +15409,35 @@ open https://admin.fewo.kolibri-visions.de/login
 # 1. Check if globals.css is loaded
 # DevTools → Network → Filter CSS → Should see globals.css
 
-# 2. Verify CSS variable values
-# DevTools → Elements → :root → Styles panel → Should see --bo-* variables
+# 2. Verify Theme v1 CSS variable values in DevTools
+# DevTools → Elements → :root → Styles panel
+# Should see Backoffice Theme v1 variables:
+# --bo-bg: #E8EFEA
+# --bo-card: #FFFFFF
+# --bo-text: #121212
+# --bo-primary: #4C6C5A
+# ... (all Theme v1 palette variables)
 
 # 3. Hard refresh browser cache
-# Sometimes Tailwind purge cache needs clearing
+# Cmd+Shift+R (Mac) / Ctrl+Shift+R (Windows)
 
-# 4. Check Tailwind config
-# Ensure tailwind.config.ts extends theme with bo-* utilities
+# 4. Check Tailwind config extension
+# Ensure tailwind.config.ts extends theme.colors.bo with new utilities
 ```
 
 **Problem**: Components still show old styling
 
 **Solution**:
 ```bash
-# 1. Check if page was updated
-# View source → Search for "bg-bo-surface" or "font-heading"
+# 1. Check if page was updated to Theme v1
+# View source → Search for "bg-bo-card", "text-bo-text", "rounded-bo-lg"
+# Should NOT see old classes like "bg-white", "text-gray-*"
 
-# 2. Clear Next.js cache
+# 2. Clear Next.js cache and rebuild
 cd frontend && rm -rf .next && npm run dev
 
-# 3. Verify deployment
-# Check if latest commit is deployed via git log
+# 3. Verify deployment includes Theme v1 commit
+# Check git log for "ui: backoffice theme v1 (dashboard style)"
 ```
 
 **Problem**: Rounded corners too aggressive / not matching design
