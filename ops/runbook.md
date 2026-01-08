@@ -24388,4 +24388,74 @@ psql $DATABASE_URL -c "SELECT id FROM auth.users WHERE id IN (...);"
 - Or manually migrate existing auth.users to owners table first
 - Then re-run migration to add FK constraint
 
+
+### 503 Service Unavailable (Transient Database Disconnect)
+
+**Symptom:** API returns 503 with message "Database connection temporarily lost. Please retry." or "Database temporarily unavailable. Please retry."
+
+**Root Cause:** Transient database connection drops during request processing. Common causes:
+- Network interruption between API and database
+- Database server restart or failover
+- Connection pool churn (old connections closed, new ones not yet ready)
+- Database under heavy load (temporary connection timeout)
+
+**Architecture:** As of Phase 3, transient DB errors (ConnectionDoesNotExistError, InterfaceError) are caught and mapped to HTTP 503 instead of 500. This prevents false positives in error monitoring and signals clients to retry.
+
+**How to Debug:**
+
+1. **Check request ID in logs**:
+   ```bash
+   # Smoke script automatically includes X-Request-Id header: smoke-test-{manager|owner}-{pid}-{random}
+   # Search backend logs for request ID
+   docker logs pms-backend-container 2>&1 | grep "smoke-test-manager-12345-6789"
+   ```
+
+2. **Check for transient DB errors in logs**:
+   ```bash
+   # Look for ConnectionDoesNotExistError or InterfaceError
+   docker logs pms-backend-container 2>&1 | grep -E "ConnectionDoesNotExistError|InterfaceError" | tail -20
+   ```
+
+3. **Verify database connectivity**:
+   ```bash
+   # Test direct connection to database
+   psql $DATABASE_URL -c "SELECT 1;"
+   
+   # Check database server status
+   docker ps | grep postgres
+   
+   # Check connection pool state via health endpoint
+   curl "$HOST/health/db"
+   ```
+
+4. **Check timing pattern**:
+   - **Single 503**: Likely transient network blip → Retry should succeed
+   - **Frequent 503s**: Database overload or connectivity issue → Check DB metrics
+   - **503 during tenant resolution**: DB query in get_current_agency_id or get_current_owner failed
+
+**Solution:**
+
+For clients:
+- **Retry the request** (503 is designed to be safe to retry)
+- **Exponential backoff**: Wait 1s, then 2s, then 4s between retries
+- Smoke script already includes request IDs for debugging
+
+For operators:
+- **Check database health**: CPU, memory, connection count, slow queries
+- **Check network**: Packet loss, latency between API and DB
+- **Check pool settings**: May need to increase min_size/max_size in database.py
+- **Check logs**: If frequent 503s with "connection dropped during tenant resolution", investigate team_members query performance
+
+**Expected Behavior:**
+- 503 errors should be rare (< 0.1% of requests)
+- Retries should succeed within 1-2 attempts
+- Logs should show "Connection cleanup failed (already closed)" warnings (expected, safely ignored)
+- No "Task exception was never retrieved" errors (fixed in Phase 3 with safe cleanup)
+
+**Distinguishing 503 from 4xx:**
+- **503**: Transient, safe to retry (DB connection lost, pool exhausted, DNS failure)
+- **400**: User error, don't retry (missing x-agency-id, invalid UUID format)
+- **403**: Authorization failure, don't retry (not a member, inactive owner)
+- **422**: Validation error, don't retry (invalid request body)
+
 ---
