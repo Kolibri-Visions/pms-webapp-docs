@@ -2892,6 +2892,115 @@ This entry will be marked **VERIFIED** only after:
 
 ---
 
+# P2 Extension: Pricing Fees and Taxes
+
+**Implementation Date:** 2026-01-08
+
+**Scope:** Extend P2 Pricing Foundation with comprehensive quote breakdown including fees and taxes
+
+**Features Implemented:**
+
+1. **Database Migration** (supabase/migrations/20260108200000_add_pricing_fees_and_taxes.sql):
+   - Created pricing_fees table: agency_id, property_id (nullable for agency-wide), name, type (per_stay/per_night/per_person/percent), value_cents, value_percent, taxable, active
+   - Created pricing_taxes table: agency_id, property_id (nullable for agency-wide), name, percent (0-100), active
+   - Foreign key constraints: pricing_fees/pricing_taxes → agencies/properties (CASCADE)
+   - Validation constraint: CHECK fee type matches value field (percent → value_percent required; else value_cents required)
+   - Indexes for performance: agency_id, property_id, active
+   - All fields nullable/optional for gradual adoption (backwards compatible)
+
+2. **API Schemas** (backend/app/schemas/pricing.py - EXTENDED):
+   - PricingFeeCreate (create fee with type validation)
+   - PricingFeeResponse (fee response)
+   - PricingFeeUpdate (update fee)
+   - PricingTaxCreate (create tax)
+   - PricingTaxResponse (tax response)
+   - PricingTaxUpdate (update tax)
+   - FeeLineItem (fee breakdown in quote: name, type, amount_cents, taxable)
+   - TaxLineItem (tax breakdown in quote: name, percent, amount_cents)
+   - QuoteRequest - EXTENDED with adults (default 1) and children (default 0)
+   - QuoteResponse - EXTENDED with:
+     - subtotal_cents (nightly_cents × nights)
+     - fees: list[FeeLineItem]
+     - fees_total_cents
+     - taxable_amount_cents (subtotal + taxable fees)
+     - taxes: list[TaxLineItem]
+     - taxes_total_cents
+     - total_cents (subtotal + fees + taxes)
+   - Backward compatible: existing quote requests still work, new fields default to empty arrays/0
+
+3. **API Routes** (backend/app/api/routes/pricing.py - EXTENDED):
+   - GET /api/v1/pricing/fees?property_id={uuid}&active={bool}&limit={int}&offset={int} (list fees)
+   - POST /api/v1/pricing/fees (create fee with type validation)
+   - GET /api/v1/pricing/taxes?property_id={uuid}&active={bool}&limit={int}&offset={int} (list taxes)
+   - POST /api/v1/pricing/taxes (create tax)
+   - POST /api/v1/pricing/quote - EXTENDED to calculate comprehensive breakdown
+   - Fee/tax management requires manager/admin role (via require_roles)
+   - Agency scoping via get_db_authed
+
+4. **Comprehensive Quote Calculation Logic** (EXTENDED):
+   - Calculate accommodation subtotal: subtotal_cents = nightly_cents × nights
+   - Fetch active fees (property-specific first, then agency-wide)
+   - Calculate fees:
+     - per_stay: value_cents (once per booking)
+     - per_night: value_cents × nights
+     - per_person: value_cents × (adults + children) × nights
+     - percent: (subtotal_cents × value_percent) / 100
+   - Calculate taxable amount: subtotal_cents + sum(taxable_fees)
+   - Fetch active taxes (property-specific first, then agency-wide)
+   - Calculate taxes: (taxable_amount_cents × tax.percent) / 100 for each tax
+   - Calculate grand total: subtotal_cents + fees_total_cents + taxes_total_cents
+   - All calculations use integer arithmetic with int() truncation (not round())
+
+5. **Fee Types Supported**:
+   - per_stay: Fixed fee per booking (e.g., cleaning fee $50)
+   - per_night: Fee per night (e.g., resort fee $20/night)
+   - per_person: Fee per person per night (e.g., linen $5/person/night)
+   - percent: Percentage of subtotal (e.g., service fee 10%)
+
+6. **Smoke Test** (backend/scripts/pms_pricing_quote_smoke.sh - EXTENDED):
+   - Test 1: Create rate plan with base pricing
+   - Test 2: List rate plans
+   - Test 3: Verify rate plan in list
+   - Test 4: Create cleaning fee (per_stay, taxable, $50)
+   - Test 5: List fees
+   - Test 6: Create sales tax (7.5%)
+   - Test 7: List taxes
+   - Test 8: Calculate comprehensive quote (with adults=2, children=1)
+   - Test 9: Verify quote breakdown:
+     - subtotal_cents = nightly_cents × nights
+     - fees_total_cents = cleaning_fee
+     - taxable_amount_cents = subtotal + cleaning_fee (taxable)
+     - taxes_total_cents = taxable_amount × 7.5%
+     - total_cents = subtotal + fees + taxes
+   - All tests must pass (rc=0)
+
+7. **Documentation** (DOCS SAFE MODE - add-only with grep proof):
+   - runbook.md:21229-21446 - "P2 Pricing v1 Extension (Fees and Taxes)" section
+   - scripts/README.md:6004-6035 - Extended smoke test documentation
+   - project_status.md - This P2 Extension entry
+
+**Architecture:**
+- Four-table design: rate_plans + rate_plan_seasons (Foundation) + pricing_fees + pricing_taxes (Extension)
+- Property-specific fees/taxes take precedence over agency-wide
+- Taxable fees included in tax base calculation
+- Integer arithmetic with int() truncation for all calculations
+- Agency scoping enforced via get_db_authed
+- RBAC via require_roles("manager", "admin") for fee/tax management
+- Quote endpoint backward compatible: returns empty arrays/0 totals if no fees/taxes configured
+
+**Type Validation:**
+- percent type: value_percent required, value_cents must be null
+- per_stay/per_night/per_person: value_cents required, value_percent must be null
+- Validation enforced at API layer with 400 Bad Request on mismatch
+
+**Status:** ✅ IMPLEMENTED
+
+**Commit:** (pending - will be added in next commit)
+
+**Note:** Status is IMPLEMENTED (not VERIFIED) as this is MVP without UI. PROD verification will occur after deployment and smoke test execution.
+
+---
+
 # P3a: Idempotency + Audit Log (Public Booking Requests)
 
 **Implementation Date:** 2026-01-06

@@ -21225,6 +21225,227 @@ curl https://api.example.com/api/v1/ops/modules | jq '{
 - Use this endpoint for ops verification, not `/openapi.json` (OpenAPI may lag behind reality)
 
 ---
+
+### P2 Pricing v1 Extension (Fees and Taxes)
+
+**Scope**: Comprehensive pricing breakdown with fees and taxes for booking quotes
+
+**Architecture Note**: Extends P2 Foundation with two additional tables:
+- `pricing_fees`: Fixed or percentage-based fees added to booking cost (cleaning, service, etc.)
+- `pricing_taxes`: Percentage taxes applied to taxable amounts (subtotal + taxable fees)
+
+All fields nullable/optional for gradual adoption. If property_id is NULL, the fee/tax applies agency-wide.
+
+**Database Schema**:
+
+1. **pricing_fees**:
+   - `id`: UUID primary key
+   - `agency_id`: UUID (required, FK to agencies)
+   - `property_id`: UUID (nullable, FK to properties, NULL = agency-wide)
+   - `name`: TEXT (required, fee display name)
+   - `type`: TEXT (required, one of: per_stay, per_night, per_person, percent)
+   - `value_cents`: INT (nullable, value in cents for fixed fees)
+   - `value_percent`: NUMERIC(5,2) (nullable, percentage for percent type)
+   - `taxable`: BOOLEAN (default false, whether fee is included in tax calculation)
+   - `active`: BOOLEAN (default true)
+   - Constraints: FK to agencies (CASCADE), FK to properties (CASCADE)
+   - Validation: percent type requires value_percent, others require value_cents
+
+2. **pricing_taxes**:
+   - `id`: UUID primary key
+   - `agency_id`: UUID (required, FK to agencies)
+   - `property_id`: UUID (nullable, FK to properties, NULL = agency-wide)
+   - `name`: TEXT (required, tax display name)
+   - `percent`: NUMERIC(5,2) (required, tax rate percentage 0-100)
+   - `active`: BOOLEAN (default true)
+   - Constraints: FK to agencies (CASCADE), FK to properties (CASCADE)
+
+**Endpoints**:
+
+1. **List Fees** (manager/admin):
+   - `GET /api/v1/pricing/fees?property_id={uuid}&active={bool}&limit={int}&offset={int}`
+   - Returns all fees for agency with optional filters
+   - Pagination support with limit (default 100) and offset (default 0)
+
+2. **Create Fee** (manager/admin):
+   - `POST /api/v1/pricing/fees`
+   - Body: `{"property_id": "uuid|null", "name": "Cleaning Fee", "type": "per_stay", "value_cents": 5000, "taxable": true, "active": true}`
+   - Type validation: percent → value_percent required; others → value_cents required
+   - Returns 201 with created fee
+
+3. **List Taxes** (manager/admin):
+   - `GET /api/v1/pricing/taxes?property_id={uuid}&active={bool}&limit={int}&offset={int}`
+   - Returns all taxes for agency with optional filters
+   - Pagination support with limit (default 100) and offset (default 0)
+
+4. **Create Tax** (manager/admin):
+   - `POST /api/v1/pricing/taxes`
+   - Body: `{"property_id": "uuid|null", "name": "Sales Tax", "percent": 7.5, "active": true}`
+   - Returns 201 with created tax
+
+5. **Calculate Quote** (authenticated) - EXTENDED:
+   - `POST /api/v1/pricing/quote`
+   - Body: `{"property_id": "uuid", "check_in": "2026-01-10", "check_out": "2026-01-13", "adults": 2, "children": 1}`
+   - Calculates comprehensive pricing breakdown including fees and taxes
+   - Returns QuoteResponse with:
+     - `nightly_cents`: Nightly rate (unchanged from Foundation)
+     - `subtotal_cents`: Accommodation subtotal (nightly_cents × nights)
+     - `fees`: Array of FeeLineItem (name, type, amount_cents, taxable)
+     - `fees_total_cents`: Sum of all fees
+     - `taxable_amount_cents`: Subtotal + taxable fees
+     - `taxes`: Array of TaxLineItem (name, percent, amount_cents)
+     - `taxes_total_cents`: Sum of all taxes
+     - `total_cents`: Grand total (subtotal + fees + taxes)
+   - Backward compatible: if no fees/taxes configured, returns empty arrays and totals=0
+
+**Quote Calculation Logic (Extended)**:
+1. Find active rate plan for property (unchanged from Foundation)
+2. Calculate accommodation subtotal: `subtotal_cents = nightly_cents × nights`
+3. Fetch active fees for property (property-specific first, then agency-wide)
+4. Calculate each fee:
+   - `per_stay`: fee.value_cents (once per booking)
+   - `per_night`: fee.value_cents × nights
+   - `per_person`: fee.value_cents × (adults + children) × nights
+   - `percent`: (subtotal_cents × fee.value_percent) / 100
+5. Calculate taxable amount: `taxable_amount_cents = subtotal_cents + sum(taxable_fees)`
+6. Fetch active taxes for property (property-specific first, then agency-wide)
+7. Calculate each tax: `tax_amount_cents = (taxable_amount_cents × tax.percent) / 100`
+8. Calculate grand total: `total_cents = subtotal_cents + fees_total_cents + taxes_total_cents`
+
+**Fee Type Examples**:
+- **per_stay**: Cleaning fee charged once per booking (e.g., $50.00 = 5000 cents)
+- **per_night**: Resort fee charged per night (e.g., $20.00/night = 2000 cents)
+- **per_person**: Linen fee charged per person per night (e.g., $5.00/person/night = 500 cents)
+- **percent**: Service fee as percentage of subtotal (e.g., 10% = 10.0)
+
+**Error Codes**:
+- **400 Bad Request**: Invalid fee/tax creation (e.g., percent type without value_percent)
+- **401 Unauthorized**: Missing or invalid JWT token
+- **403 Forbidden**: User lacks manager/admin role
+- **404 Not Found**: Property not found in agency
+- **422 Validation**: Invalid input (e.g., negative value_cents, percent > 100)
+- **500 Internal Server Error**: Database error
+
+**Troubleshooting**:
+
+**Problem**: Quote returns empty fees/taxes arrays (fees=[], taxes=[])
+
+**Solution**:
+1. Check if fees exist: `GET /api/v1/pricing/fees?property_id={uuid}`
+2. Check if taxes exist: `GET /api/v1/pricing/taxes?property_id={uuid}`
+3. If no fees/taxes found: This is expected behavior, quote returns empty arrays
+4. If fees/taxes exist but not in quote: Check active=true and property_id matches
+5. For agency-wide fees/taxes: Create with property_id=null in request body
+
+---
+
+**Problem**: Fee calculation incorrect (expected $50, got different amount)
+
+**Solution**:
+1. Verify fee type matches expected calculation:
+   - per_stay: Should be constant regardless of nights/guests
+   - per_night: Should multiply by nights
+   - per_person: Should multiply by (adults + children) × nights
+   - percent: Should calculate as percentage of subtotal_cents
+2. Check fee value_cents or value_percent in database
+3. Verify fee is active=true and property_id matches quote property
+
+---
+
+**Problem**: Tax calculation incorrect (expected 7.5% of subtotal, got different amount)
+
+**Solution**:
+1. Taxes are calculated on taxable_amount_cents = subtotal + taxable fees (NOT just subtotal)
+2. Check which fees have taxable=true in database
+3. Formula: tax_amount = (subtotal + sum(taxable_fees)) × tax_percent / 100
+4. Verify tax percent value in database (stored as NUMERIC, e.g., 7.5 for 7.5%)
+5. Integer rounding: Tax calculation uses int() truncation, not round()
+
+---
+
+**Problem**: Create fee fails with 400 "value_percent is required for percent type fees"
+
+**Solution**:
+1. For type=percent: Must provide value_percent, value_cents must be null
+2. For type=per_stay/per_night/per_person: Must provide value_cents, value_percent must be null
+3. Check request body matches type requirements
+4. Example percent fee: `{"type": "percent", "value_percent": 10.0, "value_cents": null}`
+5. Example fixed fee: `{"type": "per_stay", "value_cents": 5000, "value_percent": null}`
+
+---
+
+**Problem**: Quote total doesn't match expected calculation
+
+**Symptoms**:
+- Frontend shows different total than backend quote
+- Manual calculation: subtotal + fees + taxes ≠ total_cents
+- Smoke test fails with "Grand total mismatch"
+
+**Root Cause**:
+- Floating point precision issues in fee/tax percentage calculations
+- Client-side calculation differs from server-side int() truncation
+- Missing taxable fees in tax base calculation
+
+**Solution**:
+1. Backend uses integer arithmetic with int() truncation (not round())
+2. Always use backend total_cents as source of truth
+3. Verify calculation manually:
+   ```bash
+   subtotal_cents = nightly_cents × nights
+   fees_total_cents = sum(all fee amounts)
+   taxable_amount_cents = subtotal_cents + sum(taxable fee amounts)
+   taxes_total_cents = sum((taxable_amount_cents × tax.percent / 100) for each tax)
+   total_cents = subtotal_cents + fees_total_cents + taxes_total_cents
+   ```
+4. Example: $150/night × 3 nights = $450 subtotal, $50 cleaning (taxable), $37.50 tax (7.5%) = $537.50 total
+   - subtotal_cents = 15000 × 3 = 45000
+   - fees_total_cents = 5000
+   - taxable_amount_cents = 45000 + 5000 = 50000
+   - taxes_total_cents = int(50000 × 7.5 / 100) = 3750
+   - total_cents = 45000 + 5000 + 3750 = 53750
+
+---
+
+### Smoke Testing P2 Extension
+
+**Script**: `backend/scripts/pms_pricing_quote_smoke.sh`
+
+**Tests**:
+1. Create rate plan with base pricing
+2. Create cleaning fee (per_stay, taxable)
+3. Create sales tax (7.5%)
+4. Calculate quote and verify comprehensive breakdown
+5. Verify: subtotal = nightly × nights
+6. Verify: fees_total = cleaning_fee
+7. Verify: taxable_amount = subtotal + cleaning_fee
+8. Verify: taxes_total = taxable_amount × 7.5%
+9. Verify: total = subtotal + fees + taxes
+
+**Usage**:
+```bash
+# HOST-SERVER-TERMINAL
+HOST="https://api.fewo.kolibri-visions.de" \
+JWT_TOKEN="<manager-or-admin-token>" \
+AGENCY_ID="<uuid>" \
+./backend/scripts/pms_pricing_quote_smoke.sh
+```
+
+**Expected Output**:
+```
+✅ Created rate plan: <uuid>
+✅ Created fee: <uuid> (Cleaning Fee: 5000 cents)
+✅ Created tax: <uuid> (Sales Tax: 7.5%)
+✅ Quote calculated:
+  Subtotal: 45000 cents
+  Fees Total: 5000 cents
+  Taxable Amount: 50000 cents
+  Taxes Total: 3750 cents
+  Grand Total: 53750 cents
+✅ Quote calculation verified (subtotal + fees + taxes = total)
+✅ All P2 Pricing + Extension smoke tests passed! 🎉
+```
+
+---
 ## OPS endpoints: Auth & Zugriff
 
 ### Current Behavior (as deployed)
