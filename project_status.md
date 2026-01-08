@@ -3553,10 +3553,11 @@ To mark Phase 21 as VERIFIED in production:
 - 🐛 Fixed availability block overlap returning HTTP 500 instead of 409
   - **Symptom:** POST /api/v1/availability/blocks with overlapping dates returned 500 with `{"detail":"Failed to create availability block"}` (observed in Phase 21 smoke test TEST 3)
   - **Root cause:** PostgreSQL EXCLUSION constraint violation (SQLSTATE 23P01 on `inventory_ranges_no_overlap`) was raised as generic `asyncpg.PostgresError` instead of specific `ExclusionViolationError`. Original exception handler only caught specific type, causing overlap errors to fall through to generic 500 handler.
-  - **Fix:** Made exception handling robust by catching broader `asyncpg.PostgresError` and checking `e.sqlstate == '23P01'` to detect exclusion violations regardless of specific exception subclass. Logs constraint name and sqlstate for ops debugging.
-  - **Location:** `backend/app/services/availability_service.py:357-380` (`_create_inventory_range` method)
+  - **Fix:** Two-layer robust overlap detection to prevent 500 fallthrough:
+    - **Service layer** (`backend/app/services/availability_service.py:357-387`): Detects overlap by `sqlstate == '23P01'` OR `constraint_name == 'inventory_ranges_no_overlap'` OR message substring match. Raises `ConflictException` (409).
+    - **Route layer** (`backend/app/api/routes/availability.py:321-354`): Safety net with same detection logic. Added `except HTTPException: raise` to prevent generic `except Exception` from swallowing `ConflictException`. Logs sqlstate/constraint/exception type.
   - **Impact:** Smoke test TEST 3 (overlap detection) should now pass with 409 Conflict
-  - **Exception types handled:** `asyncpg.PostgresError` with sqlstate check for 23P01 (exclusion violation)
+  - **Exception types handled:** `asyncpg.PostgresError` with multiple detection methods (sqlstate/constraint_name/message)
 - ✅ Added missing `GET /api/v1/availability/blocks/{block_id}` endpoint (first hotfix iteration, commit cc42fe7)
   - Returns 200 with block details when found, 404 when not found
   - Required by smoke test TEST 4 (was returning 405 Method Not Allowed)

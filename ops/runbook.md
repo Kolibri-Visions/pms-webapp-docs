@@ -3528,9 +3528,16 @@ curl -H "Authorization: Bearer $TOKEN" \
 
 **Root Cause:** PostgreSQL EXCLUSION constraint violation (SQLSTATE 23P01 on `inventory_ranges_no_overlap`) was being raised as generic `asyncpg.PostgresError` instead of specific `asyncpg.exceptions.ExclusionViolationError`. Original exception handler only caught the specific type, causing overlap errors to fall through to generic 500 handler.
 
-**Fix Applied:** Made exception handling robust by catching broader `asyncpg.PostgresError` and checking `e.sqlstate == '23P01'` to detect exclusion violations regardless of specific exception subclass. Logs constraint name and sqlstate for ops debugging.
+**Fix Applied:** Two-layer robust overlap detection to prevent 500 fallthrough:
+- **Service layer** (`backend/app/services/availability_service.py:357-387`): Catches `asyncpg.PostgresError` and detects overlap by: `sqlstate == '23P01'` OR `constraint_name == 'inventory_ranges_no_overlap'` OR message contains `'inventory_ranges_no_overlap'` OR message contains `'exclusion constraint'`. Raises `ConflictException` (409) when detected.
+- **Route layer** (`backend/app/api/routes/availability.py:321-354`): Safety net with same detection logic. Added explicit `except HTTPException: raise` to prevent generic `except Exception` from swallowing `ConflictException`. Logs sqlstate/constraint on overlap detection and exception type on unexpected errors.
 
-**Location:** `backend/app/services/availability_service.py:357-380` (`_create_inventory_range` method)
+**Logs for debugging (if regression occurs):**
+```bash
+# Capture sqlstate/constraint from backend logs (HOST-SERVER-TERMINAL)
+docker logs pms-backend 2>&1 | grep -A2 "Overlap detected\|Inventory range conflict" | tail -20
+# Look for: "sqlstate=23P01" or "constraint=inventory_ranges_no_overlap"
+```
 
 **Verification (HOST-SERVER-TERMINAL):**
 ```bash
