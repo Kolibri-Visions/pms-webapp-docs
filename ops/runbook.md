@@ -15458,6 +15458,190 @@ cd frontend && npm run build
 - [Admin UI: Bookings & Properties Lists](#admin-ui-bookings--properties-lists)
 - [Admin UI: Booking & Property Detail Pages](#admin-ui-booking--property-detail-pages)
 
+
+## Admin UI Layout Polish v2.1 (Profile + Language + Sidebar Polish)
+
+### Overview
+
+Layout v2.1 adds comprehensive polish to the Admin UI with language switcher (RTL support), profile dropdown, and improved sidebar collapsed state. This builds on Theme v2 (blue/indigo palette, Lucide icons).
+
+### Key Features
+
+**Language Switcher**:
+- Flag icons for DE/EN/AR in topbar (right side)
+- Dropdown shows on HOVER (not just click)
+- Persists selection in localStorage (`bo_lang` key)
+- Sets `document.documentElement.lang` to 'de'|'en'|'ar'
+- Sets `document.documentElement.dir` to 'rtl' for Arabic, 'ltr' for others
+- Supports internationalization scaffolding for future i18n
+
+**Profile Dropdown**:
+- User icon button in topbar (right side)
+- Shows user name (extracted from email if needed) and role
+- Menu links:
+  - Profil (`/profile`)
+  - Profil bearbeiten (`/profile/edit`)
+  - Sicherheit (`/profile/security`)
+- Stub pages created with AdminShell layout
+
+**Sidebar Collapsed Polish**:
+- Logo properly centered when collapsed (no clipping)
+- Toggle button more visible: border, background, shadow
+- All icons consistently centered in collapsed mode
+- Tooltips show labels on hover when collapsed
+- Scrollbar hidden but scroll functional (`scrollbar-hide` utility)
+- No animation jank on route changes (no transitions on desktop)
+
+### Implementation Details
+
+**Files Modified**:
+- `frontend/app/components/AdminShell.tsx` - Main shell component
+  - Added `useEffect` to set document.lang and dir based on language state
+  - Changed language dropdown from onClick to onMouseEnter/onMouseLeave
+  - Centered logo in collapsed mode with conditional justify-center
+  - Enhanced toggle button styling with border/bg/shadow
+
+**Files Created**:
+- `frontend/app/profile/page.tsx` - Profile stub page
+- `frontend/app/profile/edit/page.tsx` - Edit profile stub page
+- `frontend/app/profile/security/page.tsx` - Security settings stub page
+- `frontend/app/profile/layout.tsx` - Profile section layout with auth
+
+### Browser Verification
+
+**Language Switcher**:
+```bash
+# 1. Open Admin UI in browser
+open https://admin.fewo.kolibri-visions.de/dashboard
+
+# 2. Verify language dropdown
+# - Topbar right side shows current flag (🇩🇪 DE by default)
+# - HOVER over flag button → dropdown appears with DE/EN/AR options
+# - Click different language → page updates, selection persists on reload
+
+# 3. Check RTL support for Arabic
+# DevTools → Elements → <html>
+# Should see: lang="ar" dir="rtl" when Arabic selected
+# Should see: lang="de" dir="ltr" when German selected
+# Should see: lang="en" dir="ltr" when English selected
+
+# 4. Check localStorage persistence
+# DevTools → Application → Local Storage
+# Should see: bo_lang = "de"|"en"|"ar"
+```
+
+**Profile Dropdown**:
+```bash
+# 1. Click user icon in topbar (right side, after notifications)
+# Dropdown appears with user info header (name + role)
+
+# 2. Verify menu items
+# - "Profil" link → navigates to /profile
+# - "Profil bearbeiten" link → navigates to /profile/edit
+# - "Sicherheit" link → navigates to /profile/security
+
+# 3. Check profile pages
+# All pages should:
+# - Use AdminShell layout with sidebar
+# - Show "Demnächst verfügbar" placeholder
+# - Require authentication (redirect to /login if not logged in)
+```
+
+**Sidebar Collapsed State**:
+```bash
+# 1. Collapse sidebar using toggle button at bottom
+# DevTools → Application → Local Storage
+# Should see: sidebar-collapsed = "true"
+
+# 2. Verify collapsed appearance
+# - Logo centered in header (not clipped on sides)
+# - All navigation icons centered (40px × 40px containers)
+# - Toggle button has visible border and background
+# - Sidebar width reduced to w-24 (96px)
+
+# 3. Test tooltips
+# Hover over any nav icon when collapsed
+# Should see tooltip with item label (e.g., "Dashboard", "Buchungen")
+
+# 4. Verify no scrollbar visible
+# Sidebar should scroll if content exceeds height
+# But scrollbar should be hidden (scrollbar-hide utility)
+
+# 5. Test route changes
+# Navigate between pages (Dashboard → Bookings → Properties)
+# Sidebar should NOT animate/transition (no jank)
+# Only content area updates
+```
+
+### Troubleshooting
+
+**Problem**: Language dropdown doesn't show on hover
+
+**Solution**:
+```bash
+# 1. Check JavaScript enabled in browser
+# 2. Verify React hydration completed (no console errors)
+# 3. Test with onClick as fallback:
+# - Click flag button → dropdown should appear
+# 4. Check browser event listeners in DevTools
+# Elements → Language dropdown div → Event Listeners
+# Should see: mouseenter, mouseleave
+```
+
+**Problem**: RTL not working for Arabic
+
+**Solution**:
+```bash
+# 1. Verify document.documentElement.dir is set
+# DevTools → Elements → <html> → Should see dir="rtl"
+
+# 2. Check if CSS supports RTL
+# Most Tailwind utilities are LTR-only by default
+# May need to add RTL-specific CSS or use logical properties
+
+# 3. Verify language state is "ar"
+# DevTools → React DevTools → AdminShell component
+# Should see: language = "ar"
+```
+
+**Problem**: Logo clipped in collapsed sidebar
+
+**Solution**:
+```bash
+# 1. Check if conditional centering is applied
+# DevTools → Elements → Brand header div
+# When collapsed: should have "justify-center" class
+# When expanded: should have "gap-3" class
+
+# 2. Verify sidebar width
+# Collapsed: w-24 (96px) - Logo is 48px, fits with padding
+# Expanded: w-72 (288px)
+
+# 3. Check logo flexbox
+# Logo container should have: flex-shrink-0
+```
+
+**Problem**: Profile pages return 404
+
+**Solution**:
+```bash
+# 1. Verify pages exist
+ls -la frontend/app/profile/
+# Should see: page.tsx, edit/, security/, layout.tsx
+
+# 2. Rebuild Next.js
+cd frontend && rm -rf .next && npm run dev
+
+# 3. Check authentication
+# Profile pages require auth via layout.tsx
+# If not logged in → redirects to /login with returnTo parameter
+```
+
+### Related Sections
+
+- [Admin UI Visual Style (Backoffice Theme v1)](#admin-ui-visual-style-backoffice-theme-v1)
+- [Admin UI Authentication Verification](#admin-ui-authentication-verification)
+
 ## Admin UI: Booking & Property Detail Pages
 
 ✅ **Verified in PROD on 2026-01-07** (source_commit a22da6660b7ad24a309429249c1255e575be37bc, smoke script exit code 0)

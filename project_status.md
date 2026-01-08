@@ -293,6 +293,145 @@ open https://admin.fewo.kolibri-visions.de/dashboard
 
 ---
 
+### Admin UI — Topbar + Sidebar Polish v2.1 (HOVER Language, RTL, Collapsed Polish) ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-08
+
+**Overview:**
+Comprehensive polish for Admin UI topbar and sidebar. Enhanced language switcher to show on HOVER (not just click), added full RTL support for Arabic via document.documentElement attributes, and improved sidebar collapsed state with centered logo, more visible toggle button, and consistent icon alignment.
+
+**Problem:**
+- Language dropdown only opened on CLICK, requiring unnecessary extra interaction
+- No RTL (right-to-left) support for Arabic language - text flowed LTR incorrectly
+- document.documentElement.lang not set, breaking accessibility and browser tools
+- Logo clipped/misaligned when sidebar collapsed (not centered in w-24 container)
+- Toggle button hard to see (no border/background, blended with bg-bo-surface)
+- "Plan & Abrechnung" icon alignment inconsistent with other nav items when collapsed
+
+**Solution:**
+
+**Language Switcher HOVER Behavior:**
+- Changed language dropdown from onClick-only to onMouseEnter/onMouseLeave
+- Dropdown now appears immediately when hovering over flag button
+- Improves UX: faster access, fewer clicks needed
+- Still supports click for mobile/touch devices
+- Implementation:
+  ```tsx
+  <div
+    className="relative"
+    onMouseEnter={() => setIsLangDropdownOpen(true)}
+    onMouseLeave={() => setIsLangDropdownOpen(false)}
+  >
+  ```
+
+**RTL Support via document Attributes:**
+- Added useEffect that sets document.documentElement.lang based on selected language
+- Added document.documentElement.dir = 'rtl' for Arabic, 'ltr' for others
+- Improves accessibility (screen readers use lang attribute)
+- Enables browser translation tools
+- Enables future RTL CSS support
+- Implementation:
+  ```tsx
+  useEffect(() => {
+    document.documentElement.lang = language; // 'de'|'en'|'ar'
+    if (language === "ar") {
+      document.documentElement.dir = "rtl";
+    } else {
+      document.documentElement.dir = "ltr";
+    }
+  }, [language]);
+  ```
+
+**Sidebar Collapsed Logo Centering:**
+- Logo container now conditionally centers when sidebar collapsed
+- Uses `justify-center` when isCollapsed=true, `gap-3` when expanded
+- Logo (48px × 48px) properly fits in w-24 (96px) collapsed sidebar
+- No clipping or misalignment
+- Implementation:
+  ```tsx
+  <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'}`}>
+  ```
+
+**Toggle Button Visibility Improvements:**
+- Added bg-bo-surface background (was transparent)
+- Added border border-bo-border for clear outline
+- Added shadow-sm for subtle depth
+- Increased icon size from w-4 h-4 to w-5 h-5 (20px, more clickable)
+- Added font-medium to "Einklappen" text
+- Toggle now stands out clearly at bottom of sidebar
+
+**Icon Alignment Consistency:**
+- All nav icons use w-10 h-10 (40px) containers with flex items-center justify-center
+- Icons consistently w-5 h-5 (20px) inside containers
+- Locked items (Plan & Abrechnung) use same alignment as regular items
+- Tooltips show on hover when collapsed (title attribute)
+
+**Files Changed:**
+- `frontend/app/components/AdminShell.tsx` - All polish changes:
+  - Added useEffect for document.lang and dir
+  - Changed language dropdown to onMouseEnter/onMouseLeave
+  - Conditional logo centering (justify-center when collapsed)
+  - Enhanced toggle button styling (border, bg, shadow, larger icon)
+
+**Key Features:**
+- **Hover dropdown:** Language switcher shows immediately on hover
+- **RTL support:** document.documentElement.dir='rtl' for Arabic
+- **Accessibility:** document.documentElement.lang set correctly
+- **Centered logo:** No clipping in collapsed sidebar mode
+- **Visible toggle:** Clear border and background on collapse button
+- **Consistent icons:** All nav items aligned identically when collapsed
+
+**Browser Verification Required:**
+```bash
+# Navigate to Admin UI
+open https://admin.fewo.kolibri-visions.de/dashboard
+
+# Language switcher HOVER test:
+□ Hover over flag button (🇩🇪 DE) → dropdown appears immediately (no click)
+□ Mouse away → dropdown disappears
+□ Click flag button → dropdown also works (mobile fallback)
+
+# RTL support test:
+□ Select Arabic (🇸🇦 AR) from language dropdown
+□ Open DevTools → Elements → <html>
+□ Verify: lang="ar" dir="rtl"
+□ Select German (🇩🇪 DE)
+□ Verify: lang="de" dir="ltr"
+□ Select English (🇬🇧 EN)
+□ Verify: lang="en" dir="ltr"
+
+# Sidebar collapsed polish:
+□ Click toggle button at bottom of sidebar → sidebar collapses
+□ Logo centered in header (no clipping)
+□ Toggle button clearly visible (has border and background)
+□ All nav icons centered in 40px containers
+□ Hover over nav icons → tooltips show labels
+□ "Plan & Abrechnung" icon aligned same as others
+□ No visible scrollbar (but scroll still works if content tall)
+□ Navigate between pages → no sidebar animation jank
+```
+
+**Status**: ✅ IMPLEMENTED (NOT VERIFIED)
+
+**Runbook Reference:**
+- Section: "Admin UI Layout Polish v2.1 (Profile + Language + Sidebar Polish)" in `backend/docs/ops/runbook.md` (line ~15462)
+- Includes: Language switcher HOVER, RTL support, sidebar collapsed polish, verification steps
+
+**Operational Impact:**
+- Improved language switcher UX (hover instead of click)
+- Full RTL support foundation (ready for Arabic content)
+- Better accessibility (document.lang attribute)
+- Polished collapsed sidebar (no clipping, visible toggle)
+- Professional appearance (consistent icon alignment)
+- No animation jank on route changes (already fixed in v2)
+
+**Related Entries:**
+- [Admin UI — Header: Profile Dropdown + Language Switch] - Initial language switcher implementation
+- [Admin UI — Backoffice Theme v2] - Layout foundation with blue palette and Lucide icons
+- [Admin UI — Build Hotfix (LucideIcon Typing)] - TypeScript compatibility
+
+---
+
 ### Admin UI — Build Hotfix (LucideIcon Typing) ✅ IMPLEMENTED
 
 **Date Completed:** 2026-01-08
