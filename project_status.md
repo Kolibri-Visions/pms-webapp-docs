@@ -3077,7 +3077,7 @@ echo "rc=$?"
    - backend/docs/ops/runbook.md: "P2 Pricing Management UI" section with features, verification commands, common issues
    - Both docs include HOST-SERVER-TERMINAL verification commands
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
 
 **Notes:**
 - UI route: `/pricing` (accessible to manager/admin roles)
@@ -3116,6 +3116,32 @@ echo "rc=$?"
 # 6. Toggle active status for both
 # 7. Verify list updates correctly
 ```
+
+**PROD Evidence:**
+
+**Verification Date:** 2026-01-08
+
+**API Base URL:** https://api.fewo.kolibri-visions.de
+
+**Deployed Commit:** 3d62fac87fe9770edaedc7b252037c371e339c02
+
+**Backend Started At:** 2026-01-08T21:17:03.933973+00:00
+
+**Smoke Script:** backend/scripts/pms_pricing_management_ui_smoke.sh
+
+**Exit Code:** rc=0 (all tests passed)
+
+**Property ID Used:** 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
+
+**Tests Passed:**
+- ✅ Test 1: Create fee (per_stay, €10.00, property-specific)
+- ✅ Test 2: Create tax (7%, property-specific)
+- ✅ Test 3: List fees (verify creation)
+- ✅ Test 4: List taxes (verify creation)
+- ✅ Test 5: PATCH fee active=false
+- ✅ Test 6: PATCH tax active=false
+- ✅ Test 7: Active filter (active=true excludes inactive items)
+- ✅ Test 8: Quote endpoint integration (total=58395 cents)
 
 ---
 
