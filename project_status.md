@@ -4653,3 +4653,112 @@ curl -k -sS -i "$API_BASE_URL/api/v1/ops/audit-log" | sed -n '1,25p'
 - [P3c: Audit Logging + Idempotency] - Uses /ops/audit-log endpoint (admin-only)
 
 ---
+
+# Owner Portal O1 (Read-Only MVP)
+
+**Implementation Date:** 2026-01-09
+
+**Scope:** Owner portal MVP with read-only owner access and staff management tools for owner profiles and property assignments.
+
+**Features Implemented:**
+
+1. **Database Migration** (`20260109000000_add_owners_table.sql`):
+   - Created `owners` table: id, agency_id, auth_user_id (maps to Supabase auth.users), email, first_name, last_name, is_active, timestamps
+   - Updated `properties.owner_id` FK from auth.users to owners.id
+   - Indexes: agency_id, auth_user_id, (agency_id, is_active)
+   - Unique constraint: (agency_id, auth_user_id) - one owner profile per auth user per agency
+
+2. **Owner Pydantic Schemas** (`backend/app/schemas/owners.py`):
+   - `OwnerCreate`: Create owner profile (requires auth_user_id)
+   - `OwnerUpdate`: Update owner profile (email, names, is_active)
+   - `OwnerResponse`: Owner profile response
+   - `PropertyOwnerAssignment`: Assign/unassign property owner
+   - `OwnerPropertyResponse`: Minimal property info for owner portal
+   - `OwnerBookingResponse`: Minimal booking info for owner portal
+
+3. **Auth Dependency** (`backend/app/core/auth.py`):
+   - `get_current_owner()`: Verifies user is mapped as active owner in agency
+   - Queries owners table by auth_user_id (JWT sub) + agency_id
+   - Raises 403 if not mapped or inactive
+
+4. **API Routes** (`backend/app/api/routes/owners.py`):
+   - Staff endpoints (manager/admin):
+     - GET /api/v1/owners: List owner profiles
+     - POST /api/v1/owners: Create owner profile
+     - PATCH /api/v1/owners/{id}: Update owner profile
+     - PATCH /api/v1/properties/{id}/owner: Assign/unassign property owner
+   - Owner endpoints (owner-only):
+     - GET /api/v1/owner/properties: List owned properties (filtered by owner_id + agency_id)
+     - GET /api/v1/owner/bookings: List bookings for owned properties (optional property_id filter)
+   - RBAC: Staff endpoints use require_roles("manager", "admin"), owner endpoints use get_current_owner()
+
+5. **Module Registration** (`backend/app/modules/owners.py`, `bootstrap.py`):
+   - Registered owners router in module system
+   - Depends on: core_pms, properties, bookings
+   - Tags: Owners, O1 Portal MVP
+
+6. **Frontend UI** (`frontend/app/owner/page.tsx`):
+   - Owner portal page at /owner route
+   - Lists owned properties (clickable rows)
+   - Shows bookings for selected property
+   - Error states: 401 (session expired), 403 (not registered as owner), 503 (service unavailable)
+   - Empty states: No properties assigned
+   - German translations throughout
+
+7. **Smoke Script** (`backend/scripts/pms_owner_portal_smoke.sh`):
+   - Test 1: Staff creates owner profile (POST /api/v1/owners)
+   - Test 2: Staff assigns property to owner (PATCH /api/v1/properties/{id}/owner)
+   - Test 3: Owner lists owned properties (GET /api/v1/owner/properties, must contain assigned property)
+   - Test 4: Owner lists bookings (GET /api/v1/owner/bookings)
+   - Test 5: Owner tries staff endpoint (GET /api/v1/owners, must return 403)
+   - Exit codes: rc=0 success, rc=1+ failures
+
+8. **Documentation** (add-only):
+   - backend/scripts/README.md: Complete smoke script documentation with usage, env vars, troubleshooting
+   - backend/docs/ops/runbook.md: "Owner Portal O1" section with architecture, endpoints, verification commands, common issues
+   - DOCS SAFE MODE: All docs added via append (rg proof + sed windows provided)
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- Owner portal is read-only in O1 MVP (no create/edit operations for owners)
+- RBAC enforced: Staff endpoints blocked for owners (403), owner endpoints blocked for non-owners (403)
+- Tenant isolation: All queries scoped by agency_id from JWT claims
+- Property ownership: properties.owner_id NULL = agency-owned, non-NULL = owner-assigned
+- get_current_owner() dependency checks is_active=true before granting access
+- VERIFIED status requires: PROD deployment + smoke script rc=0 + UI manual verification + PROD evidence
+
+**Dependencies:**
+- Supabase Auth (auth.users table for auth_user_id mapping)
+- Properties domain (owners own properties)
+- Bookings domain (owners view bookings for their properties)
+- Migration 20260109000000 (owners table + properties.owner_id FK update)
+
+**Verification Commands (for VERIFIED status later):**
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify deploy (optional)
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# Run smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="<<<manager/admin JWT>>>"
+export OWNER_JWT_TOKEN="<<<owner user JWT>>>"
+export OWNER_AUTH_USER_ID="<<<Supabase auth.users.id>>>"
+./backend/scripts/pms_owner_portal_smoke.sh
+echo "rc=$?"
+
+# Manual UI verification
+# 1. Login as owner user (mapped in owners table)
+# 2. Navigate to /owner
+# 3. Verify properties list shows assigned properties
+# 4. Click property row to view bookings
+# 5. Verify bookings load correctly
+# 6. Try accessing /properties (should redirect or show access denied)
+```
+
+---

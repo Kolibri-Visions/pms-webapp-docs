@@ -24174,3 +24174,174 @@ docker exec -i $POSTGRES_CONTAINER psql -U <user> -d <database> < /backups/backu
 - Consider reserved instances for long-term customers (Hetzner discounts)
 - Archive old backups to object storage (Hetzner S3-compatible storage)
 
+
+---
+
+## Owner Portal O1
+
+**Overview:** Read-only owner portal MVP with staff tools for owner profile management and property assignment.
+
+**Purpose:** Allow property owners to view their properties and bookings through authenticated web UI, while staff (manager/admin) can create owner profiles and assign properties to owners.
+
+**Architecture:**
+- **Database**: `owners` table maps Supabase auth.users to owner profiles with agency scoping
+- **RBAC**: 
+  - Staff endpoints require manager/admin role (via `require_roles("manager", "admin")`)
+  - Owner endpoints require `get_current_owner()` dependency (verifies auth_user_id + agency_id + is_active)
+- **Property Ownership**: `properties.owner_id` FK references `owners.id`
+- **Tenant Isolation**: All queries scoped by agency_id from JWT claims
+
+**UI Routes:**
+- `/owner` - Owner portal page (owner-only, lists properties + bookings)
+
+**API Endpoints:**
+
+Staff (manager/admin):
+- `GET /api/v1/owners?active=&limit=&offset=` - List owner profiles
+- `POST /api/v1/owners` - Create owner profile (requires auth_user_id)
+- `PATCH /api/v1/owners/{id}` - Update owner profile (email, names, is_active)
+- `PATCH /api/v1/properties/{id}/owner` - Assign/unassign property owner
+
+Owner-only:
+- `GET /api/v1/owner/properties?limit=&offset=` - List owned properties
+- `GET /api/v1/owner/bookings?property_id=&limit=&offset=` - List bookings for owned properties
+
+**Database Tables:**
+- `owners` - Owner profiles mapped to auth users with agency scoping
+- `properties.owner_id` - FK to owners.id (NULL = agency-owned, non-NULL = owner-assigned)
+
+**Migration:** `20260109000000_add_owners_table.sql`
+
+**Verification Commands:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# [HOST-SERVER-TERMINAL] Optional: Verify deploy after Coolify redeploy
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# [HOST-SERVER-TERMINAL] Run owner portal smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="<<<manager/admin JWT>>>"
+export OWNER_JWT_TOKEN="<<<owner user JWT>>>"
+export OWNER_AUTH_USER_ID="<<<Supabase auth.users.id for owner>>>"
+# Optional:
+# export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
+# export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+./backend/scripts/pms_owner_portal_smoke.sh
+echo "rc=$?"
+
+# Expected output: All 5 tests pass, rc=0
+```
+
+**Common Issues:**
+
+### Owner Endpoints Return 403 (Not Registered)
+
+**Symptom:** Owner user gets 403 Forbidden when accessing `/api/v1/owner/properties` or `/api/v1/owner/bookings`. Error message: "Access denied: user is not registered as an owner".
+
+**Root Cause:** User's auth_user_id (JWT sub) is not mapped to an owner profile in the `owners` table.
+
+**How to Debug:**
+```bash
+# Check JWT sub claim (auth_user_id)
+echo $OWNER_JWT_TOKEN | cut -d'.' -f2 | base64 -d | jq '.sub'
+# Example output: "550e8400-e29b-41d4-a716-446655440000"
+
+# Check if owner profile exists
+psql $DATABASE_URL -c "SELECT id, auth_user_id, is_active FROM owners WHERE auth_user_id = '550e8400-e29b-41d4-a716-446655440000';"
+
+# Check agency_id matches JWT claim
+echo $OWNER_JWT_TOKEN | cut -d'.' -f2 | base64 -d | jq '.agency_id'
+```
+
+**Solution:**
+- Have a manager/admin create owner profile: `POST /api/v1/owners` with `auth_user_id` matching JWT sub
+- Ensure `is_active=true` in owners table: `UPDATE owners SET is_active = true WHERE auth_user_id = '...'`
+- Verify JWT contains correct `agency_id` claim matching owner's agency
+
+### Owner Sees No Properties (Empty List)
+
+**Symptom:** Owner successfully accesses `/api/v1/owner/properties` but receives empty array `[]`.
+
+**Root Cause:** No properties have `owner_id` set to this owner's ID.
+
+**How to Debug:**
+```bash
+# Get owner ID from auth_user_id
+psql $DATABASE_URL -c "SELECT id FROM owners WHERE auth_user_id = '550e8400-e29b-41d4-a716-446655440000';"
+# Example output: "660e8400-e29b-41d4-a716-446655440001"
+
+# Check if any properties assigned
+psql $DATABASE_URL -c "SELECT id, name, owner_id FROM properties WHERE owner_id = '660e8400-e29b-41d4-a716-446655440001';"
+```
+
+**Solution:**
+- Have manager/admin assign property: `PATCH /api/v1/properties/{property_id}/owner` with `{"owner_id": "660e8400-..."}`
+- Verify property belongs to same agency as owner
+
+### Staff Endpoint Accessible by Owners (RBAC Bypass)
+
+**Symptom:** Owner can access `GET /api/v1/owners` (should return 403).
+
+**Root Cause:** Missing `require_roles("manager", "admin")` dependency on staff endpoints.
+
+**How to Debug:**
+```bash
+# Test staff endpoint with owner token
+curl -X GET "$HOST/api/v1/owners?limit=10" \
+  -H "Authorization: Bearer $OWNER_JWT_TOKEN"
+
+# Should return 403, not 200
+```
+
+**Solution:**
+- Ensure all staff endpoints use `_role_check=Depends(require_roles("manager", "admin"))`
+- Verify JWT role claim: `echo $OWNER_JWT_TOKEN | cut -d'.' -f2 | base64 -d | jq '.role'` (should be "owner", not "manager"/"admin")
+
+### Owner Can See Other Owners' Properties
+
+**Symptom:** Owner sees properties not assigned to them.
+
+**Root Cause:** Missing `WHERE properties.owner_id = $owner_id` filter in owner endpoints.
+
+**How to Debug:**
+```bash
+# Check query in backend/app/api/routes/owners.py
+# Line ~335: list_owner_properties query must filter by owner_id
+
+# Verify properties returned match owner_id
+curl -X GET "$HOST/api/v1/owner/properties" \
+  -H "Authorization: Bearer $OWNER_JWT_TOKEN" | jq '.[].id'
+
+psql $DATABASE_URL -c "SELECT owner_id FROM properties WHERE id IN (...);"
+```
+
+**Solution:**
+- Verify query filters: `WHERE owner_id = $1 AND agency_id = $2`
+- Ensure get_current_owner() correctly returns owner profile with ID
+
+### Migration Fails (FK Constraint Violation)
+
+**Symptom:** Migration `20260109000000_add_owners_table.sql` fails with FK constraint error on `properties.owner_id`.
+
+**Root Cause:** Existing `properties.owner_id` values reference `auth.users.id` but migration tries to FK to `owners.id`.
+
+**How to Debug:**
+```bash
+# Check existing owner_id values
+psql $DATABASE_URL -c "SELECT id, owner_id FROM properties WHERE owner_id IS NOT NULL LIMIT 10;"
+
+# Check if those owner_id values exist in auth.users
+psql $DATABASE_URL -c "SELECT id FROM auth.users WHERE id IN (...);"
+```
+
+**Solution:**
+- Before adding FK, clear invalid owner_id values: `UPDATE properties SET owner_id = NULL WHERE owner_id NOT IN (SELECT id FROM owners);`
+- Or manually migrate existing auth.users to owners table first
+- Then re-run migration to add FK constraint
+
+---
