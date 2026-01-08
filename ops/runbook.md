@@ -22592,14 +22592,15 @@ psql $DATABASE_URL -c "SELECT idempotency_key, payload_hash, created_at FROM ide
 
 **Solution:** Check `app/core/idempotency.py` hash calculation logic, ensure tests complete within TTL.
 
-#### Test 5 Skipped (Audit Log)
+#### Test 5 Failed (Audit Log)
 
-**Symptom:** Test 5 reports "SKIPPED: Could not verify specific audit event".
+**Symptom:** Test 5 reports "FAILED: Could not find audit event for booking request" after polling retries.
 
 **Possible Causes:**
 1. JWT lacks admin role (audit-log endpoint requires admin)
 2. Audit emission failed (database issue)
-3. Timing issue (audit not yet committed)
+3. Multi-tenant setup requires `AGENCY_ID` to be set for x-agency-id header
+4. Timing issue (audit not yet committed, though script polls up to ~10s)
 
 **How to Debug:**
 ```bash
@@ -22607,14 +22608,23 @@ psql $DATABASE_URL -c "SELECT idempotency_key, payload_hash, created_at FROM ide
 echo $JWT_TOKEN | cut -d'.' -f2 | base64 -d | jq '.role'
 # Should return: "admin" (manager is NOT sufficient)
 
+# Check if AGENCY_ID is needed (multi-tenant setups)
+# Export AGENCY_ID before running script:
+export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+
 # Check audit_log table directly
-psql $DATABASE_URL -c "SELECT action, actor_type, created_at FROM audit_log WHERE action = 'public.booking_request.created' ORDER BY created_at DESC LIMIT 5;"
+psql $DATABASE_URL -c "SELECT action, actor_type, entity_id, metadata FROM audit_log WHERE action LIKE '%booking%request%' ORDER BY created_at DESC LIMIT 5;"
 
 # Check backend logs for audit emission errors
 docker logs pms-backend --tail 100 | grep -i audit
 ```
 
-**Solution:** Use admin JWT, verify audit_log migration applied (20260106170000), check database connectivity.
+**Solution:**
+- Use admin JWT token
+- Set `AGENCY_ID` environment variable if you have multiple agencies
+- Verify audit_log migration applied (20260106170000)
+- Check database connectivity
+- Script automatically polls up to 10 times (1s intervals) for eventual consistency
 
 ### Testing Against Production
 
