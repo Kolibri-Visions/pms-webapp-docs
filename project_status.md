@@ -2993,11 +2993,40 @@ This entry will be marked **VERIFIED** only after:
 - per_stay/per_night/per_person: value_cents required, value_percent must be null
 - Validation enforced at API layer with 400 Bad Request on mismatch
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
 
-**Commit:** (pending - will be added in next commit)
+**PROD Evidence:**
+- **Verification Date:** 2026-01-08
+- **API Base URL:** https://api.fewo.kolibri-visions.de
+- **Source Commit:** b911e8e (P2 Extension implementation) + 29b8bda (smoke script fix)
+- **Deploy Commit (ops/version):** 29b8bda14a2be9d3936f1a58b921dfa9d0ff3993
+- **Started At (ops/version):** 2026-01-08T18:04:13.827925+00:00
+- **DB Migration Applied:** 20260108200000_add_pricing_fees_and_taxes.sql (pricing_fees/pricing_taxes tables exist in PROD)
+- **Smoke Test:** `backend/scripts/pms_pricing_quote_smoke.sh` → rc=0
+- **Quote Breakdown Verified:** Grand total 53750 cents (subtotal 45000 + fee 5000 + tax 3750)
 
-**Note:** Status is IMPLEMENTED (not VERIFIED) as this is MVP without UI. PROD verification will occur after deployment and smoke test execution.
+**Verification Commands:**
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+export HOST="https://api.fewo.kolibri-visions.de"
+export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
+export JWT_TOKEN="<<<manager/admin JWT>>>"
+./backend/scripts/pms_pricing_quote_smoke.sh
+echo "rc=$?"
+```
+
+**Verification Criteria Met:**
+- ✅ Database tables created (pricing_fees, pricing_taxes)
+- ✅ API endpoints respond (GET/POST /api/v1/pricing/fees, /api/v1/pricing/taxes)
+- ✅ Quote calculation includes fees and taxes breakdown
+- ✅ Smoke test passes with comprehensive quote verification
+- ✅ Backward compatibility maintained (existing quote requests work)
+- ✅ All 9 smoke test steps pass (rate plans + fees + taxes + quote)
 
 ---
 
