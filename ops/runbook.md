@@ -15696,6 +15696,7 @@ ADMIN_BASE_URL=https://admin.example.com CONTAINER_NAME=pms-admin EXPECTED_COMMI
 **Notes**:
 - `EXPECTED_COMMIT` supports short SHA prefixes (e.g., `18d76f2`) for convenience; full 40-char SHA also accepted
 - Script checks numeric HTTP status code (`%{http_code}`), so HTTP/2 200 responses work correctly
+- **Scan modes**: Script uses container-scan mode when docker is available (scans built Next.js assets inside container at `.next/static`); this covers UI strings in authenticated routes not referenced by /login. Falls back to http-crawl mode (downloads chunks from public site) when docker unavailable.
 - Script crawls chunk graph: downloads initial chunks from /login HTML, parses them for additional chunk URLs, downloads up to `MAX_CHUNKS` limit
 - If expected strings not found, try increasing `MAX_CHUNKS` or use `KEEP_TEMP=true` to inspect downloaded chunks
 
@@ -15720,15 +15721,12 @@ Admin UI Static Smoke Test
 [INFO] Step 2: Checking https://admin.fewo.kolibri-visions.de/login ...
 [INFO]   ✓ HTTP 200 OK
 
-[INFO] Step 3: Crawling chunk graph (MAX_CHUNKS=80)...
-[INFO]   Found 11 initial chunk URLs in /login HTML
-[INFO]   Downloaded 42 chunks
-
-[INFO] Step 4: Searching chunks for expected strings...
-[INFO]   ✓ Found 'Abmelden' in app-layout-1a2b3c4d5e.js
-[INFO]   ✓ Found 'Deutsch' in app-layout-1a2b3c4d5e.js
-[INFO]   ✓ Found 'English' in app-layout-1a2b3c4d5e.js
-[INFO]   ✓ Found 'العربية' in app-layout-1a2b3c4d5e.js
+[INFO] Step 3: Searching for UI strings (mode: container-scan)...
+[INFO]   Found Next.js assets at: /app/.next/static
+[INFO]   ✓ Found 'Abmelden' in container:/app/.next/static/chunks/app-layout-1a2b3c4d5e.js
+[INFO]   ✓ Found 'Deutsch' in container:/app/.next/static/chunks/app-layout-1a2b3c4d5e.js
+[INFO]   ✓ Found 'English' in container:/app/.next/static/chunks/app-layout-1a2b3c4d5e.js
+[INFO]   ✓ Found 'العربية' in container:/app/.next/static/chunks/app-layout-1a2b3c4d5e.js
 
 [INFO] Summary: Found 4/4 expected strings
 
