@@ -15673,8 +15673,14 @@ ADMIN_BASE_URL=https://admin.example.com ./backend/scripts/pms_admin_ui_static_s
 # With expected commit verification
 EXPECTED_COMMIT=abc1234567 ./backend/scripts/pms_admin_ui_static_smoke.sh
 
+# Increase chunk crawl limit if expected strings not found
+MAX_CHUNKS=150 ./backend/scripts/pms_admin_ui_static_smoke.sh
+
+# Debug mode: preserve temp directory with downloaded chunks
+KEEP_TEMP=true ./backend/scripts/pms_admin_ui_static_smoke.sh
+
 # Full configuration
-ADMIN_BASE_URL=https://admin.example.com CONTAINER_NAME=pms-admin EXPECTED_COMMIT=abc1234567 ./backend/scripts/pms_admin_ui_static_smoke.sh
+ADMIN_BASE_URL=https://admin.example.com CONTAINER_NAME=pms-admin EXPECTED_COMMIT=abc1234567 MAX_CHUNKS=80 KEEP_TEMP=false ./backend/scripts/pms_admin_ui_static_smoke.sh
 ```
 
 ### Environment Variables
@@ -15684,10 +15690,14 @@ ADMIN_BASE_URL=https://admin.example.com CONTAINER_NAME=pms-admin EXPECTED_COMMI
 | `ADMIN_BASE_URL` | `https://admin.fewo.kolibri-visions.de` | Base URL of Admin UI |
 | `CONTAINER_NAME` | `pms-admin` | Docker container name to inspect |
 | `EXPECTED_COMMIT` | (empty) | Expected SOURCE_COMMIT; accepts short prefix (e.g., 7 chars) or full 40-char SHA |
+| `MAX_CHUNKS` | `80` | Maximum number of JS chunks to download during crawling |
+| `KEEP_TEMP` | `false` | Set to `true` to preserve temp directory for debugging |
 
 **Notes**:
 - `EXPECTED_COMMIT` supports short SHA prefixes (e.g., `18d76f2`) for convenience; full 40-char SHA also accepted
 - Script checks numeric HTTP status code (`%{http_code}`), so HTTP/2 200 responses work correctly
+- Script crawls chunk graph: downloads initial chunks from /login HTML, parses them for additional chunk URLs, downloads up to `MAX_CHUNKS` limit
+- If expected strings not found, try increasing `MAX_CHUNKS` or use `KEEP_TEMP=true` to inspect downloaded chunks
 
 ### Expected Output (PASS)
 
@@ -15700,6 +15710,8 @@ Admin UI Static Smoke Test
 [INFO]   ADMIN_BASE_URL: https://admin.fewo.kolibri-visions.de
 [INFO]   CONTAINER_NAME: pms-admin
 [INFO]   EXPECTED_COMMIT: 0572b72f059a71dc280c564a194dd279d9a7ab6d
+[INFO]   MAX_CHUNKS: 80
+[INFO]   KEEP_TEMP: false
 
 [INFO] Step 1: Checking Docker container...
 [INFO]   Container SOURCE_COMMIT: 0572b72f059a71dc280c564a194dd279d9a7ab6d
@@ -15708,14 +15720,15 @@ Admin UI Static Smoke Test
 [INFO] Step 2: Checking https://admin.fewo.kolibri-visions.de/login ...
 [INFO]   ✓ HTTP 200 OK
 
-[INFO] Step 3: Extracting _next/static/chunks/*.js URLs...
-[INFO]   Found 20 chunk URLs
+[INFO] Step 3: Crawling chunk graph (MAX_CHUNKS=80)...
+[INFO]   Found 11 initial chunk URLs in /login HTML
+[INFO]   Downloaded 42 chunks
 
-[INFO] Step 4: Verifying chunk content...
-[INFO]   ✓ Found 'Abmelden' in app-pages-1a2b3c4d5e.js
-[INFO]   ✓ Found 'Deutsch' in app-pages-1a2b3c4d5e.js
-[INFO]   ✓ Found 'English' in app-pages-1a2b3c4d5e.js
-[INFO]   ✓ Found 'العربية' in app-pages-1a2b3c4d5e.js
+[INFO] Step 4: Searching chunks for expected strings...
+[INFO]   ✓ Found 'Abmelden' in app-layout-1a2b3c4d5e.js
+[INFO]   ✓ Found 'Deutsch' in app-layout-1a2b3c4d5e.js
+[INFO]   ✓ Found 'English' in app-layout-1a2b3c4d5e.js
+[INFO]   ✓ Found 'العربية' in app-layout-1a2b3c4d5e.js
 
 [INFO] Summary: Found 4/4 expected strings
 
