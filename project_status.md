@@ -4718,7 +4718,29 @@ curl -k -sS -i "$API_BASE_URL/api/v1/ops/audit-log" | sed -n '1,25p'
    - backend/docs/ops/runbook.md: "Owner Portal O1" section with architecture, endpoints, verification commands, common issues
    - DOCS SAFE MODE: All docs added via append (rg proof + sed windows provided)
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
+
+**PROD Evidence (Verification Date: 2026-01-09):**
+- API Base: https://api.fewo.kolibri-visions.de
+- Deployment source_commit: `4d632dc5d3dc87ceed3482bbaeb14dd70f29954c`
+- Deployment started_at: `2026-01-09T17:00:00Z`
+- Smoke Script: `backend/scripts/pms_owner_portal_smoke.sh`
+  - Run 1: rc=0 ✅
+  - Run 2: rc=0 ✅
+  - Run 3: rc=0 ✅
+- Test Results:
+  - Test 1 (POST /api/v1/owners): Owner profile created (409 OK on subsequent runs)
+  - Test 2 (PATCH /api/v1/properties/{id}/owner): Property assigned to owner
+  - Test 3 (GET /api/v1/owner/properties): Owner lists properties, returns JSON list (x-agency-id owner route fix confirmed)
+  - Test 4 (GET /api/v1/owner/bookings): Returns HTTP 200 with valid JSON (bookings schema completeness confirmed, no "column does not exist" errors)
+  - Test 5 (GET /api/v1/owners): Staff endpoint correctly blocked for owner user (403 Forbidden)
+- Test Environment:
+  - AGENCY_ID: `ffd0123a-10b6-40cd-8ad5-66eee9757ab7`
+  - PROPERTY_ID: `23dd8fda-59ae-4b2f-8489-7a90f5d46c66`
+- Stability: All tests passed consistently across 3 runs with no transient 503 DB connection errors
+- Critical Fixes Verified:
+  - Owner-aware x-agency-id tenant resolution: Test 3 stable (no "not a member of agency" errors)
+  - Bookings schema completeness: Test 4 stable (no "column does not exist" errors for date_from, date_to, total_price_cents)
 
 **Notes:**
 - Owner portal is read-only in O1 MVP (no create/edit operations for owners)
