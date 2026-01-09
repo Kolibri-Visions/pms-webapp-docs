@@ -24560,6 +24560,22 @@ If backend logs show frequent pool invalidations but queries eventually succeed:
 - Client retries should handle it gracefully
 - Monitor frequency: >10/min indicates infrastructure issue
 
+
+### Smoke Script False Failures (Test 3/4 HTTP_STATUS Parsing)
+
+**Symptom:** Smoke script reports "Test 3 FAILED: Expected HTTP 200, got: " or "Test 4 FAILED: Expected HTTP 200, got: " with empty HTTP status code, even though actual API returned HTTP 200 with correct JSON response.
+
+**Root Cause:** `call_api_with_retry()` helper already appends `-w "\nHTTP_STATUS:%{http_code}"` to curl and strips it from response body (lines 167, 171). Test 3 and Test 4 were passing `-w` flag again, causing double-wrapping where HTTP_STATUS line appeared in response body instead of footer, resulting in empty HTTP_STATUS variable during string parsing.
+
+**Fix (2026-01-09):** Removed duplicate `-w` flag and HTTP_STATUS parsing from Test 3 and Test 4. Tests now validate response structure directly:
+- **Test 3**: Checks response is JSON list (not error object with "detail" or "error" keys)
+- **Test 4**: Checks response is JSON list or object with `items` key (not error object)
+
+**Expected Behavior:** Test 3/4 now succeed whenever endpoints return HTTP 200 with valid JSON structure. False failures eliminated.
+
+**Verification:** Run smoke script - Test 3/4 should pass consistently without "Expected HTTP 200, got: " errors.
+
+
 ---
 
 **Note (2026-01-09 bugfix):** Prior to this date, the retry handler incorrectly referenced `asyncpg.ConnectionResetError` (which doesn't exist), causing `AttributeError` and HTTP 500 instead of graceful retry + 503. Fixed by using built-in `ConnectionResetError` (Python exception, not asyncpg.*). Expected behavior is now: transient drops → pool invalidation → retry → 503 if still failing (never 500 from AttributeError).
