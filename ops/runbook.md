@@ -24745,6 +24745,40 @@ echo "rc=$?"
 
 **Common Issues:**
 
+### Test 0 Fails (Owner Profile Creation)
+
+**Symptom:** Smoke test fails at Test 0 with "Could not create owner profile" or similar error.
+
+**Root Cause:** Owner profile creation failed or existing owner not found. Common causes:
+- JWT token expired (401 Unauthorized)
+- Manager token lacks RBAC permissions (403 Forbidden)
+- Validation error: invalid email format or auth_user_id (422/400)
+- Email/auth_user_id mismatch between existing profile and provided values
+
+**How to Debug:**
+Test 0 now prints HTTP code and response snippet on failure. Check the output:
+```bash
+# Expected diagnostic output on failure:
+# ⚠️  Owner create returned HTTP 401
+# Response snippet: {"detail":"Token has expired"}
+# Hint: Token may be expired. Re-login and try again.
+```
+
+**Solution:**
+- **401 Unauthorized**: JWT token expired. Re-login to obtain fresh tokens:
+  ```bash
+  # Use Supabase CLI or auth API to re-login
+  # Update MANAGER_JWT_TOKEN and OWNER_JWT_TOKEN
+  ```
+- **403 Forbidden**: Ensure MANAGER_JWT_TOKEN has manager or admin role. Verify:
+  ```bash
+  curl -H "Authorization: Bearer $MANAGER_JWT_TOKEN" "$HOST/api/v1/owners" | jq
+  # Should return 200 OK with owner list, not 403
+  ```
+- **422/400 Validation Error**: Check email format and auth_user_id validity. Test 0 derives email from OWNER_JWT_TOKEN claim `email` or OWNER_EMAIL env var.
+- **Idempotency**: Test 0 checks for existing owner first (GET /api/v1/owners). If owner already exists, it skips creation and proceeds.
+
+
 ### Statement Generation Returns Empty Items
 
 **Symptom:** Statement is created but contains no line items (gross_total_cents = 0).
