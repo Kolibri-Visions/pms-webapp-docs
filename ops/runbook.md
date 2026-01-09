@@ -24561,3 +24561,6 @@ If backend logs show frequent pool invalidations but queries eventually succeed:
 - Monitor frequency: >10/min indicates infrastructure issue
 
 ---
+
+**Note (2026-01-09 bugfix):** Prior to this date, the retry handler incorrectly referenced `asyncpg.ConnectionResetError` (which doesn't exist), causing `AttributeError` and HTTP 500 instead of graceful retry + 503. Fixed by using built-in `ConnectionResetError` (Python exception, not asyncpg.*). Expected behavior is now: transient drops → pool invalidation → retry → 503 if still failing (never 500 from AttributeError).
+

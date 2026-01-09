@@ -4765,3 +4765,5 @@ echo "rc=$?"
 ```
 
 ---
+- Tenant resolution exception handling fix (2026-01-09): Fixed AttributeError bug in tenant resolution retry handler. The code incorrectly referenced `asyncpg.ConnectionResetError` (which doesn't exist in asyncpg module), causing HTTP 500 instead of graceful 503 + retry on transient DB drops. Fixed by using built-in `ConnectionResetError` (Python standard exception, not asyncpg.*). Added `_TRANSIENT_DB_ERRORS` tuple to avoid drift between retry blocks. Backend now correctly catches transient connection errors and returns 503, allowing client retry logic to handle gracefully.
+
