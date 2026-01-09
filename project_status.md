@@ -4896,6 +4896,7 @@ echo "rc=$?"
 - **HOTFIX 2026-01-09**: Fixed smoke script bootstrap to use defensive fallback log functions (command -v checks) to prevent "log_info: command not found" failures (RC=127) on HOST-SERVER-TERMINAL
 - Required bookings columns: date_from, date_to, total_price_cents (migrations 20260109000001, 20260109000002)
 - **PROD MIGRATION REQUIRED**: Apply the migration in `supabase/migrations/` that creates `public.owner_statements` (and `public.owner_statement_items`). If not applied, statement generation returns 503 (relation does not exist). Find it via: `grep -l "CREATE TABLE.*owner_statements" supabase/migrations/*.sql`. See runbook section: "Statement Generation Fails with 503 (Schema Missing)".
+- **HOTFIX 2026-01-09 (Response Mapping)**: Fixed statement generation 500 error due to duplicate `created_at` argument in OwnerStatementResponse construction. Added `import asyncpg` to prevent NameError. Created helper `_build_statement_response()` to safely convert datetime to ISO string. Affects both new statement and existing statement code paths. Unit test added to prevent regression. See runbook: "Statement Generation Returns 500 (created_at duplicate / asyncpg NameError)".
 
 **Dependencies:**
 - Owner Portal O1 (owners table, owner profiles, RBAC dependencies)

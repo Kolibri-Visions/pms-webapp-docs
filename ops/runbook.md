@@ -24980,6 +24980,33 @@ If the SQL uses `EXTRACT(DAY FROM (b.date_to - b.date_from))`, it will fail.
 2. Verify commit: `curl -sS https://api.fewo.kolibri-visions.de/api/v1/ops/version`
 3. Re-run `./backend/scripts/pms_owner_statements_smoke.sh` (Test 3 must pass, rc=0).
 
+### Statement Generation Returns 500 (created_at duplicate / asyncpg NameError)
+
+**Symptom:** POST `/api/v1/owners/{owner_id}/statements/generate` returns **500 Internal Server Error**. Backend logs show one or both:
+- `TypeError: OwnerStatementResponse() got multiple values for keyword argument 'created_at'`
+- `NameError: name 'asyncpg' is not defined`
+
+**Context:** Statement row is created successfully in DB, but response building crashes. Subsequent calls hit "Statement already exists" and crash again with same error.
+
+**Root Cause:**
+1. **Duplicate created_at:** Response construction unpacked `**dict(row)` (which includes `created_at` as datetime), then passed `created_at=...isoformat()` again as separate kwarg.
+2. **Missing import:** Code referenced `asyncpg.UndefinedFunctionError` in except clause without importing asyncpg module.
+
+**Fix (code):**
+- Added `import asyncpg` at top of `backend/app/api/routes/owners.py`
+- Created helper function `_build_statement_response()` that converts `created_at` to ISO string before constructing response
+- Updated both code paths (new statement + existing statement) to use helper
+
+**Verification:**
+1. Redeploy backend (Coolify auto-deploys on push to main)
+2. Verify commit: `curl -sS https://api.fewo.kolibri-visions.de/api/v1/ops/version`
+3. Re-run `./backend/scripts/pms_owner_statements_smoke.sh` (Test 3 must pass with 200/201, rc=0)
+4. Check backend logs: No TypeError or NameError
+
+**Troubleshooting:**
+- If error persists after redeploy, verify deployed commit matches fix commit (check git log for "response mapping")
+- If statement was created but failed response, delete it manually: `DELETE FROM owner_statements WHERE id = '...'` to retry
+
 
 ### Owner Cannot Access Statements (403 Not Registered)
 
