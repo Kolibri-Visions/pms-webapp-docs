@@ -4880,7 +4880,22 @@ echo "rc=$?"
    - backend/scripts/README.md: Complete smoke script documentation with usage, env vars, expected output, troubleshooting
    - DOCS SAFE MODE: All docs added via append (grep proof + sed context provided)
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
+
+**PROD Evidence** (Verified: 2026-01-09):
+- **Verification Date:** 2026-01-09
+- **API Domain:** api.fewo.kolibri-visions.de
+- **Source Commit:** 7d5a4294447df68faadd704e98fcdbd6a5bf81b3
+- **Started At:** 2026-01-09T23:03:03.537167+00:00
+- **Deploy Verify:** `./backend/scripts/pms_verify_deploy.sh 7d5a4294447df68faadd704e98fcdbd6a5bf81b3` → rc=0
+- **Smoke Script:** `./backend/scripts/pms_owner_statements_smoke.sh`
+  - **Log:** /tmp/pms_owner_o2_verify_20260109_230341.log
+  - **Runs:** RC1=0, RUN_1_RC=0, RUN_2_RC=0, RUN_3_RC=0
+  - **Owner ID:** e414b73d-3d67-4edd-a441-faf5ca457caf
+  - **Property ID:** 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
+  - **Statement ID:** 5225d1b6-b5bd-44f4-9bdd-9ba0df3884f0
+  - **Period:** 2025-01-09 → 2026-01-09
+  - **Checks:** list ok (1), CSV ok (8 lines), staff endpoint denied 403 ok
 
 **Notes:**
 - Statements are read-only in O2 MVP (staff generates, owner views/downloads only)
