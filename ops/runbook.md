@@ -24458,4 +24458,39 @@ For operators:
 - **403**: Authorization failure, don't retry (not a member, inactive owner)
 - **422**: Validation error, don't retry (invalid request body)
 
+
+### Owner Portal Smoke Test with Automatic Retry
+
+**Overview:** The `pms_owner_portal_smoke.sh` script now automatically retries API calls on transient 503 errors.
+
+**Retry Behavior:**
+- **Enabled for**: POST /api/v1/owners (Test 1), PATCH /api/v1/properties/{id}/owner (Test 2), GET /api/v1/owner/properties (Test 3), GET /api/v1/owner/bookings (Test 4)
+- **Default**: 10 retry attempts with 1-second sleep between attempts (~10 seconds total)
+- **Configurable**: Set `MAX_RETRIES` and `SLEEP_SECONDS` environment variables
+- **Detection**: Retries only when HTTP 503 AND response contains "Database connection temporarily lost" OR "Database temporarily unavailable" OR "service_unavailable"
+- **Partial success**: Test 1 detects if owner was created in earlier attempt (before exhaustion) by fetching existing owners
+
+**Why This Matters:**
+- Production databases may experience transient connection drops due to network blips, pool churn, or brief maintenance
+- Without retry, smoke tests would fail intermittently even though the system is healthy
+- With retry, tests succeed once database connection is restored
+
+**Expected Outcome:**
+- First attempt fails with 503 → Script retries automatically
+- After 1-10 seconds, database connection restored → Retry succeeds
+- Test continues normally
+
+**Troubleshooting:**
+
+If smoke test fails with "Max retries exhausted":
+1. Check /health/ready output printed by script (indicates database availability)
+2. Verify database is actually up: `psql $DATABASE_URL -c "SELECT 1;"`
+3. Check if database is under heavy load (slow queries, high CPU)
+4. Consider increasing MAX_RETRIES: `MAX_RETRIES=20 ./backend/scripts/pms_owner_portal_smoke.sh`
+
+If /health/ready shows green but smoke still fails:
+- Database may be accessible but individual connections dropping
+- Check connection pool metrics (size, idle connections)
+- Review backend logs for connection pool exhaustion
+
 ---
