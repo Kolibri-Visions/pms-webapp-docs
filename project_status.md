@@ -4893,6 +4893,7 @@ echo "rc=$?"
 - RBAC enforced: Staff endpoints blocked for owners (403), owner endpoints blocked for non-owners (403)
 - Tenant isolation: All queries scoped by agency_id (resolved via O1 fallback chain)
 - Dependencies: Requires O1 (owners table, owner profiles, get_current_owner())
+- **HOTFIX 2026-01-09**: Fixed smoke script bootstrap to use defensive fallback log functions (command -v checks) to prevent "log_info: command not found" failures (RC=127) on HOST-SERVER-TERMINAL
 - Required bookings columns: date_from, date_to, total_price_cents (migrations 20260109000001, 20260109000002)
 
 **Dependencies:**

@@ -24824,4 +24824,24 @@ SQL
 
 **Solution:** See Owner Portal O1 troubleshooting section for owner profile setup.
 
+### Smoke Script Fails with "command not found" (RC=127)
+
+**Symptom:** Running `pms_owner_statements_smoke.sh` fails immediately with "log_info: command not found" or similar, exit code 127.
+
+**Root Cause:** Script bootstrap failed to define fallback log functions. This should never occur after defensive fallback implementation.
+
+**How to Debug:**
+```bash
+# Verify script has defensive fallbacks
+grep -A4 "command -v log_info" backend/scripts/pms_owner_statements_smoke.sh
+
+# Expected output: Lines defining log_info, log_success, log_error, log_warn as fallbacks
+```
+
+**Solution:**
+- Script defines defensive fallback log functions using `command -v` checks after sourcing common helpers
+- If this error occurs, script file may be corrupted or outdated
+- Pull latest code: `git fetch origin main && git reset --hard origin/main`
+- Verify script has lines 19-23 with `command -v log_*` function definitions
+
 ---
