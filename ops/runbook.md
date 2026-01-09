@@ -24850,6 +24850,114 @@ SQL
 - This is not an error. Endpoint is idempotent and returns existing statement.
 - If you need to regenerate, first delete the existing statement (future feature).
 
+### Statement Generation Fails with 503 (Schema Missing)
+
+**Symptom:** POST `/api/v1/owners/{owner_id}/statements/generate` returns 503 Service Unavailable with error message: "Database schema not installed or out of date: relation \"owner_statements\" does not exist".
+
+**Root Cause:** The `owner_statements` and `owner_statement_items` tables have not been created in the PROD database. This occurs when the required migration has not been applied.
+
+**How to Debug:**
+
+[Supabase SQL Editor]
+```sql
+-- Check if tables exist
+SELECT tablename FROM pg_tables
+WHERE schemaname = 'public'
+  AND tablename IN ('owner_statements', 'owner_statement_items');
+
+-- Expected: 0 rows if migration not applied, 2 rows if applied
+```
+
+**Solution:**
+
+**Step 1: Verify deployment commit contains migration**
+
+[HOST-SERVER-TERMINAL]
+```bash
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+EXPECT_COMMIT="$(git rev-parse HEAD)"
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh "$EXPECT_COMMIT"
+
+# Expected: rc=0 and /ops/version source_commit == EXPECT_COMMIT
+
+# Verify migration file exists locally
+ls -la supabase/migrations/*owner_statements*.sql
+# Expected: File listed (the migration creating owner_statements)
+```
+
+**Step 2: Find and apply migration in Supabase SQL Editor**
+
+[HOST-SERVER-TERMINAL]
+```bash
+# Find the migration file
+grep -l "CREATE TABLE.*owner_statements" supabase/migrations/*.sql
+# Output shows: supabase/migrations/<timestamp>_add_owner_statements.sql
+
+# Display migration filename
+ls -1 supabase/migrations/*owner_statements*.sql
+```
+
+[Supabase SQL Editor]
+1. Open Supabase Dashboard → SQL Editor
+2. Create new query as `supabase_admin` user
+3. Copy/paste the exact contents of the migration file identified above (the one creating owner_statements)
+4. Run query
+5. Verify tables created:
+   ```sql
+   SELECT tablename FROM pg_tables
+   WHERE schemaname = 'public'
+     AND tablename IN ('owner_statements', 'owner_statement_items');
+   ```
+   Expected: 2 rows (both tables)
+
+6. Verify RLS enabled:
+   ```sql
+   SELECT tablename, rowsecurity
+   FROM pg_tables
+   WHERE schemaname = 'public'
+     AND tablename IN ('owner_statements', 'owner_statement_items');
+   ```
+   Expected: 2 rows with rowsecurity = true
+
+**Step 3: Verify with smoke test**
+
+[HOST-SERVER-TERMINAL]
+```bash
+export HOST="https://api.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="<<<fresh manager/admin JWT>>>"
+export OWNER_JWT_TOKEN="<<<fresh owner JWT>>>"
+export OWNER_AUTH_USER_ID="<<<Supabase auth.users.id>>>"
+
+./backend/scripts/pms_owner_statements_smoke.sh
+echo "rc=$?"
+
+# Expected: All 6 tests pass, rc=0
+# Test 3 should succeed with "Statement generated"
+```
+
+**Step 4: Verify idempotency (3x loop)**
+
+[HOST-SERVER-TERMINAL]
+```bash
+for i in {1..3}; do
+  echo ""
+  echo "========== Run $i/3 =========="
+  ./backend/scripts/pms_owner_statements_smoke.sh && echo "rc=0" || echo "rc=$?"
+  sleep 2
+done
+
+# Expected: All 3 runs pass with rc=0
+```
+
+**Notes:**
+- Migration includes RLS policies (admin/manager/accountant staff access, owner read-only access)
+- Migration is idempotent (uses `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`)
+- Safe to re-run if interrupted
+- After migration: statement generation, listing, and CSV download should work for both staff and owners
+
+
 ### Owner Cannot Access Statements (403 Not Registered)
 
 **Symptom:** Owner gets 403 Forbidden when accessing `/api/v1/owner/statements`.
