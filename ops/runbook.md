@@ -24567,3 +24567,23 @@ If backend logs show frequent pool invalidations but queries eventually succeed:
 
 **Implementation Detail (2026-01-09):** Tenant resolution retry logic now acquires a FRESH database connection from the pool on each attempt (via `pool.acquire()`). Previously, retries reused the same injected connection (which could be dead), causing retry failures even after pool recreation. With fresh connection acquisition per attempt, retries genuinely recover from transient connection drops. Backend logs will show "succeeded on attempt N with fresh connection from pool" when retry succeeds.
 
+
+**Authorization (Agency Roles vs JWT Roles):**
+
+Owner Portal O1 endpoints enforce **application roles** from the `team_members` table, NOT Supabase JWT role claims.
+
+- **JWT role claim**: Always `"authenticated"` for normal Supabase users (system-level, not application-specific)
+- **Application roles**: Stored in `team_members.role` (manager, admin, staff, owner, accountant) per agency
+- **Staff endpoints** (POST /owners, PATCH /owners, etc.): Check `team_members.role` via `require_agency_roles("manager", "admin")`
+- **Owner endpoints** (GET /owner/properties, etc.): Check `owners` table via `get_current_owner()` dependency
+
+**Why this matters:**
+- A user with JWT `role="authenticated"` can have `team_members.role="manager"` in one agency and `"staff"` in another
+- Owner Portal endpoints resolve the user's agency (tenant resolution), then check their role in that agency's team_members table
+- 403 errors will show actionable messages: "Requires agency role manager/admin. Your agency role is staff."
+
+**Troubleshooting 403 Forbidden:**
+- Check user is a team_member in the target agency: `SELECT role FROM team_members WHERE agency_id = $1 AND user_id = $2`
+- Verify user's role matches endpoint requirements (manager/admin for staff endpoints)
+- Note: `get_current_role()` dependency still returns JWT role; use `team_members.role` from DB for authorization
+
