@@ -25060,3 +25060,36 @@ grep -A4 "command -v log_info" backend/scripts/pms_owner_statements_smoke.sh
 
 ---
 
+
+## Frontend Build Failures (pms-admin)
+
+### pms-admin build fails: apiClient.patch missing
+
+**Symptom:** Coolify deployment for pms-admin fails during `npm run build` with TypeScript error:
+```
+./app/owners/[ownerId]/page.tsx:151:23
+Type error: Property 'patch' does not exist on type 'apiClient'
+```
+
+**Root Cause:** The `apiClient` utility in `frontend/app/lib/api-client.ts` was missing the `patch` method. The Owners UI O3 detail page (`owners/[ownerId]/page.tsx`) uses `apiClient.patch()` to assign properties to owners via `PATCH /api/v1/properties/{id}/owner`.
+
+**Fix:**
+- Added `patch` method to apiClient with signature: `patch<T>(endpoint: string, body?: any, token?: string): Promise<T>`
+- Method sends JSON body with Authorization header when token is provided
+- Follows same pattern as existing `post` and `put` methods
+
+**Verification:**
+```bash
+# Check apiClient has patch method
+rg "patch:" frontend/app/lib/api-client.ts
+
+# Check usage in owners detail page
+rg "apiClient\.patch\(" frontend/app/owners
+```
+
+**Prevention:**
+- Ensure all standard HTTP methods (GET, POST, PUT, PATCH, DELETE) are implemented in apiClient before using them in pages/components.
+- In our workflow we rely on the Coolify build (`npm run build`) as the verification gate; use deployment logs as the source of truth when a build fails.
+
+---
+
