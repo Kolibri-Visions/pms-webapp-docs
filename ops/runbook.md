@@ -24281,6 +24281,8 @@ export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
 **Troubleshooting:**
 - **"Cannot resolve agency: user has N agency memberships"**: Set x-agency-id header or export AGENCY_ID for smoke script
 - **403 "not a member of agency"**: x-agency-id header provided but user is not in team_members for that agency
+- **403 "not a member" on owner routes with x-agency-id**: Fixed in 2026-01-09. Owner routes now check both owners table AND team_members. Ensure user has active owner profile in that agency (owners.auth_user_id = JWT sub, owners.is_active = true).
+
 - **Auto-detect works**: User has exactly one agency membership, no header needed
 
 ### Owner Endpoints Return 403 (Not Registered)
