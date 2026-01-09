@@ -24564,3 +24564,6 @@ If backend logs show frequent pool invalidations but queries eventually succeed:
 
 **Note (2026-01-09 bugfix):** Prior to this date, the retry handler incorrectly referenced `asyncpg.ConnectionResetError` (which doesn't exist), causing `AttributeError` and HTTP 500 instead of graceful retry + 503. Fixed by using built-in `ConnectionResetError` (Python exception, not asyncpg.*). Expected behavior is now: transient drops → pool invalidation → retry → 503 if still failing (never 500 from AttributeError).
 
+
+**Implementation Detail (2026-01-09):** Tenant resolution retry logic now acquires a FRESH database connection from the pool on each attempt (via `pool.acquire()`). Previously, retries reused the same injected connection (which could be dead), causing retry failures even after pool recreation. With fresh connection acquisition per attempt, retries genuinely recover from transient connection drops. Backend logs will show "succeeded on attempt N with fresh connection from pool" when retry succeeds.
+
