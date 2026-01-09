@@ -24390,6 +24390,40 @@ psql $DATABASE_URL -c "SELECT id FROM auth.users WHERE id IN (...);"
 - Or manually migrate existing auth.users to owners table first
 - Then re-run migration to add FK constraint
 
+### Owner Bookings Schema Drift (total_price_cents Missing)
+
+**Symptom:** GET /api/v1/owner/bookings returns 503 with error "column b.total_price_cents does not exist" or "UndefinedColumn: column does not exist".
+
+**Root Cause:** Schema drift - migration `20260109000002_add_bookings_total_price_cents.sql` not applied. Owner bookings endpoint queries `bookings.total_price_cents` which is missing from schema.
+
+**How to Debug:**
+```bash
+# Check if column exists
+psql $DATABASE_URL -c "\d bookings" | grep total_price_cents
+
+# Or query information_schema
+psql $DATABASE_URL -c "SELECT column_name FROM information_schema.columns WHERE table_name = 'bookings' AND column_name = 'total_price_cents';" 
+```
+
+**Solution:**
+Apply the missing migration. **IMPORTANT:** Supabase tables are owned by `supabase_admin`, not `postgres`. Running psql as postgres may fail with "must be owner of table bookings".
+
+```bash
+# Using docker exec with supabase_admin user (recommended for Supabase)
+docker exec -i <supabase-db-container> psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 < supabase/migrations/20260109000002_add_bookings_total_price_cents.sql
+
+# Or use Supabase CLI (if available)
+supabase db push
+
+# Or manual ALTER (if column already exists, this is harmless)
+psql $DATABASE_URL -c "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS total_price_cents BIGINT;"
+psql $DATABASE_URL -c "COMMENT ON COLUMN bookings.total_price_cents IS 'Total booking price in cents (snapshot for owner portal / reporting).';"
+```
+
+**Note:** Migration uses `IF NOT EXISTS` - safe to run even if column already exists (e.g., from manual hotfix).
+
+
+
 
 ### 503 Service Unavailable (Transient Database Disconnect)
 
