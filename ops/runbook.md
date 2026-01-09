@@ -24683,3 +24683,145 @@ supabase db push
 - GET /api/v1/owner/bookings returns 200 with booking array
 - pms_owner_portal_smoke.sh Test 4 passes with HTTP 200
 
+
+## Owner Portal O2 — Abrechnungen/Statements (CSV MVP)
+
+**Overview:** Owner statement generation and CSV export for property owner payouts.
+
+**Purpose:** Enable staff to generate period-based statements for owners, and allow owners to list and download their statements as CSV files.
+
+**Architecture:**
+- **Database**: `owner_statements` table (header with totals), `owner_statement_items` table (line items per booking)
+- **RBAC**:
+  - Staff endpoints require manager/admin role (via `require_agency_roles("manager", "admin")`)
+  - Owner endpoints require `get_current_owner()` dependency
+- **CSV Export**: Streaming response with Content-Disposition attachment header
+- **Idempotency**: Unique constraint on (agency_id, owner_id, period_start, period_end) prevents duplicates
+
+**API Endpoints:**
+
+Staff (manager/admin):
+- `POST /api/v1/owners/{owner_id}/statements/generate` - Generate statement for period (upsert-like: returns existing if already generated)
+- `GET /api/v1/owners/{owner_id}/statements` - List statements for owner
+
+Owner-only:
+- `GET /api/v1/owner/statements` - List own statements
+- `GET /api/v1/owner/statements/{statement_id}` - Get statement detail with items
+- `GET /api/v1/owner/statements/{statement_id}/download?format=csv` - Download as CSV
+
+**Database Tables:**
+- `owner_statements` - Statement headers (period, totals, status)
+- `owner_statement_items` - Line items (booking references, dates, amounts)
+
+**Migrations:**
+- `20260109000003_add_owner_statements.sql`
+
+**Verification Commands:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# [HOST-SERVER-TERMINAL] Verify deployment
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+EXPECT_COMMIT=<commit_sha> ./backend/scripts/pms_verify_deploy.sh
+
+# [HOST-SERVER-TERMINAL] Run O2 smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="<<<manager/admin JWT>>>"
+export OWNER_JWT_TOKEN="<<<owner user JWT>>>"
+export OWNER_AUTH_USER_ID="<<<Supabase auth.users.id>>>"
+# Optional:
+# export PROPERTY_ID="<property_uuid>"
+# export AGENCY_ID="<agency_uuid>"
+# export PERIOD_START="2025-10-01"
+# export PERIOD_END="2025-12-31"
+./backend/scripts/pms_owner_statements_smoke.sh
+echo "rc=$?"
+
+# Expected output: All 6 tests pass, rc=0
+```
+
+**Common Issues:**
+
+### Statement Generation Returns Empty Items
+
+**Symptom:** Statement is created but contains no line items (gross_total_cents = 0).
+
+**Root Cause:** No bookings match the period filter criteria. Common reasons:
+- Period is outside booking date range
+- All bookings for owner's properties are cancelled/declined
+- Bookings missing required columns (date_from, date_to, total_price_cents)
+
+**How to Debug:**
+```bash
+# Check bookings for owner's properties in period
+psql $DATABASE_URL <<SQL
+SELECT b.id, b.property_id, b.date_from, b.date_to, b.status, b.total_price_cents
+FROM bookings b
+JOIN properties p ON b.property_id = p.id
+WHERE p.owner_id = '<owner_id>'
+  AND p.agency_id = '<agency_id>'
+  AND b.date_from >= '2025-10-01'
+  AND b.date_from < '2025-12-31'
+  AND b.status NOT IN ('cancelled', 'declined')
+  AND b.deleted_at IS NULL
+ORDER BY b.date_from;
+SQL
+```
+
+**Solution:**
+- Verify bookings exist for the period
+- Check booking status (must not be cancelled/declined)
+- Ensure bookings.date_from/date_to/total_price_cents columns exist (migrations 20260109000001, 20260109000002)
+
+### CSV Download Returns Empty or Invalid Content
+
+**Symptom:** CSV download succeeds (HTTP 200) but file is empty or contains only headers without data rows.
+
+**Root Cause:** Statement has no line items (see above), or statement_id not found.
+
+**How to Debug:**
+```bash
+# Check statement items count
+psql $DATABASE_URL <<SQL
+SELECT COUNT(*) FROM owner_statement_items WHERE statement_id = '<statement_id>';
+SQL
+
+# Verify statement ownership
+psql $DATABASE_URL <<SQL
+SELECT id, owner_id, agency_id, period_start, period_end, gross_total_cents
+FROM owner_statements
+WHERE id = '<statement_id>';
+SQL
+```
+
+**Solution:**
+- Verify statement has items (not zero bookings)
+- Ensure owner_id matches the requesting owner
+- Re-generate statement if bookings were added after generation
+
+### Duplicate Statement Generation Fails (409 Conflict)
+
+**Symptom:** Generating statement for same owner+period returns 409 Conflict or constraint violation error.
+
+**Root Cause:** Unique constraint `uq_owner_statements_owner_period` prevents duplicates.
+
+**Expected Behavior:** This is intentional. The endpoint uses upsert-like behavior:
+- First call: Creates statement, returns 201 Created
+- Subsequent calls: Returns existing statement, returns 200 OK (not 201)
+
+**Solution:**
+- This is not an error. Endpoint is idempotent and returns existing statement.
+- If you need to regenerate, first delete the existing statement (future feature).
+
+### Owner Cannot Access Statements (403 Not Registered)
+
+**Symptom:** Owner gets 403 Forbidden when accessing `/api/v1/owner/statements`.
+
+**Root Cause:** Same as O1 - user not mapped in `owners` table or `is_active = false`.
+
+**Solution:** See Owner Portal O1 troubleshooting section for owner profile setup.
+
+---

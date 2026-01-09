@@ -4812,3 +4812,137 @@ echo "rc=$?"
 - Test 3 must return JSON list with assigned property (not 403 "not a member")
 - Test 4 must return HTTP 200 with valid JSON (not 503 "column does not exist")
 - No transient 503 DB connection errors during smoke test (retry logic should handle gracefully)
+
+# Owner Portal O2 (Statements/Abrechnungen CSV MVP)
+
+**Implementation Date:** 2026-01-09
+
+**Scope:** Owner statement generation and CSV export MVP. Enables staff to generate period-based statements for property owners, and allows owners to list and download their statements as CSV files for payout reconciliation.
+
+**Features Implemented:**
+
+1. **Database Migrations** (`20260109000003_add_owner_statements.sql`):
+   - Created `owner_statements` table: id, agency_id, owner_id, period_start, period_end, currency, gross_total_cents, commission_cents, net_total_cents, status, generated_by_user_id, timestamps
+   - Created `owner_statement_items` table: id, statement_id, booking_id, property_id, date_from, date_to, nights, total_price_cents, booking_reference
+   - Indexes: (agency_id, owner_id, period_start DESC), statement_id, booking_id
+   - Unique constraint: (agency_id, owner_id, period_start, period_end) for idempotency
+   - Data integrity checks: period_end > period_start, nights >= 0, total_price_cents >= 0
+
+2. **Pydantic Schemas** (`backend/app/schemas/owner_statements.py`):
+   - `StatementGenerateInput`: Period validation (max 2 years), currency validation (EUR only for MVP)
+   - `OwnerStatementItemResponse`: Line item details
+   - `OwnerStatementResponse`: Statement header with optional items array
+   - `OwnerStatementListResponse`: Statement list (header only, no items)
+
+3. **API Routes** (extended `backend/app/api/routes/owners.py`):
+   - Staff endpoints (manager/admin):
+     - POST /api/v1/owners/{owner_id}/statements/generate: Generate statement (upsert-like: returns existing if already generated)
+     - GET /api/v1/owners/{owner_id}/statements: List statements for owner
+   - Owner endpoints (owner-only):
+     - GET /api/v1/owner/statements: List own statements
+     - GET /api/v1/owner/statements/{statement_id}: Get statement detail with items
+     - GET /api/v1/owner/statements/{statement_id}/download?format=csv: Download CSV with Content-Disposition attachment
+   - RBAC: Staff endpoints use require_agency_roles("manager", "admin"), owner endpoints use get_current_owner()
+   - Idempotency: Duplicate generation returns existing statement (200 OK, not 201)
+
+4. **CSV Export**:
+   - German column headers: Buchungsreferenz, Objekt-ID, Von, Bis, Nächte, Betrag (Cent)
+   - Summary header rows: Period, currency, gross/commission/net totals
+   - Streaming response with proper Content-Disposition filename
+   - Format: statement_{statement_id}.csv
+
+5. **Frontend UI** (`frontend/app/owner/page.tsx`):
+   - Added "Abrechnungen" section to owner portal page
+   - Lists statements with period, gross/commission/net amounts, status
+   - "CSV herunterladen" button triggers download
+   - Minimal implementation: no page refactor, preserves existing properties/bookings functionality
+   - German UI strings throughout
+
+6. **Integration Tests** (`backend/tests/integration/test_owner_statements.py`):
+   - Staff generate statement (success, idempotency, invalid period validation)
+   - Owner list/detail/download statements
+   - RBAC enforcement (owner cannot access staff endpoints)
+   - Tests use fixtures (skipped if fixtures unavailable)
+
+7. **Smoke Script** (`backend/scripts/pms_owner_statements_smoke.sh`):
+   - Test 0: Ensure owner profile exists (create if needed, idempotent)
+   - Test 1: Auto-pick property if not provided
+   - Test 2: Assign property to owner (idempotent)
+   - Test 3: Staff generates statement for period (upsert-like behavior)
+   - Test 4: Owner lists statements (must contain generated statement)
+   - Test 5: Owner downloads CSV (validates format and non-empty)
+   - Test 6: Owner tries staff endpoint (403 Forbidden)
+   - Exit codes: rc=0 success, rc=1+ failures
+   - Idempotent: Safe to run multiple times
+
+8. **Documentation** (add-only):
+   - backend/docs/ops/runbook.md: "Owner Portal O2 — Abrechnungen/Statements" section with architecture, endpoints, verification commands, troubleshooting
+   - backend/scripts/README.md: Complete smoke script documentation with usage, env vars, expected output, troubleshooting
+   - DOCS SAFE MODE: All docs added via append (grep proof + sed context provided)
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- Statements are read-only in O2 MVP (staff generates, owner views/downloads only)
+- Commission always 0 in MVP (future enhancement)
+- Status always "generated" in MVP (future: "finalized" status for locked statements)
+- CSV format is minimal MVP (future: add property names, guest names, detailed breakdown)
+- Statement items exclude cancelled/declined bookings automatically
+- Items selection: bookings where date_from >= period_start AND date_from < period_end
+- Idempotency via unique constraint: same owner+period returns existing statement (not duplicate)
+- RBAC enforced: Staff endpoints blocked for owners (403), owner endpoints blocked for non-owners (403)
+- Tenant isolation: All queries scoped by agency_id (resolved via O1 fallback chain)
+- Dependencies: Requires O1 (owners table, owner profiles, get_current_owner())
+- Required bookings columns: date_from, date_to, total_price_cents (migrations 20260109000001, 20260109000002)
+
+**Dependencies:**
+- Owner Portal O1 (owners table, owner profiles, RBAC dependencies)
+- Properties domain (statement items reference properties)
+- Bookings domain (statement items reference bookings, totals calculated from booking prices)
+- Migration 20260109000003 (owner_statements and owner_statement_items tables)
+- Migrations 20260109000001 and 20260109000002 (bookings.date_from/date_to/total_price_cents required)
+
+**How to Verify Owner Portal O2 in PROD:**
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# [HOST-SERVER-TERMINAL] Verify deployment
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+EXPECT_COMMIT=<commit_sha> ./backend/scripts/pms_verify_deploy.sh
+
+# [HOST-SERVER-TERMINAL] Check /api/v1/ops/version
+curl https://api.fewo.kolibri-visions.de/api/v1/ops/version | jq .source_commit
+# Should match latest commit hash
+
+# [HOST-SERVER-TERMINAL] Run O2 smoke test 3 times
+for i in 1 2 3; do
+  echo "Run $i:"
+  HOST=https://api.fewo.kolibri-visions.de \
+  MANAGER_JWT_TOKEN="<<<manager/admin JWT>>>" \
+  OWNER_JWT_TOKEN="<<<owner user JWT>>>" \
+  OWNER_AUTH_USER_ID="<<<Supabase auth.users.id>>>" \
+  ./backend/scripts/pms_owner_statements_smoke.sh
+  echo "rc=$?"
+done
+
+# Expected: All runs return rc=0 consistently
+# All 6 tests must pass in each run
+# Test 3 upsert-like behavior: first run creates statement (201), subsequent runs return existing (200)
+# CSV download must return valid CSV with headers and data rows (if bookings exist in period)
+```
+
+**Verification Criteria (for VERIFIED status later):**
+- ✅ PROD deployment: /api/v1/ops/version source_commit matches O2 commit
+- ✅ Smoke script: 3 consecutive runs with rc=0 (no flakiness)
+- ✅ All 6 tests pass: owner profile, property assignment, statement generation, list, download CSV, RBAC enforcement
+- ✅ Statement generation is idempotent (repeated calls return existing statement)
+- ✅ CSV download contains valid data (headers + summary + line items if bookings exist)
+- ✅ No 503 DB errors, no false positives/negatives
+
+**Status Notes:**
+- DO NOT mark as VERIFIED until user confirms PROD smoke test 3x rc=0 with commit match
+- Current status: ✅ IMPLEMENTED (awaiting PROD verification)
+
+---
