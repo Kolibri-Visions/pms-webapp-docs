@@ -24493,4 +24493,71 @@ If /health/ready shows green but smoke still fails:
 - Check connection pool metrics (size, idle connections)
 - Review backend logs for connection pool exhaustion
 
+
+### Tenant Resolution DB Drops (503 on POST /owners)
+
+**Symptom:** POST /api/v1/owners (or other owner endpoints) returns 503 with "Database connection temporarily lost" during tenant resolution (x-agency-id validation or auto-detect).
+
+**Backend Logs Show:**
+```
+Database connection dropped during tenant resolution (x-agency-id header validation): 
+ConnectionDoesNotExistError: connection was closed in the middle of operation
+```
+
+**Root Cause:** Transient DB connection drops during membership validation query in `get_current_agency_id` dependency.
+
+**Architecture (Phase 3+):**
+- Tenant resolution validates x-agency-id header by querying `team_members` table
+- On connection drop (ConnectionDoesNotExistError, InterfaceError, ConnectionResetError, OSError):
+  1. Backend automatically invalidates pool and recreates it
+  2. Retries membership query once (max 2 attempts total)
+  3. If both attempts fail: returns 503 with retry message
+- Client (smoke script or app) retries with exponential backoff (1s, 1s, 2s, 3s, 5s)
+
+**Quick Checks:**
+
+1. **Verify health endpoint is green**:
+   ```bash
+   curl https://api.fewo.kolibri-visions.de/health/ready
+   # Should return: {"status":"healthy"}
+   ```
+
+2. **Check backend logs for tenant resolution errors**:
+   ```bash
+   docker logs --since 20m pms-backend 2>&1 | grep -E "tenant resolution|pool invalid"
+   # Look for: "Database connection dropped during tenant resolution"
+   # Look for: "Invalidating connection pool due to tenant resolution connection drop"
+   ```
+
+3. **Check for pool recreation**:
+   ```bash
+   docker logs --since 20m pms-backend 2>&1 | grep -E "Pool invalidated|Database connection pool created"
+   # Should see: pool invalidation followed by successful recreation
+   ```
+
+**Expected Behavior:**
+- First attempt: 503 (connection drop detected)
+- Backend: invalidates pool, recreates pool
+- Retry: succeeds with fresh connection
+- Total time: 1-5 seconds depending on retry attempt
+
+**When to Escalate:**
+- Persistent 503 after 5+ retry attempts → Database connectivity instability
+- /health/ready red → Database unavailable
+- Frequent pool invalidations (>10 per minute) → Network flapping or DNS issues
+
+**Troubleshooting:**
+
+If POST /owners returns 503 consistently:
+1. Check database is actually up: `psql $DATABASE_URL -c "SELECT 1;"`
+2. Verify network latency: `ping <db-host>`
+3. Check DNS resolution: `nslookup <db-host>`
+4. Review database connection pool settings (min_size, max_size in database.py)
+5. Check for DNS flaps or network interruptions in infrastructure logs
+
+If backend logs show frequent pool invalidations but queries eventually succeed:
+- This is expected behavior for transient drops
+- Client retries should handle it gracefully
+- Monitor frequency: >10/min indicates infrastructure issue
+
 ---
