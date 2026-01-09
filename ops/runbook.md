@@ -25037,3 +25037,26 @@ grep -A4 "command -v log_info" backend/scripts/pms_owner_statements_smoke.sh
 - Verify script has lines 19-23 with `command -v log_*` function definitions
 
 ---
+
+---
+
+## Backoffice Owners UI (O3) — Status & Verifikation (WIP)
+
+**Status:** WIP / not yet verified in PROD.
+
+**Goal:** Backoffice UI for staff/manager to manage owners (list/detail), assign properties, and trigger statement generation.
+
+**Backend dependencies:**
+- Owner Portal O1/O2 endpoints (owners + statements) must be deployed and verified.
+- RBAC: manager/admin required.
+
+**Verification (when implemented):**
+- [BROWSER] Navigate in Backoffice to Owners area (menu entry may be added later).
+- Validate list + detail rendering, property assignment, statement generation, CSV download.
+- Add PROD evidence to `backend/docs/project_status.md` only after automated deploy verify + smoke rc=0.
+
+**See also:**
+- Owner Portal O1/O2 sections for auth/role troubleshooting and statement generation issues.
+
+---
+

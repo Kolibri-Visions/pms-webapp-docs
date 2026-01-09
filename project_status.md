@@ -4964,3 +4964,23 @@ done
 - Current status: ✅ IMPLEMENTED (awaiting PROD verification)
 
 ---
+
+# Owner Portal O3 (Backoffice Owners UI)
+
+**Scope:** Backoffice/Admin UI for staff (manager/admin) to manage property owners: list view, detail page with property assignment, statement generation, and CSV download.
+
+**Status:** 🟡 WIP (not yet implemented)
+
+**Dependencies:**
+- Owner Portal O1 (owners table, owner endpoints, RBAC)
+- Owner Portal O2 (statements endpoints, CSV export)
+- Properties domain (property list + assignment endpoint)
+
+**Verification (when implemented):**
+- Manual browser test: Login as manager/admin → navigate to owners section → verify list/detail pages load
+- Test property assignment + statement generation + CSV download
+- Update status to ✅ IMPLEMENTED after deployment
+- Update status to ✅ VERIFIED after PROD verification with evidence
+
+---
+
