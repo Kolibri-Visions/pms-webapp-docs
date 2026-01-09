@@ -24587,3 +24587,15 @@ Owner Portal O1 endpoints enforce **application roles** from the `team_members` 
 - Verify user's role matches endpoint requirements (manager/admin for staff endpoints)
 - Note: `get_current_role()` dependency still returns JWT role; use `team_members.role` from DB for authorization
 
+
+**Owner Verification Retry Hardening (2026-01-09):**
+
+Owner Portal endpoints (GET /api/v1/owner/properties, GET /api/v1/owner/bookings) now use fresh connection retry for owner verification queries. This eliminates 503 flakiness caused by transient DB drops during owner membership lookups.
+
+- **Before:** Owner verification used injected connection that could be dead, causing immediate 503 on transient drops
+- **After:** Owner verification acquires fresh connection from pool on each attempt (max 2 attempts with pool invalidation)
+- **Backend logs on success:** "Owner verification succeeded on attempt N with fresh connection from pool"
+- **Result:** GET /owner/properties returns 200 consistently, no 503 flakiness
+
+If persistent 503 on owner endpoints after multiple retries → Check database connectivity and network stability (see "Tenant Resolution DB Drops" troubleshooting).
+
