@@ -4721,9 +4721,10 @@ curl -k -sS -i "$API_BASE_URL/api/v1/ops/audit-log" | sed -n '1,25p'
 **Status:** ✅ VERIFIED
 
 **PROD Evidence (Verification Date: 2026-01-09):**
-- API Base: https://api.fewo.kolibri-visions.de
-- Deployment source_commit: `4d632dc5d3dc87ceed3482bbaeb14dd70f29954c`
-- Deployment started_at: `2026-01-09T17:00:00Z`
+- API: https://api.fewo.kolibri-visions.de
+- /api/v1/ops/version:
+  - source_commit: `4d632dc5d3dc87ceed3482bbaeb14dd70f29954c`
+  - started_at: `2026-01-09T17:11:03.642751+00:00`
 - Smoke Script: `backend/scripts/pms_owner_portal_smoke.sh`
   - Run 1: rc=0 ✅
   - Run 2: rc=0 ✅
@@ -4738,9 +4739,9 @@ curl -k -sS -i "$API_BASE_URL/api/v1/ops/audit-log" | sed -n '1,25p'
   - AGENCY_ID: `ffd0123a-10b6-40cd-8ad5-66eee9757ab7`
   - PROPERTY_ID: `23dd8fda-59ae-4b2f-8489-7a90f5d46c66`
 - Stability: All tests passed consistently across 3 runs with no transient 503 DB connection errors
-- Critical Fixes Verified:
-  - Owner-aware x-agency-id tenant resolution: Test 3 stable (no "not a member of agency" errors)
-  - Bookings schema completeness: Test 4 stable (no "column does not exist" errors for date_from, date_to, total_price_cents)
+- Verification Notes:
+  - Owner routes accept x-agency-id for owners via owners table mapping (staff routes still require team_members membership)
+  - Owner bookings schema requirements (date_from, date_to, total_price_cents) covered by migrations 20260109000001 and 20260109000002 to prevent schema drift
 
 **Notes:**
 - Owner portal is read-only in O1 MVP (no create/edit operations for owners)
