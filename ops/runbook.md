@@ -24958,6 +24958,29 @@ done
 - After migration: statement generation, listing, and CSV download should work for both staff and owners
 
 
+### Statement Generation 503: extract(unknown, integer) does not exist
+
+**Symptom:** POST `/api/v1/owners/{owner_id}/statements/generate` returns **503** with:
+`function pg_catalog.extract(unknown, integer) does not exist` (hint: add explicit type casts).
+
+**Meaning:** If the `owner_statements` tables exist (see section above), this is **NOT** a missing-table migration issue.
+It indicates a **backend SQL type mismatch** in the statement generation query.
+
+**Root Cause:** PostgreSQL behavior:
+- `DATE - DATE` returns an **INTEGER** (number of days), not an interval.
+- `EXTRACT(...)` works with interval/timestamp types, not integers.
+If the SQL uses `EXTRACT(DAY FROM (b.date_to - b.date_from))`, it will fail.
+
+**Fix (code):**
+- Replace `EXTRACT(DAY FROM (b.date_to - b.date_from)) AS nights` with `(b.date_to - b.date_from) AS nights`.
+- File location: `backend/app/api/routes/owners.py` (statement generation SQL).
+
+**Verification:**
+1. Redeploy backend (Coolify).
+2. Verify commit: `curl -sS https://api.fewo.kolibri-visions.de/api/v1/ops/version`
+3. Re-run `./backend/scripts/pms_owner_statements_smoke.sh` (Test 3 must pass, rc=0).
+
+
 ### Owner Cannot Access Statements (403 Not Registered)
 
 **Symptom:** Owner gets 403 Forbidden when accessing `/api/v1/owner/statements`.
