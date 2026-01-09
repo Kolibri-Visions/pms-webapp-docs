@@ -24599,3 +24599,35 @@ Owner Portal endpoints (GET /api/v1/owner/properties, GET /api/v1/owner/bookings
 
 If persistent 503 on owner endpoints after multiple retries → Check database connectivity and network stability (see "Tenant Resolution DB Drops" troubleshooting).
 
+
+**Owner Bookings 503 (Missing date_from/date_to Columns):**
+
+**Symptom:** GET /api/v1/owner/bookings returns 503 "Database schema mismatch detected"
+
+**Backend Logs Show:**
+```
+Database schema mismatch detected: column b.date_from does not exist
+```
+
+**Root Cause:** Owner bookings query references `date_from`/`date_to` columns but bookings table only has `check_in`/`check_out` columns.
+
+**Fix:**
+- Apply migration `20260109000001_add_bookings_date_from_to.sql` which adds `date_from`/`date_to` columns
+- Migration automatically backfills from `check_in`/`check_out` where available
+- Adds performance indexes for owner bookings queries
+
+**Quick Verification:**
+```bash
+# Check if columns exist
+psql $DATABASE_URL -c "SELECT column_name FROM information_schema.columns WHERE table_name = 'bookings' AND column_name IN ('date_from', 'date_to');"
+# Expected: Both columns should be listed
+
+# Apply missing migrations
+cd /data/repos/pms-webapp
+supabase db push
+```
+
+**After Fix:**
+- GET /api/v1/owner/bookings returns 200 with booking array
+- pms_owner_portal_smoke.sh Test 4 passes with HTTP 200
+
