@@ -25179,3 +25179,34 @@ Geplante UI-Verbesserung (noch nicht deployed):
 
 Status: Geplant/WIP (noch nicht implementiert oder deployed).
 
+
+### Owners UI (O3): Dropdown empty due to 422 (limit validation)
+
+**Symptom:** Property assignment dropdown stays empty on /owners/[ownerId]. Browser console shows:
+```
+GET /api/v1/properties?limit=500&offset=0 → 422 Unprocessable Content
+```
+
+**Root Cause:** Frontend requested limit=500, but backend has lower max limit constraint (e.g., 200). Request validation fails with 422.
+
+**Fix (applied):**
+- Changed frontend request from `limit=500` to `limit=200` (safe limit)
+- Removed trailing slash: `/api/v1/properties?limit=200&offset=0` (not `/properties/`)
+- Added retry logic: On 422, retry with `limit=100` automatically
+- Added error message in UI: "Objekte konnten nicht geladen werden (HTTP 422: ...)"
+
+**Verification:**
+```bash
+# Browser DevTools → Network tab
+# Verify GET /api/v1/properties?limit=200&offset=0 returns 200 (not 422)
+
+# Optional: curl test
+curl -X GET "$HOST/api/v1/properties?limit=200&offset=0" \
+  -H "Authorization: Bearer $MANAGER_JWT_TOKEN"
+# Should return 200 with properties array
+```
+
+**Troubleshooting:**
+- If still 422: Backend max limit may be lower than 200 → adjust frontend limit further (e.g., 100 or 50)
+- If limit=1 works but limit=200 fails: Check backend validation schema for max_limit parameter
+

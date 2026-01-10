@@ -4982,6 +4982,12 @@ done
   - ✅ CSV download works for generated statements
   - ℹ️ Property assignment dropdown may show "Keine verfügbaren Objekte" when all properties already assigned to other owners (by design, see runbook for API workaround)
 - **Runbook Reference:** See "Owners UI (O3): Dropdown zeigt nur unassigned Properties (by design)" in backend/docs/ops/runbook.md for dropdown behavior + API reassignment workaround
+- **Bug Fix (422 Validation Error):**
+  - Issue: Property dropdown empty due to 422 error on `/api/v1/properties?limit=500&offset=0`
+  - Root cause: Frontend requested limit=500, but backend has lower max limit constraint (~200)
+  - Fix: Changed frontend to use `limit=200` (safe limit), removed trailing slash from endpoint
+  - Hardening: Added retry logic (on 422, retry with limit=100) + error message display in UI
+  - See runbook section "Owners UI (O3): Dropdown empty due to 422 (limit validation)" for troubleshooting
 
 **Dependencies:**
 - Owner Portal O1 (owners table, owner endpoints, RBAC)
