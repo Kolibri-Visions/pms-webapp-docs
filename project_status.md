@@ -1,7 +1,9 @@
 # PMS-Webapp Project Status
 
 **Last Updated:** 2026-01-05
+**Last Updated (actual):** 2026-01-10
 **Current Phase:** Phase 21 - Inventory/Availability Production Hardening
+**Current Phase (actual):** (see latest VERIFIED evidence blocks dated 2026-01-10 below)
 
 ## Overview
 
@@ -4793,6 +4795,8 @@ curl -k -sS -i "$API_BASE_URL/api/v1/ops/audit-log" | sed -n '1,25p'
 - Properties domain (owners own properties)
 - Bookings domain (owners view bookings for their properties)
 - Migration 20260109000000 (owners table + properties.owner_id FK update)
+
+**NOTE (2026-01-10):** Owner Portal O1 is already ✅ VERIFIED per the PROD Evidence block above. The following "for VERIFIED status later" verification-template text is legacy/reference and should be ignored for current status.
 
 **Verification Commands (for VERIFIED status later):**
 ```bash
