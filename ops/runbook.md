@@ -22829,6 +22829,35 @@ JWT_TOKEN="eyJ..." \
 ✅ All P3 Public Direct Booking Hardening smoke tests passed! 🎉
 ```
 
+**PROD Evidence (2026-01-10):**
+
+Verified in production with commit `b651b6220a048df674e6ebec26ec6944e7d38cc8` (started_at: 2026-01-10T14:54:05.329699+00:00).
+
+```bash
+# Deploy verification
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+# Expected: rc=0 (commit match)
+
+# P3 consolidated smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export API_BASE_URL="$HOST"
+export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
+export PID="$PROPERTY_ID"
+export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+export TEST_ORIGIN="https://fewo.kolibri-visions.de"
+export DOMAIN="api.fewo.kolibri-visions.de"
+bash ./backend/scripts/pms_public_direct_booking_hardening_smoke.sh
+# Expected: rc=0
+```
+
+**Tests Validated:**
+- CORS preflight (P3b): PASS
+- Idempotency first request (P3a): PASS
+- Idempotency retry same key (P3a): PASS
+- Idempotency conflict detection (P3a): PASS
+- Audit log booking request created event (P3c): PASS (attempt 1)
+
 ### Common Issues
 
 #### Test 1 Skipped (CORS)

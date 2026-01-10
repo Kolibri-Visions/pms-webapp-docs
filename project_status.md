@@ -3440,22 +3440,25 @@ echo "rc=$?"
 
 **Status:** ✅ VERIFIED
 
-**PROD Evidence:**
-- **Verification Date:** 2026-01-08
+**PROD Evidence (Verified: 2026-01-10):**
 - **API Base URL:** https://api.fewo.kolibri-visions.de
-- **Source Commit:** 7be5dac3f36f63aaff6b865e610bde7e7bbc06e1
-- **Started At:** 2026-01-08T19:54:04.786115+00:00
+- **Source Commit:** b651b6220a048df674e6ebec26ec6944e7d38cc8
+- **Started At:** 2026-01-10T14:54:05.329699+00:00
+- **Deploy Verification:** `pms_verify_deploy.sh` rc=0 (commit match)
 - **Smoke Script:** `backend/scripts/pms_public_direct_booking_hardening_smoke.sh`
 - **Smoke Result:** rc=0 (all tests PASS)
-- **Property ID:** 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
-- **Agency ID:** ffd0123a-10b6-40cd-8ad5-66eee9757ab7
+- **Environment Variables:**
+  - `HOST="https://api.fewo.kolibri-visions.de"`
+  - `PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"`
+  - `AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"`
+  - `TEST_ORIGIN="https://fewo.kolibri-visions.de"`
+  - `DOMAIN="api.fewo.kolibri-visions.de"`
 - **Tests Verified:**
-  - Test 1: CORS preflight with allowed origin ✅
-  - Test 2: Create booking request with Idempotency-Key (first request) ✅
-  - Test 3: Idempotency - retry same request returns same booking ID ✅
-  - Test 4: Idempotency - conflict detection returns HTTP 409 ✅
-  - Test 5: Audit log contains booking request created event ✅
-- **Audit Log Verification:** GET /api/v1/ops/audit-log returned HTTP 200 with action="public_booking_request_created"
+  - CORS preflight (P3b): PASS ✅
+  - Idempotency first (P3a): PASS ✅
+  - Idempotency retry same key (P3a): PASS ✅
+  - Idempotency conflict (P3a): PASS ✅
+  - Audit log booking request created event (P3c): PASS (attempt 1) ✅
 
 **Notes:**
 - This is a convenience wrapper that consolidates P3a/b/c tests for quick production validation
