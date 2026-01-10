@@ -15410,6 +15410,8 @@ export JWT_TOKEN="your-expired-token"
 ./backend/scripts/pms_phase23_smoke.sh  # Will auto-refresh
 ```
 
+**Fix (2026-01-10):** The exp check was updated to be nounset-safe (bash `set -u` compatible) by using a python3 helper that receives the full JWT token as an argument and returns either "NOEXP" (if exp claim missing/invalid) or the integer seconds_left. Tokens without exp claim are accepted with a warning. This prevents "unbound variable" crashes in scripts using `set -u`.
+
 ### Other Resources
 
 - **Inventory Contract** (Single Source of Truth): `/app/docs/domain/inventory.md` (date semantics, API contracts, edge cases, DB guarantees, test evidence)

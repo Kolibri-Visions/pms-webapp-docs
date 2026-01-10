@@ -3704,6 +3704,7 @@ echo "rc=$?"
 - **Affected Scripts:** `pms_phase20_final_smoke.sh`, `pms_phase21_inventory_hardening_smoke.sh`, `pms_phase23_smoke.sh`
 - **Benefits:** Prevents auth failures from stale tokens in long-running automation; seamless operation without manual token refresh
 - **Implementation:** Enhanced `get_auth_token()` in `backend/scripts/pms_smoke_common.sh` (lines 160-241)
+- **Fix (2026-01-10):** Exp check rewritten to be nounset-safe (bash `set -u` compatible); python3 helper receives full JWT token as arg, returns "NOEXP" or integer seconds_left; prevents "unbound variable" crashes
 
 **Goals:**
 - Document common gotchas and operational guidance
