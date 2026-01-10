@@ -101,11 +101,7 @@ Verification passes if `source_commit` from production starts with the expected 
 | **Channel Manager** | ✅ OPERATIONAL | Sync batches history, admin UI complete |
 | **Database Schema** | ✅ UP-TO-DATE | Guests metrics + timeline columns migrated |
 | **Admin Console** | ✅ DEPLOYED | Sync monitoring, batch details UI live |
-| **Pricing (P2)** | ✅ STABLE | P2 verified in PROD (Re-Verification 2026-01-10; ops/version commit b651b6220a048df674e6ebec26ec6944e7d38cc8; pms_verify_deploy.sh rc=0; pms_pricing_quote_smoke.sh rc=0 delta-based) |
-| **Public Direct Booking (P3)** | ✅ STABLE | Verified in PROD (Verified: 2026-01-10; consolidated smoke: backend/scripts/pms_public_direct_booking_hardening_smoke.sh rc=0; deploy verify: pms_verify_deploy.sh rc=0 commit match) |
-| **Owner Portal (O1)** | ✅ STABLE | Verified in PROD (Verified: 2026-01-09; smoke: backend/scripts/pms_owner_portal_smoke.sh rc=0; deploy verify: pms_verify_deploy.sh rc=0 commit match; see Owner Portal O1 section) |
-| **Owner Portal O3 (Owners UI)** | ✅ VERIFIED | Verified in PROD (Verified: 2026-01-10; smoke: backend/scripts/pms_owner_o3_assignments_smoke.sh rc=0; deploy verify: pms_verify_deploy.sh rc=0 commit match eb033bf8c48a) |
-| **Production Readiness** | ✅ READY | Phase 21 hardening VERIFIED (prod evidence 2026-01-08) |
+| **Production Readiness** | 🟡 IN PROGRESS | Phase 21 hardening in progress |
 
 ## Completed Phases
 
@@ -2788,12 +2784,12 @@ This entry will be marked **VERIFIED** only after:
 - **Router Mounted:** /api/v1/booking-requests found in OpenAPI (preflight PASS)
 - **Note:** UI component added 2026-01-07, requires re-verification with UI workflow
 
-**PROD Evidence (Verified: 2026-01-07)**:
-- **Verification Date**: 2026-01-07
+**PROD Evidence (Verified: 2026-01-10)**:
+- **Verification Date**: 2026-01-10
 - **API Base URL**: https://api.fewo.kolibri-visions.de
-- **Deployed Commit**: 649587698f3a89bf962eaf47f3c4c71d8e3b3111 (prefix: 6495876)
-- **Process Started**: 2026-01-07T13:26:04.816718+00:00
-- **Deploy Verification**: pms_verify_deploy.sh (rc=0, commit match PASS)
+- **Deployed Commit**: eb033bf8c48ad3e7b9270c536932a7f0c512b419
+- **Process Started**: 2026-01-10T18:27:04.685372+00:00
+- **Deploy Verification**: pms_verify_deploy.sh (rc=0, commit match eb033bf8c48ad3e7b9270c536932a7f0c512b419)
 - **Workflow Smoke Test**: pms_public_booking_requests_workflow_smoke.sh (rc=0)
 - **Key Verification Results**:
   - Health checks: /health (200), /health/ready (200)
@@ -2804,6 +2800,7 @@ This entry will be marked **VERIFIED** only after:
   - Idempotency: Re-approve returns same booking_id ✅
   - Audit events: booking_request_approved/declined logged ✅
   - Admin UI: Loads and displays booking requests ✅
+  - Additional verification: GET /api/v1/bookings/831336ed-8d86-46ed-8a5a-494c5c831e79 returned HTTP 200
 - **Verification Criteria**: All 9 criteria met (see Verification Criteria section above)
 
 ---
@@ -5011,7 +5008,7 @@ done
 
 **Scope:** Backoffice/Admin UI for staff (manager/admin) to manage property owners: list view, detail page with property assignment, statement generation, and CSV download.
 
-**Status:** ✅ VERIFIED
+**Status:** ✅ IMPLEMENTED
 
 **Implementation Notes:**
 - UI deployed at `/owners` (list) and `/owners/[ownerId]` (detail)
@@ -5092,20 +5089,10 @@ done
   - backend/tests/integration/test_properties.py: Added TestAssignablePropertiesFilter class (lines 847-992)
   - frontend/app/owners/[ownerId]/page.tsx: Updated fetchProperties to use assignable filter, simplified availableProperties computation (lines 123-129, 355-358)
 
-**PROD Evidence (Verified: 2026-01-10):**
-- **API:** https://api.fewo.kolibri-visions.de
-- **Source Commit:** eb033bf8c48ad3e7b9270c536932a7f0c512b419
-- **Started At:** 2026-01-10T18:27:04.685372+00:00
-- **Deploy Verification:** `backend/scripts/pms_verify_deploy.sh` rc=0, exact commit match to eb033bf8c48ad3e7b9270c536932a7f0c512b419
-- **Smoke Test:** `backend/scripts/pms_owner_o3_assignments_smoke.sh` rc=0
-  - ✅ Assignable filter includes unassigned properties + same owner properties
-  - ✅ Assignable filter excludes properties owned by other owners
-  - ✅ Mutual exclusion: `assignable_for_owner_id` + `owner_id` returns 400 Bad Request
-
-**Notes:**
-- Smoke test uses existing JWT tokens and creates owners in DB via API (POST /api/v1/owners)
-- In some environments, `mk_user`/signup may fail if Supabase signup is disabled (signup_disabled=true in auth config)
-- For testing in signup-disabled environments, use existing auth tokens or enable signup temporarily in Supabase dashboard
+**VERIFIED Status (not yet achieved):**
+- Status ✅ IMPLEMENTED achieved via manual browser testing + integration tests + API smoke script
+- Status ✅ VERIFIED requires: PROD deployment + smoke script rc=0 + documented PROD evidence
+- API smoke script exists: `pms_owner_o3_assignments_smoke.sh` (tests API filtering logic)
 
 ---
 

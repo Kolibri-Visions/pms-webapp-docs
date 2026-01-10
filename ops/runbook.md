@@ -21009,6 +21009,40 @@ JWT_TOKEN=<token> \
 - [Booking Requests API](../app/api/routes/booking_requests.py) - API implementation
 - [Migration 20260106120000](../../supabase/migrations/20260106120000_add_booking_request_workflow.sql) - Database schema
 
+**PROD Verification (2026-01-10)**:
+
+Verified in production with the following commands:
+
+```bash
+# [HOST-SERVER-TERMINAL] Check API version
+curl -sS "https://api.fewo.kolibri-visions.de/api/v1/ops/version" | jq .
+# Output: source_commit: eb033bf8c48ad3e7b9270c536932a7f0c512b419
+#         started_at: 2026-01-10T18:27:04.685372+00:00
+
+# [HOST-SERVER-TERMINAL] Verify deployment
+cd /data/repos/pms-webapp
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+# Output: rc=0, commit match eb033bf8c48ad3e7b9270c536932a7f0c512b419
+
+# [HOST-SERVER-TERMINAL] Run P1 workflow smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<manager/admin JWT>"
+./backend/scripts/pms_public_booking_requests_workflow_smoke.sh
+echo "rc=$?"
+# Output: rc=0 (all tests passed)
+```
+
+**Observed State Machine** (from smoke test):
+- **requested → under_review**: Review action sets status to under_review (DB: inquiry)
+- **under_review → confirmed**: Approve action sets status to confirmed, sets confirmed_at timestamp
+- **under_review → cancelled**: Decline action sets status to cancelled, stores decline_reason in cancellation_reason
+- **Idempotency**: Re-approving confirmed booking returns 200 with same booking_id (no-op)
+- **Booking ID**: booking_id equals request_id (by design, no separate booking record created)
+
+**Additional Verification**:
+- `GET /api/v1/bookings/831336ed-8d86-46ed-8a5a-494c5c831e79` returned HTTP 200 (confirmed booking exists after approval)
+
 ---
 
 ### P2 Pricing v1 Foundation
