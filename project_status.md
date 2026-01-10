@@ -5004,6 +5004,13 @@ done
   - Shows owner_id prefix (first 8 chars) with link to /owners/{owner_id}
   - Visible banner: "Eigentümer: {owner_id_prefix}... (Klicken Sie hier, um Eigentümerdetails anzuzeigen)"
   - Robust: Only displays if owner_id exists, no errors if owner not loadable
+- **UX Hardening (Planned/WIP):**
+  - Dropdown filter: Planned to show ONLY unassigned properties (owner_id=null), exclude already-assigned
+  - In-page confirmation modal: Planned to replace browser `window.confirm()` popup with in-page dialog
+  - In-page feedback banners: Planned to replace `alert()` with in-page success/error banners
+  - Responsive actions layout: Planned mobile-friendly stacked layout for property actions
+  - See runbook section "Owners UI (O3): Dropdown zeigt assigned Objekte / Browser-Popup Confirm" for details
+  - Status: Code implemented, pending deployment verification (not yet marked as deployed/verified)
 
 **Dependencies:**
 - Owner Portal O1 (owners table, owner endpoints, RBAC)

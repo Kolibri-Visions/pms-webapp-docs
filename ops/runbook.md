@@ -25301,3 +25301,48 @@ curl -X GET "$API/api/v1/properties/{propertyId}" \
 - **Error "Fehler beim Aufheben der Zuweisung":** Check PATCH /api/v1/properties/{id}/owner endpoint exists and accepts {"owner_id": null}
 - **Property stays in list after unassign:** Check browser console for errors, verify fetchProperties() was called after PATCH success
 
+
+### Owners UI (O3): Dropdown zeigt assigned Objekte / Browser-Popup Confirm
+
+**Ist-Zustand (aktuelle PROD-Situation):**
+1. **Dropdown-Filter Bug:** Dropdown "Objekt zuweisen" kann Objekte anzeigen, die bereits anderen Ownern zugewiesen sind (owner_id ≠ null), oder zeigt falsche Liste
+2. **Browser-Popup Confirm:** Unassign verwendet browser-native `window.confirm()` Popup statt In-Page-Dialog
+3. **Browser-alert Feedback:** Erfolg/Fehler-Meldungen erscheinen als `alert()` Popups statt In-Page-Banner
+4. **Mobile Layout:** Actions ("Zuweisung aufheben", "Öffnen") können auf kleinen Bildschirmen awkward/unbrauchbar sein
+
+**Workaround (API):**
+Unassign direkt per API:
+```bash
+# Unassign property (set owner_id to null)
+curl -X PATCH "$API/api/v1/properties/{propertyId}/owner" \
+  -H "Authorization: Bearer $MANAGER_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"owner_id": null}'
+# Should return 200
+
+# Verify unassignment
+curl -X GET "$API/api/v1/properties/{propertyId}" \
+  -H "Authorization: Bearer $MANAGER_JWT_TOKEN"
+# Check response: "owner_id" should be null
+
+# Optional: Reload UI to see updated dropdown
+# Navigate to https://admin.fewo.kolibri-visions.de/owners/<ownerId>
+```
+
+**Planned Improvement (WIP):**
+Geplante Frontend-Verbesserungen (noch nicht implementiert oder deployed):
+- Dropdown soll NUR Properties mit `owner_id = null` zeigen (strikt unassigned-only)
+- Zusätzlicher Filter: Exclude properties bereits in "Zugewiesene Objekte" Liste
+- In-Page Confirmation Modal statt `window.confirm()` Browser-Popup
+- In-Page Banner/Toast für Erfolg/Fehler statt `alert()` Browser-Popup
+- Responsive Actions Layout (mobile-friendly stack)
+
+Status: Geplant/WIP (noch nicht implementiert oder deployed).
+
+**Troubleshooting:**
+- **Dropdown zeigt assigned properties:** Use API workaround to unassign, dann UI reload
+- **Browser popup statt modal:** Expected behavior bis planned improvement deployed
+- **Alert statt banner:** Expected behavior bis planned improvement deployed
+- **Optional DevTools check:** Hard refresh (Cmd+Shift+R / Ctrl+F5) wenn unsicher ob latest frontend loaded
+- **Unassign schlägt fehl:** Check PATCH endpoint accessibility, verify JWT token valid, check property exists
+
