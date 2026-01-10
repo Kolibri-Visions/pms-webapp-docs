@@ -102,6 +102,7 @@ Verification passes if `source_commit` from production starts with the expected 
 | **Database Schema** | ✅ UP-TO-DATE | Guests metrics + timeline columns migrated |
 | **Admin Console** | ✅ DEPLOYED | Sync monitoring, batch details UI live |
 | **Pricing (P2)** | ✅ STABLE | P2 verified in PROD (Re-Verification 2026-01-10; ops/version commit b651b6220a048df674e6ebec26ec6944e7d38cc8; pms_verify_deploy.sh rc=0; pms_pricing_quote_smoke.sh rc=0 delta-based) |
+| **Public Direct Booking (P3)** | ✅ STABLE | Verified in PROD (Verified: 2026-01-10; consolidated smoke: backend/scripts/pms_public_direct_booking_hardening_smoke.sh rc=0; deploy verify: pms_verify_deploy.sh rc=0 commit match) |
 | **Production Readiness** | ✅ READY | Phase 21 hardening VERIFIED (prod evidence 2026-01-08) |
 
 ## Completed Phases
