@@ -2894,6 +2894,15 @@ This entry will be marked **VERIFIED** only after:
 
 **Ops Note (2026-01-10):** Hardened `pms_pricing_quote_smoke.sh` for non-empty PROD environments. Script is now idempotent (reuses SMOKE-P2 artifacts: rate plan, fee, tax) and uses baseline+delta verification instead of absolute totals. Tax delta verification accounts for (a) existing taxes applied to taxable delta and (b) newly-added SMOKE tax on full taxable amount. Safe to re-run unlimited times in PROD without creating endless artifacts or false failures. See backend/scripts/README.md for full PROD safety features.
 
+**PROD Evidence (Re-Verification 2026-01-10):**
+- **Verification Date:** 2026-01-10
+- **API Base URL:** https://api.fewo.kolibri-visions.de
+- **Source Commit (ops/version):** b651b6220a048df674e6ebec26ec6944e7d38cc8
+- **Started At (ops/version):** 2026-01-10T14:54:05.329699+00:00
+- **Deploy Verify:** backend/scripts/pms_verify_deploy.sh → rc=0 (commit match PASS)
+- **Smoke Test:** backend/scripts/pms_pricing_quote_smoke.sh → rc=0 (delta-based verification; PROD-safe/idempotent)
+- **Note:** Re-verification after smoke hardening for non-empty PROD environments (baseline+delta logic; safe to re-run).
+
 ---
 
 # P2 Extension: Pricing Fees and Taxes
