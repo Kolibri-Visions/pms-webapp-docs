@@ -25210,3 +25210,44 @@ curl -X GET "$HOST/api/v1/properties?limit=200&offset=0" \
 - If still 422: Backend max limit may be lower than 200 → adjust frontend limit further (e.g., 100 or 50)
 - If limit=1 works but limit=200 fails: Check backend validation schema for max_limit parameter
 
+
+### Owners UI (O3): HTTP 422 when properties limit > 100
+
+**Symptom:** Property assignment dropdown empty. Browser DevTools shows:
+```
+GET /api/v1/properties?limit=200&offset=0 → 422 Unprocessable Content (validation_error)
+```
+
+**Root Cause:** Backend enforces strict validation: `query.limit <= 100`. Any request with limit > 100 returns 422 validation error.
+
+**Fix (Frontend):**
+- Frontend now uses pagination with `limit=100` from the start (no initial 422 + retry)
+- Loop with `offset` increments: offset=0, offset=100, offset=200, etc.
+- Accumulates all properties across pages (max 20 pages as safety cap)
+- Checks `has_more` field or `items.length === limit` to determine if more pages exist
+- No trailing slash: `/api/v1/properties?limit=100&offset=0` (backend redirects `/properties/` → `/properties`)
+
+**Verification (Browser DevTools):**
+1. Open https://admin.fewo.kolibri-visions.de/owners/[ownerId]
+2. DevTools → Network tab → Filter "properties"
+3. Verify: All requests show `limit=100` and return **200 OK** (no 422)
+4. Check: Multiple requests with increasing offset if total properties > 100
+
+**Optional curl test:**
+```bash
+# Test limit=100 works
+curl -X GET "$API/api/v1/properties?limit=100&offset=0" \
+  -H "Authorization: Bearer $MANAGER_JWT_TOKEN"
+# Should return 200
+
+# Test limit=101 fails
+curl -X GET "$API/api/v1/properties?limit=101&offset=0" \
+  -H "Authorization: Bearer $MANAGER_JWT_TOKEN"
+# Should return 422 validation_error
+```
+
+**Troubleshooting:**
+- If still 422 with limit=100: Backend max_limit changed → check API validation schema
+- If dropdown empty after fix: Check browser console for other errors (401, 403, 503)
+- If properties missing: Check pagination loop completed (not capped at maxPages=20)
+

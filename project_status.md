@@ -4988,6 +4988,12 @@ done
   - Fix: Changed frontend to use `limit=200` (safe limit), removed trailing slash from endpoint
   - Hardening: Added retry logic (on 422, retry with limit=100) + error message display in UI
   - See runbook section "Owners UI (O3): Dropdown empty due to 422 (limit validation)" for troubleshooting
+- **Bug Fix (Pagination with limit=100):**
+  - Issue: Dropdown still empty after previous fix; DevTools showed 422 with limit=200 (backend enforces limit <= 100)
+  - Root cause: Backend strict validation requires query.limit <= 100 (not 200)
+  - Fix: Replaced single request + retry logic with pagination loop using limit=100, offset increments
+  - Frontend now accumulates all properties across multiple pages (max 20 pages safety cap)
+  - See runbook section "Owners UI (O3): HTTP 422 when properties limit > 100" for details
 
 **Dependencies:**
 - Owner Portal O1 (owners table, owner endpoints, RBAC)
