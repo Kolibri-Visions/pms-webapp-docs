@@ -91,23 +91,6 @@ Verification passes if `source_commit` from production starts with the expected 
 
 **Note**: Entries created before 2026-01-05 are marked as "Implemented" only. The verification requirement applies to all new features going forward. Do NOT retroactively mark old entries as "Verified".
 
-### Ops Note: GitHub RAW Caching / Propagation
-
-**Problem**: `raw.githubusercontent.com` can serve cached content for a short time after push, making newly committed lines appear "missing".
-
-**Solutions** (prefer pinned-commit URLs for source of truth):
-
-```bash
-# Option 1: Pinned commit URL (recommended for verification)
-PINNED="https://raw.githubusercontent.com/Kolibri-Visions/pms-webapp-docs/<COMMIT_SHA>/project_status.md"
-curl -fsSL -H 'Cache-Control: no-cache' "$PINNED" | head
-
-# Option 2: Main branch with cachebust + no-cache header
-URL="https://raw.githubusercontent.com/Kolibri-Visions/pms-webapp-docs/main/project_status.md?cb=$(date +%s)"
-curl -fsSL -H 'Cache-Control: no-cache' "$URL" -o /tmp/pms_webapp_docs_project_status.md
-```
-
-**Verification**: Use `git ls-remote` to confirm main HEAD, then fetch pinned commit URL to avoid propagation delays.
 
 ## Current Status Summary
 
@@ -118,10 +101,7 @@ curl -fsSL -H 'Cache-Control: no-cache' "$URL" -o /tmp/pms_webapp_docs_project_s
 | **Channel Manager** | ✅ OPERATIONAL | Sync batches history, admin UI complete |
 | **Database Schema** | ✅ UP-TO-DATE | Guests metrics + timeline columns migrated |
 | **Admin Console** | ✅ DEPLOYED | Sync monitoring, batch details UI live |
-| **Pricing (P2)** | ✅ STABLE | P2 verified in PROD (Re-Verification 2026-01-10; ops/version commit b651b6220a048df674e6ebec26ec6944e7d38cc8; pms_verify_deploy.sh rc=0; pms_pricing_quote_smoke.sh rc=0 delta-based) |
-| **Public Direct Booking (P3)** | ✅ STABLE | Verified in PROD (Verified: 2026-01-10; consolidated smoke: backend/scripts/pms_public_direct_booking_hardening_smoke.sh rc=0; deploy verify: pms_verify_deploy.sh rc=0 commit match) |
-| **Owner Portal (O1)** | ✅ STABLE | Verified in PROD (Verified: 2026-01-09; smoke: backend/scripts/pms_owner_portal_smoke.sh rc=0; deploy verify: pms_verify_deploy.sh rc=0 commit match; see Owner Portal O1 section) |
-| **Production Readiness** | ✅ READY | Phase 21 hardening VERIFIED (prod evidence 2026-01-08) |
+| **Production Readiness** | 🟡 IN PROGRESS | Phase 21 hardening in progress |
 
 ## Completed Phases
 
@@ -2914,15 +2894,6 @@ This entry will be marked **VERIFIED** only after:
 
 **Ops Note (2026-01-10):** Hardened `pms_pricing_quote_smoke.sh` for non-empty PROD environments. Script is now idempotent (reuses SMOKE-P2 artifacts: rate plan, fee, tax) and uses baseline+delta verification instead of absolute totals. Tax delta verification accounts for (a) existing taxes applied to taxable delta and (b) newly-added SMOKE tax on full taxable amount. Safe to re-run unlimited times in PROD without creating endless artifacts or false failures. See backend/scripts/README.md for full PROD safety features.
 
-**PROD Evidence (Re-Verification 2026-01-10):**
-- **Verification Date:** 2026-01-10
-- **API Base URL:** https://api.fewo.kolibri-visions.de
-- **Source Commit (ops/version):** b651b6220a048df674e6ebec26ec6944e7d38cc8
-- **Started At (ops/version):** 2026-01-10T14:54:05.329699+00:00
-- **Deploy Verify:** backend/scripts/pms_verify_deploy.sh → rc=0 (commit match PASS)
-- **Smoke Test:** backend/scripts/pms_pricing_quote_smoke.sh → rc=0 (delta-based verification; PROD-safe/idempotent)
-- **Note:** Re-verification after smoke hardening for non-empty PROD environments (baseline+delta logic; safe to re-run).
-
 ---
 
 # P2 Extension: Pricing Fees and Taxes
@@ -3707,8 +3678,6 @@ echo "rc=$?"
 **PROD Evidence** (Verified: 2026-01-08):
 - API: https://api.fewo.kolibri-visions.de
 - ops/version: source_commit=c7adc9c1dcfdffc19326e0a9122df0c9f2fe70f4, started_at=2026-01-08T15:25:15.229462+00:00
-- 📝 **Note:** The line above is a historical snapshot from 2026-01-08. The authoritative deployed commit is always `/api/v1/ops/version` and the latest VERIFIED evidence blocks.
-- ✅ **Update (2026-01-10):** ops/version source_commit=`b651b6220a048df674e6ebec26ec6944e7d38cc8`, started_at=`2026-01-10T14:54:05.329699+00:00` (see P2 re-verification evidence).
 - PID: 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
 - Smoke: pms_availability_phase21_smoke.sh rc=0 (TEST 3 overlap → 409)
 - Command: API_BASE_URL=https://api.fewo.kolibri-visions.de PID=23dd8fda-59ae-4b2f-8489-7a90f5d46c66 JWT_TOKEN="<redacted>" ./backend/scripts/pms_availability_phase21_smoke.sh ; echo rc=0
@@ -3944,7 +3913,6 @@ To mark Phase 21 as VERIFIED in production:
   - Runbook: "Availability Block Overlap Returns 500 Instead of 409" troubleshooting entry with verification commands
   - Location: `backend/docs/ops/runbook.md:3523-3564`
 - 📝 **Status:** Phase 21 remains **IMPLEMENTED (NOT VERIFIED)** - awaiting production verification after this hotfix
-- ✅ **Update (2026-01-08):** Phase 21 has since been **VERIFIED in production**. See the **PROD Evidence (Verified: 2026-01-08)** block in the Phase 21 section (deploy verify rc=0 + phase21 smoke rc=0). The "IMPLEMENTED (NOT VERIFIED)" line above is historical context from the hotfix moment.
 - 🔧 **Verification after deployment:**
   ```bash
   # HOST-SERVER-TERMINAL
@@ -5097,10 +5065,33 @@ done
 - Owner Portal O2 (statements endpoints, CSV export)
 - Properties domain (property list + assignment endpoint)
 
+**Backend API Enhancement (Assignable Properties Filter):**
+- **Implementation Date:** 2026-01-10
+- **Feature:** New `assignable_for_owner_id` query parameter on GET /api/v1/properties
+- **SQL Logic:** `WHERE (owner_id IS NULL OR owner_id = $specified_owner_id)` - returns unassigned properties + properties owned by specified owner, excludes properties owned by other owners
+- **Validation:** `assignable_for_owner_id` and `owner_id` filters are mutually exclusive (returns 400 if both used)
+- **Frontend Integration:** Owner detail page uses this filter to populate property assignment dropdown (shows only assignable properties)
+- **Integration Tests:** 4 tests added in test_properties.py::TestAssignablePropertiesFilter:
+  - test_assignable_includes_unassigned_properties
+  - test_assignable_includes_same_owner_properties
+  - test_assignable_excludes_other_owner_properties
+  - test_assignable_mutually_exclusive_with_owner_id_filter
+- **Smoke Test:** New script `backend/scripts/pms_owner_o3_assignments_smoke.sh` tests API filtering logic
+  - Test 1: Assignable filter includes unassigned and owner's properties, excludes other owners'
+  - Test 2: Mutual exclusion validation (400 when both filters used)
+  - Usage: Requires HOST, MANAGER_JWT_TOKEN, OWNER_A_AUTH_USER_ID, OWNER_B_AUTH_USER_ID
+  - See scripts/README.md for full documentation
+- **Files Changed:**
+  - backend/app/schemas/properties.py: Added assignable_for_owner_id field to PropertyFilter
+  - backend/app/api/routes/properties.py: Added validation and filter handling (lines 86-97)
+  - backend/app/services/property_service.py: Added SQL WHERE clause logic (lines 132-136)
+  - backend/tests/integration/test_properties.py: Added TestAssignablePropertiesFilter class (lines 847-992)
+  - frontend/app/owners/[ownerId]/page.tsx: Updated fetchProperties to use assignable filter, simplified availableProperties computation (lines 123-129, 355-358)
+
 **VERIFIED Status (not yet achieved):**
-- Status ✅ IMPLEMENTED achieved via manual browser testing (see Implementation Notes above)
-- Status ✅ VERIFIED requires: Automated smoke script with rc=0 + documented PROD evidence
-- No automated UI smoke script currently exists for O3 (manual testing only)
+- Status ✅ IMPLEMENTED achieved via manual browser testing + integration tests + API smoke script
+- Status ✅ VERIFIED requires: PROD deployment + smoke script rc=0 + documented PROD evidence
+- API smoke script exists: `pms_owner_o3_assignments_smoke.sh` (tests API filtering logic)
 
 ---
 

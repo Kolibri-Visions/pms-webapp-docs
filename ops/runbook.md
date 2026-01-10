@@ -25496,3 +25496,141 @@ Status: Geplant/WIP (noch nicht implementiert oder deployed).
 **Hinweis:** Status bleibt ✅ IMPLEMENTED (nicht VERIFIED). Kein automatisierter UI-Smoke-Script für O3 vorhanden. Manuelle Browser-Verifikation in PROD durchgeführt.
 
 
+
+---
+
+## Owner Portal O3 — Owners UI Dropdown/Dialogs/Mobile Hardening
+
+**Overview:** Enhanced owner portal UI with assignable properties filtering, dialog replacements, and mobile responsiveness.
+
+**Purpose:** Improve owner property assignment UX by filtering dropdown to show only assignable properties (unassigned OR already owned by target owner), replace browser popups with in-page dialogs/toasts, and ensure mobile-friendly layout.
+
+**Architecture:**
+- **Backend API**: New `assignable_for_owner_id` query parameter on GET /api/v1/properties
+- **SQL Filter**: `WHERE (owner_id IS NULL OR owner_id = $specified_owner_id)` excludes properties owned by other owners
+- **Validation**: `assignable_for_owner_id` and `owner_id` filters are mutually exclusive (returns 400 if both used)
+- **Frontend**: Dropdown uses assignable filter, replaces window.confirm/alert with Dialog/toast components
+
+**API Endpoints:**
+
+Staff (manager/admin):
+- `GET /api/v1/properties?assignable_for_owner_id=<owner_id>&limit=&offset=` - List assignable properties for owner
+
+**Frontend Changes:**
+- `/owners/[ownerId]` page: Updated property assignment dropdown to use `assignable_for_owner_id` filter
+- Replaced `window.confirm()` with in-page Dialog component for unassign confirmation
+- Replaced `alert()` with toast messages for success/error feedback
+- Mobile-responsive actions layout
+
+**Verification Commands:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# [HOST-SERVER-TERMINAL] Optional: Verify deploy after Coolify redeploy
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# [HOST-SERVER-TERMINAL] Run O3 smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="<<<manager/admin JWT>>>"
+export OWNER_A_AUTH_USER_ID="<<<Supabase auth.users.id for owner A>>>"
+export OWNER_B_AUTH_USER_ID="<<<Supabase auth.users.id for owner B>>>"
+# Optional:
+# export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+./backend/scripts/pms_owner_o3_assignments_smoke.sh
+echo "rc=$?"
+
+# Expected output: All 2 tests pass, rc=0
+```
+
+**Common Issues:**
+
+### Assignable Filter Returns Wrong Properties
+
+**Symptom:** GET /api/v1/properties?assignable_for_owner_id=<owner_id> returns properties owned by other owners.
+
+**Root Cause:** SQL WHERE clause in property_service.py not correctly filtering by owner_id.
+
+**How to Debug:**
+```bash
+# Test assignable filter
+curl -X GET "$HOST/api/v1/properties?assignable_for_owner_id=<owner_id>&limit=100" \
+  -H "Authorization: Bearer $MANAGER_JWT_TOKEN" | jq '.items[] | {id, name, owner_id}'
+
+# Check if any returned properties have owner_id != null and owner_id != <owner_id>
+# These should NOT be in the results
+```
+
+**Solution:**
+- Verify property_service.py line ~132-136: WHERE clause should be `(p.owner_id IS NULL OR p.owner_id = $param_idx)`
+- Check params.append(UUID(filters["assignable_for_owner_id"])) is correctly binding the parameter
+- Verify param_idx is incremented after adding the parameter
+
+### Mutual Exclusion Not Enforced
+
+**Symptom:** GET /api/v1/properties?assignable_for_owner_id=<id1>&owner_id=<id2> returns 200 instead of 400.
+
+**Root Cause:** Route validation in properties.py not checking for mutually exclusive filters.
+
+**How to Debug:**
+```bash
+# Test mutual exclusion
+curl -X GET "$HOST/api/v1/properties?assignable_for_owner_id=<owner_id>&owner_id=<other_id>" \
+  -H "Authorization: Bearer $MANAGER_JWT_TOKEN" -w "\n%{http_code}\n"
+
+# Should return 400 Bad Request with error detail
+```
+
+**Solution:**
+- Verify properties.py route line ~86-91: should raise HTTPException 400 when both filters present
+- Check if condition: `elif filters.assignable_for_owner_id and filters.owner_id:`
+- Ensure error message: "Cannot use both assignable_for_owner_id and owner_id filters simultaneously"
+
+### Dropdown Still Shows Properties Owned by Other Owners (UI)
+
+**Symptom:** Frontend dropdown includes properties with owner_id != null and owner_id != target owner.
+
+**Root Cause:** Frontend not using assignable_for_owner_id query parameter.
+
+**How to Debug:**
+```bash
+# Check frontend network tab (DevTools)
+# Should see: GET /api/v1/properties?assignable_for_owner_id=<ownerId>&limit=100
+# NOT: GET /api/v1/properties?limit=100
+
+# Verify fetchProperties call in frontend/app/owners/[ownerId]/page.tsx line ~123-129
+```
+
+**Solution:**
+- Verify page.tsx uses: `assignable_for_owner_id=${ownerId}` query parameter
+- Check availableProperties filter line ~355-358: should only exclude ownedIds, not filter by owner_id
+- Hard refresh frontend (Cmd+Shift+R / Ctrl+F5) to clear cache
+
+### Integration Tests Fail
+
+**Symptom:** pytest tests/integration/test_properties.py::TestAssignablePropertiesFilter fails.
+
+**Root Cause:** Test data setup incorrect or SQL query not working as expected.
+
+**How to Debug:**
+```bash
+# Run specific test with verbose output
+cd /Users/khaled/Documents/KI/Claude/Claude\ Code/Projekte/PMS-Webapp/backend
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/test" \
+JWT_SECRET="test-secret-key-1234567890123456" \
+python -m pytest tests/integration/test_properties.py::TestAssignablePropertiesFilter::test_assignable_includes_unassigned_properties -v --tb=short
+
+# Check SQL query executed (add logging to property_service.py)
+# logger.debug(f"Assignable filter query: {query}, params: {params}")
+```
+
+**Solution:**
+- Verify test creates properties with correct owner_id assignments
+- Check test uses correct agency1_admin_token for auth
+- Ensure test cleanup doesn't interfere with assertions (properties deleted before check)
+- Verify test fixtures create owners in same agency as properties
+
+---
