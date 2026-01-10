@@ -25251,3 +25251,53 @@ curl -X GET "$API/api/v1/properties?limit=101&offset=0" \
 - If dropdown empty after fix: Check browser console for other errors (401, 403, 503)
 - If properties missing: Check pagination loop completed (not capped at maxPages=20)
 
+
+### Owners UI (O3): Zuweisung aufheben (owner_id -> null) in UI
+
+**Feature:** In Backoffice Owner Detail (/owners/[ownerId]), jedes zugewiesene Objekt hat Button "Zuweisung aufheben".
+
+**Workflow:**
+1. Navigate to /owners/[ownerId]
+2. Section "Zugewiesene Objekte" shows list of properties owned by this owner
+3. Each property row has "Zuweisung aufheben" button (red text)
+4. Click button → Confirm dialog appears: "Möchten Sie die Zuweisung des Objekts ... wirklich aufheben?"
+5. Click OK → Frontend calls: PATCH /api/v1/properties/{propertyId}/owner with {"owner_id": null}
+6. On success: Property removed from "Zugewiesene Objekte" list and appears in dropdown (free properties)
+7. On error: Alert shows error message
+
+**Expected Behavior:**
+- After unassign: property.owner_id = null (unassigned)
+- Property visible in dropdown "Objekt zuweisen" for re-assignment
+- Owner detail page refreshes to reflect change
+
+**Verification (Browser):**
+1. Login as manager/admin
+2. Navigate to /owners/<ownerId> with at least one assigned property
+3. Click "Zuweisung aufheben" on a property
+4. Confirm dialog → Click OK
+5. Verify: Property disappears from "Zugewiesene Objekte" list
+6. Verify: Dropdown "Objekt zuweisen" now shows the property as available
+7. Optional: Navigate to /properties/<propertyId> → verify no owner reference displayed
+
+**Fallback Workaround (API):**
+If UI button fails, unassign via curl:
+```bash
+# Unassign property (set owner_id to null)
+curl -X PATCH "$API/api/v1/properties/{propertyId}/owner" \
+  -H "Authorization: Bearer $MANAGER_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"owner_id": null}'
+# Should return 200
+
+# Verify unassignment
+curl -X GET "$API/api/v1/properties/{propertyId}" \
+  -H "Authorization: Bearer $MANAGER_JWT_TOKEN"
+# Check response: "owner_id" should be null
+```
+
+**Troubleshooting:**
+- **Button nicht sichtbar:** Check role is manager/admin (not owner-only), verify property is actually assigned to this owner
+- **Confirm dialog not showing:** Browser blocks window.confirm (unlikely) → use API workaround
+- **Error "Fehler beim Aufheben der Zuweisung":** Check PATCH /api/v1/properties/{id}/owner endpoint exists and accepts {"owner_id": null}
+- **Property stays in list after unassign:** Check browser console for errors, verify fetchProperties() was called after PATCH success
+

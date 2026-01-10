@@ -4994,6 +4994,16 @@ done
   - Fix: Replaced single request + retry logic with pagination loop using limit=100, offset increments
   - Frontend now accumulates all properties across multiple pages (max 20 pages safety cap)
   - See runbook section "Owners UI (O3): HTTP 422 when properties limit > 100" for details
+- **Feature: Unassign Properties from Owner (owner_id → null):**
+  - Owner detail page now shows "Zuweisung aufheben" button for each assigned property
+  - Click button → Confirm dialog → PATCH /api/v1/properties/{id}/owner with {"owner_id": null}
+  - On success: Property removed from assigned list and appears in dropdown as available
+  - See runbook section "Owners UI (O3): Zuweisung aufheben (owner_id -> null) in UI" for details
+- **Feature: Property Detail Shows Owner Reference:**
+  - Property detail page (/properties/[id]) now displays owner reference when property.owner_id is set
+  - Shows owner_id prefix (first 8 chars) with link to /owners/{owner_id}
+  - Visible banner: "Eigentümer: {owner_id_prefix}... (Klicken Sie hier, um Eigentümerdetails anzuzeigen)"
+  - Robust: Only displays if owner_id exists, no errors if owner not loadable
 
 **Dependencies:**
 - Owner Portal O1 (owners table, owner endpoints, RBAC)
