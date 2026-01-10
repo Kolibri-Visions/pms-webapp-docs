@@ -91,6 +91,23 @@ Verification passes if `source_commit` from production starts with the expected 
 
 **Note**: Entries created before 2026-01-05 are marked as "Implemented" only. The verification requirement applies to all new features going forward. Do NOT retroactively mark old entries as "Verified".
 
+### Ops Note: GitHub RAW Caching / Propagation
+
+**Problem**: `raw.githubusercontent.com` can serve cached content for a short time after push, making newly committed lines appear "missing".
+
+**Solutions** (prefer pinned-commit URLs for source of truth):
+
+```bash
+# Option 1: Pinned commit URL (recommended for verification)
+PINNED="https://raw.githubusercontent.com/Kolibri-Visions/pms-webapp-docs/<COMMIT_SHA>/project_status.md"
+curl -fsSL -H 'Cache-Control: no-cache' "$PINNED" | head
+
+# Option 2: Main branch with cachebust + no-cache header
+URL="https://raw.githubusercontent.com/Kolibri-Visions/pms-webapp-docs/main/project_status.md?cb=$(date +%s)"
+curl -fsSL -H 'Cache-Control: no-cache' "$URL" -o /tmp/pms_webapp_docs_project_status.md
+```
+
+**Verification**: Use `git ls-remote` to confirm main HEAD, then fetch pinned commit URL to avoid propagation delays.
 
 ## Current Status Summary
 
