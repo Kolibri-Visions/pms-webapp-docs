@@ -3690,6 +3690,8 @@ echo "rc=$?"
 **PROD Evidence** (Verified: 2026-01-08):
 - API: https://api.fewo.kolibri-visions.de
 - ops/version: source_commit=c7adc9c1dcfdffc19326e0a9122df0c9f2fe70f4, started_at=2026-01-08T15:25:15.229462+00:00
+- 📝 **Note:** The line above is a historical snapshot from 2026-01-08. The authoritative deployed commit is always `/api/v1/ops/version` and the latest VERIFIED evidence blocks.
+- ✅ **Update (2026-01-10):** ops/version source_commit=`b651b6220a048df674e6ebec26ec6944e7d38cc8`, started_at=`2026-01-10T14:54:05.329699+00:00` (see P2 re-verification evidence).
 - PID: 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
 - Smoke: pms_availability_phase21_smoke.sh rc=0 (TEST 3 overlap → 409)
 - Command: API_BASE_URL=https://api.fewo.kolibri-visions.de PID=23dd8fda-59ae-4b2f-8489-7a90f5d46c66 JWT_TOKEN="<redacted>" ./backend/scripts/pms_availability_phase21_smoke.sh ; echo rc=0
