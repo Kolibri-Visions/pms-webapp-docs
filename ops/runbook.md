@@ -15312,6 +15312,64 @@ bash /app/scripts/pms_phase23_smoke.sh
 
 **Full Documentation**: `/app/scripts/README.md` (in container)
 
+#### Ops Note (2026-01-10): Phase 23 smoke script executable + PROD evidence
+
+**Context:** Fixed `pms_phase23_smoke.sh` permission issues that caused rc=126 "Permission denied" on fresh checkouts.
+
+**PROD Deployment:**
+- **Commit:** `1aeb740bfe676a7a148be5ef17910755c3630b99`
+- **Started at:** `2026-01-10T13:54:04.070027+00:00`
+- **Deploy verification:** `pms_verify_deploy.sh` rc=0 with commit prefix match
+- **API endpoint:** `https://api.fewo.kolibri-visions.de/api/v1/ops/version`
+
+**Smoke Test Results:**
+```bash
+# HOST-SERVER-TERMINAL
+./backend/scripts/pms_phase23_smoke.sh
+# rc=0 (all tests PASS)
+```
+
+**Optional Tests (enabled):**
+- `AVAIL_BLOCK_TEST=true` PASS
+  - Availability block successfully prevents overlapping booking
+  - Returns HTTP 409 with `conflict_type=inventory_overlap` as expected
+- `B2B_TEST=true` PASS
+  - Back-to-back bookings succeed (check-in = previous check-out)
+  - Confirms end-exclusive date semantics `[check_in, check_out)` working correctly
+
+**Fix Details:**
+- **Issue:** File mode was 100644 (non-executable), causing rc=126 when running `./backend/scripts/pms_phase23_smoke.sh`
+- **Solution:** Changed git file mode to 100755 (executable)
+- **Now supported:** Direct execution without `bash` prefix:
+  ```bash
+  ./backend/scripts/pms_phase23_smoke.sh
+  ```
+- **Fallback (old checkouts):** If you still see rc=126, use:
+  ```bash
+  bash ./backend/scripts/pms_phase23_smoke.sh
+  # OR
+  chmod +x ./backend/scripts/pms_phase23_smoke.sh
+  ```
+
+**Verification Commands:**
+```bash
+# Check deployed commit
+curl -sS https://api.fewo.kolibri-visions.de/api/v1/ops/version | jq -r '.source_commit, .started_at'
+
+# Run deploy verification
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+# Expected: rc=0 with commit match
+
+# Run smoke test with optional tests
+export ENV_FILE=/root/pms_env.sh
+export AVAIL_BLOCK_TEST=true
+export B2B_TEST=true
+./backend/scripts/pms_phase23_smoke.sh
+echo "rc=$?"
+# Expected: rc=0 (all tests PASS including opt-in tests)
+```
+
 ### Other Resources
 
 - **Inventory Contract** (Single Source of Truth): `/app/docs/domain/inventory.md` (date semantics, API contracts, edge cases, DB guarantees, test evidence)

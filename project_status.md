@@ -3679,6 +3679,18 @@ echo "rc=$?"
 
 **Ops Note (2026-01-10):** Smoke scripts (`pms_phase20_final_smoke.sh`, `pms_phase21_inventory_hardening_smoke.sh`, `pms_phase23_smoke.sh`) now support `JWT_TOKEN` directly (preferred) OR `EMAIL`+`PASSWORD` (auto-fetch JWT). Scripts check if `JWT_TOKEN` is set (3-part JWT), use it directly without requiring Supabase auth credentials.
 
+**Ops Note (2026-01-10): Phase23 Smoke Executable Fix + PROD Evidence**
+- **Issue:** `pms_phase23_smoke.sh` had file mode 100644 (non-executable), causing rc=126 "Permission denied" on fresh checkouts
+- **Fix:** Changed git file mode to 100755 (commit `1aeb740bfe676a7a148be5ef17910755c3630b99`)
+- **PROD Deployment:** `2026-01-10T13:54:04.070027+00:00`
+- **Deploy Verification:** `pms_verify_deploy.sh` rc=0 with commit match
+- **Smoke Test:** `./backend/scripts/pms_phase23_smoke.sh` rc=0
+  - Core tests: PASS (health, OpenAPI, JWT auth, properties, bookings, availability)
+  - `AVAIL_BLOCK_TEST=true`: PASS (availability block prevents overlapping booking, HTTP 409 with `conflict_type=inventory_overlap`)
+  - `B2B_TEST=true`: PASS (back-to-back bookings succeed, confirms end-exclusive date semantics)
+- **Now supported:** Direct execution without `bash` prefix: `./backend/scripts/pms_phase23_smoke.sh`
+- **Fallback (old checkouts):** `bash ./backend/scripts/pms_phase23_smoke.sh` or `chmod +x ./backend/scripts/pms_phase23_smoke.sh`
+
 **Goals:**
 - Document common gotchas and operational guidance
 - Validate availability API contract (negative tests)
