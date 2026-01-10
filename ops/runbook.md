@@ -16058,6 +16058,8 @@ To mark Phase 21 as **VERIFIED** in project_status.md:
 
 **Auth Note (2026-01-10)**: Smoke scripts (`pms_phase20_final_smoke.sh`, `pms_phase21_inventory_hardening_smoke.sh`, `pms_phase23_smoke.sh`) now support `JWT_TOKEN` directly (preferred) OR `EMAIL`+`PASSWORD` (auto-fetch JWT). If `JWT_TOKEN` is set (must be 3-part JWT), scripts use it directly without requiring Supabase auth credentials.
 
+**Ops Note (2026-01-10)**: `pms_phase23_smoke.sh` is executable in git (mode 100755). If you see "Permission denied" (rc=126), use fallback: `bash ./backend/scripts/pms_phase23_smoke.sh` or fix permissions: `chmod +x ./backend/scripts/pms_phase23_smoke.sh`.
+
 ---
 
 ## Admin UI: Booking & Property Detail Pages
