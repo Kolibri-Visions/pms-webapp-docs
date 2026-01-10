@@ -3924,6 +3924,7 @@ To mark Phase 21 as VERIFIED in production:
   - Runbook: "Availability Block Overlap Returns 500 Instead of 409" troubleshooting entry with verification commands
   - Location: `backend/docs/ops/runbook.md:3523-3564`
 - 📝 **Status:** Phase 21 remains **IMPLEMENTED (NOT VERIFIED)** - awaiting production verification after this hotfix
+- ✅ **Update (2026-01-08):** Phase 21 has since been **VERIFIED in production**. See the **PROD Evidence (Verified: 2026-01-08)** block in the Phase 21 section (deploy verify rc=0 + phase21 smoke rc=0). The "IMPLEMENTED (NOT VERIFIED)" line above is historical context from the hotfix moment.
 - 🔧 **Verification after deployment:**
   ```bash
   # HOST-SERVER-TERMINAL
