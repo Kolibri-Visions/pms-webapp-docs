@@ -25668,3 +25668,172 @@ python -m pytest tests/integration/test_properties.py::TestAssignablePropertiesF
 - Verify test fixtures create owners in same agency as properties
 
 ---
+
+## Epic A — Onboarding & RBAC (Team Management & Agency Settings)
+
+**Overview:** Team member management, role-based access control (RBAC), and agency settings APIs with minimal admin UI.
+
+**Purpose:** Enable multi-tenant team collaboration with role-based permissions (admin/agent/owner), team invitations, and agency configuration management.
+
+**Architecture:**
+- **Database**: `team_members` and `team_invites` tables for RBAC and invitation workflow
+- **RBAC**:
+  - Team-based roles stored in team_members table (agency_id + user_id → role)
+  - Role resolution: prefer team_members.role, fallback to JWT claim if not found
+  - Admin-only endpoints for team management (require_admin_for_team dependency)
+- **Invitations**: Pending/accepted/revoked status, email-based invites for team onboarding
+- **Tenant Isolation**: All queries scoped by agency_id from JWT claims
+- **Identity**: /me endpoint provides user_id, agency_id, role, email for frontend state
+
+**UI Routes:**
+- `/organisation` - Agency settings page (admin-only, edit agency name)
+- `/team` - Team members list, invite modal, pending invitations with revoke action
+
+**API Endpoints:**
+
+Identity:
+- `GET /api/v1/me` - Get current user identity (user_id, agency_id, role, email)
+
+Agencies:
+- `GET /api/v1/agencies/current` - Get current agency details
+- `PATCH /api/v1/agencies/current` - Update agency name (admin-only)
+
+Team Management (admin-only):
+- `GET /api/v1/team/members?limit=&offset=` - List team members
+- `POST /api/v1/team/invites` - Create team invitation
+- `GET /api/v1/team/invites?status=&limit=&offset=` - List team invitations
+- `POST /api/v1/team/invites/{id}/revoke` - Revoke pending invitation
+- `POST /api/v1/team/invites/{id}/resend` - Resend invitation email
+- `DELETE /api/v1/team/members/{id}` - Remove team member
+
+**Database Tables:**
+- `team_members` - Team member profiles with role assignments (agency_id, user_id, role)
+- `team_invites` - Team invitation workflow (email, role, status: pending/accepted/revoked)
+
+**Migration:** `20260111000000_add_epic_a_team_rbac.sql`
+
+**Verification Commands:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# [HOST-SERVER-TERMINAL] Run Epic A smoke test
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<admin JWT token>>>"
+# Optional: export SB_URL="..." SB_ANON_KEY="..." for invite-accept tests
+./backend/scripts/pms_epic_a_onboarding_rbac_smoke.sh
+echo "rc=$?"
+
+# Expected output: All 6 tests pass, rc=0
+```
+
+**Common Issues:**
+
+### /me Returns 401 Unauthorized
+
+**Symptom:** GET /api/v1/me returns 401 even with valid JWT.
+
+**Root Cause:** JWT token expired or invalid signature.
+
+**How to Debug:**
+```bash
+# Check JWT expiration
+echo $JWT_TOKEN | cut -d'.' -f2 | base64 -d | jq '.exp'
+date +%s
+
+# Compare exp (expiration timestamp) with current timestamp
+# If exp < current timestamp, token is expired
+```
+
+**Solution:**
+- Refresh JWT token via Supabase auth
+- Check JWT_SECRET matches between app and token issuer
+- Verify JWT contains required claims: user_id, agency_id
+
+### Team Endpoints Return 403 (Not Admin)
+
+**Symptom:** Admin user gets 403 Forbidden when accessing team management endpoints.
+
+**Root Cause:** User role is not 'admin' in team_members table or JWT claim.
+
+**How to Debug:**
+```bash
+# Check role from /me endpoint
+curl -X GET "$API_BASE_URL/api/v1/me" \
+  -H "Authorization: Bearer $JWT_TOKEN" | jq '.role'
+
+# Check team_members table
+psql $DATABASE_URL -c "SELECT user_id, role FROM team_members WHERE user_id = '<user_id from JWT>';"
+
+# Check JWT role claim
+echo $JWT_TOKEN | cut -d'.' -f2 | base64 -d | jq '.role'
+```
+
+**Solution:**
+- Ensure user is in team_members table with role='admin'
+- Or ensure JWT claim has role='admin' if user not yet in team_members
+- Verify require_admin_for_team dependency checks both sources
+
+### Invite Email Not Sent
+
+**Symptom:** POST /api/v1/team/invites succeeds but no email received.
+
+**Root Cause:** Email service not configured or disabled in current implementation.
+
+**How to Debug:**
+```bash
+# Check invite was created
+curl -X GET "$API_BASE_URL/api/v1/team/invites" \
+  -H "Authorization: Bearer $JWT_TOKEN" | jq '.invites[] | select(.email=="test@example.com")'
+
+# Invite should exist with status='pending'
+```
+
+**Solution:**
+- Epic A MVP does not include email sending (Phase A1 scope)
+- Manual invite acceptance: Admin shares invite link or creates user directly in Supabase
+- Future: Integrate email service (SendGrid, AWS SES) for automated invite emails
+
+### Role Not Resolving from team_members
+
+**Symptom:** /me endpoint returns role from JWT claim instead of team_members table.
+
+**Root Cause:** User not found in team_members table or query failed silently.
+
+**How to Debug:**
+```bash
+# Check if user exists in team_members
+psql $DATABASE_URL -c "SELECT * FROM team_members WHERE user_id = '<user_id>' AND agency_id = '<agency_id>';"
+
+# Check get_current_role logic in auth.py
+# Should query team_members first, fallback to JWT claim
+```
+
+**Solution:**
+- Ensure user is added to team_members when accepting invite
+- Verify get_current_role dependency in backend/app/core/auth.py line ~150-180
+- Check agency_id matches between JWT and team_members row
+
+### DELETE Team Member Fails (Foreign Key Constraint)
+
+**Symptom:** DELETE /api/v1/team/members/{id} returns 409 Conflict.
+
+**Root Cause:** Team member has associated records (e.g., created properties, bookings).
+
+**How to Debug:**
+```bash
+# Check for dependent records
+psql $DATABASE_URL -c "SELECT table_name, column_name FROM information_schema.columns WHERE column_name = 'created_by' OR column_name = 'user_id';"
+
+# Example: Check if team member created any properties
+psql $DATABASE_URL -c "SELECT COUNT(*) FROM properties WHERE created_by = '<team_member_user_id>';"
+```
+
+**Solution:**
+- Current implementation: Cannot delete team members with dependent records (safe default)
+- Alternative: Update team_member to inactive status instead of deleting
+- Future: Implement cascading delete or reassignment workflow
+
+---

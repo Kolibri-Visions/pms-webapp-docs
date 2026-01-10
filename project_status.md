@@ -5096,3 +5096,70 @@ done
 
 ---
 
+# Epic A: Onboarding & RBAC (Team Management, Multi-Tenant Collaboration)
+
+**Implementation Date:** 2026-01-10
+
+**Scope:** Multi-tenant team management with role-based access control (RBAC), team member invitations, and agency settings management for collaborative workflows.
+
+**Status:** ✅ IMPLEMENTED
+
+**Features Implemented:**
+
+1. **Database Migration** (`supabase/migrations/20260111000000_add_epic_a_team_rbac.sql`):
+   - `team_members` table: Maps users to agencies with RBAC roles (admin, agent, owner)
+   - `team_invites` table: Tracks pending/accepted/revoked team invitations
+   - Constraints: UNIQUE (agency_id, user_id) for team_members, UNIQUE (agency_id, email) WHERE status='pending' for invites
+   - Indexes: agency_id, user_id, (agency_id, created_at DESC), (agency_id, status)
+
+2. **API Schemas** (`backend/app/schemas/epic_a.py`):
+   - AgencyResponse, AgencyUpdateRequest (agency settings)
+   - TeamMemberResponse, TeamMembersListResponse, TeamMemberUpdateRequest (team member management)
+   - TeamInviteCreateRequest, TeamInviteResponse, TeamInvitesListResponse (invitation workflow)
+   - MeResponse (current user identity with agency context + role for UI bootstrap)
+
+3. **API Routes** (`backend/app/api/routes/epic_a.py`):
+   - **Agencies**: GET /api/v1/agencies/current, PATCH /api/v1/agencies/current (admin only)
+   - **Team Members**: GET /api/v1/team/members, PATCH /api/v1/team/members/{user_id}, DELETE /api/v1/team/members/{user_id} (admin only)
+   - **Invitations**: POST /api/v1/team/invites, GET /api/v1/team/invites, POST /api/v1/team/invites/{id}/revoke (admin only), POST /api/v1/team/invites/{id}/accept (authenticated, email match required)
+   - **Identity**: GET /api/v1/me (returns user_id, email, role from team_members, agency_id, agency_name)
+   - All routes registered in backend/app/main.py with tag "Epic A - Onboarding & RBAC"
+
+4. **RBAC Roles** (MVP):
+   - **admin**: Full access to agency settings, team management, invitations, all resources
+   - **agent**: Can manage bookings/properties, cannot manage team or invitations
+   - **owner**: Restricted to owner portal endpoints only (existing O1/O2/O3 features)
+
+5. **Authorization & Guards**:
+   - `require_admin_for_team()` dependency enforces admin role via team_members table lookup
+   - Guards: Cannot remove/downgrade last admin in agency
+   - Invite accept: Current user's email must match invitation email (case-insensitive)
+   - All operations scoped to current agency via existing tenant resolution (get_current_agency_id)
+   - Role resolution: Preferentially from team_members table, fallback to JWT claim
+
+6. **Frontend UI** (German copy):
+   - `/organisation` page: View/edit agency name (admin only), displays subscription tier
+   - `/team` page: List team members with roles, invite modal (email + role dropdown), pending invitations table with revoke action
+   - Error handling: 403 Forbidden ("Keine Berechtigung"), 409 Conflict ("Einladung existiert bereits")
+
+7. **Smoke Test** (`backend/scripts/pms_epic_a_onboarding_rbac_smoke.sh`):
+   - Test 1: GET /api/v1/me (identity + agency context + role)
+   - Test 2: GET /api/v1/agencies/current
+   - Test 3: POST /api/v1/team/invites (create invitation)
+   - Test 4: GET /api/v1/team/invites (list invitations)
+   - Test 5: GET /api/v1/team/members (list members)
+   - Test 6: POST /api/v1/team/invites/{id}/revoke
+   - **Note**: Accept invitation requires second JWT for invited user (not tested in smoke script; manual verification required)
+
+**How to Verify in PROD:**
+1. `/api/v1/ops/version` shows current commit
+2. `backend/scripts/pms_verify_deploy.sh` rc=0 commit match
+3. `backend/scripts/pms_epic_a_onboarding_rbac_smoke.sh` rc=0 (requires API_BASE_URL + JWT_TOKEN with admin role)
+
+**Dependencies:**
+- Existing agencies table (Phase 17B)
+- Supabase Auth (auth.users for email/user_id mapping)
+- Existing tenant resolution via get_current_agency_id (JWT agency_id claim or x-agency-id header)
+
+---
+
