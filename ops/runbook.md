@@ -16056,6 +16056,8 @@ To mark Phase 21 as **VERIFIED** in project_status.md:
 - [Availability API Documentation](#availability-api) (if exists)
 - [Database Schema - Availability Tables](#database-schema) (if exists)
 
+**Auth Note (2026-01-10)**: Smoke scripts (`pms_phase20_final_smoke.sh`, `pms_phase21_inventory_hardening_smoke.sh`, `pms_phase23_smoke.sh`) now support `JWT_TOKEN` directly (preferred) OR `EMAIL`+`PASSWORD` (auto-fetch JWT). If `JWT_TOKEN` is set (must be 3-part JWT), scripts use it directly without requiring Supabase auth credentials.
+
 ---
 
 ## Admin UI: Booking & Property Detail Pages
