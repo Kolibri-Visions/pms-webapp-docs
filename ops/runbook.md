@@ -15370,6 +15370,46 @@ echo "rc=$?"
 # Expected: rc=0 (all tests PASS including opt-in tests)
 ```
 
+#### Ops Note (2026-01-10): Expired JWT_TOKEN Auto-Refresh
+
+**Context:** Smoke scripts now automatically detect and refresh expired JWT tokens to prevent auth failures.
+
+**How It Works:**
+1. When `JWT_TOKEN` is provided (3-part JWT), scripts extract and check the `exp` claim
+2. If token is expired or near-expired (≤30 seconds):
+   - **With fallback credentials** (`EMAIL`, `PASSWORD`, `SB_URL`, `ANON_KEY`): Automatically fetches fresh token
+   - **Without fallback credentials**: Fails with actionable error message
+3. Logs show token status for debugging:
+   - Valid token: `Auth: JWT_TOKEN (provided, seconds_left=3600)`
+   - Expired with refresh: `Auth: JWT_TOKEN expired/near-expired (seconds_left=-120) → fetching fresh token via EMAIL/PASSWORD`
+   - Missing exp claim: `JWT_TOKEN missing exp claim, treating as valid`
+
+**Benefits:**
+- Prevents auth failures due to stale tokens in long-running automation
+- Allows seamless operation without manual token refresh
+- Clear error messages when auto-refresh not possible
+
+**Affected Scripts:**
+- `pms_phase20_final_smoke.sh`
+- `pms_phase21_inventory_hardening_smoke.sh`
+- `pms_phase23_smoke.sh`
+
+**Error Handling:**
+If you see "JWT_TOKEN is expired/near-expired" error:
+```bash
+# Option 1: Unset JWT_TOKEN to use EMAIL/PASSWORD auth
+unset JWT_TOKEN
+./backend/scripts/pms_phase23_smoke.sh
+
+# Option 2: Provide fallback credentials for auto-refresh
+export EMAIL="your-email@example.com"
+export PASSWORD="your-password"
+export SB_URL="https://your-project.supabase.co"
+export ANON_KEY="your-anon-key"
+export JWT_TOKEN="your-expired-token"
+./backend/scripts/pms_phase23_smoke.sh  # Will auto-refresh
+```
+
 ### Other Resources
 
 - **Inventory Contract** (Single Source of Truth): `/app/docs/domain/inventory.md` (date semantics, API contracts, edge cases, DB guarantees, test evidence)

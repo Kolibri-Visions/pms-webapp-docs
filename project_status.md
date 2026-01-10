@@ -3691,6 +3691,20 @@ echo "rc=$?"
 - **Now supported:** Direct execution without `bash` prefix: `./backend/scripts/pms_phase23_smoke.sh`
 - **Fallback (old checkouts):** `bash ./backend/scripts/pms_phase23_smoke.sh` or `chmod +x ./backend/scripts/pms_phase23_smoke.sh`
 
+**Ops Note (2026-01-10): Expired JWT_TOKEN Auto-Refresh**
+- **Feature:** Smoke scripts now automatically detect and refresh expired JWT tokens
+- **Logic:** When `JWT_TOKEN` is provided (3-part JWT):
+  - Extract and check `exp` claim from payload (base64url decode via python3)
+  - If expired/near-expired (≤30s) AND fallback credentials available (`EMAIL`, `PASSWORD`, `SB_URL`, `ANON_KEY`) → auto-fetch fresh token via `fetch_token()`
+  - If expired/near-expired WITHOUT fallback credentials → fail with actionable error message
+  - If `exp` claim missing → warn and treat as valid (no expiry check)
+- **Logs:** Token status visible for debugging:
+  - Valid: `Auth: JWT_TOKEN (provided, seconds_left=3600)`
+  - Expired with auto-refresh: `Auth: JWT_TOKEN expired/near-expired (seconds_left=-120) → fetching fresh token via EMAIL/PASSWORD`
+- **Affected Scripts:** `pms_phase20_final_smoke.sh`, `pms_phase21_inventory_hardening_smoke.sh`, `pms_phase23_smoke.sh`
+- **Benefits:** Prevents auth failures from stale tokens in long-running automation; seamless operation without manual token refresh
+- **Implementation:** Enhanced `get_auth_token()` in `backend/scripts/pms_smoke_common.sh` (lines 160-241)
+
 **Goals:**
 - Document common gotchas and operational guidance
 - Validate availability API contract (negative tests)
