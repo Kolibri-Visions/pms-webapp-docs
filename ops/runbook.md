@@ -25131,3 +25131,51 @@ rg "apiClient\.patch\(" frontend/app/owners
 
 ---
 
+
+### Owners UI (O3): Dropdown zeigt nur unassigned Properties (by design)
+
+**Symptom:** Manager will Objekt von Owner A zu Owner B neu zuweisen, aber Dropdown auf /owners/B zeigt nur freie (unassigned) Objekte.
+
+**Root Cause:** By design. Dropdown filtert standardmäßig nur Objekte ohne `owner_id` (oder bereits diesem Owner zugewiesen), um versehentliche Neuzuweisungen zu verhindern.
+
+**Expected Behavior:**
+- Dropdown zeigt: Objekte mit `owner_id = NULL` oder `owner_id = <current_owner_id>`
+- Wenn alle Objekte bereits anderen Ownern zugewiesen sind: Hinweis "Alle Objekte sind bereits anderen Eigentümern zugewiesen..." ist **korrekt**
+
+**Workaround (API):**
+
+Reassign via API statt UI:
+
+```bash
+# 1. Check current owner assignment
+curl -X GET "$HOST/api/v1/properties/{property_id}" \
+  -H "Authorization: Bearer $MANAGER_JWT_TOKEN"
+
+# 2. Reassign property to different owner
+curl -X PATCH "$HOST/api/v1/properties/{property_id}/owner" \
+  -H "Authorization: Bearer $MANAGER_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"owner_id": "new-owner-uuid-here"}'
+
+# 3. Verify reassignment
+curl -X GET "$HOST/api/v1/properties/{property_id}" \
+  -H "Authorization: Bearer $MANAGER_JWT_TOKEN"
+# Check response: "owner_id" should now be "new-owner-uuid-here"
+
+# Optional: Verify in Backoffice UI
+# Navigate to /owners/new-owner-uuid-here
+# Check that property appears under "Zugewiesene Objekte"
+```
+
+Siehe auch: "Owner Portal O1" Abschnitt in diesem Runbook für Details zu PATCH /api/v1/properties/{id}/owner Endpoint.
+
+**Planned Improvement (WIP):**
+
+Geplante UI-Verbesserung (noch nicht deployed):
+- Toggle-Checkbox "Auch bereits zugewiesene Objekte anzeigen (Neu zuweisen)"
+- Wenn aktiv: Dropdown zeigt ALLE Objekte (auch assigned)
+- Objekte mit anderem Owner werden markiert: "⚠️ <label> (bereits zugewiesen: <owner_prefix>)"
+- Confirm-Dialog vor Neuzuweisung: "WARNUNG: Objekt ist bereits zugewiesen..."
+
+Status: Geplant/WIP (noch nicht implementiert oder deployed).
+
