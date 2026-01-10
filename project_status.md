@@ -2890,7 +2890,7 @@ This entry will be marked **VERIFIED** only after:
   - `/api/v1/pricing/quote`
   - `/api/v1/pricing/rate-plans`
 
-**Ops Note (2026-01-10):** Hardened `pms_pricing_quote_smoke.sh` for non-empty PROD environments. Script is now idempotent (reuses SMOKE-P2 artifacts: rate plan, fee, tax) and uses baseline+delta verification instead of absolute totals. Safe to re-run unlimited times in PROD without creating endless artifacts or false failures. See backend/scripts/README.md for full PROD safety features.
+**Ops Note (2026-01-10):** Hardened `pms_pricing_quote_smoke.sh` for non-empty PROD environments. Script is now idempotent (reuses SMOKE-P2 artifacts: rate plan, fee, tax) and uses baseline+delta verification instead of absolute totals. Tax delta verification accounts for (a) existing taxes applied to taxable delta and (b) newly-added SMOKE tax on full taxable amount. Safe to re-run unlimited times in PROD without creating endless artifacts or false failures. See backend/scripts/README.md for full PROD safety features.
 
 ---
 

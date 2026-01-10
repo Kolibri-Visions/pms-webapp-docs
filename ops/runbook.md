@@ -21155,7 +21155,7 @@ JWT_TOKEN=<token> \
 - [Pricing Schemas](../app/schemas/pricing.py) - Pydantic models
 - [Migration 20260106150000](../../supabase/migrations/20260106150000_add_pricing_v1.sql) - Database schema
 
-**Ops Note (2026-01-10)**: Pricing quote smoke script is PROD-safe (idempotent + delta verification). Safe to re-run unlimited times in non-empty PROD environments. SMOKE-P2 artifacts (rate plan, fee, tax) are reused by name; verification uses baseline+delta instead of absolute totals. See script README for full details.
+**Ops Note (2026-01-10)**: Pricing quote smoke script is PROD-safe (idempotent + delta verification). Safe to re-run unlimited times in non-empty PROD environments. SMOKE-P2 artifacts (rate plan, fee, tax) are reused by name; verification uses baseline+delta instead of absolute totals. Tax delta verification accounts for (a) existing taxes applied to taxable delta and (b) newly-added SMOKE tax on full taxable amount. See script README for full details.
 
 ---
 
