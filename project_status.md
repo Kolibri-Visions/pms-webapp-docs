@@ -5011,6 +5011,16 @@ done
   - Responsive actions layout: Planned mobile-friendly stacked layout for property actions
   - See runbook section "Owners UI (O3): Dropdown zeigt assigned Objekte / Browser-Popup Confirm" for details
   - Status: Code implemented, pending deployment verification (not yet marked as deployed/verified)
+- **UX Hardening (DEPLOYED in PROD — 2026-01-10):**
+  - Deployed commit: `ae9aa7a96f88fd4257e2a08fed48616b97009db4`
+  - Backend started_at: `2026-01-10T10:36:05.314675+00:00`
+  - Evidence: `pms_verify_deploy.sh` rc=0 + commit match confirmed
+  - Manual browser verification (Admin UI):
+    - ✅ Check 1: Dropdown filter shows ONLY unassigned properties (owner_id=null), excludes already-assigned, no duplicates
+    - ✅ Check 2: In-page confirmation modal (replaces browser window.confirm popup)
+    - ✅ Check 3: In-page success/error banner (replaces browser alert popup)
+    - ✅ Check 4: Responsive actions layout (mobile-friendly, actions usable on small screens)
+  - Status: Keep overall ✅ IMPLEMENTED (NOT VERIFIED; no automated O3 UI smoke script exists)
 
 **Dependencies:**
 - Owner Portal O1 (owners table, owner endpoints, RBAC)

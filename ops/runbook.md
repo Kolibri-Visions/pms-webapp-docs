@@ -25346,3 +25346,18 @@ Status: Geplant/WIP (noch nicht implementiert oder deployed).
 - **Optional DevTools check:** Hard refresh (Cmd+Shift+R / Ctrl+F5) wenn unsicher ob latest frontend loaded
 - **Unassign schlägt fehl:** Check PATCH endpoint accessibility, verify JWT token valid, check property exists
 
+#### PROD Update (2026-01-10) — DEPLOYED (not VERIFIED)
+
+**Deployed to Production:**
+- Deployed commit: `ae9aa7a96f88fd4257e2a08fed48616b97009db4`
+- Backend started_at: `2026-01-10T10:36:05.314675+00:00`
+- Deploy verification: `backend/scripts/pms_verify_deploy.sh` rc=0 + commit match confirmed
+- Manual Browser Check (Admin UI):
+  - ✅ Check 1: Dropdown "Objekt zuweisen" zeigt nur unassigned Properties (owner_id=null), keine Duplikate, exclude bereits zugewiesene
+  - ✅ Check 2: In-page Confirmation Modal (kein window.confirm Browser-Popup)
+  - ✅ Check 3: In-page Success/Error Banner (kein alert() Browser-Popup)
+  - ✅ Check 4: Mobile Layout responsive (Actions usable auf kleinen Bildschirmen)
+
+**Hinweis:** Status bleibt ✅ IMPLEMENTED (nicht VERIFIED). Kein automatisierter UI-Smoke-Script für O3 vorhanden. Manuelle Browser-Verifikation in PROD durchgeführt.
+
+
