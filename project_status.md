@@ -4969,18 +4969,25 @@ done
 
 **Scope:** Backoffice/Admin UI for staff (manager/admin) to manage property owners: list view, detail page with property assignment, statement generation, and CSV download.
 
-**Status:** 🟡 WIP (not yet implemented)
+**Status:** 🟡 DEPLOYED (property assignment fix pending verification)
+
+**Implementation Notes:**
+- UI deployed at `/owners` (list) and `/owners/[ownerId]` (detail)
+- Navigation entry "Eigentümer" visible in CRM section (admin/manager only)
+- Property assignment dropdown fix applied: robust response parsing, trailing slash endpoint, owner_id normalization
+- Awaiting full verification (property assignment + statement generation + CSV download)
 
 **Dependencies:**
 - Owner Portal O1 (owners table, owner endpoints, RBAC)
 - Owner Portal O2 (statements endpoints, CSV export)
 - Properties domain (property list + assignment endpoint)
 
-**Verification (when implemented):**
+**Verification (pending):**
 - Manual browser test: Login as manager/admin → navigate to owners section → verify list/detail pages load
-- Test property assignment + statement generation + CSV download
-- Update status to ✅ IMPLEMENTED after deployment
-- Update status to ✅ VERIFIED after PROD verification with evidence
+- Test property assignment: dropdown shows properties → assign succeeds → property appears in owned list
+- Test statement generation + CSV download
+- Update status to ✅ IMPLEMENTED after full verification
+- Update status to ✅ VERIFIED after PROD verification with automated evidence
 
 ---
 

@@ -25093,3 +25093,41 @@ rg "apiClient\.patch\(" frontend/app/owners
 
 ---
 
+
+### Owners UI (O3): Property assignment dropdown empty
+
+**Symptom:** In Backoffice Owners UI (`/owners/[ownerId]`), the "Objekt zuweisen" dropdown is empty, showing no properties to assign.
+
+**Root Causes:**
+1. **Response shape mismatch:** API returns `{ items: Property[] }` but frontend only checked for direct array
+2. **Missing trailing slash:** GET `/api/v1/properties` may trigger redirect, frontend didn't handle `/api/v1/properties/`
+3. **Field name mismatch:** Properties may have `ownerId` (camelCase) but code only checked `owner_id` (snake_case)
+4. **Display label incomplete:** If `internal_name` is missing, dropdown shows blank or crashes
+
+**Fix (applied):**
+- Added trailing slash to endpoint: `/api/v1/properties/?limit=500&offset=0`
+- Support multiple response shapes: `{ items: [] }`, `{ data: [] }`, or `[]` directly
+- Normalize `owner_id` field: `p.owner_id ?? p.ownerId ?? null`
+- Robust display labels with fallbacks: `internal_name || name || title || 'Objekt {id}'`
+- Clear empty state message with link to properties page
+
+**Verification (Browser):**
+```bash
+# 1. Open DevTools → Network tab
+# 2. Navigate to /owners/[ownerId]
+# 3. Check GET /api/v1/properties/ request:
+#    - Response status: 200 OK
+#    - Response body contains items/data/array with properties
+#    - Properties have id, internal_name or name fields
+# 4. Verify dropdown shows property options (at least unassigned ones)
+# 5. Select property → click "Zuweisen" → success message appears
+```
+
+**Troubleshooting:**
+- **Still empty after fix:** Check browser console for errors, verify API returns non-empty array
+- **All properties assigned:** Expected if all properties have `owner_id` set to other owners
+- **Dropdown shows "Objekt abc12345":** Property has no `internal_name`, `name`, or `title` fields (uses ID fallback)
+- **Assignment fails:** Check PATCH request body contains `{"owner_id": "..."}` (snake_case required by backend)
+
+---
+
