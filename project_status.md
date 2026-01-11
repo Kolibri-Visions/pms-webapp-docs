@@ -5315,3 +5315,162 @@ export JWT_TOKEN="<<<admin JWT token>>>"
 
 ---
 
+
+# Epic B: Direct Booking Funnel (Public → Quote → Request → Review → Confirm)
+
+**Implementation Date:** 2026-01-11
+
+**Scope:** End-to-end direct booking workflow enabling public guests to check availability, request pricing quotes, submit booking requests, and staff to review/approve/decline requests for confirmation.
+
+**Status:** ✅ IMPLEMENTED
+
+**Features Implemented:**
+
+1. **Public Booking Page (`/buchung`)**:
+   - Step-based funnel: Input → Available → Quote → Confirmed
+   - Property selection via query parameter `?property_id=` (optional, dropdown if not provided)
+   - Availability check: GET /api/v1/public/availability (public endpoint)
+   - Pricing quote: POST /api/v1/pricing/quote (authenticated, best-effort)
+   - Booking request submission: POST /api/v1/public/booking-requests (public, idempotent)
+   - Guest info form: first_name, last_name, email, phone
+   - Check-in/check-out date pickers with validation
+   - Adults/children guest count inputs
+   - Success confirmation with booking request ID display
+   - German UI copy with clear disclaimer: "Dies ist eine unverbindliche Anfrage"
+   - Error states: Unavailable dates, pricing service down, submission failures
+   - Loading states during API calls
+   - Clean Tailwind CSS styling (no external UI libraries)
+
+2. **Admin Navigation Enhancement**:
+   - Added "Buchungsanfragen" entry to AdminShell sidebar (Betrieb section)
+   - ClipboardList icon from lucide-react
+   - Routes to `/booking-requests` page (existing admin UI for managing booking requests)
+   - Visible only to manager/admin roles
+
+3. **Backend API (Existing, No Changes Required)**:
+   - Public endpoints: `/api/v1/public/availability`, `/api/v1/public/booking-requests`
+   - Authenticated endpoints: `/api/v1/pricing/quote`, `/api/v1/booking-requests/*`
+   - Idempotency support via `Idempotency-Key` header (prevents duplicate submissions)
+   - Tenant resolution: Public endpoints resolve agency via domain or property lookup
+   - Status mapping: Database "inquiry" ↔ API "under_review"
+   - Audit logging: All state transitions logged via `emit_audit_event`
+   - State machine: pending → under_review → confirmed/declined
+
+4. **Comprehensive Smoke Script** (`backend/scripts/pms_epic_b_direct_booking_funnel_smoke.sh`):
+   - Test 1: GET /api/v1/properties (authenticated) - Pick property for test
+   - Test 2: GET /api/v1/public/availability (public) - Check availability with date shifting on conflict
+   - Test 3: POST /api/v1/pricing/quote (authenticated) - Get pricing quote (best-effort, continues on 503)
+   - Test 4: POST /api/v1/public/booking-requests (public) - Create booking request with idempotency
+   - Test 5: POST /api/v1/booking-requests/{id}/review (authenticated) - Mark under_review
+   - Test 6: POST /api/v1/booking-requests/{id}/approve (authenticated) - Approve and create booking
+   - Test 7: GET /api/v1/bookings/{id} (authenticated) - Verify booking status=confirmed
+   - Date shifting logic: Auto-shifts date window by SHIFT_DAYS on availability conflict (max MAX_WINDOW_TRIES attempts)
+   - Environment variables: HOST, JWT_TOKEN, PROPERTY_ID (optional), DATE_FROM/DATE_TO (optional), SHIFT_DAYS (default: 7), MAX_WINDOW_TRIES (default: 10)
+   - Exit codes: rc=0 success, rc=1+ failures
+   - Cross-platform: Supports BSD date (macOS) and GNU date (Linux)
+
+5. **Documentation Updates** (DOCS SAFE MODE):
+   - **Runbook** (`backend/docs/ops/runbook.md`):
+     - New section: "Epic B — Direct Booking Funnel (Public → Quote → Request → Review → Confirm)" (line 26252)
+     - Architecture overview: Public flow, staff flow, idempotency, tenant resolution, status mapping, audit trail
+     - API endpoints documentation (public + authenticated)
+     - Frontend routes: /buchung, /booking-requests
+     - Smoke script usage and test flow (7 tests)
+     - Verification commands for PROD deployment
+     - Troubleshooting guide: 9 common issues with root causes, debugging steps, solutions
+       - Availability always unavailable
+       - Pricing quote 503 errors
+       - Booking request 400 validation errors
+       - Review/approve 403 forbidden
+       - Approve 409 conflicts
+       - Idempotency not working
+       - Booking not created after approval
+       - Date shifting failures in smoke script
+   - **Project Status** (`backend/docs/project_status.md`):
+     - New section: "Epic B: Direct Booking Funnel" with complete feature list and verification commands
+
+**Files Changed:**
+- `frontend/app/buchung/page.tsx`: New public booking funnel page (German UI, step-based flow)
+- `frontend/app/components/AdminShell.tsx`: Added Buchungsanfragen navigation entry
+- `backend/scripts/pms_epic_b_direct_booking_funnel_smoke.sh`: Comprehensive 7-test smoke script
+- `backend/docs/ops/runbook.md`: Added Epic B section with troubleshooting (line 26252)
+- `backend/docs/project_status.md`: Added Epic B entry
+
+**Verification (PROD):**
+
+**Automated Smoke Test:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# [HOST-SERVER-TERMINAL] Optional: Verify deploy after Coolify redeploy
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+# Expected: rc=0, commit match
+
+# [HOST-SERVER-TERMINAL] Run Epic B smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<manager/admin JWT token>>>"
+# Optional:
+# export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
+# export DATE_FROM="2026-03-01"
+# export DATE_TO="2026-03-05"
+./backend/scripts/pms_epic_b_direct_booking_funnel_smoke.sh
+echo "rc=$?"
+
+# Expected output: All 7 tests pass, rc=0
+```
+
+**Manual Browser Verification:**
+
+1. **Public Booking Page** (`https://admin.fewo.kolibri-visions.de/buchung?property_id=<id>`):
+   - ✅ Page loads without authentication
+   - ✅ Property dropdown appears if no property_id query param
+   - ✅ Date pickers work with validation (check-out > check-in)
+   - ✅ Availability check: Click "Verfügbarkeit prüfen" → shows available/unavailable status
+   - ✅ Pricing quote: Shows price breakdown (or "Pricing service unavailable" if 503)
+   - ✅ Guest form: All fields required, email validation works
+   - ✅ Submit request: Click "Anfrage senden" → success message with booking request ID
+   - ✅ Error states: Try unavailable dates → shows reason, try invalid email → validation error
+
+2. **Admin Navigation** (`https://admin.fewo.kolibri-visions.de/`):
+   - ✅ Login as manager/admin
+   - ✅ Sidebar shows "Buchungsanfragen" under "Betrieb" section
+   - ✅ ClipboardList icon displayed
+   - ✅ Click entry → navigates to `/booking-requests` page
+   - ✅ Page shows booking requests list with review/approve/decline actions
+
+**Notes:**
+- **Status**: Marked as IMPLEMENTED (not VERIFIED) until user confirms automated PROD smoke test passes (rc=0)
+- Epic B smoke script provides comprehensive API-level verification but does not test frontend UI rendering
+- Manual browser verification checklist provided above for QA/stakeholder sign-off
+- Backend APIs already existed (no changes required): public_booking.py, booking_requests.py, pricing.py
+- Frontend work: New /buchung page + AdminShell navigation entry
+- Build verified: TypeScript compilation passes, no new runtime errors introduced
+
+**Dependencies:**
+- Backend APIs: `/api/v1/public/availability`, `/api/v1/public/booking-requests`, `/api/v1/pricing/quote`, `/api/v1/booking-requests/*`, `/api/v1/bookings/{id}`
+- Database tables: booking_requests, bookings, guests, properties, property_availability, audit_events
+- Migrations: Existing (no new migrations required)
+- Frontend: Next.js App Router, Tailwind CSS, lucide-react icons
+- Smoke script: bash, curl, jq, date (BSD/GNU cross-platform)
+
+**Related Entries:**
+- [P3 Public Direct Booking Hardening (Consolidated)] - Backend implementation of public booking endpoints
+- [P3a: Idempotency + Audit Log (Public Booking Requests)] - Idempotency middleware and audit logging
+- [Admin UI: Bookings & Properties Lists] - Admin UI for managing bookings
+- [Booking Status Validation Error (500)] - Troubleshooting booking status issues
+
+**Architecture Notes:**
+- **Idempotency**: All POST endpoints support `Idempotency-Key` header to prevent duplicate submissions (24-hour TTL)
+- **Tenant Resolution**: Public endpoints resolve agency_id via domain lookup or property.agency_id lookup
+- **Status Mapping**: Database stores "inquiry" status, API returns/accepts "under_review" (mapped in routes layer)
+- **Audit Trail**: All booking request state transitions logged to audit_events table (user_id, action, resource_type, resource_id, details JSON)
+- **Availability Logic**: Checks property_availability table + overlapping bookings (excludes canceled/declined)
+- **Guest Auto-Creation**: Public booking request endpoint auto-creates guest profile if email doesn't exist in agency
+- **Pricing Best-Effort**: Quote endpoint may return 503 if pricing rules not configured (smoke script continues on 503)
+
+---
+

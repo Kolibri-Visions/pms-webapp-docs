@@ -26248,3 +26248,317 @@ EXPECT_COMMIT=3d0e1ca9390b209a5bbdaeea69e02bb284a8159e ./backend/scripts/pms_ver
 - Migration now runnable from scratch for new installations
 
 ---
+
+## Epic B — Direct Booking Funnel (Public → Quote → Request → Review → Confirm)
+
+**Overview:** End-to-end direct booking workflow enabling public guests to check availability, request pricing quotes, submit booking requests, and staff to review/approve/decline requests for confirmation.
+
+**Purpose:** Allow public guests to initiate bookings through a self-service funnel, while staff (manager/admin) review and approve booking requests to create confirmed bookings.
+
+**Architecture:**
+- **Public Flow**: Guest checks availability → gets pricing quote (optional) → submits booking request (creates guest if needed)
+- **Staff Flow**: Manager/admin reviews pending requests → approves (creates confirmed booking) or declines
+- **Idempotency**: All POST endpoints support `Idempotency-Key` header to prevent duplicate submissions
+- **Tenant Resolution**: Public endpoints resolve agency via domain or property lookup
+- **Status Mapping**: Database "inquiry" status maps to API "under_review" for booking requests
+- **Audit Trail**: All state transitions logged via `emit_audit_event` (user_id, action, resource_type, resource_id, details)
+
+**Frontend Routes:**
+- `/buchung` - Public booking page (guest funnel: availability check → pricing quote → booking request submission)
+- `/booking-requests` - Admin page for managing booking requests (review/approve/decline)
+
+**API Endpoints:**
+
+Public (no authentication):
+- `GET /api/v1/public/availability?property_id=&date_from=&date_to=` - Check property availability for date range
+- `POST /api/v1/public/booking-requests` - Create booking request (idempotent with `Idempotency-Key` header)
+
+Authenticated (manager/admin):
+- `GET /api/v1/properties?limit=&offset=` - List properties for availability check
+- `POST /api/v1/pricing/quote` - Get pricing quote for property/dates/guests (best-effort, may 503 if pricing not configured)
+- `GET /api/v1/booking-requests?status=&property_id=&limit=&offset=` - List booking requests
+- `GET /api/v1/booking-requests/{id}` - Get booking request details
+- `POST /api/v1/booking-requests/{id}/review` - Transition booking request to under_review (status: pending → under_review)
+- `POST /api/v1/booking-requests/{id}/approve` - Approve booking request (status: under_review/pending → confirmed, creates booking)
+- `POST /api/v1/booking-requests/{id}/decline` - Decline booking request (status: * → declined)
+- `GET /api/v1/bookings/{id}` - Verify confirmed booking exists
+
+**Database Tables:**
+- `booking_requests` - Pending booking requests from guests (status: pending, under_review, confirmed, declined, expired, canceled)
+- `bookings` - Confirmed bookings created from approved booking requests
+- `guests` - Guest profiles (auto-created from booking request guest data if email not exists)
+- `properties` - Properties available for booking
+- `audit_events` - Audit log for all booking request state transitions
+
+**Smoke Script:** `backend/scripts/pms_epic_b_direct_booking_funnel_smoke.sh`
+
+**Test Flow:**
+1. GET /api/v1/properties (authenticated) - Pick property for test
+2. GET /api/v1/public/availability (public) - Check availability (with date shifting on conflict)
+3. POST /api/v1/pricing/quote (authenticated) - Get pricing quote (best-effort, continues on 503)
+4. POST /api/v1/public/booking-requests (public) - Create booking request with idempotency
+5. POST /api/v1/booking-requests/{id}/review (authenticated) - Mark under_review
+6. POST /api/v1/booking-requests/{id}/approve (authenticated) - Approve and create booking
+7. GET /api/v1/bookings/{id} (authenticated) - Verify booking status=confirmed
+
+**Verification Commands:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# [HOST-SERVER-TERMINAL] Optional: Verify deploy after Coolify redeploy
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# [HOST-SERVER-TERMINAL] Run Epic B smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<manager/admin JWT token>>>"
+# Optional:
+# export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
+# export DATE_FROM="2026-03-01"
+# export DATE_TO="2026-03-05"
+# export SHIFT_DAYS=7
+# export MAX_WINDOW_TRIES=10
+./backend/scripts/pms_epic_b_direct_booking_funnel_smoke.sh
+echo "rc=$?"
+
+# Expected output: All 7 tests pass, rc=0
+```
+
+**Common Issues:**
+
+### Availability Check Always Returns Unavailable
+
+**Symptom:** GET /api/v1/public/availability always returns `{"available": false, "reason": "..."}` even for dates with no bookings.
+
+**Root Cause:** Property has blocking availability records, calendar not initialized, or date range conflicts with existing bookings.
+
+**How to Debug:**
+```bash
+# Check property availability records
+psql $DATABASE_URL -c "SELECT id, property_id, date, available, reason FROM property_availability WHERE property_id = '<property_id>' AND date BETWEEN '<date_from>' AND '<date_to>' ORDER BY date;"
+
+# Check existing bookings for property
+psql $DATABASE_URL -c "SELECT id, date_from, date_to, status FROM bookings WHERE property_id = '<property_id>' AND status NOT IN ('canceled', 'declined') ORDER BY date_from;"
+
+# Test availability endpoint
+curl -X GET "$HOST/api/v1/public/availability?property_id=<property_id>&date_from=2026-03-01&date_to=2026-03-05"
+```
+
+**Solution:**
+- If property_availability has `available=false` records: Update or delete blocking records
+- If overlapping bookings exist: Smoke script will auto-shift dates (use `SHIFT_DAYS=7`, `MAX_WINDOW_TRIES=10`)
+- If property not found: Verify PROPERTY_ID exists in properties table and is active
+
+### Pricing Quote Returns 503 (Service Unavailable)
+
+**Symptom:** POST /api/v1/pricing/quote returns 503 with "Pricing service unavailable" error.
+
+**Root Cause:** Pricing rules not configured for property, or pricing service down.
+
+**How to Debug:**
+```bash
+# Test pricing quote endpoint
+curl -X POST "$HOST/api/v1/pricing/quote" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -d '{
+    "property_id": "<property_id>",
+    "date_from": "2026-03-01",
+    "date_to": "2026-03-05",
+    "num_adults": 2,
+    "num_children": 0
+  }' -w "\n%{http_code}\n"
+
+# Check if property has pricing rules
+psql $DATABASE_URL -c "SELECT id, property_id, base_price_cents, currency FROM pricing_rules WHERE property_id = '<property_id>';"
+```
+
+**Solution:**
+- Pricing quote is **best-effort** in Epic B smoke script (continues on 503)
+- Configure pricing rules for property via admin UI or SQL insert
+- If pricing not needed: Smoke script warning is expected behavior (Test 3 shows "WARNING: Quote endpoint returned 503")
+
+### Booking Request Creation Returns 400 (Bad Request)
+
+**Symptom:** POST /api/v1/public/booking-requests returns 400 with validation error.
+
+**Root Cause:** Missing required fields, invalid date format, adults/children validation failure, or property_id not found.
+
+**How to Debug:**
+```bash
+# Check request payload structure
+# Required fields: property_id, date_from, date_to, adults, children, currency, guest (first_name, last_name, email, phone)
+
+# Test with minimal valid payload
+curl -X POST "$HOST/api/v1/public/booking-requests" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: test-$(date +%s)" \
+  -d '{
+    "property_id": "<property_id>",
+    "date_from": "2026-03-01",
+    "date_to": "2026-03-05",
+    "adults": 2,
+    "children": 0,
+    "currency": "EUR",
+    "guest": {
+      "first_name": "Test",
+      "last_name": "User",
+      "email": "test@example.com",
+      "phone": "+49123456789"
+    },
+    "notes": "",
+    "website": ""
+  }' -w "\n%{http_code}\n"
+```
+
+**Solution:**
+- Ensure date_from < date_to (check-out must be after check-in)
+- Ensure adults >= 1 (at least one adult required)
+- Ensure guest.email is valid email format
+- Ensure property_id exists and is active
+- Dates must be YYYY-MM-DD format (ISO 8601)
+
+### Review/Approve Endpoints Return 403 (Forbidden)
+
+**Symptom:** POST /api/v1/booking-requests/{id}/review or /approve returns 403 Forbidden.
+
+**Root Cause:** JWT token missing, invalid, or user role is not manager/admin.
+
+**How to Debug:**
+```bash
+# Check JWT token role claim
+echo $JWT_TOKEN | cut -d'.' -f2 | base64 -d | jq '.role'
+# Should return "manager" or "admin"
+
+# Test /me endpoint to verify authentication
+curl -X GET "$HOST/api/v1/me" \
+  -H "Authorization: Bearer $JWT_TOKEN"
+# Should return 200 with user_id and role
+```
+
+**Solution:**
+- Ensure JWT_TOKEN is valid and not expired (use Supabase dashboard to generate new token)
+- Verify user role is "manager" or "admin" (not "agent" or "owner")
+- Review/approve/decline endpoints require `require_roles("manager", "admin")` dependency
+
+### Approve Endpoint Returns 409 (Conflict)
+
+**Symptom:** POST /api/v1/booking-requests/{id}/approve returns 409 Conflict with "Property not available" error.
+
+**Root Cause:** Dates became unavailable between booking request creation and approval (another booking was confirmed for overlapping dates).
+
+**How to Debug:**
+```bash
+# Check booking request dates
+psql $DATABASE_URL -c "SELECT id, property_id, date_from, date_to, status FROM booking_requests WHERE id = '<booking_request_id>';"
+
+# Check for overlapping confirmed bookings
+psql $DATABASE_URL -c "
+SELECT id, date_from, date_to, status 
+FROM bookings 
+WHERE property_id = '<property_id>' 
+  AND status NOT IN ('canceled', 'declined')
+  AND (
+    (date_from, date_to) OVERLAPS ('<req_date_from>'::date, '<req_date_to>'::date)
+  )
+ORDER BY date_from;
+"
+```
+
+**Solution:**
+- Decline the conflicting booking request (dates no longer available)
+- Or cancel/modify the existing overlapping booking first, then approve request
+- Epic B smoke script creates fresh booking requests to avoid this (uses unique guest email per run)
+
+### Idempotency Not Working (Duplicate Booking Requests)
+
+**Symptom:** Multiple POST /api/v1/public/booking-requests with same `Idempotency-Key` create duplicate booking requests.
+
+**Root Cause:** Idempotency middleware not enabled, or key format invalid.
+
+**How to Debug:**
+```bash
+# Test idempotency with same key twice
+IDEMPOTENCY_KEY="test-$(date +%s)-unique"
+
+# First request (should create booking request)
+curl -X POST "$HOST/api/v1/public/booking-requests" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: $IDEMPOTENCY_KEY" \
+  -d '{...}' -w "\n%{http_code}\n"
+# Expected: 201 Created
+
+# Second request with same key (should return cached response)
+curl -X POST "$HOST/api/v1/public/booking-requests" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: $IDEMPOTENCY_KEY" \
+  -d '{...}' -w "\n%{http_code}\n"
+# Expected: 201 Created (same response, no duplicate created)
+```
+
+**Solution:**
+- Verify idempotency middleware is enabled in `backend/app/core/middleware.py`
+- Check `idempotency_cache` table exists (migration `20250106000000_add_idempotency_table.sql`)
+- Ensure `Idempotency-Key` header is present and non-empty (format: `<source>-<timestamp>-<random>`)
+- Idempotency cache TTL is 24 hours (cached responses expire after 24h)
+
+### Booking Not Created After Approval
+
+**Symptom:** POST /api/v1/booking-requests/{id}/approve returns 200 OK with `status=confirmed` and `booking_id`, but GET /api/v1/bookings/{booking_id} returns 404 Not Found.
+
+**Root Cause:** Database transaction rolled back, or booking creation failed silently.
+
+**How to Debug:**
+```bash
+# Check booking request status
+psql $DATABASE_URL -c "SELECT id, status, booking_id FROM booking_requests WHERE id = '<booking_request_id>';"
+# Should show status=confirmed and booking_id not null
+
+# Check if booking exists
+psql $DATABASE_URL -c "SELECT id, property_id, guest_id, date_from, date_to, status FROM bookings WHERE id = '<booking_id>';"
+# Should return 1 row with status=confirmed
+
+# Check application logs for errors
+docker logs <backend-container> | grep -i "error.*booking"
+```
+
+**Solution:**
+- If booking_request.booking_id is null: Approval transaction failed, retry approval
+- If booking exists but GET endpoint returns 404: Agency mismatch (booking belongs to different agency), verify JWT agency_id claim
+- Check backend logs for database constraint violations or errors during booking creation
+
+### Date Shifting Fails in Smoke Script
+
+**Symptom:** Smoke script fails with "Could not find available dates after N attempts" even though calendar has availability.
+
+**Root Cause:** All tested date windows are unavailable, or date shifting logic broken (BSD vs GNU date command incompatibility).
+
+**How to Debug:**
+```bash
+# Test date shifting manually
+CHECK_IN="2026-03-01"
+SHIFT_DAYS=7
+
+# macOS (BSD date)
+date -u -j -v+${SHIFT_DAYS}d -f "%Y-%m-%d" "$CHECK_IN" +%Y-%m-%d
+# Expected: 2026-03-08
+
+# Linux (GNU date)
+date -u -d "$CHECK_IN + $SHIFT_DAYS days" +%Y-%m-%d
+# Expected: 2026-03-08
+
+# Check if gdate (coreutils) is available on macOS
+command -v gdate
+# If available: brew install coreutils
+```
+
+**Solution:**
+- Smoke script supports both BSD date (macOS) and GNU date (Linux)
+- On macOS: Install GNU coreutils if date shifting fails: `brew install coreutils` (provides `gdate`)
+- Override date window manually: `DATE_FROM=2026-04-01 DATE_TO=2026-04-05 ./backend/scripts/pms_epic_b_direct_booking_funnel_smoke.sh`
+- Increase max attempts: `MAX_WINDOW_TRIES=20 SHIFT_DAYS=3 ./backend/scripts/pms_epic_b_direct_booking_funnel_smoke.sh`
+
+---
