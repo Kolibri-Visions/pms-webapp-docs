@@ -25836,4 +25836,76 @@ psql $DATABASE_URL -c "SELECT COUNT(*) FROM properties WHERE created_by = '<team
 - Alternative: Update team_member to inactive status instead of deleting
 - Future: Implement cascading delete or reassignment workflow
 
+### Admin UI Check
+
+**Purpose:** Verify Epic A pages are accessible and functional in Admin UI.
+
+**How to Test:**
+1. Log in to Admin UI as admin user
+2. Navigate to sidebar → Einstellungen (Settings) section
+3. Click "Organisation" - should load agency details
+4. Click "Team" - should show team members list and invitations
+
+**Expected Behavior:**
+- `/organisation` page loads agency name and allows editing (admin only)
+- `/team` page shows team members, allows creating invitations, revoking pending invites
+- No API 404 errors in browser console
+
+**Common Failures:**
+
+**Symptom:** Organisation/Team not visible in sidebar
+
+**Root Cause:** User role is not "admin" or sidebar navigation config missing entries.
+
+**How to Debug:**
+```bash
+# Check user role via /me endpoint
+curl -X GET "$API_BASE_URL/api/v1/me" \
+  -H "Authorization: Bearer $JWT_TOKEN" | jq '.role'
+
+# Should return "admin"
+```
+
+**Solution:**
+- Ensure user has admin role in team_members table or JWT claim
+- Verify sidebar config includes Organisation and Team entries with `roles: ["admin"]`
+
+**Symptom:** Page loads but shows "API Error 404: Not Found"
+
+**Root Cause:** Epic A endpoints not mounted in backend (module not registered).
+
+**How to Debug:**
+```bash
+# Check if Epic A endpoints exist in OpenAPI
+curl -sS "$API_BASE_URL/openapi.json" | jq '.paths | keys[]' | grep -E "agencies/current|team/members"
+
+# Should show:
+#   "/api/v1/agencies/current"
+#   "/api/v1/team/members"
+```
+
+**Solution:**
+- Ensure `backend/app/modules/epic_a.py` exists and is imported in `bootstrap.py`
+- Verify `MODULES_ENABLED=true` (default) in production
+- Check backend logs for "Epic A module not available" warnings
+
+**Symptom:** Page loads but API calls fail with CORS or wrong host
+
+**Root Cause:** Frontend API client using wrong base URL.
+
+**How to Debug:**
+```bash
+# Check browser DevTools Network tab
+# API calls should go to api.* domain, not admin.* domain
+# Example: https://api.fewo.kolibri-visions.de/api/v1/agencies/current
+
+# Verify NEXT_PUBLIC_API_BASE env var in frontend container
+docker exec pms-admin env | grep NEXT_PUBLIC_API_BASE
+```
+
+**Solution:**
+- Set `NEXT_PUBLIC_API_BASE` to API service URL in Coolify frontend environment
+- Ensure pages use `apiClient` from `lib/api-client.ts` (not direct fetch)
+- Clear browser cache and hard refresh (Cmd+Shift+R / Ctrl+F5)
+
 ---
