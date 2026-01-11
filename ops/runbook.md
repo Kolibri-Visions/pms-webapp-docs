@@ -27046,4 +27046,63 @@ PUBLIC_HOST=fewo.kolibri-visions.de \
 # Expected: rc=0, all 6 tests pass
 ```
 
+### Public Properties Endpoint Returns 500 (Bathrooms Decimal/Fractional)
+
+**Symptom:** GET /api/v1/public/properties returns 500 Internal Server Error. Backend logs show Pydantic `ValidationError`: `PublicPropertyListItem.bathrooms` expects `int` but got `Decimal('1.5')` in `backend/app/api/routes/public_site.py` line ~270.
+
+**Root Cause:** Database stores `bathrooms` as `numeric` (can be fractional like 1.5 for "1 and a half bathrooms"). PostgreSQL returns these as `Decimal` objects. Original Pydantic schema defined `bathrooms: Optional[int]`, rejecting fractional values. Properties with integer bathrooms (1, 2) work fine, but properties with fractional bathrooms (1.5, 2.5) trigger ValidationError.
+
+**Why Limit Matters:**
+- `limit=1` might return 200 if first property has integer bathrooms
+- `limit=10` fails if ANY property in results has fractional bathrooms
+- This explains intermittent failures depending on query results
+
+**How to Debug:**
+```bash
+# Test with small limit (may pass if first property has integer bathrooms)
+curl -k -sS -i \
+  -H "X-Forwarded-Host: fewo.kolibri-visions.de" \
+  -H "Origin: https://fewo.kolibri-visions.de" \
+  "https://api.fewo.kolibri-visions.de/api/v1/public/properties?limit=1"
+
+# Test with larger limit (more likely to hit fractional bathrooms)
+curl -k -sS -i \
+  -H "X-Forwarded-Host: fewo.kolibri-visions.de" \
+  -H "Origin: https://fewo.kolibri-visions.de" \
+  "https://api.fewo.kolibri-visions.de/api/v1/public/properties?limit=10"
+
+# Expected after fix: Both return HTTP 200 with valid JSON array
+# bathrooms field shows as number (e.g., 1, 1.5, 2.0) in response
+
+# Check backend logs for ValidationError if still failing
+# Look for: "value is not a valid integer" or "got Decimal('1.5')"
+```
+
+**Fix Applied:**
+- Schema updated: `bathrooms: Optional[int]` → `Optional[float]` in both `PublicPropertyListItem` and `PublicPropertyDetail`
+- Defensive conversion added to both endpoints:
+  ```python
+  if "bathrooms" in data and data["bathrooms"] is not None:
+      data["bathrooms"] = float(data["bathrooms"])
+  ```
+- Ensures Decimal values from DB are converted to float before Pydantic validation
+- OpenAPI now shows bathrooms as `number` (accepts integers and fractional values)
+
+**Verification:**
+```bash
+# After fix deployed, test properties list with large limit
+curl -k -sS -i \
+  -H "X-Forwarded-Host: fewo.kolibri-visions.de" \
+  -H "Origin: https://fewo.kolibri-visions.de" \
+  "https://api.fewo.kolibri-visions.de/api/v1/public/properties?limit=10"
+
+# Expected: HTTP 200 with JSON array, bathrooms field shows as 1.5, 2.0, etc.
+
+# Run Epic C smoke test
+API_BASE_URL=https://api.fewo.kolibri-visions.de \
+PUBLIC_HOST=fewo.kolibri-visions.de \
+./backend/scripts/pms_epic_c_public_website_smoke.sh
+# Expected: rc=0, all 6 tests pass (Test 5 no longer fails with 500)
+```
+
 ---

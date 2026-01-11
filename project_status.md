@@ -5612,6 +5612,13 @@ echo "rc=$?"
 - Affected endpoints: `/api/v1/public/properties` (list) and `/api/v1/public/properties/{id}` (detail)
 - Added troubleshooting section "Public Properties Endpoint Returns 500 (Duplicate Currency Kwarg)" to runbook with Host header gotcha note
 
+**Fix Applied (2026-01-11 - Bathrooms Decimal Compatibility):**
+- Fixed Pydantic ValidationError for fractional bathrooms in public properties endpoints
+- Root cause: Schema defined `bathrooms: Optional[int]`, but DB stores as `numeric` allowing fractional values (e.g., 1.5). PostgreSQL returns Decimal objects, causing validation failure
+- Solution: Changed schema to `bathrooms: Optional[float]` in both models, added defensive `float()` conversion in both endpoints before model construction
+- Affected endpoints: `/api/v1/public/properties` (list) and `/api/v1/public/properties/{id}` (detail)
+- Added troubleshooting section "Public Properties Endpoint Returns 500 (Bathrooms Decimal/Fractional)" to runbook with limit behavior explanation
+
 **How to Verify in PROD:**
 
 **Automated Backend Smoke Test:**
