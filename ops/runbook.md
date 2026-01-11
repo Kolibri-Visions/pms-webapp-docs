@@ -26352,6 +26352,12 @@ curl -X GET "$HOST/api/v1/public/availability?property_id=<property_id>&date_fro
 - If overlapping bookings exist: Smoke script will auto-shift dates (use `SHIFT_DAYS=7`, `MAX_WINDOW_TRIES=10`)
 - If property not found: Verify PROPERTY_ID exists in properties table and is active
 
+**Smoke Script Auto-Retry Behavior:**
+- When availability returns `{"available": false, "reason": "double_booking"}` or any other blocking reason (e.g., "blocked", "maintenance"), the smoke script automatically shifts the date window forward by `SHIFT_DAYS` (default: 7 days) and retries
+- Maximum retry attempts: `MAX_WINDOW_TRIES` (default: 10)
+- Only fails if no available window found after all retry attempts
+- Override retry behavior: `SHIFT_DAYS=3 MAX_WINDOW_TRIES=20 ./backend/scripts/pms_epic_b_direct_booking_funnel_smoke.sh`
+
 ### Pricing Quote Returns 503 (Service Unavailable)
 
 **Symptom:** POST /api/v1/pricing/quote returns 503 with "Pricing service unavailable" error.
