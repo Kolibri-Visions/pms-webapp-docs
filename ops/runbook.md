@@ -26838,4 +26838,51 @@ psql $DATABASE_URL -c "
 - Implement missing block type in `frontend/app/(public)/components/BlockRenderer.tsx`
 - Or update database to use supported block types (hero_search, usp_grid, rich_text, contact_cta, faq, featured_properties)
 
+### API Endpoints Return 404 Not Found
+
+**Symptom:** GET /api/v1/public/site/settings returns 404 with `{"detail":"Not Found"}`, even though deployment commit is correct and /api/v1/public/ping works.
+
+**Root Cause:** Public site router not mounted, wrong prefix used, or router gated behind environment flag/module condition.
+
+**How to Debug:**
+```bash
+# Check if routes appear in OpenAPI
+curl https://api.fewo.kolibri-visions.de/openapi.json | grep -c "/api/v1/public/site/settings"
+# Should return 1 or more (if 0, router not mounted)
+
+curl https://api.fewo.kolibri-visions.de/openapi.json | grep -c "/api/v1/public/properties"
+# Should return 1 or more (if 0, router not mounted)
+
+# Check backend startup logs for router mounting messages
+# [Coolify container logs or docker logs <backend-container>]
+# Look for: "Failsafe: Public site router mounted" or "Public site router already mounted"
+```
+
+**Fix Checklist:**
+1. **Verify router registration in `backend/app/main.py`**:
+   - Check failsafe path (MODULES_ENABLED=true): Both `public_booking_routes_exist` AND `public_site_routes_exist` checks must be present
+   - Check fallback path (MODULES_ENABLED=false): Both `public_booking.router` AND `public_site.router` must be included
+   - Ensure correct prefix: `prefix="/api/v1/public"`
+   - Ensure correct tags: `tags=["Public Website"]`
+
+2. **Check environment flags**:
+   - If MODULES_ENABLED=true, ensure module system includes public_site router
+   - If MODULES_ENABLED=false, ensure fallback path mounts router explicitly
+
+3. **Verify route paths in router file** (`backend/app/api/routes/public_site.py`):
+   - Routes should be defined as `/site/settings`, `/site/pages`, `/properties` (WITHOUT /api/v1/public prefix)
+   - Prefix is added when mounting with `app.include_router(..., prefix="/api/v1/public")`
+
+4. **Re-run smoke script with OpenAPI preflight**:
+   ```bash
+   API_BASE_URL=https://api.fewo.kolibri-visions.de \
+   ./backend/scripts/pms_epic_c_public_website_smoke.sh
+   # Preflight will fail with actionable error if routes not in OpenAPI
+   ```
+
+**Solution:**
+- If failsafe check was too broad (only checked for any `/api/v1/public` routes), update to check specifically for `/api/v1/public/site/settings` route
+- Ensure both failsafe and fallback paths mount `public_site.router`
+- Redeploy and verify OpenAPI contains routes before running full smoke test
+
 ---

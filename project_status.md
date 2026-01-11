@@ -5579,6 +5579,13 @@ echo "rc=$?"
   - `backend/docs/ops/runbook.md` - Added Epic C section
   - `backend/docs/project_status.md` - Added Epic C entry
 
+**Fix Applied (2026-01-11):**
+- Fixed router mounting issue where public_site router was not being mounted in production
+- Root cause: Failsafe check was too broad (`route.path.startswith("/api/v1/public")`) - triggered by public_booking routes, preventing public_site from mounting
+- Solution: Changed to check for specific canonical routes (`/api/v1/public/ping`, `/api/v1/public/site/settings`) and mount each router independently
+- Added OpenAPI preflight check to smoke script for earlier detection
+- Added troubleshooting section "API Endpoints Return 404 Not Found" to runbook
+
 **How to Verify in PROD:**
 
 **Automated Backend Smoke Test:**
