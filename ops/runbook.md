@@ -27728,3 +27728,113 @@ echo "rc=$?"
 - Failures show HTTP code + first 200 chars of response body
 
 ---
+
+## Frontend Host Routing (admin.* vs Public)
+
+**Overview:** Next.js frontend routes requests differently based on hostname to separate Admin UI from Public Website.
+
+**Purpose:** Prevent public website visitors from being redirected to /login. Admin UI requires authentication, public website is anonymous.
+
+**Routing Rules:**
+- **admin.*** prefix (e.g., `admin.fewo.kolibri-visions.de`) → Admin UI mode
+  - Root `/` redirects to `/login`
+  - `/login` renders login form
+  - All admin routes require authentication
+- **public** host (e.g., `fewo.kolibri-visions.de`, no `admin.` prefix) → Public Website mode
+  - Root `/` redirects to `/unterkuenfte` (properties listing)
+  - `/login` redirects to `https://admin.<public-host>/login` (except localhost)
+  - Public routes (pages, properties) do not require authentication
+- **localhost** → Both modes work (dev mode safety)
+
+**Implementation:**
+- `frontend/lib/host_mode.ts`: Helper functions for host detection
+  - `getRequestHost()`: Reads x-forwarded-host or host header (server-side)
+  - `isAdminHost(host)`: Returns true if host starts with "admin."
+  - `getAdminHost(host)`: Converts public host to admin host (prepends "admin.")
+- `frontend/app/page.tsx`: Dynamic root page with host-based redirect
+- `frontend/app/login/page.tsx`: Redirects to admin host if accessed on public host (except localhost)
+
+**Next.js Redirect Behavior (NEXT_REDIRECT Digest):**
+When Next.js uses `redirect()`, it returns HTTP 200 with HTML body containing:
+```
+NEXT_REDIRECT;action;/target/path
+```
+This is **intentional** Next.js behavior for client-side navigation. The browser JavaScript consumes the digest and performs the actual redirect.
+
+**When using curl**, you'll see HTTP 200 + NEXT_REDIRECT body instead of HTTP 302. This is normal.
+
+**Verification Commands:**
+
+```bash
+# Test public host root (should NOT redirect to /login)
+curl -k -sS -H 'Cache-Control: no-cache' "https://fewo.kolibri-visions.de/?cb=$(date +%s)" | head -20
+# Expected: NEXT_REDIRECT;replace;/unterkuenfte (or public page HTML)
+# NOT expected: NEXT_REDIRECT;replace;/login
+
+# Test admin host root (should redirect to /login)
+curl -k -sS -H 'Cache-Control: no-cache' "https://admin.fewo.kolibri-visions.de/?cb=$(date +%s)" | head -20
+# Expected: NEXT_REDIRECT;replace;/login
+
+# Test public host /login (should redirect to admin host)
+curl -k -sS -H 'Cache-Control: no-cache' "https://fewo.kolibri-visions.de/login?cb=$(date +%s)" | head -20
+# Expected: NEXT_REDIRECT;replace;https://admin.fewo.kolibri-visions.de/login
+
+# Test admin host /login (should render login form or redirect to login)
+curl -k -sS -H 'Cache-Control: no-cache' "https://admin.fewo.kolibri-visions.de/login?cb=$(date +%s)" | head -20
+# Expected: NEXT_REDIRECT;replace;/login OR login form HTML
+```
+
+**Common Issues:**
+
+### Public Host Shows Login Page
+
+**Symptom:** Accessing `https://fewo.kolibri-visions.de/` redirects to `/login` instead of `/unterkuenfte`.
+
+**Root Cause:** Frontend not detecting public host correctly, treating all hosts as admin.
+
+**How to Debug:**
+```bash
+# Check x-forwarded-host header is set by proxy/CDN
+curl -k -I "https://fewo.kolibri-visions.de/" | grep -i "x-forwarded-host"
+
+# Check Next.js is reading headers (dynamic route, not statically cached)
+# frontend/app/page.tsx should use headers() to be dynamic
+grep "headers()" frontend/app/page.tsx
+# Expected: import { headers } from "next/headers"; and await headers() call
+
+# Check isAdminHost logic
+grep "isAdminHost" frontend/lib/host_mode.ts
+# Expected: baseHost.startsWith("admin.")
+```
+
+**Solution:**
+- Verify x-forwarded-host header is passed by proxy (Traefik/Coolify)
+- Verify root page is dynamic (uses `await headers()` or `await getRequestHost()`)
+- Clear Next.js cache: `rm -rf frontend/.next` and rebuild
+- Redeploy frontend
+
+### Admin Host Does Not Require Login
+
+**Symptom:** Accessing `https://admin.fewo.kolibri-visions.de/` does not redirect to `/login`.
+
+**Root Cause:** Frontend treating admin host as public host (isAdminHost returns false).
+
+**How to Debug:**
+```bash
+# Test host detection
+curl -k -sS "https://admin.fewo.kolibri-visions.de/?cb=$(date +%s)" | grep "NEXT_REDIRECT"
+# Expected: NEXT_REDIRECT;replace;/login
+# If missing: host detection broken
+
+# Check x-forwarded-host header
+curl -k -I "https://admin.fewo.kolibri-visions.de/" | grep -i "x-forwarded-host"
+# Expected: x-forwarded-host: admin.fewo.kolibri-visions.de
+```
+
+**Solution:**
+- Verify proxy passes x-forwarded-host with "admin." prefix
+- Verify DNS CNAME for admin subdomain points to correct target
+- Check Traefik/Coolify host routing config includes admin subdomain
+- Redeploy frontend
+
+---
