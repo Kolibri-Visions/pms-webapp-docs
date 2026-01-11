@@ -27427,3 +27427,72 @@ curl -X GET https://api.fewo.kolibri-visions.de/api/v1/public-site/domain \
 ```
 
 ---
+
+### Public Domain Smoke Test Returns rc=1 Despite PASS
+
+**Symptom:** Running `pms_epic_c_public_domain_smoke.sh` prints "Test 1 PASSED" but exits with rc=1.
+
+**Root Cause (Fixed):** Earlier versions had exit code tracking issues:
+1. Early `exit 1` statements bypassed final exit logic when tests failed
+2. Counter increments using `((PASS++))` could fail with `set -euo pipefail` on arithmetic errors
+3. Inconsistent exit code handling in different code paths
+
+**How It's Fixed (Commit 0a07ed0+):**
+- Replaced `((PASS++))` with `PASS=$((PASS + 1))` for safer arithmetic
+- Removed early exits after test failures - tests now continue and set FAIL counter
+- Consistent exit logic at end of script:
+  - If `PUBLIC_DOMAIN` not set: exit based on FAIL counter after Test 1
+  - If conflict (409) on Test 2: exit based on FAIL counter
+  - End of all tests: exit 0 if FAIL=0, else exit 1
+- Added `print_response()` helper to show first 200 chars of response body on failures
+- Added 500 error handling to all test cases with diagnostic output
+
+**Additional Improvements:**
+- Script now accepts `API_BASE_URL` (preferred) OR `HOST` (backward compatible)
+- Better error messages when env vars missing (exit 2 for config errors)
+- Always prints "PUBLIC_DOMAIN not set, skipping mutation tests" when applicable
+- Improved jq error handling with `2>/dev/null || echo "error"` fallbacks
+
+**How to Update:**
+```bash
+# Pull latest version
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify you have the fixed version
+head -30 backend/scripts/pms_epic_c_public_domain_smoke.sh | grep "API_BASE_URL OR HOST"
+# Expected: Should find the updated env var documentation
+```
+
+**Verification (After Update):**
+```bash
+# Test with API_BASE_URL (preferred)
+API_BASE_URL=https://api.fewo.kolibri-visions.de \
+JWT_TOKEN="<your-jwt>" \
+./backend/scripts/pms_epic_c_public_domain_smoke.sh
+echo "rc=$?"
+
+# Expected output:
+# ℹ Test 1: GET domain status (auth required)
+# ✅ Test 1 PASSED: GET domain status returned 200 (...)
+# ℹ PUBLIC_DOMAIN not set, skipping mutation tests (save/verify)
+# ℹ Summary: 1 passed, 0 failed
+# rc=0
+
+# Test with HOST (backward compatible)
+HOST=https://api.fewo.kolibri-visions.de \
+JWT_TOKEN="<your-jwt>" \
+./backend/scripts/pms_epic_c_public_domain_smoke.sh
+echo "rc=$?"
+
+# Expected: Same output, rc=0
+```
+
+**Expected Behavior (After Fix):**
+- All tests pass → rc=0
+- Any test fails → rc=1 (but script continues and shows summary)
+- Config error (missing env vars) → rc=2
+- Script always prints summary before exiting
+- Failures show HTTP code + first 200 chars of response body
+
+---
