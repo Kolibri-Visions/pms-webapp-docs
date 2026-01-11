@@ -27105,4 +27105,16 @@ PUBLIC_HOST=fewo.kolibri-visions.de \
 # Expected: rc=0, all 6 tests pass (Test 5 no longer fails with 500)
 ```
 
+### PROD Verification Evidence (2026-01-11)
+
+**Status:** ✅ VERIFIED in production
+
+**Evidence:**
+- **Source Commit:** d5e92fa8dd4fca874e61a6ccafb76933a351b6b2 (verified via /api/v1/ops/version)
+- **Deploy Verification:** `backend/scripts/pms_verify_deploy.sh` rc=0 (commit match exact)
+- **Epic C Smoke Test:** `backend/scripts/pms_epic_c_public_website_smoke.sh` rc=0 (all 6 tests passed)
+- **Agency:** ffd0123a-10b6-40cd-8ad5-66eee9757ab7
+- **Stats:** 7 pages, 10 properties, fractional bathrooms supported
+- **Conclusion:** Epic C fully operational in production at https://api.fewo.kolibri-visions.de with tenant resolution via fewo.kolibri-visions.de
+
 ---

@@ -5496,7 +5496,24 @@ echo "rc=$?"
 
 **Scope:** Public-facing website with block-based CMS, white-label customization per agency, and comprehensive SEO stack (metadata, JSON-LD, robots.txt, sitemap.xml).
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
+
+**PROD Verification Evidence:**
+- **Verification Date:** 2026-01-11
+- **Service:** pms-backend
+- **API Base URL:** https://api.fewo.kolibri-visions.de
+- **Public Host (tenant resolution):** fewo.kolibri-visions.de
+- **Source Commit:** d5e92fa8dd4fca874e61a6ccafb76933a351b6b2 (verified via /api/v1/ops/version)
+- **Started At:** 2026-01-11T15:53:04.566071+00:00
+- **Deploy Verification:** `backend/scripts/pms_verify_deploy.sh` rc=0 (commit match exact)
+- **Epic C Smoke Test:** `backend/scripts/pms_epic_c_public_website_smoke.sh` rc=0
+  - Test 1: Public ping OK
+  - Test 2: Settings retrieved (agency: ffd0123a-10b6-40cd-8ad5-66eee9757ab7)
+  - Test 3: Found 7 pages (includes 'home')
+  - Test 4: Home page retrieved (blocks present)
+  - Test 5: Properties list retrieved (10 properties)
+  - Test 6: Property detail retrieved (fractional bathrooms supported)
+- **Result:** All tests passed, Epic C fully operational in production
 
 **Features Implemented:**
 
