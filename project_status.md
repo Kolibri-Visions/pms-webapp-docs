@@ -5205,3 +5205,113 @@ done
 
 ---
 
+## Epic A — Admin UI: Organisation & Team Production-Grade Polish
+
+**Implementation Date:** 2026-01-11
+
+**Scope:** Production-grade UI enhancements for Epic A admin pages (/organisation and /team) with polished components, loading states, dialogs, and feedback mechanisms.
+
+**Status:** ✅ IMPLEMENTED
+
+**Features Implemented:**
+
+1. **Organisation Page (`/organisation`) Enhancements:**
+   - Dialog-based editing for agency name (replaces inline editing)
+   - Copy-to-clipboard button for Organisation ID with visual feedback (Copy → Check icon toggle)
+   - Loading skeletons with animate-pulse placeholders
+   - Toast notifications (success/error banners with 5s auto-dismiss)
+   - Styled error banners (no raw error dumps)
+   - Improved visual hierarchy (Building2 icon, typography, spacing)
+   - All fields displayed: Name, Organisations-ID, Erstellt am, E-Mail, Abonnement
+   - "Nicht festgelegt" placeholders for null values (email, subscription_tier)
+
+2. **Team Page (`/team`) Enhancements:**
+   - Two-card sectioned layout: "Mitglieder (N)" and "Einladungen (N)"
+   - Copy-to-clipboard buttons for emails and User IDs with Check icon feedback
+   - Role badges with color coding: Admin (purple), Agent (blue), Owner (green)
+   - Status badges for invites: Ausstehend (yellow), Akzeptiert (green), Widerrufen (gray)
+   - Loading skeletons with animated placeholders
+   - Empty states with icons ("Keine Teammitglieder", "Keine Einladungen")
+   - Custom dialog component for invite revocation confirmation (replaces window.confirm())
+   - Toast notifications for all actions (replaces alert())
+   - Enhanced invite dialog with improved styling and validation
+   - Note displayed: "Rollenänderungen folgen in einer späteren Phase"
+
+3. **UI Components (No External Dependencies):**
+   - Custom Dialog: Fixed overlay (`fixed inset-0 z-50`) + modal card pattern
+   - Toast Banners: Conditional styling with 5s auto-dismiss timers
+   - Badges: Tailwind utility classes (`inline-flex items-center px-2.5 py-0.5 rounded-full`)
+   - Skeleton Loaders: CSS animations (`bg-gray-200 animate-pulse`)
+   - Copy Buttons: lucide-react icons (Copy/Check) with state-based rendering
+   - No shadcn/ui, @radix-ui, or external toast libraries used
+
+4. **Documentation Updates:**
+   - **Runbook** (`backend/docs/ops/runbook.md`):
+     - New section: "UI Polish (Production-Grade Organisation & Team Pages)"
+     - Browser verification checklists for both pages (12-step Team page checklist)
+     - Troubleshooting guide: clipboard permissions, toast auto-dismiss, dialog centering, role badge mapping
+     - Mobile responsiveness notes
+     - Performance considerations (skeleton flicker, toast cleanup, dialog rendering)
+
+**Files Changed:**
+- `frontend/app/organisation/page.tsx`: Dialog editing, copy button, skeletons, toasts
+- `frontend/app/team/page.tsx`: Sectioned layout, badges, dialogs, copy buttons, empty states
+- `backend/docs/ops/runbook.md`: Added "UI Polish" section (line 25946)
+
+**Verification (PROD):**
+
+**Manual Browser Verification Required** (no automated UI smoke tests for frontend components):
+
+1. **Organisation Page** (`https://admin.fewo.kolibri-visions.de/organisation`):
+   - ✅ Loading skeleton appears during data fetch
+   - ✅ Page renders with AdminShell (sidebar + topbar visible)
+   - ✅ Copy button next to Organisation ID shows "Kopiert" feedback
+   - ✅ Click "Bearbeiten" → dialog opens (not inline editing)
+   - ✅ Submit edit → toast appears, auto-dismisses after 5s
+   - ✅ All fields display correctly (null values show "Nicht festgelegt")
+
+2. **Team Page** (`https://admin.fewo.kolibri-visions.de/team`):
+   - ✅ Two sections visible: "Mitglieder (N)" and "Einladungen (N)"
+   - ✅ Role badges show correct colors (Admin=purple, Agent=blue, Owner=green)
+   - ✅ Copy buttons work with Check icon feedback (reverts after 2s)
+   - ✅ Click "Mitglied einladen" → dialog opens (not browser prompt)
+   - ✅ Submit invite → toast appears, list updates
+   - ✅ Click "Widerrufen" → confirmation dialog appears (not window.confirm)
+   - ✅ Empty states show when no members/invites
+   - ✅ Actions column shows: "Rollenänderungen folgen in einer späteren Phase"
+
+**Automated Verification (Backend APIs only):**
+
+```bash
+# [HOST-SERVER-TERMINAL] Verify deployment
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+# Expected: rc=0, commit match
+
+# [HOST-SERVER-TERMINAL] Run Epic A API smoke test (UI changes do not affect API)
+export JWT_TOKEN="<<<admin JWT token>>>"
+./backend/scripts/pms_epic_a_onboarding_rbac_smoke.sh
+# Expected: rc=0, all 6 tests pass
+```
+
+**Notes:**
+- **Status**: Marked as IMPLEMENTED (not VERIFIED) because no automated PROD verification exists for frontend UI components (skeletons, dialogs, toasts, badges)
+- Backend API smoke test (`pms_epic_a_onboarding_rbac_smoke.sh`) validates API correctness but does not test UI rendering or client-side interactions
+- Manual browser verification checklist provided in runbook for QA/stakeholder sign-off
+- Build verified: TypeScript compilation passes, no new runtime errors introduced
+
+**Dependencies:**
+- Epic A backend APIs: `/api/v1/agencies/current`, `/api/v1/team/members`, `/api/v1/team/invites`
+- Epic A smoke script: `backend/scripts/pms_epic_a_onboarding_rbac_smoke.sh`
+- AdminShell layout pattern (sidebar + topbar chrome)
+- lucide-react icons: Building2, Users, Mail, UserPlus, Copy, Check
+- Tailwind CSS (no additional dependencies)
+
+**Related Entries:**
+- [Epic A: Onboarding & RBAC] - Base implementation with API endpoints and minimal UI
+- [Epic A — AdminShell Layout Fix] - Route-level layouts ensuring sidebar/topbar rendering
+
+---
+
