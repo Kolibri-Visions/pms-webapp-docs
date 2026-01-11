@@ -26612,3 +26612,230 @@ echo "rc=$?"
 - **Quote step returns HTTP 422**: Pricing quote endpoint is best-effort in current setup. Smoke script treats non-200 responses as WARNING and continues (until Pricing v1 is finalized). This does not block booking request flow.
 
 ---
+
+## Epic C — Public Website v1 (White-Label, Block-Based CMS + SEO)
+
+**Overview:** Public-facing website with block-based CMS, white-label customization, and full SEO stack.
+
+**Purpose:** Provide agencies with a customizable public website for showcasing properties, enabling direct booking funnel integration, and SEO optimization.
+
+**Architecture:**
+- **Database**: `public_site_settings` (white-label config), `public_site_pages` (block-based CMS pages)
+- **Backend API**: Public endpoints for site settings, pages, and properties (tenant-scoped via domain)
+- **Frontend**: Next.js public layout with block renderer, SEO components (robots.txt, sitemap.xml, metadata, JSON-LD)
+- **Block System**: Flexible content blocks (hero_search, usp_grid, rich_text, faq, etc.) stored as JSONB
+
+**Frontend Routes:**
+- `/` - Home page (renders blocks from slug=home)
+- `/p/[slug]` - Generic CMS pages (kontakt, faq, angebote, impressum, datenschutz)
+- `/unterkuenfte` - Properties listing page
+- `/unterkuenfte/[id]` - Property detail page with booking CTA
+- `/robots.txt` - Dynamic robots.txt (per tenant)
+- `/sitemap.xml` - Dynamic sitemap.xml (pages + properties per tenant)
+
+**API Endpoints (Public, No Auth):**
+- `GET /api/v1/public/site/settings` - Get site settings (theme, contact, nav, SEO defaults)
+- `GET /api/v1/public/site/pages` - List published pages
+- `GET /api/v1/public/site/pages/{slug}` - Get page by slug (title, meta, blocks)
+- `GET /api/v1/public/properties?limit=&offset=&q=` - List public properties
+- `GET /api/v1/public/properties/{id}` - Get property details
+
+**Database Tables:**
+- `public_site_settings` - White-label configuration per agency (site_name, colors, contact, nav, footer_links, seo_defaults)
+- `public_site_pages` - Block-based CMS pages per agency (slug, title, meta, blocks JSONB, is_published)
+- `properties.is_public` - Boolean flag for public website visibility (default true)
+
+**Migration:** `20260111000001_add_epic_c_public_website.sql`
+
+**Smoke Script:** `backend/scripts/pms_epic_c_public_website_smoke.sh`
+
+**Customization (Supabase SQL Editor):**
+
+To customize site content, edit the JSONB blocks in `public_site_pages`:
+
+```sql
+-- Example: Update home page headline
+UPDATE public_site_pages
+SET blocks = jsonb_set(
+    blocks,
+    '{0,props,headline}',
+    '"Willkommen in unserem Ferienparadies"'
+)
+WHERE slug = 'home' AND agency_id = '<your-agency-id>';
+
+-- Example: Add new FAQ item
+UPDATE public_site_pages
+SET blocks = jsonb_set(
+    blocks,
+    '{1,props,items}',
+    blocks->'1'->'props'->'items' || '[{"question": "Neue Frage?", "answer": "Antwort hier."}]'::jsonb
+)
+WHERE slug = 'faq' AND agency_id = '<your-agency-id>';
+
+-- Example: Update site settings
+UPDATE public_site_settings
+SET 
+    site_name = 'Meine Ferienvermietung',
+    phone = '+49 123 456789',
+    email = 'info@beispiel.de',
+    primary_color = '#1e40af',
+    accent_color = '#3b82f6'
+WHERE agency_id = '<your-agency-id>';
+```
+
+**Supported Block Types:**
+- `hero_search` - Hero section with headline, subheadline, CTA
+- `usp_grid` - Grid of USPs/features (icon, title, text)
+- `rich_text` - HTML content block
+- `contact_cta` - Contact CTA with phone/email
+- `faq` - FAQ accordion (question, answer pairs)
+- `featured_properties` - Property grid (auto-fetches from API)
+
+**Verification Commands:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# [HOST-SERVER-TERMINAL] Optional: Verify deploy after Coolify redeploy
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# [HOST-SERVER-TERMINAL] Run Epic C smoke test
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+# Optional: export PUBLIC_HOST="fewo.kolibri-visions.de"
+./backend/scripts/pms_epic_c_public_website_smoke.sh
+echo "rc=$?"
+
+# Expected output: All 6 tests pass (or 5 if no properties), rc=0
+```
+
+**Manual Browser Verification:**
+
+1. **Home Page** (`https://<domain>/`):
+   - ✅ Hero section renders with headline and CTA
+   - ✅ USP grid displays features
+   - ✅ Navigation shows Unterkünfte, FAQ, Kontakt
+   - ✅ Footer displays contact info and legal links
+
+2. **Properties Listing** (`https://<domain>/unterkuenfte`):
+   - ✅ Page blocks render (if configured)
+   - ✅ Properties grid displays available properties
+   - ✅ Click property → navigates to detail page
+
+3. **Property Detail** (`https://<domain>/unterkuenfte/<id>`):
+   - ✅ Property name, city, facts display
+   - ✅ Description renders
+   - ✅ "Jetzt anfragen" CTA links to /buchung?property_id=<id>
+
+4. **Generic Pages** (`https://<domain>/p/kontakt`, `/p/faq`):
+   - ✅ Content blocks render correctly
+   - ✅ FAQ accordion works
+   - ✅ Contact CTA displays phone/email
+
+5. **SEO** (`https://<domain>/robots.txt`, `/sitemap.xml`):
+   - ✅ robots.txt returns with sitemap reference
+   - ✅ sitemap.xml includes all published pages and properties
+
+**Common Issues:**
+
+### Site Settings Return Default Values
+
+**Symptom:** GET /api/v1/public/site/settings returns generic defaults instead of customized settings.
+
+**Root Cause:** No settings row exists for agency, or tenant resolution failed.
+
+**How to Debug:**
+```bash
+# Check if settings exist
+psql $DATABASE_URL -c "SELECT agency_id, site_name FROM public_site_settings WHERE agency_id = '<agency-id>';"
+
+# Test tenant resolution with explicit headers
+curl -H "X-Forwarded-Host: <customer-domain>" \
+     -H "Origin: https://<customer-domain>" \
+     https://api.fewo.kolibri-visions.de/api/v1/public/site/settings | jq '.agency_id'
+```
+
+**Solution:**
+- Ensure `public_site_settings` row exists for agency (migration seeds defaults)
+- Verify tenant resolution headers: `X-Forwarded-Host` and `Origin` must match customer domain
+- Check `agency_domains` table has mapping for custom domain
+
+### Home Page Returns 404
+
+**Symptom:** GET /api/v1/public/site/pages/home returns 404.
+
+**Root Cause:** Migration did not seed default pages, or page was unpublished/deleted.
+
+**How to Debug:**
+```bash
+# Check if home page exists
+psql $DATABASE_URL -c "SELECT slug, title, is_published FROM public_site_pages WHERE slug = 'home' AND agency_id = '<agency-id>';"
+```
+
+**Solution:**
+- Re-run migration seeding (idempotent): `psql $DATABASE_URL < supabase/migrations/20260111000001_add_epic_c_public_website.sql`
+- Or manually insert home page:
+  ```sql
+  INSERT INTO public_site_pages (agency_id, slug, title, blocks, is_published)
+  VALUES ('<agency-id>', 'home', 'Willkommen', '[]'::jsonb, true);
+  ```
+
+### Properties Not Showing on Public Website
+
+**Symptom:** GET /api/v1/public/properties returns empty array.
+
+**Root Cause:** All properties have `is_public = false`, or no properties exist for agency.
+
+**How to Debug:**
+```bash
+# Check properties count and is_public status
+psql $DATABASE_URL -c "SELECT id, name, is_public FROM properties WHERE agency_id = '<agency-id>' LIMIT 10;"
+```
+
+**Solution:**
+- Set `is_public = true` for properties: `UPDATE properties SET is_public = true WHERE agency_id = '<agency-id>';`
+- Verify properties table has rows for the agency
+
+### Sitemap.xml Empty or Errors
+
+**Symptom:** /sitemap.xml returns empty or malformed XML.
+
+**Root Cause:** API fetch failed, or no published pages/properties available.
+
+**How to Debug:**
+```bash
+# Test sitemap endpoint
+curl https://<domain>/sitemap.xml
+
+# Check if pages exist
+curl -H "X-Forwarded-Host: <domain>" https://api.fewo.kolibri-visions.de/api/v1/public/site/pages | jq '.'
+```
+
+**Solution:**
+- Ensure API is accessible from frontend (NEXT_PUBLIC_API_BASE or same-domain deployment)
+- Verify published pages exist: `SELECT slug FROM public_site_pages WHERE is_published = true;`
+- Check network logs for API fetch errors
+
+### Block Renderer Shows "Unknown block type"
+
+**Symptom:** Frontend displays yellow "Unknown block type: X" placeholders.
+
+**Root Cause:** Block type in database not implemented in BlockRenderer component.
+
+**How to Debug:**
+```bash
+# Check which block types are used
+psql $DATABASE_URL -c "
+  SELECT DISTINCT jsonb_array_elements(blocks)->>'type' AS block_type
+  FROM public_site_pages
+  WHERE agency_id = '<agency-id>';
+"
+```
+
+**Solution:**
+- Implement missing block type in `frontend/app/(public)/components/BlockRenderer.tsx`
+- Or update database to use supported block types (hero_search, usp_grid, rich_text, contact_cta, faq, featured_properties)
+
+---

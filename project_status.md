@@ -5489,3 +5489,175 @@ echo "rc=$?"
 
 ---
 
+
+# Epic C: Public Website v1 (White-Label, Block-Based CMS + SEO)
+
+**Implementation Date:** 2026-01-11
+
+**Scope:** Public-facing website with block-based CMS, white-label customization per agency, and comprehensive SEO stack (metadata, JSON-LD, robots.txt, sitemap.xml).
+
+**Status:** ✅ IMPLEMENTED
+
+**Features Implemented:**
+
+1. **Database Schema** (Migration: `20260111000001_add_epic_c_public_website.sql`):
+   - `public_site_settings` table: White-label configuration (site_name, logo_url, colors, contact, nav, footer_links, seo_defaults)
+   - `public_site_pages` table: Block-based CMS pages (slug, title, meta_title, meta_description, blocks JSONB, is_published)
+   - `properties.is_public` column: Public website visibility filter (default true)
+   - Seeded default pages for all agencies: home, unterkuenfte, kontakt, faq, angebote, impressum, datenschutz
+   - Idempotent migration with ON CONFLICT DO NOTHING for safe re-runs
+
+2. **Backend API Routes** (`backend/app/api/routes/public_site.py`):
+   - `GET /api/v1/public/site/settings` - Get site settings (theme, contact, nav, SEO defaults, with safe fallbacks)
+   - `GET /api/v1/public/site/pages` - List published pages
+   - `GET /api/v1/public/site/pages/{slug}` - Get page by slug (title, meta, blocks)
+   - `GET /api/v1/public/properties?limit=&offset=&q=` - List public properties (safe fields only)
+   - `GET /api/v1/public/properties/{id}` - Get property details (safe fields only)
+   - All endpoints tenant-scoped via domain resolution (X-Forwarded-Host/Origin headers)
+   - Public access (no authentication required)
+
+3. **Frontend Public Website** (Next.js App Router):
+   - Public layout: `frontend/app/(public)/layout.tsx` - Header/nav/footer with dynamic site settings
+   - Home page: `frontend/app/(public)/page.tsx` - Renders blocks from slug=home
+   - Generic CMS page: `frontend/app/(public)/p/[slug]/page.tsx` - Renders any CMS page (kontakt, faq, etc.)
+   - Properties listing: `frontend/app/(public)/unterkuenfte/page.tsx` - Page blocks + property grid
+   - Property detail: `frontend/app/(public)/unterkuenfte/[id]/page.tsx` - Property info + booking CTA
+   - Block renderer: `frontend/app/(public)/components/BlockRenderer.tsx` - Supports hero_search, usp_grid, rich_text, contact_cta, faq, featured_properties
+   - Unknown block types: Safe placeholder in dev, nothing in prod
+
+4. **SEO Components**:
+   - Dynamic robots.txt: `frontend/app/robots.txt/route.ts` - Per-tenant robots.txt with sitemap reference
+   - Dynamic sitemap.xml: `frontend/app/sitemap.xml/route.ts` - Auto-generated from published pages + properties
+   - Metadata: Next.js generateMetadata pattern (TODO: not implemented in this commit, pages use client-side only)
+   - JSON-LD: Placeholder for Organization/LocalBusiness (TODO: not implemented in this commit)
+   - Image alt attributes: Required in block components
+   - H1 usage: Proper heading structure in blocks
+
+5. **Smoke Script** (`backend/scripts/pms_epic_c_public_website_smoke.sh`):
+   - Test 1: Public ping health check
+   - Test 2: Get site settings (validates agency_id field)
+   - Test 3: List pages (validates includes "home" page)
+   - Test 4: Get home page (validates blocks array)
+   - Test 5: List properties (validates JSON response)
+   - Test 6: Get property detail (if properties exist)
+   - Supports PUBLIC_HOST env var for tenant resolution headers
+   - Exit codes: rc=0 success, rc=1+ failures
+
+6. **Documentation** (DOCS SAFE MODE - add-only):
+   - **Runbook** (`backend/docs/ops/runbook.md`):
+     - New section: "Epic C — Public Website v1" (appended at end)
+     - Architecture, routes, API endpoints, database tables, migration
+     - Customization guide: SQL examples for editing blocks and settings
+     - Supported block types list
+     - Verification commands for PROD
+     - Troubleshooting: 5 common issues with debugging steps
+
+   - **Project Status** (`backend/docs/project_status.md`):
+     - New section: "Epic C: Public Website v1"
+     - Status: IMPLEMENTED (pending PROD verification)
+     - How to Verify in PROD steps
+
+**Files Changed:**
+- Backend:
+  - `supabase/migrations/20260111000001_add_epic_c_public_website.sql` - Database schema + seeds
+  - `backend/app/schemas/public_site.py` - Pydantic schemas
+  - `backend/app/api/routes/public_site.py` - Public API routes
+  - `backend/app/main.py` - Router registration (failsafe + fallback)
+  - `backend/scripts/pms_epic_c_public_website_smoke.sh` - Smoke test script
+
+- Frontend:
+  - `frontend/app/(public)/layout.tsx` - Public layout with nav/footer
+  - `frontend/app/(public)/page.tsx` - Home page
+  - `frontend/app/(public)/p/[slug]/page.tsx` - Generic CMS page renderer
+  - `frontend/app/(public)/unterkuenfte/page.tsx` - Properties listing
+  - `frontend/app/(public)/unterkuenfte/[id]/page.tsx` - Property detail
+  - `frontend/app/(public)/components/BlockRenderer.tsx` - Block components
+  - `frontend/app/robots.txt/route.ts` - Dynamic robots.txt
+  - `frontend/app/sitemap.xml/route.ts` - Dynamic sitemap.xml
+
+- Documentation:
+  - `backend/docs/ops/runbook.md` - Added Epic C section
+  - `backend/docs/project_status.md` - Added Epic C entry
+
+**How to Verify in PROD:**
+
+**Automated Backend Smoke Test:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# [HOST-SERVER-TERMINAL] Optional: Verify deploy after Coolify redeploy
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+# Expected: rc=0, commit match
+
+# [HOST-SERVER-TERMINAL] Run Epic C smoke test
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+# Optional: export PUBLIC_HOST="fewo.kolibri-visions.de"
+./backend/scripts/pms_epic_c_public_website_smoke.sh
+echo "rc=$?"
+
+# Expected output: All 6 tests pass (or 5 if no properties), rc=0
+```
+
+**Manual Browser Verification:**
+
+1. **Home Page** (`https://<domain>/`):
+   - ✅ Hero section renders with headline and CTA
+   - ✅ USP grid displays features
+   - ✅ Navigation shows Unterkünfte, FAQ, Kontakt
+   - ✅ Footer displays contact info and legal links
+
+2. **Properties Listing** (`https://<domain>/unterkuenfte`):
+   - ✅ Properties grid displays available properties
+   - ✅ Click property → navigates to detail page
+
+3. **Property Detail** (`https://<domain>/unterkuenfte/<id>`):
+   - ✅ Property info displays (name, city, facts, description)
+   - ✅ "Jetzt anfragen" CTA links to /buchung?property_id=<id>
+
+4. **Generic Pages** (`https://<domain>/p/kontakt`, `/p/faq`):
+   - ✅ Content blocks render correctly
+   - ✅ FAQ items display
+
+5. **SEO** (`https://<domain>/robots.txt`, `/sitemap.xml`):
+   - ✅ robots.txt returns with sitemap reference
+   - ✅ sitemap.xml includes all published pages and properties
+
+**Required Evidence for VERIFIED Status:**
+- Deploy verification: pms_verify_deploy.sh (rc=0, commit match)
+- Smoke test: pms_epic_c_public_website_smoke.sh (rc=0)
+- Manual browser verification: All 5 checklist items pass
+- PROD URL: Evidence of live public website accessible on customer domain
+
+**Notes:**
+- **Status**: Marked as IMPLEMENTED (not VERIFIED) pending PROD deployment and verification
+- Migration is idempotent (safe to run multiple times with ON CONFLICT DO NOTHING)
+- SEO metadata and JSON-LD not fully implemented (TODO: add generateMetadata and JSON-LD structured data)
+- Block renderer supports 6 core block types (hero_search, usp_grid, rich_text, contact_cta, faq, featured_properties)
+- Customization requires Supabase SQL Editor access (no admin UI for block editing in this epic)
+- Images/amenities fields empty (no images/amenities tables in current schema)
+
+**Dependencies:**
+- Migration: `20260111000001_add_epic_c_public_website.sql`
+- Existing tenant resolution: `resolve_agency_id_for_public_endpoint`
+- Existing public middleware: `public_anti_abuse_guard`, `enforce_host_allowlist`
+- Frontend: Next.js 14 App Router, Tailwind CSS, lucide-react icons
+- Smoke script: bash, curl, jq
+
+**Related Entries:**
+- [P3 Public Direct Booking Hardening (Consolidated)] - Public booking endpoints (integrated with Epic C CTA)
+- [Epic B: Direct Booking Funnel] - Booking request flow (CTA destination from property detail)
+
+**Customization Examples:**
+
+See runbook section "Epic C — Public Website v1" for SQL examples to:
+- Update home page headline
+- Add FAQ items
+- Update site settings (name, colors, contact)
+- Change navigation links
+
+---
+
