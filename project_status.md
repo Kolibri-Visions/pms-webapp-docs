@@ -5723,7 +5723,21 @@ See runbook section "Epic C — Public Website v1" for SQL examples to:
 
 **Scope:** Post-verification production hardening for Epic C public website APIs: caching headers, pagination support, SEO file edge cases.
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
+
+**PROD Verification Evidence:**
+- **Verification Date:** 2026-01-11
+- **Service:** pms-backend
+- **API Base URL:** https://api.fewo.kolibri-visions.de
+- **Public Host (tenant resolution):** fewo.kolibri-visions.de
+- **Source Commit:** 854c2736e715a71665114fa3d9013fdbba135bf7 (verified via /api/v1/ops/version)
+- **Started At:** 2026-01-11T19:34:05.001562+00:00
+- **Deploy Verification:** `backend/scripts/pms_verify_deploy.sh` rc=0 (commit match exact)
+- **Epic C Smoke Test:** `backend/scripts/pms_epic_c_public_website_smoke.sh` rc=0
+  - All 8 tests passed (Tests 1-6: existing Epic C, Tests 7-8: robots.txt + sitemap.xml from backend root routes)
+  - Test 7: GET /robots.txt returns 200 with Sitemap reference
+  - Test 8: GET /sitemap.xml returns 200 with valid XML structure
+- **Result:** Epic C Post-Verification Hardening fully operational in production. Backend serves robots.txt and sitemap.xml at root with tenant-aware headers. Cache-Control headers verified. Pagination backward compatible. Domain verify endpoint fixed (httpx exceptions corrected).
 
 **Features Implemented:**
 
