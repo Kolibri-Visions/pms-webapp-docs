@@ -5824,3 +5824,31 @@ See runbook section "Epic C — Public Website v1" for SQL examples to:
 - [Epic C: Public Website v1] - Public website CMS and SEO stack (domain is target for custom branding)
 
 ---
+
+**Fix Applied (2026-01-11 - Router Mounting):**
+- Fixed 404 errors on public domain endpoints by adding router to failsafe mounting section
+- Root cause: public_domain_admin router was only mounted in fallback section (MODULES_ENABLED=false), not in failsafe section (MODULES_ENABLED=true, the default in PROD)
+- Solution: Added public_domain_admin_routes_exist check and mounting logic to failsafe section in main.py
+- Router now mounts via failsafe mechanism when MODULES_ENABLED=true (checks for /api/v1/public-site/domain path existence)
+- Added smoke script: backend/scripts/pms_epic_c_public_domain_smoke.sh (read-only by default, full test if PUBLIC_DOMAIN env var set)
+- Added troubleshooting section "Public Domain Endpoints Return 404" to runbook with OpenAPI verification commands
+- Status remains IMPLEMENTED (awaiting PROD verification after deployment)
+
+**Smoke Script:**
+- `backend/scripts/pms_epic_c_public_domain_smoke.sh`
+- Requires: HOST, JWT_TOKEN
+- Optional: PUBLIC_DOMAIN (for save/verify tests)
+- Default mode: Read-only (GET status only, safe for PROD)
+- Full mode: GET + PUT + POST verify (accepts 200 or 409, never 500)
+- Documented in backend/scripts/README.md
+
+**Files Changed (Fix):**
+- Backend:
+  - `backend/app/main.py` (MODIFIED) - Added public_domain_admin to failsafe section
+  - `backend/scripts/pms_epic_c_public_domain_smoke.sh` (NEW) - Smoke test script
+- Documentation:
+  - `backend/scripts/README.md` (ADD-ONLY) - Smoke script documentation
+  - `backend/docs/ops/runbook.md` (ADD-ONLY) - Troubleshooting section for 404 errors
+  - `backend/docs/project_status.md` (ADD-ONLY) - This fix note
+
+---

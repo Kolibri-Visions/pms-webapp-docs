@@ -27283,3 +27283,58 @@ psql $DATABASE_URL -c "SELECT agency_id, domain, is_primary, validated_at FROM a
 - For local development, use ngrok or similar tunneling service
 
 ---
+
+### Public Domain Endpoints Return 404
+
+**Symptom:** GET/PUT/POST /api/v1/public-site/domain* returns 404. OpenAPI schema does not include /public-site/domain paths.
+
+**Root Cause:** Router not mounted. The public_domain_admin router must be included in the FastAPI app via failsafe mechanism (when MODULES_ENABLED=true) or fallback (when MODULES_ENABLED=false).
+
+**How to Debug:**
+```bash
+# Check if endpoints exist in OpenAPI schema
+curl -s https://api.fewo.kolibri-visions.de/openapi.json | jq '.paths | keys[]' | grep public-site/domain
+# Expected: /api/v1/public-site/domain, /api/v1/public-site/domain/verify
+# If empty: Router not mounted
+
+# Check backend logs for router mounting
+docker logs pms-backend --tail 100 | grep "Public domain admin"
+# Expected: "✅ Failsafe: Public domain admin router mounted at /api/v1/public-site"
+# OR: "✅ Public domain admin router already mounted via module system"
+# If missing: Router mounting logic not executed
+
+# Test endpoint with curl (should return 401/403 without token, not 404)
+curl -I https://api.fewo.kolibri-visions.de/api/v1/public-site/domain
+# Expected: HTTP 401 Unauthorized OR HTTP 403 Forbidden
+# Got 404: Router not mounted
+```
+
+**Solution:**
+1. Verify main.py includes public_domain_admin in failsafe section:
+   ```bash
+   rg -A 3 "public_domain_admin_routes_exist" backend/app/main.py
+   # Should show: any(route.path == "/api/v1/public-site/domain" for route in app.routes)
+   ```
+
+2. Verify import statement in failsafe section:
+   ```bash
+   rg "from .api.routes import.*public_domain_admin" backend/app/main.py
+   # Should show: from .api.routes import public_booking, public_site, public_domain_admin
+   ```
+
+3. Verify mounting logic in failsafe section:
+   ```bash
+   rg -A 2 "if not public_domain_admin_routes_exist" backend/app/main.py
+   # Should show: app.include_router(public_domain_admin.router, prefix="/api/v1/public-site", ...)
+   ```
+
+4. Redeploy backend (trigger rebuild via Coolify or git push)
+
+5. Verify router mounted:
+   ```bash
+   # Check OpenAPI again after redeploy
+   curl -s https://api.fewo.kolibri-visions.de/openapi.json | jq '.paths | keys[]' | grep public-site/domain
+   # Expected: /api/v1/public-site/domain, /api/v1/public-site/domain/verify
+   ```
+
+---
