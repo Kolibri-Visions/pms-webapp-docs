@@ -25942,6 +25942,170 @@ docker exec pms-admin env | grep NEXT_PUBLIC_API_BASE
 - **401/403 errors**: Verify user is logged in and has admin role
 - **Layout props undefined**: Check `getAuthenticatedUser()` returns all required fields (role, name, agencyName)
 
+
+### UI Polish (Production-Grade Organisation & Team Pages)
+
+**Overview:** Enhanced Organisation and Team pages with production-grade UI components, replacing basic MVP implementation.
+
+**Improvements Implemented:**
+
+**Organisation Page (`/organisation`):**
+- ✅ Dialog-based editing (replaces inline editing)
+- ✅ Copy-to-clipboard button for Organisation ID (with visual feedback)
+- ✅ Loading skeletons (animated placeholders during data fetch)
+- ✅ Toast notifications (success/error banners with auto-dismiss)
+- ✅ Error banners (styled error states)
+- ✅ Improved visual hierarchy (icons, typography, spacing)
+- ✅ All fields displayed: Name, Organisations-ID, Erstellt am, E-Mail, Abonnement
+- ✅ "Nicht festgelegt" placeholders for null values
+
+**Team Page (`/team`):**
+- ✅ Sectioned layout: Mitglieder (Members) + Einladungen (Invitations) as separate cards
+- ✅ Copy-to-clipboard buttons for emails and user IDs (with visual feedback)
+- ✅ Role badges (color-coded: Admin = purple, Agent = blue, Owner = green)
+- ✅ Status badges for invites (Ausstehend = yellow, Akzeptiert = green, Widerrufen = gray)
+- ✅ Loading skeletons (animated placeholders)
+- ✅ Empty states with icons ("Keine Teammitglieder", "Keine Einladungen")
+- ✅ Replaced `window.confirm()` with dialog component for invite revocation
+- ✅ Replaced `alert()` with toast notifications (success/error banners)
+- ✅ Enhanced invite dialog (improved styling and validation)
+- ✅ Note: "Rollenänderungen folgen in einer späteren Phase" shown in actions column
+
+**UI Components Used:**
+- Custom Dialog: Fixed overlay (`fixed inset-0 z-50`) + modal card pattern
+- Toast Banners: Conditional styling (green for success, red for error) with auto-dismiss (5s timeout)
+- Badges: Inline `<span>` with Tailwind utility classes (`inline-flex items-center px-2.5 py-0.5 rounded-full`)
+- Skeleton Loaders: `bg-gray-200 animate-pulse` divs with varying widths/heights
+- Copy Buttons: `lucide-react` icons (Copy/Check) with state-based rendering
+
+**No External UI Libraries:**
+- ❌ No shadcn/ui (not installed)
+- ❌ No @radix-ui components
+- ❌ No sonner/react-hot-toast
+- ✅ All components custom-built with Tailwind CSS + lucide-react icons
+
+**Browser Verification Checklist:**
+
+**Organisation Page:**
+1. Navigate to `/organisation` (admin-only)
+2. ✅ Loading skeleton appears briefly during data fetch
+3. ✅ Page shows agency details with Building2 icon header
+4. ✅ Copy button next to Organisation ID works (shows "Kopiert" feedback)
+5. ✅ Click "Bearbeiten" → opens dialog (not inline editing)
+6. ✅ Submit edit → toast appears with success message, auto-dismisses after 5s
+7. ✅ Error state: disconnect internet → reload → shows red error banner
+
+**Team Page:**
+1. Navigate to `/team` (admin-only)
+2. ✅ Loading skeleton appears briefly during data fetch
+3. ✅ Page shows two sections: "Mitglieder (N)" and "Einladungen (N)"
+4. ✅ Members table shows email or User-ID with copy buttons
+5. ✅ Role badges show correct colors (Admin = purple, Agent = blue, Owner = green)
+6. ✅ Copy button works (icon changes to Check, reverts after 2s)
+7. ✅ Click "Mitglied einladen" → opens dialog (not browser modal)
+8. ✅ Submit invite → dialog closes, toast appears, invites list updates
+9. ✅ Click "Widerrufen" on pending invite → confirmation dialog appears
+10. ✅ Confirm revoke → toast appears, invite removed from list
+11. ✅ Empty state: remove all members/invites → shows icon + "Keine Teammitglieder/Einladungen"
+12. ✅ Actions column shows: "Rollenänderungen folgen in einer späteren Phase"
+
+**Troubleshooting:**
+
+**Symptom:** Copy button doesn't work (no feedback, clipboard empty)
+
+**Root Cause:** `navigator.clipboard.writeText()` requires HTTPS or localhost (not supported on HTTP).
+
+**How to Debug:**
+```bash
+# Check browser console for clipboard errors
+# Open DevTools → Console → look for "Failed to copy" or "clipboard-write permission denied"
+```
+
+**Solution:**
+- Ensure site is served over HTTPS (production: `https://admin.fewo.kolibri-visions.de`)
+- Localhost development: works on `http://localhost:3000`
+- HTTP deployment: clipboard API will fail silently, fallback not implemented (would require manual `<textarea>` copy workaround)
+
+**Symptom:** Toast messages don't auto-dismiss (stuck on screen)
+
+**Root Cause:** JavaScript timers (`setTimeout`) not firing or component unmounting before timeout.
+
+**How to Debug:**
+```bash
+# Check browser console for React strict mode warnings
+# Check if user navigates away from page before 5s timeout
+```
+
+**Solution:**
+- Toast timeout set to 5000ms (5 seconds) for success, same for errors
+- If navigating away quickly, toast may not dismiss (expected behavior)
+- No cleanup on unmount currently implemented (toast state tied to page component)
+
+**Symptom:** Dialogs not centered on mobile (off-screen)
+
+**Root Cause:** Fixed positioning with `flex items-center justify-center` requires viewport height awareness on mobile browsers with URL bar behavior.
+
+**How to Debug:**
+```bash
+# Test on mobile device or Chrome DevTools mobile emulation
+# Check if dialog appears above/below viewport center when URL bar hides/shows
+```
+
+**Solution:**
+- Current implementation uses `fixed inset-0` which should handle viewport correctly
+- If issue persists: add `mx-4` (horizontal margin) to dialog card for mobile padding (already implemented)
+- No additional mobile fixes needed for MVP
+
+**Symptom:** Loading skeletons flicker (appear and disappear too fast)
+
+**Root Cause:** API response is very fast (<100ms), skeleton briefly visible causing flicker.
+
+**How to Debug:**
+```bash
+# Check Network tab in DevTools → see API response time
+# If < 200ms, skeleton may flicker
+```
+
+**Solution:**
+- Acceptable behavior for fast API responses (shows system is performant)
+- To prevent flicker: add minimum loading delay (e.g., `await new Promise(r => setTimeout(r, 300))`)
+- Not implemented in MVP (prefer fast loading over artificial delays)
+
+**Symptom:** Role badges show wrong colors or labels
+
+**Root Cause:** Backend returns role string not matching frontend badge mapping.
+
+**How to Debug:**
+```bash
+# Check API response: GET /api/v1/team/members
+# Verify role values are exactly "admin", "agent", or "owner" (lowercase)
+```
+
+**Solution:**
+- Badge mapping defined in `getRoleBadge()` function (frontend/app/team/page.tsx:105-123)
+- Supported roles: admin (purple), agent (blue), owner (green)
+- Unknown roles fall back to gray badge with raw role string
+- Ensure backend returns lowercase role strings
+
+**Mobile Responsiveness:**
+
+**Organisation Page:**
+- ✅ Copy button: shows icon + "Kopieren" text on desktop, icon only on mobile would be better but text included for clarity
+- ✅ Dialog: max-width constraint + `mx-4` padding prevents overflow on small screens
+- ✅ Fields: single column layout (no grid on mobile) for better readability
+
+**Team Page:**
+- ✅ Header: flex-col on mobile (button stacks below title), flex-row on desktop
+- ✅ Tables: `overflow-x-auto` wrapper allows horizontal scroll on narrow screens
+- ✅ Copy buttons: icon-only (compact) for space efficiency
+- ✅ Dialogs: max-width constraint + `mx-4` padding prevents overflow
+
+**Performance Notes:**
+- Skeleton loaders: pure CSS animations (no JavaScript), negligible performance impact
+- Copy-to-clipboard: native browser API (no external library), instant execution
+- Toast auto-dismiss: single `setTimeout` per toast, cleaned up with state update
+- Dialog rendering: conditional (`{dialog && ...}`), not rendered when closed (no hidden DOM overhead)
+
 ### PROD Schema Drift Fix (Epic A)
 
 **Overview:** During Epic A deployment to production, schema drift was discovered where the migration file had syntax errors and missing columns. This section documents the symptoms, resolution, and verification.
