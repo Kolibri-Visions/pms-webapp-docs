@@ -26940,4 +26940,58 @@ rg -B 2 -A 2 "resolve_agency_id_for_public_endpoint\(" backend/app/api/routes/
 
 **Related:** Tenant resolution uses X-Forwarded-Host (preferred) or Host header to resolve agency_id via `agency_domains` table. Ensure TRUST_PROXY_HEADERS is set correctly and agency has a domain mapping in the database.
 
+### Smoke Test 6 Fails with jq Parsing Error
+
+**Symptom:** Epic C smoke script fails at Test 6 with error: `jq: Cannot index object with number`. Tests 1-5 pass successfully (settings, pages, home, properties list).
+
+**Root Cause:** Smoke script assumed properties list endpoint returns a plain array `[{...}]`, but may encounter paginated object response `{items: [...], total: N}` or error object. The jq expression `.[0].id` fails when response is an object structure instead of array.
+
+**How to Debug:**
+```bash
+# Test properties list endpoint directly
+curl -sS \
+  -H "X-Forwarded-Host: fewo.kolibri-visions.de" \
+  -H "Origin: https://fewo.kolibri-visions.de" \
+  "https://api.fewo.kolibri-visions.de/api/v1/public/properties?limit=10" | jq 'type'
+
+# Should return: "array" or "object"
+
+# If object, check structure
+curl -sS \
+  -H "X-Forwarded-Host: fewo.kolibri-visions.de" \
+  -H "Origin: https://fewo.kolibri-visions.de" \
+  "https://api.fewo.kolibri-visions.de/api/v1/public/properties?limit=10" | jq 'keys'
+
+# If array, check first element
+curl -sS \
+  -H "X-Forwarded-Host: fewo.kolibri-visions.de" \
+  -H "Origin: https://fewo.kolibri-visions.de" \
+  "https://api.fewo.kolibri-visions.de/api/v1/public/properties?limit=10" | jq '.[0] | keys'
+```
+
+**Fix Applied:**
+- Smoke script now handles both response shapes:
+  - Plain array: `[{id:...}, {id:...}]`
+  - Paginated object: `{items: [{id:...}], total: N}`
+- Added HTTP status code checks for Test 5 (properties list)
+- Added robust validation for Test 6 (property detail):
+  - Validates response is object with `.id` field
+  - Verifies returned ID matches requested ID
+  - Shows truncated response body (first 200 chars) on errors for debugging
+- No API contract changes needed (endpoint returns array as designed)
+
+**Verification:**
+```bash
+# Run smoke script with enhanced diagnostics
+API_BASE_URL=https://api.fewo.kolibri-visions.de \
+PUBLIC_HOST=fewo.kolibri-visions.de \
+./backend/scripts/pms_epic_c_public_website_smoke.sh
+
+# Expected: All 6 tests pass, rc=0
+# If Test 6 fails, script now shows:
+# - HTTP status code
+# - Response shape (object vs array)
+# - First 200 chars of response body
+```
+
 ---

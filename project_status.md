@@ -5594,6 +5594,17 @@ echo "rc=$?"
 - Added defensive runtime guard: `if not hasattr(request, 'headers')` raises RuntimeError with actionable message
 - Added troubleshooting section "API Endpoints Return 500 Internal Server Error" to runbook
 
+**Fix Applied (2026-01-11 - Smoke Script Hardening):**
+- Hardened Epic C smoke script to handle property detail parsing robustly
+- Root cause: Script assumed properties list returns plain array `[{...}]`, failed with `jq: Cannot index object with number` error when parsing property ID
+- Solution: Enhanced Test 5 and Test 6 with:
+  - HTTP status code validation for both list and detail requests
+  - Fallback jq logic to handle both array `[{...}]` and paginated object `{items: [...]}` response shapes
+  - Property detail validation: ensures response is object with `.id` field, verifies returned ID matches requested ID
+  - Enhanced error diagnostics: shows HTTP code, response shape, and truncated body (first 200 chars) on failures
+- Added troubleshooting section "Smoke Test 6 Fails with jq Parsing Error" to runbook
+- No API changes needed (endpoint returns array as designed)
+
 **How to Verify in PROD:**
 
 **Automated Backend Smoke Test:**
