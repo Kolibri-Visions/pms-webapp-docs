@@ -26357,6 +26357,7 @@ curl -X GET "$HOST/api/v1/public/availability?property_id=<property_id>&date_fro
 - Maximum retry attempts: `MAX_WINDOW_TRIES` (default: 10)
 - Only fails if no available window found after all retry attempts
 - Override retry behavior: `SHIFT_DAYS=3 MAX_WINDOW_TRIES=20 ./backend/scripts/pms_epic_b_direct_booking_funnel_smoke.sh`
+- **Important:** `available=false` is treated as normal (not an error) - the script validates field presence and type, then auto-shifts and retries when unavailable
 
 ### Pricing Quote Returns 503 (Service Unavailable)
 
