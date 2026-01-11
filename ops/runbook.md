@@ -26994,4 +26994,56 @@ PUBLIC_HOST=fewo.kolibri-visions.de \
 # - First 200 chars of response body
 ```
 
+### Public Properties Endpoint Returns 500 (Duplicate Currency Kwarg)
+
+**Symptom:** GET /api/v1/public/properties returns 500 Internal Server Error. Backend logs show: `TypeError: PublicPropertyListItem() got multiple values for keyword argument 'currency'` in `backend/app/api/routes/public_site.py` line ~265.
+
+**Root Cause:** Property list endpoint passes `**dict(row)` which already contains `currency` field from SQL SELECT, then also passes `currency=row.get("currency", "EUR")` as a keyword argument, causing duplicate kwarg error. Same issue exists in property detail endpoint.
+
+**How to Debug:**
+```bash
+# Test properties list endpoint (use X-Forwarded-Host, NOT Host header override)
+curl -k -sS -i \
+  -H "X-Forwarded-Host: fewo.kolibri-visions.de" \
+  -H "Origin: https://fewo.kolibri-visions.de" \
+  "https://api.fewo.kolibri-visions.de/api/v1/public/properties?limit=1"
+
+# Expected: HTTP 200 with JSON array
+# If 500, check backend logs for TypeError about duplicate currency kwarg
+
+# GOTCHA: Do NOT override Host header directly (e.g., -H "Host: fewo.kolibri-visions.de")
+# This can cause Traefik 503 "no available server" because Traefik routing uses
+# the Host header to select backend. Always use X-Forwarded-Host for tenant resolution
+# while keeping Host as api.fewo.kolibri-visions.de for routing.
+```
+
+**Fix Applied:**
+- List endpoint (`/api/v1/public/properties`): Refactored to pop `currency` from dict, apply default if null/empty, then set explicitly before passing to model
+- Detail endpoint (`/api/v1/public/properties/{id}`): Same fix applied
+- Pattern:
+  ```python
+  data = dict(row)
+  currency = data.pop("currency", None) or "EUR"
+  data["currency"] = currency
+  return PublicPropertyListItem(**data, images=[])
+  ```
+- Ensures currency defaults to "EUR" if DB value is null/empty, without duplicate kwarg
+
+**Verification:**
+```bash
+# After fix deployed, test properties list
+curl -k -sS -i \
+  -H "X-Forwarded-Host: fewo.kolibri-visions.de" \
+  -H "Origin: https://fewo.kolibri-visions.de" \
+  "https://api.fewo.kolibri-visions.de/api/v1/public/properties?limit=1"
+
+# Expected: HTTP 200 with JSON array containing properties with currency field
+
+# Run Epic C smoke test
+API_BASE_URL=https://api.fewo.kolibri-visions.de \
+PUBLIC_HOST=fewo.kolibri-visions.de \
+./backend/scripts/pms_epic_c_public_website_smoke.sh
+# Expected: rc=0, all 6 tests pass
+```
+
 ---

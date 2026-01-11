@@ -5605,6 +5605,13 @@ echo "rc=$?"
 - Added troubleshooting section "Smoke Test 6 Fails with jq Parsing Error" to runbook
 - No API changes needed (endpoint returns array as designed)
 
+**Fix Applied (2026-01-11 - Public Properties 500 Currency Kwarg):**
+- Fixed duplicate `currency` kwarg causing 500 errors in public properties endpoints
+- Root cause: Both list and detail endpoints passed `**dict(row)` (which includes currency from SQL SELECT) AND `currency=row.get("currency", "EUR")` as separate kwarg, causing TypeError
+- Solution: Refactored to pop `currency` from dict, apply "EUR" default if null/empty, then set explicitly before passing to Pydantic model
+- Affected endpoints: `/api/v1/public/properties` (list) and `/api/v1/public/properties/{id}` (detail)
+- Added troubleshooting section "Public Properties Endpoint Returns 500 (Duplicate Currency Kwarg)" to runbook with Host header gotcha note
+
 **How to Verify in PROD:**
 
 **Automated Backend Smoke Test:**
