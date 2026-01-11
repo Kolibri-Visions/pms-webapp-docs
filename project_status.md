@@ -5322,7 +5322,7 @@ export JWT_TOKEN="<<<admin JWT token>>>"
 
 **Scope:** End-to-end direct booking workflow enabling public guests to check availability, request pricing quotes, submit booking requests, and staff to review/approve/decline requests for confirmation.
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
 
 **Features Implemented:**
 
@@ -5471,6 +5471,21 @@ echo "rc=$?"
 - **Availability Logic**: Checks property_availability table + overlapping bookings (excludes canceled/declined)
 - **Guest Auto-Creation**: Public booking request endpoint auto-creates guest profile if email doesn't exist in agency
 - **Pricing Best-Effort**: Quote endpoint may return 503 if pricing rules not configured (smoke script continues on 503)
+
+**PROD Verification Evidence (Verified: 2026-01-11):**
+- **Verification Date**: 2026-01-11
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Deployed Commit**: 9016fad5fb6980b122697bc855e7b1c708ea9d67
+- **Started At**: 2026-01-11T10:45:05.266237+00:00
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh` (rc=0, commit match)
+- **Smoke Test**: `backend/scripts/pms_epic_b_direct_booking_funnel_smoke.sh` (rc=0)
+  - Window shifting handled `available=false` (reason: double_booking) until available
+  - Property: 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
+  - Dates: 2026-02-08 → 2026-02-11
+  - Booking Request ID: e9645066-5776-4fdc-a0b5-689e23507ace
+  - Booking ID: e9645066-5776-4fdc-a0b5-689e23507ace
+  - Result: confirmed
+- **Note**: Quote step is best-effort; current smoke tolerates HTTP 422 as WARNING (documented).
 
 ---
 

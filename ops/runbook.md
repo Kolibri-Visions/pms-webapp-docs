@@ -26568,4 +26568,47 @@ command -v gdate
 - Override date window manually: `DATE_FROM=2026-04-01 DATE_TO=2026-04-05 ./backend/scripts/pms_epic_b_direct_booking_funnel_smoke.sh`
 - Increase max attempts: `MAX_WINDOW_TRIES=20 SHIFT_DAYS=3 ./backend/scripts/pms_epic_b_direct_booking_funnel_smoke.sh`
 
+### PROD Verification (2026-01-11)
+
+**Deployment Verified:**
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Deployed Commit**: 9016fad5fb6980b122697bc855e7b1c708ea9d67
+- **Started At**: 2026-01-11T10:45:05.266237+00:00
+
+**Verification Commands:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Check deployed version
+curl -sS https://api.fewo.kolibri-visions.de/api/v1/ops/version | jq '.'
+# Expected: source_commit matches deployed commit above
+
+# [HOST-SERVER-TERMINAL] Verify deploy (commit match)
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+# Expected: rc=0, ✅ Deployment verified (commit match)
+
+# [HOST-SERVER-TERMINAL] Run Epic B smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<manager/admin JWT token>>>"
+./backend/scripts/pms_epic_b_direct_booking_funnel_smoke.sh
+echo "rc=$?"
+# Expected: rc=0, all 7 tests pass
+```
+
+**Verified Test Results (2026-01-11):**
+- ✅ Test 1 PASSED: Auto-picked property 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
+- ✅ Test 2 PASSED: Property available for 2026-02-08 to 2026-02-11 (after auto-shifting from 2026-02-01 due to `available=false` reason: double_booking)
+- ⚠️ Test 3 WARNING: Quote endpoint returned HTTP 422 (best-effort endpoint, smoke continues)
+- ✅ Test 4 PASSED: Created booking request e9645066-5776-4fdc-a0b5-689e23507ace
+- ✅ Test 5 PASSED: Booking request marked as under_review
+- ✅ Test 6 PASSED: Booking request approved (booking_id: e9645066-5776-4fdc-a0b5-689e23507ace)
+- ✅ Test 7 PASSED: Booking verified (status: confirmed)
+- **Result**: rc=0 (all critical tests passed)
+
+**Troubleshooting Notes:**
+- **Availability `available=false` responses**: Script automatically shifts date window forward by SHIFT_DAYS (default: 7) and retries up to MAX_WINDOW_TRIES (default: 10). This is expected behavior when dates are unavailable due to double_booking, blocked, or maintenance reasons.
+- **Quote step returns HTTP 422**: Pricing quote endpoint is best-effort in current setup. Smoke script treats non-200 responses as WARNING and continues (until Pricing v1 is finalized). This does not block booking request flow.
+
 ---
