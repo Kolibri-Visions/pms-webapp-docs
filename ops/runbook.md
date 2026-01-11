@@ -25908,6 +25908,40 @@ docker exec pms-admin env | grep NEXT_PUBLIC_API_BASE
 - Ensure pages use `apiClient` from `lib/api-client.ts` (not direct fetch)
 - Clear browser cache and hard refresh (Cmd+Shift+R / Ctrl+F5)
 
+#### Organisation/Team Layout Fix (AdminShell)
+
+**Symptom:** When navigating to `/organisation` or `/team`, pages render without sidebar/topbar (no AdminShell chrome).
+
+**Root Cause:** Missing route-level layout.tsx files that wrap page content in AdminShell component.
+
+**Fix Applied:**
+- Created `frontend/app/organisation/layout.tsx`
+- Created `frontend/app/team/layout.tsx`
+- Both layouts follow established pattern from `frontend/app/profile/layout.tsx`:
+  - Call `getAuthenticatedUser()` for auth guard
+  - Wrap children in `<AdminShell>` with userRole, userName, agencyName props
+  - Set `export const dynamic = "force-dynamic"` for SSR
+
+**Verification Checklist (Browser):**
+1. Open Admin UI: https://admin.fewo.kolibri-visions.de
+2. Log in as admin user
+3. Navigate to sidebar → Einstellungen → Organisation
+   - ✅ Sidebar visible with navigation
+   - ✅ Topbar shows page title "Organisation"
+   - ✅ Agency details card displays: Name (editable), Organisations-ID, Erstellt am, E-Mail, Abonnement
+4. Navigate to sidebar → Einstellungen → Team
+   - ✅ Sidebar visible with navigation
+   - ✅ Topbar shows page title "Team"
+   - ✅ Team members table shows "E-Mail / User-ID" column header
+   - ✅ UUID entries display as "User-ID: ..." in muted smaller text
+   - ✅ Email entries display normally
+5. No console errors or missing styles
+
+**Common Failures:**
+- **Pages still missing chrome**: Hard refresh browser (Cmd+Shift+R / Ctrl+F5) to clear Next.js cache
+- **401/403 errors**: Verify user is logged in and has admin role
+- **Layout props undefined**: Check `getAuthenticatedUser()` returns all required fields (role, name, agencyName)
+
 ### PROD Schema Drift Fix (Epic A)
 
 **Overview:** During Epic A deployment to production, schema drift was discovered where the migration file had syntax errors and missing columns. This section documents the symptoms, resolution, and verification.

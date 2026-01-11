@@ -5135,6 +5135,17 @@ done
 - **Migration File Updated**: `supabase/migrations/20260111000000_add_epic_a_team_rbac.sql` now syntactically valid with idempotent partial index creation (DO $$ block checking pg_indexes)
 - **Post-Fix Verification**: All Epic A endpoints return 200/201, agencies table includes email/subscription_tier columns
 
+**UI Layout Fix (Admin UI Chrome):**
+- **Issue**: `/organisation` and `/team` pages rendered without AdminShell (missing sidebar/topbar)
+- **Fix Applied**: Created route-level layouts (`frontend/app/organisation/layout.tsx`, `frontend/app/team/layout.tsx`) following established pattern
+- **Status**: Implemented, requires browser verification (not covered by automated smoke tests)
+- **UI Improvements**: Organisation page now displays Agency ID, Created At, Email, Subscription tier; Team page table column relabeled "E-Mail / User-ID" with improved UUID display
+- **Verification**: Manual browser testing required - see runbook "Organisation/Team Layout Fix" section
+
+**Note on VERIFIED Status:**
+- Backend APIs, database schema, and smoke tests: ✅ VERIFIED in PROD (automated)
+- Admin UI functionality: Implemented and functional, requires manual browser verification
+
 **Features Implemented:**
 
 1. **Database Migration** (`supabase/migrations/20260111000000_add_epic_a_team_rbac.sql`):
