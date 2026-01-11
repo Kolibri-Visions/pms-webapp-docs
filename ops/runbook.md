@@ -25908,4 +25908,145 @@ docker exec pms-admin env | grep NEXT_PUBLIC_API_BASE
 - Ensure pages use `apiClient` from `lib/api-client.ts` (not direct fetch)
 - Clear browser cache and hard refresh (Cmd+Shift+R / Ctrl+F5)
 
+### PROD Schema Drift Fix (Epic A)
+
+**Overview:** During Epic A deployment to production, schema drift was discovered where the migration file had syntax errors and missing columns. This section documents the symptoms, resolution, and verification.
+
+**Symptoms (API Errors in PROD):**
+- GET /api/v1/agencies/current → 503 Service Unavailable
+  - Error detail: `column agencies.email does not exist`
+  - Error detail: `column agencies.subscription_tier does not exist`
+- POST /api/v1/team/invites → 503 Service Unavailable
+  - Error detail: `relation "team_invites" does not exist`
+- Migration file `20260111000000_add_epic_a_team_rbac.sql` fails with syntax error:
+  - `syntax error at or near "WHERE"` (line 72: invalid WHERE clause on UNIQUE constraint)
+
+**Root Cause:**
+1. Migration file had invalid SQL syntax:
+   - Table-level UNIQUE constraint with WHERE clause (not supported in PostgreSQL)
+   - Should be a partial unique index created separately
+2. Migration did not create agencies.email and agencies.subscription_tier columns
+3. PROD database was missing team_invites and team_members tables entirely
+
+**Fix Applied:**
+
+**[Supabase SQL Editor]** Applied schema patch:
+```sql
+-- Add missing agencies columns
+ALTER TABLE agencies ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE agencies ADD COLUMN IF NOT EXISTS subscription_tier TEXT;
+
+-- Create team_members table (if missing)
+CREATE TABLE IF NOT EXISTS team_members (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('admin', 'agent', 'owner')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT team_members_agency_user_unique UNIQUE (agency_id, user_id)
+);
+
+-- Create team_invites table (if missing)
+CREATE TABLE IF NOT EXISTS team_invites (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  invited_by_user_id UUID NOT NULL,
+  email TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('admin', 'agent', 'owner')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'revoked')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  accepted_at TIMESTAMPTZ,
+  revoked_at TIMESTAMPTZ
+);
+
+-- Create partial unique index for pending invites (idempotent)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_indexes
+    WHERE schemaname = 'public'
+      AND tablename = 'team_invites'
+      AND indexname = 'team_invites_agency_email_pending_unique'
+  ) THEN
+    CREATE UNIQUE INDEX team_invites_agency_email_pending_unique
+      ON team_invites(agency_id, LOWER(email))
+      WHERE status = 'pending';
+  END IF;
+END $$;
+
+-- Create indexes
+CREATE INDEX IF NOT EXISTS team_members_agency_id_idx ON team_members(agency_id);
+CREATE INDEX IF NOT EXISTS team_invites_agency_id_idx ON team_invites(agency_id);
+CREATE INDEX IF NOT EXISTS team_invites_agency_status_idx ON team_invites(agency_id, status);
+```
+
+**Verification Steps:**
+
+**[HOST-SERVER-TERMINAL]** Recheck Epic A endpoints:
+```bash
+# 1. Check agencies endpoint
+curl -i -X GET "https://api.fewo.kolibri-visions.de/api/v1/agencies/current" \
+  -H "Authorization: Bearer $JWT_TOKEN"
+# Expected: 200 OK with {"id": "...", "name": "...", "email": null, "subscription_tier": null}
+
+# 2. Check team invites endpoint
+curl -i -X GET "https://api.fewo.kolibri-visions.de/api/v1/team/invites" \
+  -H "Authorization: Bearer $JWT_TOKEN"
+# Expected: 200 OK with {"invites": [], "total": 0}
+
+# 3. Run full Epic A smoke test
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<admin JWT token>>>"
+cd /data/repos/pms-webapp
+./backend/scripts/pms_epic_a_onboarding_rbac_smoke.sh
+echo "rc=$?"
+# Expected: All 6 tests pass, rc=0
+```
+
+**PROD Verification (2026-01-11):**
+
+**Backend Deployment:**
+- API Base URL: https://api.fewo.kolibri-visions.de
+- Deployed Commit: `3d0e1ca9390b209a5bbdaeea69e02bb284a8159e`
+- Started At: 2026-01-10T22:20:05.387167+00:00
+- Source: GET /api/v1/ops/version
+
+**Deploy Verification:**
+```bash
+# pms_verify_deploy.sh rc=0 (commit match)
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+EXPECT_COMMIT=3d0e1ca9390b209a5bbdaeea69e02bb284a8159e ./backend/scripts/pms_verify_deploy.sh
+# Output: ✅ Deployment verified (commit match)
+```
+
+**Epic A Smoke Test:**
+```bash
+# pms_epic_a_onboarding_rbac_smoke.sh rc=0
+./backend/scripts/pms_epic_a_onboarding_rbac_smoke.sh
+# Output:
+#   ✅ Test 1 PASSED: /me returned user_id=..., role=admin
+#   ✅ Test 2 PASSED: Agency name=Kolibri Visions Agency
+#   ✅ Test 3 PASSED: Invite created with id=...
+#   ✅ Test 4 PASSED: Found 1 invite(s)
+#   ✅ Test 5 PASSED: Found 1 member(s)
+#   ✅ Test 6 PASSED: Invite revoked
+#   ✅ All Epic A smoke tests passed! 🎉
+```
+
+**Endpoints Verified:**
+- ✅ GET /api/v1/me → 200 (user identity)
+- ✅ GET /api/v1/agencies/current → 200 (agency details with email/subscription_tier)
+- ✅ POST /api/v1/team/invites → 201 (create invitation)
+- ✅ GET /api/v1/team/invites → 200 (list invitations)
+- ✅ GET /api/v1/team/members → 200 (list team members)
+- ✅ POST /api/v1/team/invites/{id}/revoke → 200 (revoke invitation)
+
+**Migration File Fix:**
+- Updated `supabase/migrations/20260111000000_add_epic_a_team_rbac.sql`
+- Fixed syntax error: removed invalid WHERE clause from UNIQUE constraint
+- Added partial unique index creation with idempotent DO $$ block
+- Added agencies.email and agencies.subscription_tier columns (IF NOT EXISTS)
+- Migration now runnable from scratch for new installations
+
 ---

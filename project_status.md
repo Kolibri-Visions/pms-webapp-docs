@@ -5102,7 +5102,38 @@ done
 
 **Scope:** Multi-tenant team management with role-based access control (RBAC), team member invitations, and agency settings management for collaborative workflows.
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
+
+**PROD Verification Evidence:**
+
+**Verification Date:** 2026-01-11
+
+**Backend Deployment:**
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Deployed Commit**: `3d0e1ca9390b209a5bbdaeea69e02bb284a8159e`
+- **Started At**: 2026-01-10T22:20:05.387167+00:00
+- **Source**: GET /api/v1/ops/version
+
+**Automated Verification:**
+1. **Deploy Verification** (`pms_verify_deploy.sh`):
+   - Commit match: ✅ `3d0e1ca9390b209a5bbdaeea69e02bb284a8159e`
+   - Exit code: `rc=0`
+
+2. **Epic A Smoke Test** (`pms_epic_a_onboarding_rbac_smoke.sh`):
+   - Exit code: `rc=0`
+   - All 6 tests passed:
+     - ✅ Test 1: GET /api/v1/me → 200 (user identity)
+     - ✅ Test 2: GET /api/v1/agencies/current → 200 (agency name: "Kolibri Visions Agency")
+     - ✅ Test 3: POST /api/v1/team/invites → 201 (create invitation)
+     - ✅ Test 4: GET /api/v1/team/invites → 200 (list invitations)
+     - ✅ Test 5: GET /api/v1/team/members → 200 (list members)
+     - ✅ Test 6: POST /api/v1/team/invites/{id}/revoke → 200 (revoke invitation)
+
+**Schema Drift Resolution:**
+- **Issue**: Migration file had syntax error (invalid WHERE clause on UNIQUE constraint), missing agencies.email/subscription_tier columns
+- **Fix Applied** [Supabase SQL Editor]: Added missing columns, created team_members/team_invites tables with correct partial unique index
+- **Migration File Updated**: `supabase/migrations/20260111000000_add_epic_a_team_rbac.sql` now syntactically valid with idempotent partial index creation (DO $$ block checking pg_indexes)
+- **Post-Fix Verification**: All Epic A endpoints return 200/201, agencies table includes email/subscription_tier columns
 
 **Features Implemented:**
 
