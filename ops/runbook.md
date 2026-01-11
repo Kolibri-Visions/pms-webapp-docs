@@ -27338,3 +27338,92 @@ curl -I https://api.fewo.kolibri-visions.de/api/v1/public-site/domain
    ```
 
 ---
+
+### GET /api/v1/public-site/domain Returns 500 (Agency ID Resolution)
+
+**Symptom:** GET/PUT/POST /api/v1/public-site/domain* returns 500 with traceback:
+```
+TypeError: one of the hex, bytes, bytes_le, fields, or int arguments must be given
+File "/app/app/api/routes/public_domain_admin.py", line 92:
+  agency_id = UUID(current_user["agency_id"])
+```
+
+**Root Cause:** JWT does not include `agency_id` claim. The endpoint tried to extract `current_user["agency_id"]` directly, which raised TypeError when the key was missing or None.
+
+**How It's Fixed:**
+Endpoints now use `get_current_agency_id()` dependency which implements robust agency resolution:
+1. JWT claim "agency_id" (if present)
+2. x-agency-id header (validated via team_members membership)
+3. Auto-detect if user has exactly one agency membership
+4. Otherwise raise 400/403 with actionable error message
+
+**Resolution Flow:**
+- **JWT has agency_id claim**: Use it directly (fastest path)
+- **JWT + x-agency-id header**: Validate user is member of specified agency (multi-tenant)
+- **JWT + no header + 1 membership**: Auto-detect agency (convenience)
+- **JWT + no header + 0 memberships**: 400 "user has no agency memberships, set x-agency-id header"
+- **JWT + no header + 2+ memberships**: 400 "user has N memberships, set x-agency-id header"
+
+**How to Debug:**
+```bash
+# Decode JWT to check for agency_id claim
+echo $JWT_TOKEN | cut -d'.' -f2 | base64 -d | jq '.agency_id'
+# Output: "ffd0123a-10b6-40cd-8ad5-66eee9757ab7" OR null
+
+# If null, check user's agency memberships
+export USER_ID=$(echo $JWT_TOKEN | cut -d'.' -f2 | base64 -d | jq -r '.sub')
+psql $DATABASE_URL -c "SELECT agency_id FROM team_members WHERE user_id = '$USER_ID';"
+
+# If 0 rows: User not assigned to any agency (403)
+# If 1 row: Endpoint auto-detects this agency
+# If 2+ rows: User must send x-agency-id header
+```
+
+**Solution (Single Membership):**
+User is auto-detected:
+```bash
+# No x-agency-id header needed
+curl -X GET https://api.fewo.kolibri-visions.de/api/v1/public-site/domain \
+  -H "Authorization: Bearer $JWT_TOKEN"
+# Expected: 200 OK with domain status
+```
+
+**Solution (Multiple Memberships):**
+User must specify agency:
+```bash
+# Get user's agency memberships
+psql $DATABASE_URL -c "SELECT agency_id FROM team_members WHERE user_id = '$USER_ID';"
+
+# Pick one agency and use x-agency-id header
+curl -X GET https://api.fewo.kolibri-visions.de/api/v1/public-site/domain \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "x-agency-id: ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+# Expected: 200 OK with domain status for specified agency
+```
+
+**Solution (No Memberships):**
+Contact admin to add user to agency:
+```sql
+-- Admin assigns user to agency via team_members
+INSERT INTO team_members (agency_id, user_id, role) 
+VALUES ('ffd0123a-10b6-40cd-8ad5-66eee9757ab7', '<user_id>', 'staff');
+```
+
+**Expected Errors (After Fix):**
+- **400 Bad Request**: "Cannot resolve agency: user has N agency memberships. Please set x-agency-id header."
+- **403 Forbidden**: "Access denied: user is not a member of agency <uuid>" (invalid x-agency-id)
+- **Not 500**: Agency resolution never raises unhandled TypeError
+
+**Verification:**
+```bash
+# Test with JWT that has no agency_id claim
+curl -X GET https://api.fewo.kolibri-visions.de/api/v1/public-site/domain \
+  -H "Authorization: Bearer $JWT_TOKEN"
+
+# Expected (single membership): 200 OK
+# Expected (multiple memberships): 400 with actionable message
+# Expected (no memberships): 400 with actionable message
+# NOT expected: 500 with TypeError
+```
+
+---

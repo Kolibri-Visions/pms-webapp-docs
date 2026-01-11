@@ -5852,3 +5852,36 @@ See runbook section "Epic C — Public Website v1" for SQL examples to:
   - `backend/docs/project_status.md` (ADD-ONLY) - This fix note
 
 ---
+
+**Fix Applied (2026-01-11 - Agency ID Resolution):**
+- Fixed 500 errors on public domain endpoints caused by missing agency_id JWT claim
+- Root cause: Endpoints directly accessed `current_user["agency_id"]` which raised TypeError when JWT lacked the claim
+- Solution: Replaced manual extraction with `get_current_agency_id()` dependency (robust multi-tenant resolution)
+- Agency resolution order:
+  1. JWT claim "agency_id" (if present)
+  2. x-agency-id header (validated via team_members membership)
+  3. Auto-detect if user has exactly one agency membership
+  4. Raise 400/403 with actionable error if ambiguous or unauthorized
+- All three endpoints now handle missing agency_id claim gracefully:
+  - GET /api/v1/public-site/domain
+  - PUT /api/v1/public-site/domain
+  - POST /api/v1/public-site/domain/verify
+- Added troubleshooting section "GET /api/v1/public-site/domain Returns 500 (Agency ID Resolution)" to runbook
+- Status remains IMPLEMENTED (awaiting PROD verification after deployment)
+
+**Expected Behavior After Fix:**
+- JWT with agency_id claim: Works as before (fastest path)
+- JWT without agency_id claim + single membership: Auto-detected (convenient)
+- JWT without agency_id claim + multiple memberships: 400 "Please set x-agency-id header"
+- JWT without agency_id claim + no memberships: 400 "user has no agency memberships"
+- Invalid x-agency-id header: 403 "user is not a member of agency <uuid>"
+- Never 500 with TypeError: Agency resolution is robust
+
+**Files Changed (Fix):**
+- Backend:
+  - `backend/app/api/routes/public_domain_admin.py` (MODIFIED) - Use get_current_agency_id() dependency
+- Documentation:
+  - `backend/docs/ops/runbook.md` (ADD-ONLY) - Troubleshooting section for 500 errors
+  - `backend/docs/project_status.md` (ADD-ONLY) - This fix note
+
+---
