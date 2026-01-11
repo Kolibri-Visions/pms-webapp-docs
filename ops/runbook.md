@@ -27118,3 +27118,168 @@ PUBLIC_HOST=fewo.kolibri-visions.de \
 - **Conclusion:** Epic C fully operational in production at https://api.fewo.kolibri-visions.de with tenant resolution via fewo.kolibri-visions.de
 
 ---
+
+### Public Domain Self-Service (Admin UI)
+
+**Overview:** Agency admins can configure custom domain for public website via Admin UI (/organisation page).
+
+**Purpose:** Allow agencies to use their own domain (e.g., ferienwohnungen-beispiel.de) instead of default subdomain (e.g., fewo.kolibri-visions.de) for their public website.
+
+**Architecture:**
+- **Database Table**: `agency_domains` (id, agency_id, domain, is_primary, validated_at)
+- **Admin API Endpoints** (auth required): GET/PUT/POST for domain status, save, verify
+- **SSRF Protection**: Reject localhost, *.local, private IPs; no redirect following; short timeout
+- **Domain Validation**: Normalize domain (remove protocol/path/port), check uniqueness per agency
+- **Verification**: HTTP/HTTPS GET to https://<domain>/robots.txt with 3s timeout (best-effort)
+
+**Admin UI Location:**
+- **Route**: `/organisation` page (authenticated, admin/manager only)
+- **Section**: "Öffentliche Website" card with domain input, status pill, action buttons
+
+**API Endpoints (Auth Required):**
+- `GET /api/v1/public-site/domain` - Get current domain status (missing/pending/verified)
+- `PUT /api/v1/public-site/domain` - Save/update domain (sets is_primary=true, validated_at=NULL)
+- `POST /api/v1/public-site/domain/verify` - Verify domain reachability (updates validated_at on success)
+
+**Domain Statuses:**
+- **missing**: No domain configured (domain=NULL)
+- **pending**: Domain saved but not yet validated (validated_at=NULL)
+- **verified**: Domain validated (validated_at IS NOT NULL)
+
+**Verification Process:**
+1. User enters domain in Admin UI (e.g., "beispiel.de")
+2. Backend normalizes domain (remove https://, path, port)
+3. Backend validates domain (not private IP, not in use by other agency)
+4. Backend saves domain with is_primary=true, validated_at=NULL (status=pending)
+5. User clicks "Jetzt prüfen" button
+6. Backend attempts HTTP GET to https://<domain>/robots.txt (3s timeout, no redirects)
+7. On success (200/301/302/404): updates validated_at=NOW() (status=verified)
+8. On failure: returns 409 with guidance message
+
+**DNS Setup Requirements:**
+- CNAME record: `<custom-domain>` → `fewo.kolibri-visions.de`
+- OR A/AAAA records pointing to server IP
+- Proxy (Coolify/Traefik): Add custom domain as Host for Public Website app
+- SSL certificate: Automatic via Let's Encrypt (Coolify/Traefik)
+
+**SSRF Protection:**
+- No redirect following (`follow_redirects=False` in httpx)
+- Reject private/local domains: localhost, *.local, 127.*, 10.*, 172.16-31.*, 192.168.*, ::1
+- Short timeout: 3 seconds
+- Domain normalization: strip protocol, path, query, fragment, port
+
+**Verification Commands:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# [HOST-SERVER-TERMINAL] Optional: Verify deploy after Coolify redeploy
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# [LOCAL-TERMINAL] Manual API test (requires manager/admin JWT)
+export HOST="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<your-manager-or-admin-jwt>"
+
+# Get domain status
+curl -X GET "$HOST/api/v1/public-site/domain" \
+  -H "Authorization: Bearer $JWT_TOKEN"
+# Expected: {"domain": null, "status": "missing", ...} OR {"domain": "...", "status": "pending|verified", ...}
+
+# Save domain
+curl -X PUT "$HOST/api/v1/public-site/domain" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"domain": "beispiel.de"}'
+# Expected: 200 OK with {"domain": "beispiel.de", "status": "pending", "validated": false, ...}
+
+# Verify domain
+curl -X POST "$HOST/api/v1/public-site/domain/verify" \
+  -H "Authorization: Bearer $JWT_TOKEN"
+# Expected (success): 200 OK with {"success": true, "status": "verified", ...}
+# Expected (failure): 409 Conflict with guidance message
+
+# UI verification
+# 1. Login to Admin UI: https://admin.fewo.kolibri-visions.de
+# 2. Navigate to /organisation
+# 3. Scroll to "Öffentliche Website" section
+# 4. Enter domain (e.g., "beispiel.de")
+# 5. Click "Speichern" → Should show status "Nicht verifiziert" (yellow pill)
+# 6. Click "Jetzt prüfen" → Should show "Verifiziert" (green pill) if DNS/proxy configured
+# 7. Click "Website öffnen" → Should open https://beispiel.de in new tab
+```
+
+**Common Issues:**
+
+### Domain Verification Fails (409)
+
+**Symptom:** POST /api/v1/public-site/domain/verify returns 409 with "Domain ist nicht erreichbar".
+
+**Root Cause:** DNS not configured, Proxy/Traefik not configured, or SSL certificate missing.
+
+**How to Debug:**
+```bash
+# Check DNS resolution
+dig beispiel.de
+# Expected: A/AAAA records pointing to server IP OR CNAME to fewo.kolibri-visions.de
+
+# Check if domain reachable from outside
+curl -I https://beispiel.de/robots.txt
+# Expected: HTTP 200/301/302/404 (not timeout/connection refused)
+
+# Check Traefik/Coolify configuration (HOST-SERVER-TERMINAL)
+# Ensure domain is added as Host for Public Website app
+
+# Check SSL certificate
+openssl s_client -connect beispiel.de:443 -servername beispiel.de </dev/null 2>/dev/null | openssl x509 -noout -subject -issuer -dates
+# Expected: Valid Let's Encrypt certificate (not expired, not self-signed)
+```
+
+**Solution:**
+1. Configure DNS: Add CNAME record `beispiel.de` → `fewo.kolibri-visions.de`
+2. Configure Proxy: In Coolify, add `beispiel.de` to Public Website app's domains
+3. Wait for DNS propagation (5-60 minutes)
+4. Wait for SSL certificate issuance (automatic via Let's Encrypt, 1-5 minutes)
+5. Retry verification in Admin UI
+
+### Domain Already Used by Another Agency (409)
+
+**Symptom:** PUT /api/v1/public-site/domain returns 409 with "Domain wird bereits von einer anderen Organisation verwendet".
+
+**Root Cause:** Domain already exists in `agency_domains` table for a different agency_id.
+
+**How to Debug:**
+```bash
+# Check if domain exists (DATABASE_URL required)
+psql $DATABASE_URL -c "SELECT agency_id, domain, is_primary, validated_at FROM agency_domains WHERE domain = 'beispiel.de';"
+```
+
+**Solution:**
+- Contact support to reassign domain to correct agency
+- OR use a different domain
+
+### Domain Contains Path/Query/Port (400)
+
+**Symptom:** PUT /api/v1/public-site/domain returns 400 with "Domain darf keinen Pfad/Query/Port enthalten".
+
+**Root Cause:** User entered full URL instead of domain (e.g., "https://beispiel.de/home" instead of "beispiel.de").
+
+**Solution:**
+- Enter only the domain name without protocol, path, query, or port
+- Examples:
+  - ✅ Correct: `beispiel.de`, `www.beispiel.de`
+  - ❌ Wrong: `https://beispiel.de`, `beispiel.de:8080`, `beispiel.de/home`
+
+### Private/Local Domain Rejected (400)
+
+**Symptom:** PUT /api/v1/public-site/domain returns 400 with "Private oder lokale Domains sind nicht erlaubt".
+
+**Root Cause:** SSRF protection rejects localhost, *.local, and private IP addresses.
+
+**Solution:**
+- Use a public domain name (not localhost, not *.local, not 192.168.*, etc.)
+- For local development, use ngrok or similar tunneling service
+
+---

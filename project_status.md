@@ -5718,3 +5718,109 @@ See runbook section "Epic C — Public Website v1" for SQL examples to:
 
 ---
 
+
+### Public Domain Self-Service (Admin UI)
+
+**Implementation Date:** 2026-01-11
+
+**Scope:** Admin UI feature allowing agencies to configure custom domain for public website via /organisation page.
+
+**Status:** ✅ IMPLEMENTED
+
+**Features Implemented:**
+
+1. **Backend API Routes** (`backend/app/api/routes/public_domain_admin.py`):
+   - `GET /api/v1/public-site/domain` - Get domain status (missing/pending/verified)
+   - `PUT /api/v1/public-site/domain` - Save/update domain (normalizes, validates, sets is_primary=true)
+   - `POST /api/v1/public-site/domain/verify` - Verify domain reachability (best-effort HTTP check)
+   - SSRF protection: Reject localhost, *.local, private IPs; no redirect following; 3s timeout
+   - Domain validation: Reject path, query, fragment, port; check uniqueness per agency
+   - Authentication required: Uses `get_current_user()` dependency
+
+2. **Pydantic Schemas** (`backend/app/schemas/public_site.py`):
+   - `PublicDomainResponse` - Domain status response (domain, status, validated, primary, recommended_dns_target)
+   - `PublicDomainSaveRequest` - Save domain request (domain field, min 3 chars)
+   - `PublicDomainVerifyResponse` - Verify response (success, status, message, validated)
+
+3. **Admin UI** (`frontend/app/organisation/page.tsx`):
+   - Added "Öffentliche Website" card section
+   - Domain input field with placeholder "beispiel.de"
+   - DNS setup helper text (CNAME and Proxy/Traefik instructions)
+   - Status pill: Verifiziert (green), Nicht verifiziert (yellow), Nicht konfiguriert (gray)
+   - Action buttons: Speichern, Jetzt prüfen, Website öffnen
+   - Toast notifications for success/error feedback
+   - German labels throughout
+
+4. **Router Registration** (`backend/app/main.py`):
+   - Mounted public_domain_admin router at `/api/v1/public-site` prefix
+   - Tags: ["Public Website", "Admin"]
+
+5. **Documentation** (DOCS SAFE MODE - add-only):
+   - **Runbook** (`backend/docs/ops/runbook.md`):
+     - New subsection: "Public Domain Self-Service (Admin UI)" under Epic C
+     - Architecture, API endpoints, domain statuses, verification process
+     - DNS setup requirements, SSRF protection details
+     - Verification commands for manual API testing and UI testing
+     - Troubleshooting: 5 common issues with debugging steps
+   - **Project Status** (`backend/docs/project_status.md`):
+     - This entry documenting the feature
+
+**Domain Status Logic:**
+- **missing**: No domain configured (domain IS NULL)
+- **pending**: Domain saved but not yet validated (validated_at IS NULL)
+- **verified**: Domain validated (validated_at IS NOT NULL)
+
+**SSRF Protection:**
+- `is_private_or_local()` function rejects: localhost, *.local, 127.*, 10.*, 172.16-31.*, 192.168.*, ::1
+- HTTP verification uses `follow_redirects=False` to prevent SSRF via redirect chains
+- Short timeout: 3 seconds (prevents hanging on unreachable hosts)
+- Verification endpoint accepts 200/301/302/404 as "reachable" (404 = server responds, no robots.txt)
+
+**Domain Normalization:**
+- Remove protocol (https://, http://)
+- Reject path, query, fragment (/, ?, #)
+- Reject port (:8080)
+- Lowercase and trim whitespace
+- Validation: min 3 chars, not private/local
+
+**Verification Process:**
+1. User enters domain in Admin UI (e.g., "beispiel.de")
+2. Backend normalizes domain (remove https://, path, port)
+3. Backend validates domain (not private IP, not in use by other agency)
+4. Backend saves domain with is_primary=true, validated_at=NULL (status=pending)
+5. User clicks "Jetzt prüfen" button
+6. Backend attempts HTTP GET to https://<domain>/robots.txt (3s timeout, no redirects)
+7. On success (200/301/302/404): updates validated_at=NOW() (status=verified)
+8. On failure: returns 409 with guidance message (check DNS, Proxy/Traefik, SSL)
+
+**Database Table:**
+- Existing table: `agency_domains` (id, agency_id, domain, is_primary, validated_at)
+- No migration needed (table already exists from previous epic)
+
+**Files Changed:**
+- Backend:
+  - `backend/app/api/routes/public_domain_admin.py` (NEW) - Admin API endpoints
+  - `backend/app/schemas/public_site.py` (MODIFIED) - Added domain management schemas
+  - `backend/app/main.py` (MODIFIED) - Router registration
+- Frontend:
+  - `frontend/app/organisation/page.tsx` (MODIFIED) - Added Public Website Domain section
+- Documentation:
+  - `backend/docs/ops/runbook.md` (ADD-ONLY) - Appended subsection
+  - `backend/docs/project_status.md` (ADD-ONLY) - This entry
+
+**Notes:**
+- Status remains IMPLEMENTED (not VERIFIED) until PROD deployment and verification
+- No smoke script added (feature is UI-focused, manual verification via Admin UI)
+- DNS setup requires coordination with customer/ops team (CNAME, Proxy/Traefik, SSL)
+- Verification is best-effort (external network requests can fail for valid domains)
+- Domain uniqueness enforced: one domain per agency (409 if domain used by another agency)
+
+**Dependencies:**
+- Existing table: `agency_domains` (from previous migration)
+- Frontend: React state management, useEffect hooks, lucide-react icons
+- Backend: httpx for HTTP requests, asyncpg for database operations
+
+**Related Entries:**
+- [Epic C: Public Website v1] - Public website CMS and SEO stack (domain is target for custom branding)
+
+---
