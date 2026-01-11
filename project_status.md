@@ -5834,6 +5834,7 @@ curl -sS https://fewo.kolibri-visions.de/sitemap.xml | head -5
 - Cache headers improve CDN efficiency and reduce backend load
 - SEO files always return 200 with valid content (never 500)
 - Smoke script now covers SEO file validation
+- **Fix Applied (2026-01-11)**: Backend now serves root routes /robots.txt and /sitemap.xml (no /api/v1 prefix) as fallback, tenant-aware via X-Forwarded-Host. Domain verify endpoint fixed to use correct httpx exceptions (TransportError, TimeoutException, ssl.SSLError instead of non-existent TLSError). Smoke script Tests 7-8 now test backend root routes.
 
 **Dependencies:**
 - Epic C: Public Website v1 (base implementation, must be VERIFIED first)

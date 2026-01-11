@@ -27284,6 +27284,71 @@ curl -sS "https://api.fewo.kolibri-visions.de/api/v1/public/properties?limit=100
 - Always return valid XML (even if empty): `<urlset>` must close even if no pages/properties
 - Verify X-Forwarded-Host and Origin headers passed to API fetch
 
+
+### /robots.txt or /sitemap.xml Returns 404 (Backend)
+
+**Symptom:** GET /robots.txt or /sitemap.xml on backend API returns 404 {"detail":"Not Found"}.
+
+**Root Cause:** Backend root meta router not mounted or mounted with incorrect prefix.
+
+**How to Debug:**
+```bash
+# Test backend root routes with tenant headers
+curl -I https://api.fewo.kolibri-visions.de/robots.txt \
+  -H "X-Forwarded-Host: fewo.kolibri-visions.de"
+# Expected: HTTP 200, Content-Type: text/plain
+
+curl -I https://api.fewo.kolibri-visions.de/sitemap.xml \
+  -H "X-Forwarded-Host: fewo.kolibri-visions.de"
+# Expected: HTTP 200, Content-Type: application/xml
+
+# Check backend logs for router mounting
+# Look for: "Root meta routes mounted at / (robots.txt, sitemap.xml)"
+```
+
+**Solution:**
+- Verify `backend/app/api/routes/public_root_meta.py` exists
+- Verify `backend/app/main.py` imports and mounts the router WITHOUT prefix:
+  ```python
+  from .api.routes import public_root_meta
+  app.include_router(public_root_meta.router)  # NO prefix parameter
+  ```
+- Router must be mounted in BOTH failsafe section (MODULES_ENABLED=true) and fallback section (MODULES_ENABLED=false)
+- Redeploy backend
+
+### Domain Verify Fails with httpx TLSError
+
+**Symptom:** Admin UI "Jetzt prüfen" button fails with "module 'httpx' has no attribute 'TLSError'" or similar AttributeError.
+
+**Root Cause:** httpx.TLSError does not exist in httpx API. Correct exceptions are `httpx.TransportError`, `httpx.TimeoutException`, `ssl.SSLError`.
+
+**How to Debug:**
+```bash
+# Check backend logs for AttributeError traceback
+# Look for: AttributeError: module 'httpx' has no attribute 'TLSError'
+
+# Verify exception handling in domain verify endpoint
+grep "httpx.TLSError" backend/app/api/routes/public_domain_admin.py
+# Should return nothing (TLSError should not be used)
+
+grep "ssl.SSLError" backend/app/api/routes/public_domain_admin.py
+# Should return matches (correct exception)
+```
+
+**Solution:**
+- Import `ssl` module at top of `public_domain_admin.py`
+- Replace exception handling:
+  ```python
+  # WRONG (httpx.TLSError does not exist):
+  except (httpx.TLSError, httpx.ConnectError) as e:
+
+  # CORRECT:
+  except (httpx.TimeoutException, httpx.TransportError, ssl.SSLError) as e:
+  ```
+- Use `timeout=5.0, follow_redirects=True` in AsyncClient for domain verification
+- Only accept HTTP 200 as verified (404 means robots.txt missing, return 409 with actionable message)
+- Redeploy backend
+
 ---
 
 ### Public Domain Self-Service (Admin UI)
