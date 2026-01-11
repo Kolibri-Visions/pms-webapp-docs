@@ -5579,12 +5579,20 @@ echo "rc=$?"
   - `backend/docs/ops/runbook.md` - Added Epic C section
   - `backend/docs/project_status.md` - Added Epic C entry
 
-**Fix Applied (2026-01-11):**
+**Fix Applied (2026-01-11 - Router Mounting):**
 - Fixed router mounting issue where public_site router was not being mounted in production
 - Root cause: Failsafe check was too broad (`route.path.startswith("/api/v1/public")`) - triggered by public_booking routes, preventing public_site from mounting
 - Solution: Changed to check for specific canonical routes (`/api/v1/public/ping`, `/api/v1/public/site/settings`) and mount each router independently
 - Added OpenAPI preflight check to smoke script for earlier detection
 - Added troubleshooting section "API Endpoints Return 404 Not Found" to runbook
+
+**Fix Applied (2026-01-11 - Tenant Resolver):**
+- Fixed tenant resolution argument order causing 500 errors on public site endpoints
+- Root cause: `resolve_agency_id_for_public_endpoint()` had signature `(db, request, ...)` but call sites in `public_site.py` used `(request, conn)` positionally, swapping arguments
+- Symptom: Backend logs showed `'Connection' object has no attribute 'headers'` AttributeError
+- Solution: Changed function signature to `(request: Request, conn, *, property_id=None, trust_proxy=True)` with request FIRST, updated all call sites to match
+- Added defensive runtime guard: `if not hasattr(request, 'headers')` raises RuntimeError with actionable message
+- Added troubleshooting section "API Endpoints Return 500 Internal Server Error" to runbook
 
 **How to Verify in PROD:**
 

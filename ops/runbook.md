@@ -26885,4 +26885,59 @@ curl https://api.fewo.kolibri-visions.de/openapi.json | grep -c "/api/v1/public/
 - Ensure both failsafe and fallback paths mount `public_site.router`
 - Redeploy and verify OpenAPI contains routes before running full smoke test
 
+### API Endpoints Return 500 Internal Server Error
+
+**Symptom:** GET /api/v1/public/site/settings returns 500 with `{"detail":"Internal server error"}`. Backend logs show: `'Connection' object has no attribute 'headers'` or `AttributeError: 'Connection' object has no attribute 'headers'`.
+
+**Root Cause:** Tenant resolution function `resolve_agency_id_for_public_endpoint()` called with swapped arguments. The function expects `(request: Request, conn: Connection, ...)` but was called with `(conn, request, ...)`, causing the Connection object to be passed where Request is expected.
+
+**How to Debug:**
+```bash
+# Check backend logs for the full traceback
+# [Coolify container logs or docker logs <backend-container>]
+# Look for:
+#   - "AttributeError: 'Connection' object has no attribute 'headers'"
+#   - Call stack showing: resolve_agency_id_for_public_endpoint → extract_request_host → request.headers.get
+
+# Verify function signature in backend/app/core/tenant_domain.py
+rg -A 5 "async def resolve_agency_id_for_public_endpoint" backend/app/core/tenant_domain.py
+# Should show: (request: Request, conn, *, property_id=..., trust_proxy=...)
+
+# Verify call sites match signature
+rg -B 2 -A 2 "resolve_agency_id_for_public_endpoint\(" backend/app/api/routes/
+# All calls should use: (request, conn) or (request, db) positionally
+```
+
+**Fix Checklist:**
+1. **Verify function signature** in `backend/app/core/tenant_domain.py`:
+   - Must be: `async def resolve_agency_id_for_public_endpoint(request: Request, conn, *, property_id=None, trust_proxy=True)`
+   - Request MUST be first parameter, connection MUST be second parameter
+
+2. **Verify all call sites** in `backend/app/api/routes/`:
+   - `public_site.py`: Should call with `(request, conn)` positionally
+   - `public_booking.py`: Should call with `(http_request, db, property_id=..., trust_proxy=...)`
+   - NO calls should use `db=db, request=request` with old parameter order
+
+3. **Check defensive guard is present**:
+   - Function should have `if not hasattr(request, 'headers'):` guard at the top
+   - Guard should raise RuntimeError with clear message about swapped args
+
+4. **Verify tenant resolution works**:
+   ```bash
+   # Test with X-Forwarded-Host header
+   curl -sS -i \
+     -H "X-Forwarded-Host: fewo.kolibri-visions.de" \
+     -H "Origin: https://fewo.kolibri-visions.de" \
+     "https://api.fewo.kolibri-visions.de/api/v1/public/site/settings"
+   # Should return HTTP 200 with JSON containing agency_id
+   ```
+
+**Solution:**
+- Update function signature to `(request: Request, conn, *, ...)` with request FIRST
+- Update all call sites to match the signature (positional or named args consistent with new order)
+- Add defensive runtime guard to catch swapped args early
+- Redeploy and verify tenant resolution works with X-Forwarded-Host/Host headers
+
+**Related:** Tenant resolution uses X-Forwarded-Host (preferred) or Host header to resolve agency_id via `agency_domains` table. Ensure TRUST_PROXY_HEADERS is set correctly and agency has a domain mapping in the database.
+
 ---
