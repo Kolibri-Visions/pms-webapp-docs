@@ -5716,6 +5716,132 @@ See runbook section "Epic C — Public Website v1" for SQL examples to:
 - Update site settings (name, colors, contact)
 - Change navigation links
 
+
+## Epic C Post-Verification Hardening
+
+**Implementation Date:** 2026-01-11
+
+**Scope:** Post-verification production hardening for Epic C public website APIs: caching headers, pagination support, SEO file edge cases.
+
+**Status:** ✅ IMPLEMENTED
+
+**Features Implemented:**
+
+1. **Backend Caching Headers** (`backend/app/api/routes/public_site.py`):
+   - Added `Response` parameter to all public GET endpoints
+   - Created `add_cache_headers(response, max_age, stale_while_revalidate)` helper
+   - Site settings/pages: `public, max-age=60, stale-while-revalidate=300` (1 min fresh, 5 min stale)
+   - Properties list/detail: `public, max-age=30, stale-while-revalidate=120` (30s fresh, 2 min stale)
+   - Reduces backend load, improves CDN efficiency
+
+2. **Backward Compatible Pagination** (`backend/app/api/routes/public_site.py`):
+   - Added `PaginatedPropertiesResponse` Pydantic model with `items`, `total`, `limit`, `offset` fields
+   - Added `paginated` query param to `GET /api/v1/public/properties` (default: False)
+   - Default behavior: returns array `[{id, name, ...}, ...]` (existing clients unaffected)
+   - With `?paginated=true`: returns `{items: [...], total: N, limit: L, offset: O}`
+   - Uses COUNT query for total when paginated=true
+   - Zero breaking changes for existing API consumers
+
+3. **robots.txt Hardening** (`frontend/app/robots.txt/route.ts`):
+   - Always returns HTTP 200 text/plain (never 500)
+   - Uses X-Forwarded-Host header for correct tenant resolution behind proxy
+   - Cache-Control: `public, max-age=300` (5 min)
+   - Includes Sitemap reference with correct protocol and host
+
+4. **sitemap.xml Hardening** (`frontend/app/sitemap.xml/route.ts`):
+   - Always returns HTTP 200 application/xml with valid XML structure (never 500)
+   - Separate try/catch for pages and properties fetches (graceful degradation)
+   - Backward compatible API response parsing: handles both array and `{items: [...]}` shapes
+   - Uses X-Forwarded-Host header for correct tenant resolution
+   - Cache-Control: `public, max-age=300` (5 min)
+   - Includes /unterkuenfte listing page when properties exist
+   - Generates valid XML even if API fetch fails (empty <urlset>)
+
+5. **Smoke Script Extension** (`backend/scripts/pms_epic_c_public_website_smoke.sh`):
+   - Added Test 7: Validates robots.txt returns 200 and contains "Sitemap:" line
+   - Added Test 8: Validates sitemap.xml returns 200 and contains "<urlset" (valid XML)
+   - Now runs 8 tests total (was 6)
+   - Exit codes: rc=0 success, rc=1+ failures
+
+6. **Documentation** (DOCS SAFE MODE - add-only):
+   - **Runbook** (`backend/docs/ops/runbook.md`):
+     - New subsection: "Epic C Post-Verification Hardening" (appended to Epic C section)
+     - Architecture details for caching, pagination, robots.txt, sitemap.xml
+     - Verification commands for cache headers, pagination, SEO files
+     - Troubleshooting: 3 common issues with debugging steps
+   - **Project Status** (`backend/docs/project_status.md`):
+     - This entry
+
+**Files Changed:**
+- Backend:
+  - `backend/app/api/routes/public_site.py` - Added Response import, PaginatedPropertiesResponse class, add_cache_headers helper, updated all endpoints with cache headers and response parameter, added paginated query param to list_public_properties
+  - `backend/scripts/pms_epic_c_public_website_smoke.sh` - Added Tests 7-8 for robots.txt and sitemap.xml validation
+
+- Frontend:
+  - `frontend/app/robots.txt/route.ts` - Added X-Forwarded-Host support, cache headers
+  - `frontend/app/sitemap.xml/route.ts` - Added X-Forwarded-Host support, cache headers, improved error handling, backward compatible response parsing
+
+**Verification Commands:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# [HOST-SERVER-TERMINAL] Run Epic C smoke test (now includes Tests 7-8)
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export PUBLIC_HOST="fewo.kolibri-visions.de"
+./backend/scripts/pms_epic_c_public_website_smoke.sh
+echo "rc=$?"
+# Expected: rc=0, all 8 tests pass (Tests 7-8 new: robots.txt, sitemap.xml)
+
+# [CLIENT-TERMINAL] Test cache headers
+curl -I https://api.fewo.kolibri-visions.de/api/v1/public/site/settings \
+  -H "X-Forwarded-Host: fewo.kolibri-visions.de" | grep "Cache-Control"
+# Expected: Cache-Control: public, max-age=60, stale-while-revalidate=300
+
+curl -I https://api.fewo.kolibri-visions.de/api/v1/public/properties?limit=10 \
+  -H "X-Forwarded-Host: fewo.kolibri-visions.de" | grep "Cache-Control"
+# Expected: Cache-Control: public, max-age=30, stale-while-revalidate=120
+
+# [CLIENT-TERMINAL] Test pagination (backward compatible)
+curl -sS "https://api.fewo.kolibri-visions.de/api/v1/public/properties?limit=3" \
+  -H "X-Forwarded-Host: fewo.kolibri-visions.de" | jq 'type'
+# Expected: "array" (default, existing clients unaffected)
+
+curl -sS "https://api.fewo.kolibri-visions.de/api/v1/public/properties?limit=3&paginated=true" \
+  -H "X-Forwarded-Host: fewo.kolibri-visions.de" | jq 'keys'
+# Expected: ["items","total","limit","offset"]
+
+# [CLIENT-TERMINAL] Test SEO files
+curl -I https://fewo.kolibri-visions.de/robots.txt | grep "Cache-Control"
+# Expected: Cache-Control: public, max-age=300
+
+curl -sS https://fewo.kolibri-visions.de/robots.txt | grep "Sitemap:"
+# Expected: Sitemap: https://fewo.kolibri-visions.de/sitemap.xml
+
+curl -I https://fewo.kolibri-visions.de/sitemap.xml | head -10
+# Expected: HTTP 200, Content-Type: application/xml, Cache-Control: public, max-age=300
+
+curl -sS https://fewo.kolibri-visions.de/sitemap.xml | head -5
+# Expected: <?xml version="1.0"...?> <urlset xmlns="...">
+```
+
+**Notes:**
+- **Status**: ✅ IMPLEMENTED (ready for PROD deployment)
+- All changes are backward compatible (no breaking changes)
+- Pagination defaults to array response (existing clients unaffected)
+- Cache headers improve CDN efficiency and reduce backend load
+- SEO files always return 200 with valid content (never 500)
+- Smoke script now covers SEO file validation
+
+**Dependencies:**
+- Epic C: Public Website v1 (base implementation, must be VERIFIED first)
+- Existing public endpoints and SEO files
+
+**Related Entries:**
+- [Epic C: Public Website v1] - Base public website implementation (VERIFIED)
+
 ---
 
 

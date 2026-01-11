@@ -27117,6 +27117,173 @@ PUBLIC_HOST=fewo.kolibri-visions.de \
 - **Stats:** 7 pages, 10 properties, fractional bathrooms supported
 - **Conclusion:** Epic C fully operational in production at https://api.fewo.kolibri-visions.de with tenant resolution via fewo.kolibri-visions.de
 
+
+### Epic C Post-Verification Hardening
+
+**Overview:** Post-verification improvements to Epic C public website APIs for production reliability and performance.
+
+**Purpose:** Harden public website endpoints with caching headers, pagination support, and SEO file edge case handling.
+
+**Changes Made:**
+1. **Caching Headers**: All public GET endpoints return Cache-Control headers with stale-while-revalidate support
+2. **Pagination**: `/api/v1/public/properties` supports optional `?paginated=true` query param (backward compatible)
+3. **robots.txt**: Always returns 200 with cache headers, uses X-Forwarded-Host for tenant resolution
+4. **sitemap.xml**: Always returns 200 with valid XML, improved error handling, backward compatible API response parsing
+5. **Smoke Test Extension**: Tests 7-8 added for robots.txt and sitemap.xml validation
+
+**Architecture:**
+
+- **Cache-Control Headers** (backend/app/api/routes/public_site.py):
+  - Site settings/pages: `public, max-age=60, stale-while-revalidate=300` (1 min fresh, 5 min stale)
+  - Properties list/detail: `public, max-age=30, stale-while-revalidate=120` (30s fresh, 2 min stale)
+  - Helper: `add_cache_headers(response, max_age, stale_while_revalidate)`
+
+- **Pagination** (backward compatible):
+  - Default: Returns array `[{id, name, ...}, ...]` (existing clients unaffected)
+  - With `?paginated=true`: Returns `{items: [...], total: N, limit: L, offset: O}`
+  - Uses COUNT query for total when paginated=true
+  - Pydantic model: `PaginatedPropertiesResponse`
+
+- **robots.txt** (frontend/app/robots.txt/route.ts):
+  - Uses X-Forwarded-Host header (proxy support)
+  - Always returns 200 text/plain
+  - Cache-Control: `public, max-age=300` (5 min)
+  - Includes Sitemap reference
+
+- **sitemap.xml** (frontend/app/sitemap.xml/route.ts):
+  - Uses X-Forwarded-Host header (proxy support)
+  - Separate try/catch for pages and properties fetches (graceful degradation)
+  - Backward compatible: handles both array and `{items: [...]}` API responses
+  - Always returns 200 application/xml (even if empty)
+  - Cache-Control: `public, max-age=300` (5 min)
+  - Includes /unterkuenfte listing page when properties exist
+
+**Smoke Test Extension** (backend/scripts/pms_epic_c_public_website_smoke.sh):
+- Test 7: Validates robots.txt contains "Sitemap:" line
+- Test 8: Validates sitemap.xml contains "<urlset" (valid XML structure)
+- Both tests check HTTP 200 response
+
+**Verification Commands:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# [HOST-SERVER-TERMINAL] Run Epic C smoke test (now includes Tests 7-8)
+API_BASE_URL=https://api.fewo.kolibri-visions.de \
+PUBLIC_HOST=fewo.kolibri-visions.de \
+./backend/scripts/pms_epic_c_public_website_smoke.sh
+# Expected: rc=0, all 8 tests pass (Tests 7-8 new)
+
+# [CLIENT-TERMINAL] Test cache headers
+curl -I https://api.fewo.kolibri-visions.de/api/v1/public/site/settings \
+  -H "X-Forwarded-Host: fewo.kolibri-visions.de"
+# Expected: Cache-Control: public, max-age=60, stale-while-revalidate=300
+
+curl -I https://api.fewo.kolibri-visions.de/api/v1/public/properties?limit=10 \
+  -H "X-Forwarded-Host: fewo.kolibri-visions.de"
+# Expected: Cache-Control: public, max-age=30, stale-while-revalidate=120
+
+# [CLIENT-TERMINAL] Test pagination (backward compatible)
+# Default: array response
+curl -sS https://api.fewo.kolibri-visions.de/api/v1/public/properties?limit=3 \
+  -H "X-Forwarded-Host: fewo.kolibri-visions.de" | jq 'type'
+# Expected: "array"
+
+# With paginated=true: wrapper response
+curl -sS "https://api.fewo.kolibri-visions.de/api/v1/public/properties?limit=3&paginated=true" \
+  -H "X-Forwarded-Host: fewo.kolibri-visions.de" | jq '{type: type, keys: keys}'
+# Expected: {"type": "object", "keys": ["items", "total", "limit", "offset"]}
+
+# [CLIENT-TERMINAL] Test robots.txt and sitemap.xml
+curl -I https://fewo.kolibri-visions.de/robots.txt
+# Expected: HTTP 200, Cache-Control: public, max-age=300
+
+curl -sS https://fewo.kolibri-visions.de/robots.txt | grep "Sitemap:"
+# Expected: Sitemap: https://fewo.kolibri-visions.de/sitemap.xml
+
+curl -I https://fewo.kolibri-visions.de/sitemap.xml
+# Expected: HTTP 200, Content-Type: application/xml, Cache-Control: public, max-age=300
+
+curl -sS https://fewo.kolibri-visions.de/sitemap.xml | head -5
+# Expected: <?xml version="1.0"...?> <urlset xmlns="...">
+```
+
+**Common Issues:**
+
+### Cache Headers Not Present
+
+**Symptom:** curl -I shows no Cache-Control header on public endpoints.
+
+**Root Cause:** Response parameter not added to endpoint signature or add_cache_headers not called.
+
+**How to Debug:**
+```bash
+# Check if Response is imported
+grep "from fastapi import.*Response" backend/app/api/routes/public_site.py
+
+# Check if response parameter in endpoint signature
+grep "response: Response" backend/app/api/routes/public_site.py
+
+# Check if add_cache_headers called
+grep "add_cache_headers" backend/app/api/routes/public_site.py
+```
+
+**Solution:**
+- Verify all public GET endpoints have `response: Response` parameter
+- Verify all endpoints call `add_cache_headers(response, max_age, stale_while_revalidate)` before async operations
+- Redeploy backend
+
+### Pagination Breaks Existing Clients
+
+**Symptom:** Frontend or external clients receive unexpected response shape.
+
+**Root Cause:** Default response changed from array to object (backward compatibility broken).
+
+**How to Debug:**
+```bash
+# Test default response (should be array)
+curl -sS "https://api.fewo.kolibri-visions.de/api/v1/public/properties?limit=3" \
+  -H "X-Forwarded-Host: fewo.kolibri-visions.de" | jq 'type'
+# Expected: "array" (NOT "object")
+
+# Test paginated response (should be object)
+curl -sS "https://api.fewo.kolibri-visions.de/api/v1/public/properties?limit=3&paginated=true" \
+  -H "X-Forwarded-Host: fewo.kolibri-visions.de" | jq 'type'
+# Expected: "object"
+```
+
+**Solution:**
+- Verify `paginated` query param defaults to False: `paginated: bool = Query(False, ...)`
+- Verify response logic: `if paginated: return PaginatedPropertiesResponse(...) else: return items`
+- Existing clients without `?paginated=true` must receive array (backward compatible)
+
+### sitemap.xml Returns Empty or Errors
+
+**Symptom:** sitemap.xml returns empty <urlset> or 500 error.
+
+**Root Cause:** API fetch errors not handled gracefully, or response parsing fails.
+
+**How to Debug:**
+```bash
+# Check backend logs for API fetch errors during sitemap generation
+# Look for "Error fetching pages for sitemap" or "Error fetching properties for sitemap"
+
+# Test API endpoints directly
+curl -sS "https://api.fewo.kolibri-visions.de/api/v1/public/site/pages" \
+  -H "X-Forwarded-Host: fewo.kolibri-visions.de" | jq 'type, length'
+
+curl -sS "https://api.fewo.kolibri-visions.de/api/v1/public/properties?limit=100" \
+  -H "X-Forwarded-Host: fewo.kolibri-visions.de" | jq 'type'
+```
+
+**Solution:**
+- sitemap.xml should have separate try/catch for pages and properties fetches
+- Handle both array and `{items: [...]}` response shapes: `properties = Array.isArray(data) ? data : (data.items || [])`
+- Always return valid XML (even if empty): `<urlset>` must close even if no pages/properties
+- Verify X-Forwarded-Host and Origin headers passed to API fetch
+
 ---
 
 ### Public Domain Self-Service (Admin UI)
