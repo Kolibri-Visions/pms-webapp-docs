@@ -26374,6 +26374,38 @@ psql $DATABASE_URL -c "SELECT * FROM team_members WHERE user_id = '<user_id>' AN
 - Verify get_current_role dependency in backend/app/core/auth.py line ~150-180
 - Check agency_id matches between JWT and team_members row
 
+### Team Invites/Members 500 Error (Permission Denied for Schema auth)
+
+**Symptom:** POST /api/v1/team/invites or GET /api/v1/team/members returns HTTP 500 with error message containing "permission denied for schema auth".
+
+**Root Cause:** Application queries `auth.users` table but database role lacks permissions to access `auth` schema (by design - app should only access `public` schema).
+
+**How to Debug:**
+```bash
+# Check backend logs for InsufficientPrivilegeError
+docker logs pms-backend | grep "permission denied for schema auth"
+
+# Verify current queries don't reference auth schema
+grep -r "auth\\.users\|auth\\.identities" backend/app/
+```
+
+**Solution:**
+1. Deploy latest version that uses `profiles` table instead of `auth.users`
+2. Verify deployment:
+```bash
+# [HOST-SERVER-TERMINAL] Verify deploy
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# [HOST-SERVER-TERMINAL] Run Epic A smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<admin JWT token>>>"
+./backend/scripts/pms_epic_a_onboarding_rbac_smoke.sh
+# Expected: rc=0, all tests pass
+```
+
+**Note:** Backend DB role should NOT be granted access to `auth` schema. Application must use `public.profiles` for user email lookups.
+
 ### DELETE Team Member Fails (Foreign Key Constraint)
 
 **Symptom:** DELETE /api/v1/team/members/{id} returns 409 Conflict.

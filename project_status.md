@@ -5201,9 +5201,9 @@ done
 
 **Scope:** Multi-tenant team management with role-based access control (RBAC), team member invitations, and agency settings management for collaborative workflows.
 
-**Status:** ✅ VERIFIED
+**Status:** ✅ IMPLEMENTED
 
-**PROD Verification Evidence:**
+**PROD Verification Evidence (Previous - 2026-01-11):**
 
 **Verification Date:** 2026-01-11
 
@@ -5244,6 +5244,17 @@ done
 **Note on VERIFIED Status:**
 - Backend APIs, database schema, and smoke tests: ✅ VERIFIED in PROD (automated)
 - Admin UI functionality: Implemented and functional, requires manual browser verification
+
+**Regression Note (2026-01-12):**
+- **Issue**: POST /api/v1/team/invites and GET /api/v1/team/members returned HTTP 500 with "permission denied for schema auth"
+- **Root Cause**: Endpoints queried `auth.users` table but database role lacks permissions to access `auth` schema (by design)
+- **Fix Applied**: Removed all `auth` schema dependencies:
+  - Replaced `auth.users` joins/queries with `public.profiles` table
+  - Added `InsufficientPrivilegeError` exception handler returning HTTP 503 with actionable message
+  - All email lookups now use `profiles.email` (LEFT JOIN tolerates NULL)
+- **Status**: Downgraded to IMPLEMENTED pending re-verification after deployment
+- **Verification Required**: Deploy this fix and re-run `pms_epic_a_onboarding_rbac_smoke.sh` (rc=0 expected)
+- **Related Files**: `backend/app/api/routes/epic_a.py`, `backend/app/core/database.py`
 
 **Features Implemented:**
 
