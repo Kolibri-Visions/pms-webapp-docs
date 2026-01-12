@@ -26453,6 +26453,66 @@ export JWT_TOKEN="<<<admin JWT token>>>"
 
 **Note:** Epic A endpoints use dynamic column detection with module-level caching. If schema is fixed during runtime, restart backend workers to clear cache and re-detect columns.
 
+### Team Invites/Members 503 Error (Missing profiles.email Column)
+
+**Symptom:** GET /api/v1/team/members or POST /api/v1/team/invites returns HTTP 503 with error message containing "column p.email does not exist" or similar database error referencing profiles.email.
+
+**Root Cause:** Profiles table is missing email column. Epic A endpoints require email for team member display and invitation verification, but PROD database profiles table may not have an email column.
+
+**How to Debug:**
+```bash
+# Check if profiles table has email column
+psql $DATABASE_URL -c "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name IN ('email', 'primary_email', 'contact_email');"
+
+# Check backend logs for email column resolution
+docker logs pms-backend | grep "Epic A columns resolved"
+# Expected: "Epic A columns resolved: profiles_key=..., team_members_key=..., profiles_email=email"
+# Or if missing: "Epic A columns resolved: profiles_key=..., team_members_key=..., profiles_email=NONE"
+```
+
+**Solution:**
+
+**Option A: Add email column to profiles table (recommended for full functionality):**
+```sql
+-- Add email column to profiles table
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS email TEXT;
+
+-- Optionally populate from auth.users if accessible
+-- (Only run this if your DB role has access to auth schema)
+UPDATE profiles p
+SET email = (SELECT au.email FROM auth.users au WHERE au.id = p.user_id)
+WHERE p.email IS NULL AND p.user_id IS NOT NULL;
+
+-- Create index for email lookups
+CREATE INDEX IF NOT EXISTS idx_profiles_email ON profiles(LOWER(email));
+```
+
+**Option B: Deploy code fix (graceful degradation - already implemented):**
+
+The latest Epic A code tolerates missing email columns:
+- Team member listings return `email: null` for all members
+- Invitations can still be created (duplicate invite check works via team_invites table)
+- "Already a member" check is skipped when email column is missing (logged as warning)
+- Invitation acceptance relies on JWT email claim instead of profiles.email
+
+To deploy:
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code and verify deploy
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=<new_commit>
+
+# [HOST-SERVER-TERMINAL] Run Epic A smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<admin JWT token>>>"
+./backend/scripts/pms_epic_a_onboarding_rbac_smoke.sh
+# Expected: rc=0, all tests pass (email fields may be null)
+```
+
+**Note:** With email column missing, team member listings show null emails and "already a member" checks are skipped. For full functionality, add the email column (Option A). Code gracefully degrades without 503 errors.
+
 ### DELETE Team Member Fails (Foreign Key Constraint)
 
 **Symptom:** DELETE /api/v1/team/members/{id} returns 409 Conflict.

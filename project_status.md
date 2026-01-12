@@ -5268,6 +5268,21 @@ done
 - **Verification Required**: Deploy this fix and re-run `pms_epic_a_onboarding_rbac_smoke.sh` (rc=0 expected)
 - **Related Files**: `backend/app/api/routes/epic_a.py` (all Epic A endpoints updated with dynamic columns)
 
+**Regression Note (2026-01-12 - Missing profiles.email Column Fix):**
+- **Issue**: GET /api/v1/team/members and POST /api/v1/team/invites returned HTTP 503 with "column p.email does not exist" error
+- **Root Cause**: PROD database `profiles` table missing `email` column - Epic A queries referenced `p.email` directly causing 503
+- **Fix Applied**: Extended dynamic column detection to tolerate missing email column:
+  - Extended `resolve_epic_a_identity_columns()` to detect email column: `email` (preferred) OR `primary_email` OR `contact_email` OR None (tolerated)
+  - Updated all queries to use detected email column or `NULL::text` when missing
+  - Team member listings: Return `email: null` when column doesn't exist (graceful degradation)
+  - Create invite: Skip "already member by email" check when column missing (log warning, still prevent duplicate pending invites)
+  - Accept invite: Rely on JWT email claim when profiles.email unavailable
+  - All email fields in response schemas already Optional (no Pydantic changes needed)
+- **Status**: IMPLEMENTED pending re-verification after deployment
+- **Verification Required**: Deploy this fix and re-run `pms_epic_a_onboarding_rbac_smoke.sh` (rc=0 expected, email fields may be null)
+- **Related Files**: `backend/app/api/routes/epic_a.py` (5 endpoints updated: list_team_members, update_team_member_role, create_team_invite, accept_team_invite, get_me)
+- **Note**: For full functionality, add `profiles.email` column to database (see runbook). Code now gracefully degrades without 503 errors.
+
 **Features Implemented:**
 
 1. **Database Migration** (`supabase/migrations/20260111000000_add_epic_a_team_rbac.sql`):
