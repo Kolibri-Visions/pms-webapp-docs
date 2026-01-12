@@ -27901,3 +27901,39 @@ curl -k -sS -w "\n%{http_code}" "https://admin.fewo.kolibri-visions.de/login" | 
 # Expected: HTTP 200, login form HTML
 ```
 
+
+
+**Update (2026-01-12): Fixed PUBLIC / returning 404**
+
+**Problem:** After commit a2370c6, PUBLIC "/" returned HTTP 404 with header `x-middleware-rewrite: /_public`.
+
+**Root Cause:** Middleware rewrote "/" to "/_public" but that route doesn't exist (app/_public/page.tsx was never created).
+
+**Solution:**
+1. Removed rewrite to "/_public" in middleware.ts - let PUBLIC "/" pass through with NextResponse.next()
+2. The existing frontend/app/page.tsx serves as public root (simple static landing page)
+3. Fixed smoke script parsing bugs (empty status codes due to curl output capture issues)
+4. Added env var fallback: NEXT_PUBLIC_API_BASE_URL (Coolify compatibility) in api-client.ts
+
+**Middleware Behavior After Fix:**
+- **PUBLIC /** → passes through normally (no rewrite), renders frontend/app/page.tsx
+- **PUBLIC /login** → redirects 307 to `https://admin.<basedomain>/login` (unchanged)
+- **ADMIN /** → redirects 307 to `/login` (unchanged)
+- **ADMIN /unterkuenfte or /p/** → redirects 307 to public host (unchanged)
+
+**Verification:**
+```bash
+# PUBLIC / must return 200 (not 404)
+curl -k -sS -o /dev/null -w "%{http_code}" "https://fewo.kolibri-visions.de/"
+# Expected: 200
+
+# Verify no rewrite header
+curl -k -sS -I "https://fewo.kolibri-visions.de/" | grep -i "x-middleware-rewrite"
+# Expected: No output (header should not exist)
+
+# Run smoke script (should pass all 4 tests)
+./backend/scripts/pms_frontend_host_routing_smoke.sh
+# Expected: rc=0, all tests pass
+```
+
+---
