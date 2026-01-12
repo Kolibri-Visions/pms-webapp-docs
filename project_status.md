@@ -5614,6 +5614,30 @@ echo "rc=$?"
   - Test 6: Property detail retrieved (fractional bathrooms supported)
 - **Result:** All tests passed, Epic C fully operational in production
 
+**PROD Evidence (2026-01-12):**
+
+**Deployed Version:**
+- Verification Date: 2026-01-12
+- API Base URL: https://api.fewo.kolibri-visions.de
+- Public Host: fewo.kolibri-visions.de
+- Agency ID: ffd0123a-10b6-40cd-8ad5-66eee9757ab7
+- Source Commit: d88e2a0a04447b47f6a6ffe30e97aca64748135d
+- Started At: 2026-01-12T19:37:05.333697+00:00
+
+**Verification Scripts:**
+- Deploy Verification: `backend/scripts/pms_verify_deploy.sh` (rc=0)
+- Smoke Test: `backend/scripts/pms_epic_c_public_website_smoke.sh` (rc=0)
+
+**Smoke Test Results (rc=0):**
+- Site settings OK (site: "Kolibri Visions Agency")
+- Pages published: 7 (includes "home")
+- Properties listed: 10
+- Property detail OK (example: 23dd8fda-59ae-4b2f-8489-7a90f5d46c66)
+- robots.txt OK (includes sitemap reference)
+- sitemap.xml OK (valid XML structure)
+
+---
+
 **Features Implemented:**
 
 1. **Database Schema** (Migration: `20260111000001_add_epic_c_public_website.sql`):

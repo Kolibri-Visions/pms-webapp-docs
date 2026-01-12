@@ -27207,6 +27207,8 @@ echo "rc=$?"
 
 **Smoke Script:** `backend/scripts/pms_epic_c_public_website_smoke.sh`
 
+**What the smoke test validates:** Site settings, published pages (including "home"), properties list, property detail, robots.txt (with sitemap reference), sitemap.xml (valid XML structure). Uses PUBLIC_HOST env var for tenant resolution headers.
+
 **Customization (Supabase SQL Editor):**
 
 To customize site content, edit the JSONB blocks in `public_site_pages`:
