@@ -26406,6 +26406,53 @@ export JWT_TOKEN="<<<admin JWT token>>>"
 
 **Note:** Backend DB role should NOT be granted access to `auth` schema. Application must use `public.profiles` for user email lookups.
 
+### Team Invites/Members 503 Error (Column Missing - Schema Drift)
+
+**Symptom:** POST /api/v1/team/invites or GET /api/v1/team/members returns HTTP 503 with error message containing "column 'user_id' does not exist" or similar database schema error.
+
+**Root Cause:** Schema drift between expected columns and actual database schema. Epic A endpoints dynamically detect identity columns in `public.profiles` and `public.team_members` tables to support schema variants:
+- profiles join key: `profiles.user_id` (preferred) OR `profiles.id` (fallback)
+- team_members user ref: `team_members.user_id` (preferred) OR `team_members.profile_id` (fallback)
+
+**How to Debug:**
+```bash
+# Check actual column names in profiles table
+psql $DATABASE_URL -c "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name IN ('user_id', 'id');"
+
+# Check actual column names in team_members table
+psql $DATABASE_URL -c "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='team_members' AND column_name IN ('user_id', 'profile_id');"
+
+# Check backend logs for column resolution
+docker logs pms-backend | grep "Epic A identity columns resolved"
+# Expected: "Epic A identity columns resolved: profiles_key=user_id, team_members_key=user_id"
+```
+
+**Solution:**
+1. If using Supabase default schema, ensure migrations create `profiles.user_id` and `team_members.user_id` columns:
+```sql
+-- Verify profiles table has user_id column
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);
+CREATE INDEX IF NOT EXISTS idx_profiles_user_id ON profiles(user_id);
+
+-- Verify team_members table has user_id column
+-- (should already exist from Epic A migration 20260111000000)
+```
+
+2. Verify deployment after schema fix:
+```bash
+# [HOST-SERVER-TERMINAL] Verify deploy
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# [HOST-SERVER-TERMINAL] Run Epic A smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<admin JWT token>>>"
+./backend/scripts/pms_epic_a_onboarding_rbac_smoke.sh
+# Expected: rc=0, all tests pass
+```
+
+**Note:** Epic A endpoints use dynamic column detection with module-level caching. If schema is fixed during runtime, restart backend workers to clear cache and re-detect columns.
+
 ### DELETE Team Member Fails (Foreign Key Constraint)
 
 **Symptom:** DELETE /api/v1/team/members/{id} returns 409 Conflict.

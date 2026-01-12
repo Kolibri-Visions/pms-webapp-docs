@@ -5256,6 +5256,18 @@ done
 - **Verification Required**: Deploy this fix and re-run `pms_epic_a_onboarding_rbac_smoke.sh` (rc=0 expected)
 - **Related Files**: `backend/app/api/routes/epic_a.py`, `backend/app/core/database.py`
 
+**Regression Note (2026-01-12 - Schema Drift Fix):**
+- **Issue**: POST /api/v1/team/invites returned HTTP 503 with "column 'user_id' does not exist" error
+- **Root Cause**: Schema drift - PROD database `profiles` table uses `id` column while code expected `user_id` column; similar issue with `team_members` table
+- **Fix Applied**: Added dynamic column detection with caching to support schema variants:
+  - `resolve_epic_a_identity_columns()` function detects and caches column names at runtime
+  - Supports profiles join key: `profiles.user_id` (preferred) OR `profiles.id` (fallback)
+  - Supports team_members user ref: `team_members.user_id` (preferred) OR `team_members.profile_id` (fallback)
+  - Returns HTTP 503 with actionable message if neither expected column exists
+- **Status**: IMPLEMENTED pending re-verification after deployment
+- **Verification Required**: Deploy this fix and re-run `pms_epic_a_onboarding_rbac_smoke.sh` (rc=0 expected)
+- **Related Files**: `backend/app/api/routes/epic_a.py` (all Epic A endpoints updated with dynamic columns)
+
 **Features Implemented:**
 
 1. **Database Migration** (`supabase/migrations/20260111000000_add_epic_a_team_rbac.sql`):
