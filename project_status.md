@@ -5851,7 +5851,15 @@ curl -sS https://fewo.kolibri-visions.de/sitemap.xml | head -5
 - **Fix Applied (2026-01-11)**: Backend now serves root routes /robots.txt and /sitemap.xml (no /api/v1 prefix) as fallback, tenant-aware via X-Forwarded-Host. Domain verify endpoint fixed to use correct httpx exceptions (TransportError, TimeoutException, ssl.SSLError instead of non-existent TLSError). Smoke script Tests 7-8 now test backend root routes.
 - **Frontend Host Routing Fix (2026-01-11)**: Implemented admin.* vs public host detection to prevent public website visitors from being redirected to /login. Created frontend/lib/host_mode.ts with host detection helpers. Updated frontend/app/page.tsx to redirect to /unterkuenfte on public host, /login on admin host. Updated frontend/app/login/page.tsx to redirect to admin host if accessed on public host (except localhost). Status: ✅ IMPLEMENTED (not verified in prod yet).
 - **Frontend Host Routing Middleware Fix (2026-01-11)**: Fixed HTTP 500 errors on root routes (/) for both public and admin hosts. Moved routing logic from page handlers to Next.js middleware (frontend/middleware.ts) to handle host detection before page execution. Created frontend/app/_public/page.tsx as safe public homepage. Simplified frontend/app/page.tsx as fallback. Added backend/scripts/pms_frontend_host_routing_smoke.sh to automate verification (4 tests: public root 200, public login redirect, admin root redirect, admin login 200). Status: ✅ IMPLEMENTED (not verified in prod yet).
-- **Frontend Host Routing 404 Fix (2026-01-12)**: Fixed PUBLIC / returning HTTP 404 after commit a2370c6. Root cause: middleware rewrote "/" to "/_public" but that route did not exist. Solution: Removed rewrite to /_public in middleware.ts, let PUBLIC / pass through normally to render frontend/app/page.tsx. Added env var fallback NEXT_PUBLIC_API_BASE_URL (Coolify compatibility) in api-client.ts. Fixed smoke script parsing bugs (empty status codes). Status: ✅ IMPLEMENTED (not verified in prod yet).
+- **Frontend Host Routing 404 Fix (2026-01-12)**: Fixed PUBLIC / returning HTTP 404 after commit a2370c6. Root cause: middleware rewrote "/" to "/_public" but that route did not exist. Solution: Removed rewrite to /_public in middleware.ts, let PUBLIC / pass through normally to render frontend/app/page.tsx. Added env var fallback NEXT_PUBLIC_API_BASE_URL (Coolify compatibility) in api-client.ts. Fixed smoke script parsing bugs (empty status codes). Status: ✅ VERIFIED.
+  - **PROD Evidence (2026-01-12)**:
+    - Container image tags: `public-website: so4cw4c04c84s4ww8cccs0gg:08ed721b93cc040bc7bd01cc868b06143cc906ec`, `pms-admin: nwwsswgoswgosck4kcgcooss:08ed721b93cc040bc7bd01cc868b06143cc906ec`
+    - Smoke test: `./backend/scripts/pms_frontend_host_routing_smoke.sh` → rc=0 (4/4 tests passed)
+      - Test 1: PUBLIC / → 200 (not 500, no error indicators)
+      - Test 2: PUBLIC /login → 307 redirect to https://admin.fewo.kolibri-visions.de/login
+      - Test 3: ADMIN / → 307 redirect to /login
+      - Test 4: ADMIN /login → 200
+    - Header check: `curl -k -sS -I https://fewo.kolibri-visions.de/` → HTTP 200, no `x-middleware-rewrite` header (no rewrite happening)
 
 **Dependencies:**
 - Epic C: Public Website v1 (base implementation, must be VERIFIED first)

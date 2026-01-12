@@ -27936,4 +27936,32 @@ curl -k -sS -I "https://fewo.kolibri-visions.de/" | grep -i "x-middleware-rewrit
 # Expected: rc=0, all tests pass
 ```
 
+**PROD Evidence (2026-01-12):**
+
+Verified in production with commit 08ed721b93cc040bc7bd01cc868b06143cc906ec deployed to both frontend containers.
+
+```bash
+# [HOST-SERVER-TERMINAL] Verify deployed commit matches
+docker ps --format 'table {{.Names}}\t{{.Image}}' | egrep -i 'public-website|pms-admin'
+# Expected output:
+# public-website    so4cw4c04c84s4ww8cccs0gg:08ed721b93cc040bc7bd01cc868b06143cc906ec
+# pms-admin         nwwsswgoswgosck4kcgcooss:08ed721b93cc040bc7bd01cc868b06143cc906ec
+
+# [HOST-SERVER-TERMINAL] Run smoke test
+cd /data/repos/pms-webapp
+./backend/scripts/pms_frontend_host_routing_smoke.sh
+echo "rc=$?"
+# Expected: All 4 tests pass, rc=0
+# ✅ Test 1 PASSED: PUBLIC / returns 200
+# ✅ Test 2 PASSED: PUBLIC /login redirects to admin host
+# ✅ Test 3 PASSED: ADMIN / redirects to /login
+# ✅ Test 4 PASSED: ADMIN /login returns 200
+
+# [HOST-SERVER-TERMINAL] Verify no rewrite header
+curl -k -sS -I "https://fewo.kolibri-visions.de/" | egrep -i 'HTTP/|x-middleware-rewrite|location'
+# Expected output:
+# HTTP/2 200
+# (no x-middleware-rewrite header - confirms no rewrite happening)
+```
+
 ---
