@@ -2834,6 +2834,9 @@ Additionally, public endpoint requests now include tenant resolution headers (X-
 This fixes "jq: error: Cannot iterate over null (null)" failures in production. Status remains IMPLEMENTED (not VERIFIED) until full prod verification with rc=0.
 
 
+**Update (2026-01-12):** Bugfix for 500 error on GET /api/v1/booking-requests when guest_id=NULL. Schema updated: `BookingRequestListItem.guest_id` and `BookingRequestDetail.guest_id` now `Optional[UUID] = None`. List endpoint uses defensive per-row validation to tolerate NULL guest_id without failing entire request. Status remains IMPLEMENTED until prod verification (pms_verify_deploy.sh + pms_p1_booking_request_smoke.sh rc=0).
+
+
 **PROD Evidence (Verified: 2026-01-10)**:
 - **Verification Date**: 2026-01-10
 - **API Base URL**: https://api.fewo.kolibri-visions.de

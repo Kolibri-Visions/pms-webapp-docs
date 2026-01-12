@@ -21398,6 +21398,51 @@ echo $JWT_TOKEN | cut -d'.' -f2 | base64 -d 2>/dev/null | jq '.exp'
 1. Open browser DevTools Console tab and check for errors
 2. Open Network tab and inspect API response status code
 3. If 200 OK: Check response body for actual status value
+
+**Scenario: GET /api/v1/booking-requests Returns 500 (guest_id ValidationError)**
+
+**Symptom:** GET /api/v1/booking-requests returns 500 Internal Server Error. Backend logs show Pydantic ValidationError for BookingRequestListItem: field guest_id expected UUID but got None.
+
+**Root Cause:** Database contains booking request rows with guest_id = NULL (legacy data or data migration gaps). Pydantic schema expected required UUID field, causing ValidationError when mapping DB rows to response models.
+
+**Fix (after deploy):**
+- Schema changed: `BookingRequestListItem.guest_id` and `BookingRequestDetail.guest_id` now `Optional[UUID] = None`
+- Endpoint tolerates NULL guest_id and returns 200 with guest_id=null in JSON response
+- Defensive per-row validation with warning log as fallback (non-fatal)
+
+**Diagnostic Commands:**
+```bash
+# Check backend logs for guest_id validation errors
+docker logs --since 30m pms-backend | grep -nE "booking-requests|ValidationError|BookingRequestListItem|guest_id"
+
+# Find booking requests with NULL guest_id (Supabase SQL Editor)
+SELECT id, status, guest_id, guest_email, created_at
+FROM public.booking_requests
+WHERE guest_id IS NULL
+ORDER BY created_at DESC
+LIMIT 50;
+```
+
+**Verification After Deploy:**
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code and verify deployment
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# Run P1 smoke test (should pass with rc=0)
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export PUBLIC_HOST="fewo.kolibri-visions.de"
+export JWT_TOKEN="<manager-jwt>"
+export AGENCY_ID="<agency-uuid>"
+./backend/scripts/pms_p1_booking_request_smoke.sh
+echo "rc=$?"
+# Expected: rc=0
+```
+
+---
 4. If 4xx/5xx: Check error message in response body
 5. Hard refresh page (Cmd+Shift+R / Ctrl+F5) to clear stale state
 
