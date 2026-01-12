@@ -28034,6 +28034,12 @@ openssl s_client -connect beispiel.de:443 -servername beispiel.de </dev/null 2>/
 4. Wait for SSL certificate issuance (automatic via Let's Encrypt, 1-5 minutes)
 5. Retry verification in Admin UI
 
+**Note (Smoke Test Behavior):**
+- 409 response from POST /api/v1/public-site/domain/verify is EXPECTED when DNS is not configured or domain is not yet reachable
+- Smoke script (`backend/scripts/pms_epic_c_public_domain_smoke.sh`) treats 409 as a warning, not a failure (exit code remains 0)
+- This confirms backend validation logic works correctly; actual domain verification depends on external DNS/network configuration
+- Feature is fully functional even when verify returns 409; it indicates domain not yet publicly reachable (expected for new/unconfigured domains)
+
 ### Domain Already Used by Another Agency (409)
 
 **Symptom:** PUT /api/v1/public-site/domain returns 409 with "Domain wird bereits von einer anderen Organisation verwendet".
