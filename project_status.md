@@ -2754,7 +2754,7 @@ Verified in production on **2026-01-06** (Europe/Berlin timezone):
    - Real-time status updates after actions
    - Uses existing design patterns (Tailwind CSS, responsive table)
 
-**Status:** ✅ IMPLEMENTED (Not verified in production yet)
+**Status:** ✅ VERIFIED
 
 **Implementation Complete:** 2026-01-06
 **Components Delivered:**
@@ -2873,6 +2873,29 @@ Status remains IMPLEMENTED until prod verification (pms_verify_deploy.sh + pms_p
   - Admin UI: Loads and displays booking requests ✅
   - Additional verification: GET /api/v1/bookings/831336ed-8d86-46ed-8a5a-494c5c831e79 returned HTTP 200
 - **Verification Criteria**: All 9 criteria met (see Verification Criteria section above)
+
+**PROD Evidence (Verified: 2026-01-12)**:
+- **Verification Date**: 2026-01-12
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Public Host**: fewo.kolibri-visions.de
+- **Agency ID**: ffd0123a-10b6-40cd-8ad5-66eee9757ab7
+- **Deploy Verification**: pms_verify_deploy.sh (rc=0)
+  - Source Commit: a417c1ba473c62c6d08976d3711e85392fc507b2
+  - Started At: 2026-01-12T12:11:05.624611+00:00
+  - Endpoint: /api/v1/ops/version
+- **Production Smoke Test**: pms_p1_booking_request_smoke.sh (rc=0)
+  - Step A: Discovered property ✅
+  - Step B: Created booking request ✅
+  - Step C: Found request in list ✅
+  - Step D: Declined request ✅
+  - Step E: Created and approved request ✅
+  - ALL TESTS PASSED ✅
+- **Key Improvements Verified**:
+  - Approve endpoint accepts empty body (no 422 error) ✅
+  - Booking conflicts return 409 (not 500) ✅
+  - Smart date selection with far-future dates ✅
+  - Curl header quoting fixed (no "curl: (6)" errors) ✅
+  - Step E retry logic with date shifting (up to 5 attempts) ✅
 
 ---
 
