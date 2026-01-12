@@ -2897,6 +2897,8 @@ Status remains IMPLEMENTED until prod verification (pms_verify_deploy.sh + pms_p
   - Curl header quoting fixed (no "curl: (6)" errors) ✅
   - Step E retry logic with date shifting (up to 5 attempts) ✅
 
+
+**Cleanup (2026-01-12)**: Admin `/buchung` route now redirects to public booking form `https://fewo.kolibri-visions.de/buchung` to avoid duplicate booking request forms. Server-side redirect preserves query parameters. The public form is the single source of truth (no deletion, maintaining compatibility).
 ---
 
 # P2 Pricing v1 Foundation (Rate Plans + Quote Calculation)

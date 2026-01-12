@@ -20893,6 +20893,15 @@ Rate limit decisions logged with structured context:
 - All other statuses (requested, confirmed, cancelled) pass through unchanged
 - Clients always see API status `under_review` in responses, never `inquiry`
 
+**Admin UI Redirect Note**: The admin booking form at `/buchung` has been replaced with a server-side redirect to the public booking form `https://fewo.kolibri-visions.de/buchung` to avoid duplicate booking request forms. The public form is the single source of truth. Query parameters are preserved during redirect.
+
+**Verification**:
+```bash
+# Test redirect with query params
+curl -k -I "https://admin.fewo.kolibri-visions.de/buchung?foo=bar"
+# Expected: 307/308 redirect with Location: https://fewo.kolibri-visions.de/buchung?foo=bar
+```
+
 **Endpoints** (authenticated, requires manager/admin role):
 
 1. **List Booking Requests**:
