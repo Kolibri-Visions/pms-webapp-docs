@@ -20902,6 +20902,19 @@ curl -k -I "https://admin.fewo.kolibri-visions.de/buchung?foo=bar"
 # Expected: 307/308 redirect with Location: https://fewo.kolibri-visions.de/buchung?foo=bar
 ```
 
+**Implementation Detail (2026-01-12)**: Redirect is implemented via Next.js middleware (`frontend/middleware.ts`) with host-based routing. Only triggers when `host.startsWith("admin.")`. Public `/buchung` on `fewo.kolibri-visions.de` renders the actual booking form (no redirect). Returns HTTP 308 Permanent Redirect with `Cache-Control: no-store`.
+
+**Verification Commands**:
+```bash
+# Admin host should redirect (308)
+curl -k -I "https://admin.fewo.kolibri-visions.de/buchung?foo=bar"
+# Expected: 308 redirect with Location: https://fewo.kolibri-visions.de/buchung?foo=bar
+
+# Public host should render form (200)
+curl -k -I "https://fewo.kolibri-visions.de/buchung"
+# Expected: 200 OK (HTML page)
+```
+
 **Endpoints** (authenticated, requires manager/admin role):
 
 1. **List Booking Requests**:

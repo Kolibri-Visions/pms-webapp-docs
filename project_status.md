@@ -2899,6 +2899,7 @@ Status remains IMPLEMENTED until prod verification (pms_verify_deploy.sh + pms_p
 
 
 **Cleanup (2026-01-12)**: Admin `/buchung` route now redirects to public booking form `https://fewo.kolibri-visions.de/buchung` to avoid duplicate booking request forms. Server-side redirect preserves query parameters. The public form is the single source of truth (no deletion, maintaining compatibility).
+ **Correction (2026-01-12)**: Redirect implemented via Next.js middleware (host-based). Only admin hosts (admin.fewo.kolibri-visions.de) redirect to public form. Public host (fewo.kolibri-visions.de) renders original booking form (restored from git). Middleware returns 308 Permanent Redirect with no-store cache control.
 ---
 
 # P2 Pricing v1 Foundation (Rate Plans + Quote Calculation)
