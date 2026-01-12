@@ -21108,6 +21108,63 @@ echo "rc=$?"
 
 **Observed State Machine** (from smoke test):
 - **requested → under_review**: Review action sets status to under_review (DB: inquiry)
+
+#### Update (2026-01-12): Hardened Step C - Booking Requests List Parsing
+
+**Issue**: The production smoke script (`pms_p1_booking_request_smoke.sh`)
+failed at Step C (GET `/api/v1/booking-requests`) with:
+
+- `jq: error: Cannot iterate over null (null)`
+
+The script assumed response shape `.items[]` and did not robustly handle
+alternative shapes or transient errors.
+
+**Fix**: Step C has been hardened with:
+- **HTTP Status Code Checking**: Separate HTTP code extraction via `curl -w "%{http_code}"`, expects 200, retries on 502/503
+- **Multiple Response Shape Support**: Handles:
+  - array `[...]`
+  - `{ "items": [...] }`
+  - `{ "data": [...] }`
+  - `{ "data": { "items": [...] } }`
+- **Retry Logic**: 5 attempts with 1s sleep for transient errors or delayed list updates
+- **Tenant Headers**: Sets `x-agency-id` header when `AGENCY_ID` env var is provided
+- **Better Diagnostics**: On failure, outputs first 5 booking request IDs/statuses,
+  response shape, and truncated body (600 chars)
+
+**Verification Commands** (HOST-SERVER-TERMINAL):
+```bash
+# 1) Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# 2) Export required env vars
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export PUBLIC_HOST="fewo.kolibri-visions.de"
+export JWT_TOKEN="<manager-or-admin-jwt-token>"
+export AGENCY_ID="<agency-uuid>"  # Optional but recommended
+
+# 3) Run smoke test
+./backend/scripts/pms_p1_booking_request_smoke.sh
+echo "rc=$?"
+
+# Expected: All steps pass (A-E), rc=0
+```
+
+**Expected Output at Step C**:
+```
+ℹ Step C: Retrieving booking requests (authenticated)...
+ℹ GET https://api.fewo.kolibri-visions.de/api/v1/booking-requests
+ℹ Found 10 booking request(s) in response
+✅ Step C PASSED: Found booking request in list (ID: <uuid>)
+```
+
+**Troubleshooting Step C**:
+- **"Cannot iterate over null"**: Script not updated; pull latest code
+- **HTTP 401/403**: JWT_TOKEN invalid or lacks manager/admin role
+- **HTTP 500**: Backend error; check logs for SQL/constraint issues
+- **"Could not find booking request after 5 attempts"**: Booking request not visible;
+  check agency scoping (ensure AGENCY_ID matches JWT claims and booking request agency)
+
 - **under_review → confirmed**: Approve action sets status to confirmed, sets confirmed_at timestamp
 - **under_review → cancelled**: Decline action sets status to cancelled, stores decline_reason in cancellation_reason
 - **Idempotency**: Re-approving confirmed booking returns 200 with same booking_id (no-op)

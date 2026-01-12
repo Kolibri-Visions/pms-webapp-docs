@@ -2824,6 +2824,16 @@ Mark as **✅ VERIFIED** when ALL of the following are confirmed:
 Additionally, public endpoint requests now include tenant resolution headers (X-Forwarded-Host, X-Forwarded-Proto, Origin) to match Epic C public website smoke test approach. This fixes "jq: error: Cannot index array with string 'items'" failures in production (commit 66ca49e).
 
 
+**Update (2026-01-12):** Smoke script Step C hardened for booking-requests list parsing. The script now:
+- Checks HTTP status codes explicitly (expects 200, retries on 502/503)
+- Handles multiple response shapes: array, `{items:[...]}`, `{data:[...]}`, `{data:{items:[...]}}`
+- Retries up to 5 times with 1s sleep for transient errors or delayed list updates
+- Explicitly sets `x-agency-id` header when AGENCY_ID env var is provided
+- Provides better diagnostics on failure (first 5 IDs/statuses, response shape, truncated body)
+
+This fixes "jq: error: Cannot iterate over null (null)" failures in production. Status remains IMPLEMENTED (not VERIFIED) until full prod verification with rc=0.
+
+
 **PROD Evidence (Verified: 2026-01-10)**:
 - **Verification Date**: 2026-01-10
 - **API Base URL**: https://api.fewo.kolibri-visions.de
