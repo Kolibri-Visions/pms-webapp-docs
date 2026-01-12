@@ -2952,6 +2952,68 @@ docker exec $(docker ps -q -f name=supabase) psql -U postgres -d postgres \
 
 ---
 
+## Data Hygiene
+
+### Legacy bookings.cancelled_by Strings (host/guest)
+
+**Symptom**: The `public.bookings.cancelled_by` column contains non-UUID string values like `'host'` or `'guest'` instead of proper user UUIDs.
+
+**Root Cause**: Early legacy data stored the cancellation actor as a string descriptor (`'host'` or `'guest'`) before the schema standardized to UUIDs referencing `auth.users.id`.
+
+**Impact**: 
+- Data inconsistency warnings in logs
+- Potential validation errors when querying cancelled bookings
+- Foreign key or JOIN operations may fail if code expects UUIDs
+
+**Verification (before cleanup)**:
+```sql
+-- Count non-UUID values in cancelled_by column
+SELECT count(*) FILTER (
+  WHERE cancelled_by IS NOT NULL
+    AND substring(cancelled_by from '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}') IS NULL
+) AS cancelled_by_non_uuid
+FROM public.bookings;
+
+-- List actual non-UUID values
+SELECT DISTINCT cancelled_by
+FROM public.bookings
+WHERE cancelled_by IS NOT NULL
+  AND substring(cancelled_by from '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}') IS NULL;
+```
+
+**Fix (transaction-safe)**:
+```sql
+BEGIN;
+
+-- Normalize legacy string values to NULL
+-- We do NOT attempt to invent user identities for legacy data
+UPDATE public.bookings
+  SET cancelled_by = NULL
+  WHERE cancelled_by IN ('host', 'guest');
+
+COMMIT;
+```
+
+**Verification (after cleanup)**:
+```sql
+-- Should return 0
+SELECT count(*) FILTER (
+  WHERE cancelled_by IS NOT NULL
+    AND substring(cancelled_by from '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}') IS NULL
+) AS cancelled_by_non_uuid
+FROM public.bookings;
+```
+
+**PROD Remediation (2026-01-12)**:
+- **Before**: 27 rows with legacy values (`host`=26, `guest`=1)
+- **After**: 0 rows with non-UUID values
+- **Action**: Applied UPDATE transaction, set legacy values to NULL
+- **Impact**: No functional impact; cancelled_by is nullable and optional metadata
+
+**Note**: This cleanup does not affect booking status or other fields. The `cancelled_at` timestamp and `cancellation_reason` fields (if populated) remain intact and provide cancellation context.
+
+---
+
 ## DB Migrations (Production)
 
 **Date Added:** 2026-01-03 (Phase 21A)
