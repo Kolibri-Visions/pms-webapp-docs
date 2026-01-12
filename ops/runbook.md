@@ -21045,6 +21045,234 @@ echo "rc=$?"
 
 ---
 
+#### P1: Admin UI and Common Operations
+
+**Admin UI Location**: `https://admin.fewo.kolibri-visions.de/booking-requests`
+
+**Page Features:**
+- Responsive table view with booking requests sorted by creation date (newest first)
+- Status filter dropdown: All, Requested, Under Review, Confirmed, Cancelled
+- Search functionality (future: by guest name, email, reference)
+- Real-time action buttons: Review, Approve, Decline
+- Decline modal with required reason field and validation
+- Toast notifications for success/error feedback
+- Loading states during API calls
+- Empty state: "Keine Buchungsanfragen gefunden" with helpful guidance
+
+**Access Control:**
+- Requires valid JWT token (obtained via Supabase Auth login)
+- Role requirement: `manager` or `admin` in `team_members` table
+- Agency scoping: Users only see booking requests for their agency_id
+- RLS policies enforce database-level isolation
+
+**Common Operations:**
+
+1. **View Pending Booking Requests:**
+   ```bash
+   # List all requested booking requests
+   curl -sS -H "Authorization: Bearer $JWT_TOKEN" \
+     "https://api.fewo.kolibri-visions.de/api/v1/booking-requests?status=requested&limit=50" | jq '.'
+   ```
+
+2. **Review a Booking Request:**
+   ```bash
+   # Mark as under_review with internal note
+   curl -sS -X POST \
+     -H "Authorization: Bearer $JWT_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"internal_note": "Checking property availability"}' \
+     "https://api.fewo.kolibri-visions.de/api/v1/booking-requests/{request-id}/review" | jq '.'
+   ```
+
+3. **Approve a Booking Request:**
+   ```bash
+   # Approve and create confirmed booking
+   curl -sS -X POST \
+     -H "Authorization: Bearer $JWT_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"internal_note": "Approved - property available"}' \
+     "https://api.fewo.kolibri-visions.de/api/v1/booking-requests/{request-id}/approve" | jq '.'
+
+   # Response includes booking_id for newly confirmed booking
+   ```
+
+4. **Decline a Booking Request:**
+   ```bash
+   # Decline with required reason
+   curl -sS -X POST \
+     -H "Authorization: Bearer $JWT_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"decline_reason": "Property not available for requested dates", "internal_note": "Declined"}' \
+     "https://api.fewo.kolibri-visions.de/api/v1/booking-requests/{request-id}/decline" | jq '.'
+   ```
+
+**Database Queries for Operations:**
+
+```sql
+-- Count pending booking requests by status
+SELECT status, COUNT(*)
+FROM booking_requests
+WHERE agency_id = '<your-agency-id>'
+GROUP BY status;
+
+-- Find oldest unreviewed requests
+SELECT id, created_at, date_from, date_to, status
+FROM booking_requests
+WHERE agency_id = '<your-agency-id>'
+  AND status = 'requested'
+ORDER BY created_at ASC
+LIMIT 10;
+
+-- Check for requests awaiting approval (under_review)
+SELECT id, reviewed_at, date_from, date_to, internal_notes
+FROM booking_requests
+WHERE agency_id = '<your-agency-id>'
+  AND status = 'under_review'
+ORDER BY reviewed_at ASC
+LIMIT 10;
+
+-- Find approved requests with booking_ids
+SELECT br.id, br.booking_id, br.confirmed_at, b.status AS booking_status
+FROM booking_requests br
+LEFT JOIN bookings b ON br.booking_id = b.id
+WHERE br.agency_id = '<your-agency-id>'
+  AND br.status = 'confirmed'
+ORDER BY br.confirmed_at DESC
+LIMIT 10;
+```
+
+---
+
+#### P1: Additional Troubleshooting Scenarios
+
+**Scenario: Admin UI Shows "Session Expired" (401 Error)**
+
+**Symptom:** /booking-requests page shows "Session abgelaufen" banner and redirects to login
+
+**Root Cause:** JWT token expired (Supabase Auth tokens have 1-hour default TTL)
+
+**Solution:**
+1. Re-login via `/login` page to obtain fresh JWT token
+2. Token is automatically refreshed by Supabase client if refresh token is valid
+3. For API testing: Generate fresh token using `pms_fresh_jwt.sh` script
+
+**Verification:**
+```bash
+# Check token expiration
+echo $JWT_TOKEN | cut -d'.' -f2 | base64 -d 2>/dev/null | jq '.exp'
+# Compare with current time: date +%s
+```
+
+---
+
+**Scenario: Cannot Decline Request (422 Validation Error)**
+
+**Symptom:** POST /api/v1/booking-requests/{id}/decline returns 422 with "decline_reason is required"
+
+**Root Cause:** Request body missing required `decline_reason` field
+
+**Solution:**
+- Ensure request body includes non-empty `decline_reason` string
+- Example: `{"decline_reason": "Property unavailable", "internal_note": "Optional note"}`
+- Admin UI decline modal enforces this validation client-side
+
+---
+
+**Scenario: Booking Request List Empty Despite Database Records**
+
+**Symptom:** GET /api/v1/booking-requests returns empty array but database has records
+
+**Root Cause:** Agency_id mismatch or RLS policy filtering records
+
+**Solution:**
+1. Verify JWT token agency_id claim:
+   ```bash
+   echo $JWT_TOKEN | cut -d'.' -f2 | base64 -d 2>/dev/null | jq '.agency_id'
+   ```
+
+2. Check booking_requests agency_id:
+   ```sql
+   SELECT agency_id, COUNT(*)
+   FROM booking_requests
+   GROUP BY agency_id;
+   ```
+
+3. Verify RLS policies allow SELECT:
+   ```sql
+   SELECT * FROM pg_policies
+   WHERE tablename = 'booking_requests'
+     AND cmd = 'SELECT';
+   ```
+
+---
+
+**Scenario: Approve Action Hangs or Times Out**
+
+**Symptom:** POST /api/v1/booking-requests/{id}/approve never returns, times out after 30s
+
+**Root Cause:** Database deadlock or slow query (checking for overlapping bookings)
+
+**Solution:**
+1. Check for long-running queries:
+   ```sql
+   SELECT pid, now() - query_start AS duration, state, query
+   FROM pg_stat_activity
+   WHERE state != 'idle'
+     AND query LIKE '%booking_requests%'
+   ORDER BY duration DESC;
+   ```
+
+2. Kill long-running query if necessary:
+   ```sql
+   SELECT pg_terminate_backend(<pid>);
+   ```
+
+3. Check for database locks:
+   ```sql
+   SELECT * FROM pg_locks
+   WHERE NOT granted
+     AND relation::regclass::text = 'booking_requests';
+   ```
+
+---
+
+**Scenario: Idempotent Approval Returns Different booking_id**
+
+**Symptom:** Re-approving same booking request returns different booking_id each time
+
+**Root Cause:** Idempotency logic not working (should return cached response for 24h)
+
+**Solution:**
+1. Check idempotency_keys table:
+   ```sql
+   SELECT key, endpoint, response_body, created_at
+   FROM idempotency_keys
+   WHERE endpoint LIKE '%approve%'
+   ORDER BY created_at DESC
+   LIMIT 5;
+   ```
+
+2. Verify `Idempotency-Key` header was sent in original request
+3. Check Redis connectivity (if using Redis for idempotency cache)
+4. TTL is 24 hours - requests older than 24h will create new bookings
+
+---
+
+**Scenario: Admin UI Actions Don't Update Status**
+
+**Symptom:** Clicked Approve/Decline button but status still shows same value after refresh
+
+**Root Cause:** JavaScript error in frontend, API error not displayed, or state update failure
+
+**Solution:**
+1. Open browser DevTools Console tab and check for errors
+2. Open Network tab and inspect API response status code
+3. If 200 OK: Check response body for actual status value
+4. If 4xx/5xx: Check error message in response body
+5. Hard refresh page (Cmd+Shift+R / Ctrl+F5) to clear stale state
+
+---
+
 ### P2 Pricing v1 Foundation
 
 **Scope**: Rate plans, seasonal pricing overrides, and quote calculation for booking requests
