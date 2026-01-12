@@ -20997,6 +20997,60 @@ requested → under_review → confirmed (approved)
 6. If MODULES_ENABLED=false in production, verify fallback router mounting in main.py
 
 
+---
+
+**Problem**: Approve returns 422 Unprocessable Entity (Field required)
+
+**Symptom**: POST /api/v1/booking-requests/{id}/approve returns 422 with error: "Field required" or "Body is required"
+
+**Root Cause** (before fix): Approve endpoint required body with `internal_note` field, but many clients call approve without body.
+
+**Solution** (after fix):
+- Approve endpoint now accepts empty body (body is optional)
+- `internal_note` is optional (defaults to None if body empty)
+- Call approve without body:
+  ```bash
+  curl -X POST "https://api.fewo.kolibri-visions.de/api/v1/booking-requests/{id}/approve" \
+    -H "Authorization: Bearer $JWT_TOKEN" \
+    -H "Content-Type: application/json"
+  # Expected: 200 OK (no body required)
+  ```
+- Call approve with body:
+  ```bash
+  curl -X POST "https://api.fewo.kolibri-visions.de/api/v1/booking-requests/{id}/approve" \
+    -H "Authorization: Bearer $JWT_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"internal_note": "Approved by manager"}'
+  # Expected: 200 OK
+  ```
+
+---
+
+**Problem**: Approve returns 500 Internal Server Error (TypeError: ConflictException)
+
+**Symptom**: POST /api/v1/booking-requests/{id}/approve returns 500 when booking dates conflict. Backend logs show: `TypeError: ConflictException.__init__() got an unexpected keyword argument 'message'`
+
+**Root Cause** (before fix): Conflict handler called `ConflictException(message=...)` but exception only accepted `detail=` kwarg, causing TypeError and 500 response instead of 409 Conflict.
+
+**Solution** (after fix):
+- ConflictException now accepts both `detail=` and `message=` kwargs (backward compatible)
+- Booking conflicts now correctly return 409 Conflict instead of 500
+- Example 409 response:
+  ```json
+  {
+    "detail": "Booking conflict: dates overlap with existing booking",
+    "conflict_type": "booking_overlap",
+    "existing_resource_id": "<existing-booking-uuid>"
+  }
+  ```
+- How to handle 409 in client code:
+  1. On 409, retrieve conflict details from response body
+  2. Shift booking dates by +7 days and retry approval
+  3. Or decline the booking request with appropriate reason
+  4. Smoke test (`pms_p1_booking_request_smoke.sh` Step E) implements automatic retry with date shifting
+
+---
+
 #### Update (2026-01-12): P1 Smoke Script Hardened for Public Properties Response
 
 **Issue**: The P1 smoke script (`pms_p1_booking_request_smoke.sh`) failed in production (commit 66ca49e) when discovering properties via GET `/api/v1/public/properties`. The script assumed the response shape was always `{items: [...]}`, but the public properties endpoint returns a plain array `[...]` by default (backward compatible), and only returns `{items: [...], total: N}` when `paginated=true` query parameter is used.

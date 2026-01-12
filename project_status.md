@@ -2837,6 +2837,24 @@ This fixes "jq: error: Cannot iterate over null (null)" failures in production. 
 **Update (2026-01-12):** Bugfix for 500 error on GET /api/v1/booking-requests when guest_id=NULL. Schema updated: `BookingRequestListItem.guest_id` and `BookingRequestDetail.guest_id` now `Optional[UUID] = None`. List endpoint uses defensive per-row validation to tolerate NULL guest_id without failing entire request. Status remains IMPLEMENTED until prod verification (pms_verify_deploy.sh + pms_p1_booking_request_smoke.sh rc=0).
 
 
+
+**Update (2026-01-12):** Bugfix for approve endpoint accepting empty body and returning 409 (not 500) on booking conflicts:
+
+1. **Approve Endpoint Body Optional**: POST /api/v1/booking-requests/{id}/approve now accepts empty body (no 422 "Field required" error). The `internal_note` field is optional and defaults to None when body is empty or missing. This aligns with common client usage patterns where approve is called without additional notes.
+
+2. **ConflictException Backward Compatibility**: Fixed `ConflictException` to accept both `detail=` and `message=` kwargs. Previously, conflict handlers called `ConflictException(message=...)` but the exception only accepted `detail=`, causing TypeError and 500 Internal Server Error instead of proper 409 Conflict response. Now booking date overlaps correctly return 409 with conflict details (`conflict_type`, `existing_resource_id`).
+
+3. **Smoke Script Step E Retry Logic**: Production smoke test (`pms_p1_booking_request_smoke.sh`) Step E now implements automatic retry on 409 conflicts (up to 5 attempts). Each retry creates a new booking request with dates shifted by +7 days. Conflicted requests are declined before retry (cleanup). This brings production smoke test closer to comprehensive workflow test in terms of conflict handling while maintaining simplicity.
+
+**Affected Files**:
+- backend/app/api/routes/booking_requests.py (approve endpoint: optional body via `Body(default=None)`)
+- backend/app/core/exceptions.py (ConflictException: accepts `message` kwarg mapped to `detail`)
+- backend/scripts/pms_p1_booking_request_smoke.sh (Step E: retry loop with date shifting on 409)
+- backend/docs/ops/runbook.md (troubleshooting: approve 422/500 → 200/409)
+- backend/scripts/README.md (Step E retry strategy documented)
+
+Status remains IMPLEMENTED until prod verification (pms_verify_deploy.sh + pms_p1_booking_request_smoke.sh rc=0 with Step E retry success).
+
 **PROD Evidence (Verified: 2026-01-10)**:
 - **Verification Date**: 2026-01-10
 - **API Base URL**: https://api.fewo.kolibri-visions.de
