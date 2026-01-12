@@ -5201,7 +5201,39 @@ done
 
 **Scope:** Multi-tenant team management with role-based access control (RBAC), team member invitations, and agency settings management for collaborative workflows.
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
+
+**PROD Verification Evidence (2026-01-12):**
+
+**Verification Date:** 2026-01-12
+
+**Backend Deployment:**
+- **API Base URL / HOST**: https://api.fewo.kolibri-visions.de
+- **Agency ID**: ffd0123a-10b6-40cd-8ad5-66eee9757ab7
+- **Source Commit**: 054bd62bff32ce6335185b71d1bdd3aca93a6b4f
+- **Started At**: 2026-01-12T22:12:04.081912+00:00
+- **Source**: GET /api/v1/ops/version
+
+**Automated Verification:**
+1. **Deploy Verification** (`backend/scripts/pms_verify_deploy.sh`):
+   - Commit match: ✅ EXPECT_COMMIT=054bd62
+   - Exit code: `rc=0`
+
+2. **Epic A Smoke Test** (`backend/scripts/pms_epic_a_onboarding_rbac_smoke.sh`):
+   - Exit code: `rc=0`
+   - All 6 tests passed:
+     - ✅ Test 1: GET /api/v1/me → 200 (user identity)
+     - ✅ Test 2: GET /api/v1/agencies/current → 200 (agency name: "Kolibri Visions Agency")
+     - ✅ Test 3: POST /api/v1/team/invites → 201 (created id=edf75533-ad98-4108-b636-bc65957facbc for smoke-test-1768256618@example.com)
+     - ✅ Test 4: GET /api/v1/team/invites → 200 (list invitations)
+     - ✅ Test 5: GET /api/v1/team/members → 200 (3 members)
+     - ✅ Test 6: POST /api/v1/team/invites/{id}/revoke → 200 (revoke invitation)
+
+**Notes:**
+- Epic A no longer queries auth schema (all queries use public.profiles with dynamic column detection)
+- If profiles email column is missing, API returns email=null but flow remains functional
+- Schema drift handling: Supports profiles.user_id OR profiles.id; team_members.user_id OR team_members.profile_id
+- Email column detection: Supports email OR primary_email OR contact_email OR None (graceful degradation)
 
 **PROD Verification Evidence (Previous - 2026-01-11):**
 
@@ -5252,8 +5284,7 @@ done
   - Replaced `auth.users` joins/queries with `public.profiles` table
   - Added `InsufficientPrivilegeError` exception handler returning HTTP 503 with actionable message
   - All email lookups now use `profiles.email` (LEFT JOIN tolerates NULL)
-- **Status**: Downgraded to IMPLEMENTED pending re-verification after deployment
-- **Verification Required**: Deploy this fix and re-run `pms_epic_a_onboarding_rbac_smoke.sh` (rc=0 expected)
+- **Resolution**: ✅ Resolved and VERIFIED in PROD on 2026-01-12 (commit 054bd62)
 - **Related Files**: `backend/app/api/routes/epic_a.py`, `backend/app/core/database.py`
 
 **Regression Note (2026-01-12 - Schema Drift Fix):**
@@ -5264,8 +5295,7 @@ done
   - Supports profiles join key: `profiles.user_id` (preferred) OR `profiles.id` (fallback)
   - Supports team_members user ref: `team_members.user_id` (preferred) OR `team_members.profile_id` (fallback)
   - Returns HTTP 503 with actionable message if neither expected column exists
-- **Status**: IMPLEMENTED pending re-verification after deployment
-- **Verification Required**: Deploy this fix and re-run `pms_epic_a_onboarding_rbac_smoke.sh` (rc=0 expected)
+- **Resolution**: ✅ Resolved and VERIFIED in PROD on 2026-01-12 (commit 054bd62)
 - **Related Files**: `backend/app/api/routes/epic_a.py` (all Epic A endpoints updated with dynamic columns)
 
 **Regression Note (2026-01-12 - Missing profiles.email Column Fix):**
@@ -5278,8 +5308,7 @@ done
   - Create invite: Skip "already member by email" check when column missing (log warning, still prevent duplicate pending invites)
   - Accept invite: Rely on JWT email claim when profiles.email unavailable
   - All email fields in response schemas already Optional (no Pydantic changes needed)
-- **Status**: IMPLEMENTED pending re-verification after deployment
-- **Verification Required**: Deploy this fix and re-run `pms_epic_a_onboarding_rbac_smoke.sh` (rc=0 expected, email fields may be null)
+- **Resolution**: ✅ Resolved and VERIFIED in PROD on 2026-01-12 (commit 054bd62)
 - **Related Files**: `backend/app/api/routes/epic_a.py` (5 endpoints updated: list_team_members, update_team_member_role, create_team_invite, accept_team_invite, get_me)
 - **Note**: For full functionality, add `profiles.email` column to database (see runbook). Code now gracefully degrades without 503 errors.
 

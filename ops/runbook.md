@@ -26513,6 +26513,24 @@ export JWT_TOKEN="<<<admin JWT token>>>"
 
 **Note:** With email column missing, team member listings show null emails and "already a member" checks are skipped. For full functionality, add the email column (Option A). Code gracefully degrades without 503 errors.
 
+---
+
+**Verification (PROD, 2026-01-12):**
+
+All Epic A schema drift issues (auth schema, user_id columns, profiles.email) have been resolved and verified in production:
+
+- **Source Commit**: 054bd62bff32ce6335185b71d1bdd3aca93a6b4f
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh` (rc=0, EXPECT_COMMIT=054bd62)
+- **Smoke Test**: `backend/scripts/pms_epic_a_onboarding_rbac_smoke.sh` (rc=0)
+- **Verification Date**: 2026-01-12
+- **Notes**:
+  - Epic A no longer queries auth schema
+  - Dynamic column detection handles schema variants (profiles.user_id OR profiles.id; team_members.user_id OR team_members.profile_id)
+  - Email column detection tolerates missing profiles.email (returns email=null with graceful degradation)
+  - All 6 smoke tests pass: /me, agencies/current, team/invites (create/list/revoke), team/members
+
+---
+
 ### DELETE Team Member Fails (Foreign Key Constraint)
 
 **Symptom:** DELETE /api/v1/team/members/{id} returns 409 Conflict.
