@@ -27838,3 +27838,66 @@ curl -k -I "https://admin.fewo.kolibri-visions.de/" | grep -i "x-forwarded-host"
 - Redeploy frontend
 
 ---
+
+### Middleware Implementation (2026-01-11 Fix)
+
+**Problem:** Original implementation in commit 0a6dd27 caused HTTP 500 on both public and admin root routes.
+
+**Root Cause:** Route handlers (app/page.tsx) tried to use headers() which can fail in certain edge cases. Direct routing in page components is fragile.
+
+**Solution:** Moved routing logic to Next.js middleware (frontend/middleware.ts).
+
+**How Middleware Works:**
+1. Reads hostname from `x-forwarded-host` or `host` header
+2. Strips port, lowercases, determines if admin host (starts with "admin.")
+3. Routes BEFORE page handlers execute:
+   - **PUBLIC /** → rewrites to `/_public` (URL stays `/`, content from `/_public`)
+   - **PUBLIC /login** → redirects 307 to `https://admin.<basedomain>/login`
+   - **ADMIN /** → redirects 307 to `/login`
+   - **ADMIN /unterkuenfte or /p/** → redirects 307 to public host (safety)
+4. Returns proper HTTP 307 redirects (not NEXT_REDIRECT digest)
+
+**Safe Routes:**
+- `frontend/app/_public/page.tsx`: Minimal public homepage (no auth, no admin deps, never throws)
+- `frontend/app/page.tsx`: Simplified fallback (rarely hit, middleware handles routing)
+
+**Automated Smoke Test:**
+Script: `backend/scripts/pms_frontend_host_routing_smoke.sh`
+
+Tests:
+1. PUBLIC / → expect 200 (not 500, no error indicators)
+2. PUBLIC /login → expect 307 to admin host
+3. ADMIN / → expect 307 to /login
+4. ADMIN /login → expect 200
+
+Usage:
+```bash
+# Default hosts (fewo.kolibri-visions.de, admin.fewo.kolibri-visions.de)
+./backend/scripts/pms_frontend_host_routing_smoke.sh
+
+# Custom hosts
+PUBLIC_HOST=example.com ADMIN_HOST=admin.example.com \
+./backend/scripts/pms_frontend_host_routing_smoke.sh
+
+# Expected output: All 4 tests pass, rc=0
+```
+
+**Verification After Fix:**
+```bash
+# PUBLIC / must return 200 (not 500)
+curl -k -sS -w "\n%{http_code}" "https://fewo.kolibri-visions.de/" | tail -5
+# Expected: HTTP 200, public homepage HTML (no "__next_error__" or "500:")
+
+# PUBLIC /login must redirect to admin host
+curl -k -sS -I "https://fewo.kolibri-visions.de/login" | grep -i "location"
+# Expected: Location: https://admin.fewo.kolibri-visions.de/login
+
+# ADMIN / must redirect to /login
+curl -k -sS -I "https://admin.fewo.kolibri-visions.de/" | grep -i "location"
+# Expected: Location: /login (or absolute URL ending in /login)
+
+# ADMIN /login must return 200
+curl -k -sS -w "\n%{http_code}" "https://admin.fewo.kolibri-visions.de/login" | tail -5
+# Expected: HTTP 200, login form HTML
+```
+
