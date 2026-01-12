@@ -471,6 +471,22 @@ curl -X POST https://sb-pms.kolibri-visions.de/auth/v1/token?grant_type=password
 export TOKEN="eyJhb..."
 ```
 
+**Note**: If SB_URL or ANON_KEY are not available in your environment, retrieve them from the Supabase Kong container:
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+# Get Supabase container name
+SUPABASE_KONG_CONTAINER=$(docker ps --filter "name=supabase-kong" --format "{{.Names}}" | head -n1)
+
+# Extract environment variables from Kong container
+export SB_URL=$(docker inspect $SUPABASE_KONG_CONTAINER | jq -r '.[0].Config.Env[]' | grep '^SUPABASE_URL=' | cut -d'=' -f2-)
+export ANON_KEY=$(docker inspect $SUPABASE_KONG_CONTAINER | jq -r '.[0].Config.Env[]' | grep '^SUPABASE_ANON_KEY=' | cut -d'=' -f2-)
+
+# Verify
+echo "SB_URL: $SB_URL"
+echo "ANON_KEY: ${ANON_KEY:0:20}..." # Show first 20 chars only
+```
+
 2. Verify token structure
 
 WHERE: HOST-SERVER-TERMINAL

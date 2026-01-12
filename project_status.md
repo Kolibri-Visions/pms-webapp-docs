@@ -2720,7 +2720,7 @@ Verified in production on **2026-01-06** (Europe/Berlin timezone):
    - Logs action, request_id, user_id (actor), old_status → new_status
    - Structured log context for review/approve/decline actions
 
-7. **Smoke Test** (backend/scripts/pms_public_booking_requests_workflow_smoke.sh):
+7. **Smoke Test** (backend/scripts/pms_p1_booking_request_smoke.sh):
    - Test 1: Create public booking request
    - Test 2: Review (set to under_review)
    - Test 3: Approve (set to confirmed)
@@ -2758,13 +2758,15 @@ Verified in production on **2026-01-06** (Europe/Berlin timezone):
 
 **Implementation Complete:** 2026-01-06
 **Components Delivered:**
-- Database schema (`booking_requests` table with status tracking, RLS policies)
+- Database schema (booking requests stored in public.bookings table with workflow columns: reviewed_at, approved_at, reviewed_by, approved_by, decline_reason, status tracking, RLS policies)
 - Public API: POST /api/v1/public/booking-requests (idempotent, no auth)
 - Admin API: GET/POST /api/v1/booking-requests/* endpoints (requires manager/admin role)
 - Admin UI: /booking-requests page with review/approve/decline actions
 - Status mapping layer: API `under_review` ↔ DB `inquiry` (backward compatibility)
-- Comprehensive smoke test: `pms_public_booking_requests_workflow_smoke.sh`
+- Comprehensive smoke test: `pms_p1_booking_request_smoke.sh`
 - Documentation: runbook.md sections, API schemas, troubleshooting guides
+
+**NOTE (2026-01-12):** The section below ("Next Steps for VERIFIED Status") is legacy template text from initial implementation. P1 is now VERIFIED in production. See the PROD Evidence blocks further below for actual verification results, and use the current smoke script name `pms_p1_booking_request_smoke.sh`.
 
 **Next Steps for VERIFIED Status:**
 1. Deploy to production (Coolify redeploy of backend + frontend)
@@ -2773,7 +2775,7 @@ Verified in production on **2026-01-06** (Europe/Berlin timezone):
    cd /data/repos/pms-webapp
    export HOST="https://api.fewo.kolibri-visions.de"
    export JWT_TOKEN="<<<manager/admin token>>>"
-   ./backend/scripts/pms_public_booking_requests_workflow_smoke.sh
+   ./backend/scripts/pms_p1_booking_request_smoke.sh
    echo "rc=$?"
    ```
 3. Verify commit hash matches deployed version:
@@ -2791,7 +2793,7 @@ Verified in production on **2026-01-06** (Europe/Berlin timezone):
 
 **Verification Criteria:**
 Mark as **✅ VERIFIED** when ALL of the following are confirmed:
-1. ✅ Database migration applied (booking_requests table exists with all required columns)
+1. ✅ Database migration applied (public.bookings table has workflow columns: reviewed_at, approved_at, reviewed_by, approved_by, decline_reason, approved_booking_id)
 2. ✅ API endpoints accessible (/api/v1/booking-requests/* returns non-404 responses)
 3. ✅ Smoke test passes in production (rc=0, all 5 tests pass)
 4. ✅ Admin UI loads without errors (/booking-requests page renders table)
@@ -2807,7 +2809,7 @@ Mark as **✅ VERIFIED** when ALL of the following are confirmed:
 - **Source Commit:** 3dea97cc8e864855e433d81fc808dfed363b4fa3
 - **Health Checks:** /health (200), /health/ready (200)
 - **Verification Script:** pms_verify_deploy.sh (commit verification PASS)
-- **Smoke Test:** pms_public_booking_requests_workflow_smoke.sh (rc=0)
+- **Smoke Test:** pms_p1_booking_request_smoke.sh (rc=0)
 - **Key Outcomes:**
   - Review → under_review ✅
   - Approve → confirmed ✅
@@ -2861,7 +2863,7 @@ Status remains IMPLEMENTED until prod verification (pms_verify_deploy.sh + pms_p
 - **Deployed Commit**: eb033bf8c48ad3e7b9270c536932a7f0c512b419
 - **Process Started**: 2026-01-10T18:27:04.685372+00:00
 - **Deploy Verification**: pms_verify_deploy.sh (rc=0, commit match eb033bf8c48ad3e7b9270c536932a7f0c512b419)
-- **Workflow Smoke Test**: pms_public_booking_requests_workflow_smoke.sh (rc=0)
+- **Workflow Smoke Test**: pms_p1_booking_request_smoke.sh (rc=0)
 - **Key Verification Results**:
   - Health checks: /health (200), /health/ready (200)
   - API endpoints accessible: /api/v1/booking-requests/* (200)
@@ -2880,7 +2882,7 @@ Status remains IMPLEMENTED until prod verification (pms_verify_deploy.sh + pms_p
 - **Public Host**: fewo.kolibri-visions.de
 - **Agency ID**: ffd0123a-10b6-40cd-8ad5-66eee9757ab7
 - **Deploy Verification**: pms_verify_deploy.sh (rc=0)
-  - Source Commit: a417c1ba473c62c6d08976d3711e85392fc507b2
+  - Source Commit: 72f40107ad1a04970d8e56b54217a1a945441afd
   - Started At: 2026-01-12T12:11:05.624611+00:00
   - Endpoint: /api/v1/ops/version
 - **Production Smoke Test**: pms_p1_booking_request_smoke.sh (rc=0)
