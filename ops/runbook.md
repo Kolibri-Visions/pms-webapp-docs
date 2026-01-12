@@ -20996,6 +20996,79 @@ requested → under_review → confirmed (approved)
 5. Check logs at startup for "Booking Requests module not available" warnings
 6. If MODULES_ENABLED=false in production, verify fallback router mounting in main.py
 
+
+#### Update (2026-01-12): P1 Smoke Script Hardened for Public Properties Response
+
+**Issue**: The P1 smoke script (`pms_p1_booking_request_smoke.sh`) failed in production (commit 66ca49e) when discovering properties via GET `/api/v1/public/properties`. The script assumed the response shape was always `{items: [...]}`, but the public properties endpoint returns a plain array `[...]` by default (backward compatible), and only returns `{items: [...], total: N}` when `paginated=true` query parameter is used.
+
+**Error**: `jq: error: Cannot index array with string "items"` at Step A property discovery.
+
+**Fix**: Updated the smoke script to handle both response shapes:
+- Array (default): `[ {...}, {...} ]`
+- Paginated object: `{ "items": [...], "total": N }`
+
+The script now uses a jq filter similar to Epic C public website smoke test:
+```bash
+PROPERTY_ID=$(echo "$RESPONSE" | jq -r '
+    if type == "array" then
+        if length > 0 then .[0].id else empty end
+    elif type == "object" and has("items") then
+        if (.items | length) > 0 then .items[0].id else empty end
+    else
+        empty
+    end
+')
+```
+
+Additionally, the script now includes tenant resolution headers for public endpoints (matching Epic C approach):
+- `X-Forwarded-Host: ${PUBLIC_HOST}`
+- `X-Forwarded-Proto: https`
+- `Origin: https://${PUBLIC_HOST}`
+
+**Verification Commands** (HOST-SERVER-TERMINAL):
+```bash
+# 1. Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# 2. Optional: Verify deployment
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# 3. Run P1 smoke test with required env vars
+export HOST="api.fewo.kolibri-visions.de"
+export PUBLIC_HOST="fewo.kolibri-visions.de"
+export JWT_TOKEN="<manager-or-admin-jwt-token>"
+# Optional: export AGENCY_ID="<agency-uuid>"
+./backend/scripts/pms_p1_booking_request_smoke.sh
+echo "rc=$?"
+
+# Expected: All 5 tests pass (A-E), rc=0
+```
+
+**Expected Output**:
+```
+ℹ Step A: Discovering published property...
+✅ Step A PASSED: Found property 'Property Name' (ID: <uuid>)
+ℹ Step B: Creating first booking request (for decline test)...
+✅ Step B PASSED: Booking request created (ID: <uuid>, status: requested)
+ℹ Step C: Retrieving booking requests (authenticated)...
+✅ Step C PASSED: Found booking request in list (ID: <uuid>)
+ℹ Step D: Declining booking request with reason...
+✅ Step D PASSED: Booking request declined (status: cancelled, reason: ...)
+ℹ Step E: Creating second booking request (for approve test)...
+✅ Created second booking request (ID: <uuid>, status: requested)
+ℹ Approving booking request...
+✅ Step E PASSED: Booking request approved (status: confirmed, booking_id: <uuid>)
+✅ ALL TESTS PASSED ✅
+```
+
+**Troubleshooting**:
+- **Still fails at Step A with jq error**: Script not updated; pull latest code
+- **Step A returns empty property list**: No public properties published; check `/api/v1/properties` (authenticated) vs `/api/v1/public/properties` (public)
+- **Step B/C/D/E auth errors**: JWT_TOKEN invalid or missing manager/admin role
+- **Step E returns 409 Conflict**: Property already has bookings for test dates; smoke test logs this as WARNING (expected in production)
+
 **Smoke Test**:
 ```bash
 # Run workflow smoke test (requires JWT_TOKEN with manager/admin role)

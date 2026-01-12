@@ -2817,6 +2817,13 @@ Mark as **✅ VERIFIED** when ALL of the following are confirmed:
 - **Router Mounted:** /api/v1/booking-requests found in OpenAPI (preflight PASS)
 - **Note:** UI component added 2026-01-07, requires re-verification with UI workflow
 
+**Update (2026-01-12):** Smoke script parsing hardened for public properties array response. The production smoke script (`pms_p1_booking_request_smoke.sh`) now handles both response shapes from GET /api/v1/public/properties:
+- Array (default): `[{...}, {...}]` - backward compatible
+- Paginated object (with `paginated=true`): `{items: [...], total: N}`
+
+Additionally, public endpoint requests now include tenant resolution headers (X-Forwarded-Host, X-Forwarded-Proto, Origin) to match Epic C public website smoke test approach. This fixes "jq: error: Cannot index array with string 'items'" failures in production (commit 66ca49e).
+
+
 **PROD Evidence (Verified: 2026-01-10)**:
 - **Verification Date**: 2026-01-10
 - **API Base URL**: https://api.fewo.kolibri-visions.de
