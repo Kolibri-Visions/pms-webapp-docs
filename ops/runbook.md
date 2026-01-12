@@ -21122,6 +21122,7 @@ echo "rc=$?"
 - **Step A returns empty property list**: No public properties published; check `/api/v1/properties` (authenticated) vs `/api/v1/public/properties` (public)
 - **Step B/C/D/E auth errors**: JWT_TOKEN invalid or missing manager/admin role
 - **Step E returns 409 Conflict**: Property already has bookings for test dates; smoke test logs this as WARNING (expected in production)
+- **Step E fails with "curl: (6) Could not resolve host: <UUID>"**: Header quoting issue (pre-fix). The AGENCY_ID was treated as a hostname due to unquoted command substitution. Fixed in commit > c1cb753 by using array-based headers. Pull latest code: `git fetch origin main && git reset --hard origin/main`
 
 **Smoke Test**:
 ```bash
