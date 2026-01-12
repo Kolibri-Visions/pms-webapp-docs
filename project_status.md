@@ -5586,6 +5586,27 @@ echo "rc=$?"
   - Result: confirmed
 - **Note**: Quote step is best-effort; current smoke tolerates HTTP 422 as WARNING (documented).
 
+**PROD Evidence (2026-01-12):**
+- **Verification Date**: 2026-01-12
+- **API Base URL / HOST**: https://api.fewo.kolibri-visions.de
+- **Public Host**: fewo.kolibri-visions.de
+- **Agency ID**: ffd0123a-10b6-40cd-8ad5-66eee9757ab7
+- **Source Commit**: 8e542865465300fa8fdd3b571aa38e1559ee6b84
+- **Started At**: 2026-01-12T19:53:05.162370+00:00
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh` (rc=0)
+- **Smoke Test**: `backend/scripts/pms_epic_b_direct_booking_funnel_smoke.sh` (rc=0)
+  - Availability window auto-shifted due to double_booking until available (expected behavior)
+  - Quote endpoint returned 422 (WARNING, optional endpoint, script continues)
+  - Booking Request created + reviewed + approved + verified confirmed
+  - Property: 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
+  - Dates used: 2026-02-23 to 2026-02-26
+  - Booking Request ID: 8c46552f-f5b1-408a-9eca-ab7032ab5b1b
+  - Booking ID: 8c46552f-f5b1-408a-9eca-ab7032ab5b1b
+  - Status: confirmed
+- **Notes**:
+  - Quote endpoint 422 is expected WARNING when pricing not configured; smoke script treats as optional and continues
+  - Date-window shifting is expected behavior to auto-avoid overlaps with existing bookings (double_booking)
+
 ---
 
 

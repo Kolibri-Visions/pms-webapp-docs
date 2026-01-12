@@ -26850,6 +26850,11 @@ Authenticated (manager/admin):
 
 **Smoke Script:** `backend/scripts/pms_epic_b_direct_booking_funnel_smoke.sh`
 
+**Important Notes:**
+- **HOST env var required**: Epic B smoke script uses `HOST` (not `API_BASE_URL`) for the base URL
+- **Quote endpoint 422 is WARNING**: When pricing not configured, quote endpoint returns 422; smoke script treats this as optional (WARNING) and continues
+- **Auto-shift behavior**: Availability check may auto-shift date window due to existing bookings (double_booking) until free window found (expected behavior, controlled via `SHIFT_DAYS` and `MAX_WINDOW_TRIES`)
+
 **Test Flow:**
 1. GET /api/v1/properties (authenticated) - Pick property for test
 2. GET /api/v1/public/availability (public) - Check availability (with date shifting on conflict)
