@@ -813,7 +813,7 @@ open https://admin.fewo.kolibri-visions.de/login
 
 ---
 
-### Admin UI — Backoffice Theme v1 ✅ IMPLEMENTED
+### Admin UI — Backoffice Theme v1 ✅ VERIFIED
 
 **Date Completed:** 2026-01-08
 
@@ -916,7 +916,23 @@ open https://admin.fewo.kolibri-visions.de/login
 - /channel-sync      → Sync dashboard with connection cards
 ```
 
-**Status**: ✅ IMPLEMENTED (NOT VERIFIED)
+**Status**: ✅ VERIFIED
+
+**PROD Evidence (2026-01-13):**
+
+- Verification Date: 2026-01-13
+- Admin URL: https://admin.fewo.kolibri-visions.de
+- Container: pms-admin
+- Container SOURCE_COMMIT: c57426f01e03d0baf943abb7454f5c8767b053ef
+- Smoke Test: backend/scripts/pms_admin_ui_static_smoke.sh → rc=0
+  - EXPECTED_COMMIT: c57426f (prefix match ok)
+  - /login endpoint: HTTP 200
+  - UI string scan (container-scan) verified:
+    - "Abmelden" (Logout)
+    - "Deutsch" (German)
+    - "English" (English)
+    - "العربية" (Arabic)
+  - Script summary: Found 4/4 expected strings, PASS
 
 **Runbook Reference:**
 - Section: "Admin UI Visual Style (Backoffice Theme v1)" in `backend/docs/ops/runbook.md` (line ~15280)
