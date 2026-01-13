@@ -4077,7 +4077,7 @@ To mark Phase 21 as VERIFIED in production:
 - ✅ Documentation updates (DOCS SAFE MODE - add-only)
   - Runbook: "Availability Block Overlap Returns 500 Instead of 409" troubleshooting entry with verification commands
   - Location: `backend/docs/ops/runbook.md:3523-3564`
-- 📝 **Status:** Phase 21 remains **IMPLEMENTED (NOT VERIFIED)** - awaiting production verification after this hotfix
+- 📝 **Legacy Status Note (outdated):** Previously awaiting production verification after hotfix — now ✅ VERIFIED (see UPDATE below)
 - 📝 **UPDATE (2026-01-13):** This legacy note is outdated. Phase 21 is now ✅ VERIFIED in PROD (availability smoke rc=0, commit c57426f). See "PROD Evidence (Re-verified: 2026-01-13)" in Phase 21 section above.
 - 🔧 **Verification after deployment:**
   ```bash
