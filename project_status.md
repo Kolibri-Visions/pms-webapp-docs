@@ -4719,7 +4719,33 @@ Added JWT authentication requirement to `/api/v1/ops/modules` endpoint to protec
 - `/ops/audit-log`: Remains AUTH REQUIRED (admin-only) - unchanged
 - Auth mechanism: JWT signature verification only (no DB dependency)
 
-**Status**: ✅ IMPLEMENTED (awaiting production verification)
+**Status**: ✅ VERIFIED
+
+**PROD Evidence (2026-01-13):**
+
+- Verification Date: 2026-01-13
+- API Base URL: https://api.fewo.kolibri-visions.de
+- Endpoint: /api/v1/ops/modules
+
+**Authentication Behavior Verified:**
+- NO AUTH: HTTP 403 with {"detail":"Not authenticated"}
+- EMPTY Bearer: HTTP 403 with {"detail":"Not authenticated"}
+- VALID JWT: HTTP 200, returns modules_enabled=true with module list (pricing + others)
+
+**Related Endpoint (/api/v1/ops/version):**
+- HTTP 200 (remains public, no auth required)
+- source_commit: 7f09c5c358d868f7b3de5c555befe51de19445ad
+- started_at: 2026-01-13T14:57:03.642217+00:00
+- environment: development
+- api_version: 0.1.0
+
+**Verification Results:**
+- ✅ /ops/version returns 200 without auth (PUBLIC, unchanged)
+- ✅ /ops/modules returns 403 without auth (AUTH REQUIRED)
+- ✅ /ops/modules returns 403 with empty Bearer
+- ✅ /ops/modules returns 200 with valid JWT token
+- ✅ Response includes expected fields: mounted_has_channel_connections, channel_connections_paths, pricing_paths
+- ✅ No database errors (auth is JWT-only, no DB dependency)
 
 **PROD Verification (pending):**
 
