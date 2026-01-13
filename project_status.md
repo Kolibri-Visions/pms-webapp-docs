@@ -3331,6 +3331,15 @@ echo "rc=$?"
 
 **Status:** ✅ VERIFIED
 
+**PROD Evidence (2026-01-13):**
+- API Base URL: https://api.fewo.kolibri-visions.de
+- /api/v1/ops/version source_commit: f00edd572e2bc39e2e009775e7969ce46dc3f6d6
+- started_at: 2026-01-13T20:00:05.201229+00:00
+- Smoke script: backend/scripts/pms_pricing_management_ui_smoke.sh
+- Smoke result: rc=0
+- Key output: "All P2 Pricing Management UI smoke tests passed! 🎉"
+- Verification date: 2026-01-13
+
 **Notes:**
 - UI route: `/pricing` (accessible to manager/admin roles)
 - PATCH endpoints enable active toggle without full re-creation
