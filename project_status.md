@@ -3139,6 +3139,18 @@ Status remains IMPLEMENTED until prod verification (pms_verify_deploy.sh + pms_p
 - **Smoke Test:** `backend/scripts/pms_pricing_quote_smoke.sh` → rc=0
 - **Quote Breakdown Verified:** Grand total 53750 cents (subtotal 45000 + fee 5000 + tax 3750)
 
+**PROD Evidence (2026-01-13):**
+- API Base URL: https://api.fewo.kolibri-visions.de
+- /api/v1/ops/version source_commit: f00edd572e2bc39e2e009775e7969ce46dc3f6d6
+- started_at: 2026-01-13T20:00:05.201229+00:00
+- Smoke script: backend/scripts/pms_pricing_quote_smoke.sh
+- Smoke result: rc=0
+- Key output lines:
+  - "✅ Quote calculation verified (delta-based, PROD-safe)"
+  - "✅ All P2 Pricing + Extension smoke tests passed! 🎉"
+- Verification date: 2026-01-13
+- Note: Script requires `HOST` env var (not API_BASE_URL)
+
 **Verification Commands:**
 ```bash
 # HOST-SERVER-TERMINAL
