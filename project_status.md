@@ -3262,7 +3262,18 @@ echo "rc=$?"
   - Enhanced debug output: First 120 lines of headers, first 200 lines of body on failure
 - Updated backend/scripts/README.md HTTP Code Capture section with DELETE-specific details
 - Updated backend/docs/ops/runbook.md Solution section to reference commit 71e1ce2+ and enhanced features
-- Status: IMPLEMENTED (not VERIFIED until PROD smoke test rc=0)
+- Status: ✅ VERIFIED
+
+**PROD Evidence (2026-01-13):**
+- API Base URL: https://api.fewo.kolibri-visions.de
+- /api/v1/ops/version source_commit: 2235ec6b971d7fe7ff65056de0553a1621664aae
+- started_at: 2026-01-13T18:55:04.505315+00:00
+- Smoke script: backend/scripts/pms_pricing_rate_plans_smoke.sh
+- Smoke result: rc=0
+- Key output lines:
+  - "DELETE returned HTTP 204"
+  - "✅ All Pricing v1 Rate Plans smoke tests passed! 🎉"
+- Verification date: 2026-01-13
 
 **Dependencies:**
 - Existing pricing foundation (rate_plans and rate_plan_seasons tables)
