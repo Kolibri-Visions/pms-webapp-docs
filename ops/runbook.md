@@ -3861,6 +3861,71 @@ If disabling the module system causes issues:
 
 ---
 
+## Backend Restart Loop (Module Import Failures)
+
+**Symptom:** Traefik returns 503 "no available server", pms-backend container in restart loop.
+
+**Logs Show:**
+```
+ImportError: cannot import name 'require_agency_roles' from 'app.api.deps'
+ValueError: Module 'channel_manager' depends on unknown module: 'core_pms'
+```
+
+**Root Cause:**
+1. Missing dependency export in `backend/app/api/deps.py` (e.g., `require_agency_roles` not re-exported)
+2. Module registry validation fails hard, crashing entire app when optional module has missing dependencies
+
+**How to Debug:**
+```bash
+# [HOST-SERVER-TERMINAL] Check container logs
+docker logs pms-backend --tail 100
+
+# Look for ImportError or ValueError during module registration
+# Common patterns:
+# - "cannot import name '<func>' from 'app.api.deps'"
+# - "Module '<name>' depends on unknown module: '<dep>'"
+```
+
+**Solution (Production Fix):**
+
+Fixed in commit post-3624cab:
+1. **Import Fix**: Added `require_agency_roles` to `backend/app/api/deps.py` exports
+2. **Registry Fail-Soft**: Module registry now skips modules with missing deps (degraded mode) instead of crashing
+
+**Verification Commands:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Check backend health after fix deployed
+docker logs pms-backend --tail 50 | grep -E "(Started|Skipping module|ImportError)"
+
+# Expected: "Application startup complete" or similar, no ImportError
+
+# Test health endpoint
+curl -sS https://api.fewo.kolibri-visions.de/health
+# Expected: HTTP 200 {"status":"healthy"}
+
+# Test version endpoint
+curl -sS https://api.fewo.kolibri-visions.de/api/v1/ops/version | jq '.source_commit'
+# Expected: Shows current commit hash (not 3624cab)
+
+# Check for degraded mode warnings (optional modules skipped)
+docker logs pms-backend 2>&1 | grep "Skipping module"
+# If present: Module with missing deps was skipped (degraded operation)
+# If absent: All modules loaded successfully
+```
+
+**Prevention:**
+- Backend now runs in fail-soft mode by default (registry.register(spec, fail_soft=True))
+- Missing optional module dependencies logged as errors but don't crash app
+- Core functionality remains available even if optional modules fail to load
+- Regression test: `backend/tests/unit/test_module_registry_failsoft.py`
+
+**Related:**
+- Module System Kill-Switch (MODULES_ENABLED=false) for emergency disabling
+- Module registry fail-soft behavior prevents single module from killing entire app
+
+---
+
 ## Module Feature Flags
 
 **Purpose:** Control which optional modules are loaded and exposed via API.

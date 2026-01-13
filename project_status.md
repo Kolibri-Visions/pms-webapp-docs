@@ -3229,6 +3229,13 @@ echo "rc=$?"
 - Seasonal override applied if check_in >= date_from AND check_in < date_to AND active = true
 - If multiple seasons overlap, most recent date_from wins (ORDER BY date_from DESC LIMIT 1)
 
+**PROD Outage (2026-01-13):**
+- Commit 3624cab caused restart-loop: `require_agency_roles` import failed from `app.api.deps`
+- Module system crashed hard when optional module had missing dependency (channel_manager → core_pms)
+- Fixed by adding `require_agency_roles` export to deps.py and making module registry fail-soft
+- Registry now skips modules with missing deps (degraded mode) instead of crashing entire app
+- Awaiting PROD deployment verification
+
 **Dependencies:**
 - Existing pricing foundation (rate_plans and rate_plan_seasons tables)
 - Properties domain (rate plans scoped to properties or agency-wide)
