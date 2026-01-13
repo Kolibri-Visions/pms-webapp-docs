@@ -3817,6 +3817,23 @@ echo "rc=$?"
 - Smoke: pms_availability_phase21_smoke.sh rc=0 (TEST 3 overlap → 409)
 - Command: API_BASE_URL=https://api.fewo.kolibri-visions.de PID=23dd8fda-59ae-4b2f-8489-7a90f5d46c66 JWT_TOKEN="<redacted>" ./backend/scripts/pms_availability_phase21_smoke.sh ; echo rc=0
 
+**PROD Evidence** (Re-verified: 2026-01-13):
+- Verification Date: 2026-01-13
+- API Base URL: https://api.fewo.kolibri-visions.de
+- Source Commit: c57426f01e03d0baf943abb7454f5c8767b053ef
+- Backend Started At: 2026-01-13T11:37:05.788898+00:00
+- Deploy Verify: backend/scripts/pms_verify_deploy.sh → rc=0 (commit prefix match c57426f)
+- Smoke Test: backend/scripts/pms_availability_phase21_smoke.sh → rc=0
+  - Property ID: 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
+  - Test Window: AVAIL_FROM=2026-01-14, AVAIL_TO=2026-01-21
+  - Key Assertions Passed:
+    - GET availability → 200
+    - POST block → 201 (block id created)
+    - Overlap rejection → 409
+    - GET block → 200
+    - DELETE block → 204
+    - Verify deletion → 404
+
 **Ops Note (2026-01-10):** Smoke scripts (`pms_phase20_final_smoke.sh`, `pms_phase21_inventory_hardening_smoke.sh`, `pms_phase23_smoke.sh`) now support `JWT_TOKEN` directly (preferred) OR `EMAIL`+`PASSWORD` (auto-fetch JWT). Scripts check if `JWT_TOKEN` is set (3-part JWT), use it directly without requiring Supabase auth credentials.
 
 **Ops Note (2026-01-10): Phase23 Smoke Executable Fix + PROD Evidence**
