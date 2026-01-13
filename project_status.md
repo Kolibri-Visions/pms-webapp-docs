@@ -6095,8 +6095,21 @@ curl -sS https://fewo.kolibri-visions.de/sitemap.xml | head -5
 - SEO files always return 200 with valid content (never 500)
 - Smoke script now covers SEO file validation
 - **Fix Applied (2026-01-11)**: Backend now serves root routes /robots.txt and /sitemap.xml (no /api/v1 prefix) as fallback, tenant-aware via X-Forwarded-Host. Domain verify endpoint fixed to use correct httpx exceptions (TransportError, TimeoutException, ssl.SSLError instead of non-existent TLSError). Smoke script Tests 7-8 now test backend root routes.
-- **Frontend Host Routing Fix (2026-01-11)**: Implemented admin.* vs public host detection to prevent public website visitors from being redirected to /login. Created frontend/lib/host_mode.ts with host detection helpers. Updated frontend/app/page.tsx to redirect to /unterkuenfte on public host, /login on admin host. Updated frontend/app/login/page.tsx to redirect to admin host if accessed on public host (except localhost). Status: ✅ IMPLEMENTED (not verified in prod yet).
-- **Frontend Host Routing Middleware Fix (2026-01-11)**: Fixed HTTP 500 errors on root routes (/) for both public and admin hosts. Moved routing logic from page handlers to Next.js middleware (frontend/middleware.ts) to handle host detection before page execution. Created frontend/app/_public/page.tsx as safe public homepage. Simplified frontend/app/page.tsx as fallback. Added backend/scripts/pms_frontend_host_routing_smoke.sh to automate verification (4 tests: public root 200, public login redirect, admin root redirect, admin login 200). Status: ✅ IMPLEMENTED (not verified in prod yet).
+- **Frontend Host Routing Fix (2026-01-11)**: Implemented admin.* vs public host detection to prevent public website visitors from being redirected to /login. Created frontend/lib/host_mode.ts with host detection helpers. Updated frontend/app/page.tsx to redirect to /unterkuenfte on public host, /login on admin host. Updated frontend/app/login/page.tsx to redirect to admin host if accessed on public host (except localhost). Status: ✅ VERIFIED.
+- **Frontend Host Routing Middleware Fix (2026-01-11)**: Fixed HTTP 500 errors on root routes (/) for both public and admin hosts. Moved routing logic from page handlers to Next.js middleware (frontend/middleware.ts) to handle host detection before page execution. Created frontend/app/_public/page.tsx as safe public homepage. Simplified frontend/app/page.tsx as fallback. Added backend/scripts/pms_frontend_host_routing_smoke.sh to automate verification (4 tests: public root 200, public login redirect, admin root redirect, admin login 200). Status: ✅ VERIFIED.
+  - **PROD Evidence (2026-01-13)**:
+    - Verification Date: 2026-01-13
+    - API Base URL: https://api.fewo.kolibri-visions.de
+    - Public Host: fewo.kolibri-visions.de
+    - Admin Host: admin.fewo.kolibri-visions.de
+    - Source Commit: c57426f01e03d0baf943abb7454f5c8767b053ef
+    - Backend Started At: 2026-01-13T11:37:05.788898+00:00
+    - Deploy Verify: backend/scripts/pms_verify_deploy.sh → rc=0 (commit prefix match c57426f)
+    - Smoke Test: backend/scripts/pms_frontend_host_routing_smoke.sh → rc=0 (4/4 tests passed)
+      - Test 1: PUBLIC / returns 200
+      - Test 2: PUBLIC /login redirects to admin host
+      - Test 3: ADMIN / redirects to /login
+      - Test 4: ADMIN /login returns 200
 - **Frontend Host Routing 404 Fix (2026-01-12)**: Fixed PUBLIC / returning HTTP 404 after commit a2370c6. Root cause: middleware rewrote "/" to "/_public" but that route did not exist. Solution: Removed rewrite to /_public in middleware.ts, let PUBLIC / pass through normally to render frontend/app/page.tsx. Added env var fallback NEXT_PUBLIC_API_BASE_URL (Coolify compatibility) in api-client.ts. Fixed smoke script parsing bugs (empty status codes). Status: ✅ VERIFIED.
   - **PROD Evidence (2026-01-12)**:
     - Container image tags: `public-website: so4cw4c04c84s4ww8cccs0gg:08ed721b93cc040bc7bd01cc868b06143cc906ec`, `pms-admin: nwwsswgoswgosck4kcgcooss:08ed721b93cc040bc7bd01cc868b06143cc906ec`
