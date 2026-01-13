@@ -3247,6 +3247,40 @@ echo "rc=$?"
 - ✅ Test 7: Active filter (active=true excludes inactive items)
 - ✅ Test 8: Quote endpoint integration (total=58395 cents)
 
+
+**Admin UI /pricing 404 Fix (2026-01-13):**
+
+**Issue:** Admin UI /pricing page made relative API calls (`fetch("/api/v1/...")`) which resolved to admin.* host instead of api.* host, causing 404 errors.
+
+**Root Cause:** frontend/app/pricing/page.tsx used direct `fetch()` instead of `apiClient` which properly routes to NEXT_PUBLIC_API_BASE (api.fewo.kolibri-visions.de).
+
+**Fix:** Migrated all API calls to `apiClient.get/post/patch()` with accessToken guards and ApiError handling.
+- Converted 7 fetch calls: fetchProperties, fetchFees, fetchTaxes, createFee, createTax, toggleFeeActive, toggleTaxActive
+- Added `useAuth()` hook for accessToken
+- Added accessToken guard checks (`if (!accessToken) return;`)
+- Improved error handling to extract ApiError messages
+
+**Commit:** c57426f01e03d0baf943abb7454f5c8767b053ef
+
+**Runbook:** backend/docs/ops/runbook.md - Added "Admin UI Returns 404 for API Calls (Relative fetch Paths)" troubleshooting section with guard check: `rg -n 'fetch\("/api/v1' frontend`
+
+**PROD Evidence (2026-01-13):**
+
+**Verification Date:** 2026-01-13
+
+**API Domain:** https://api.fewo.kolibri-visions.de
+
+**Admin Domain:** https://admin.fewo.kolibri-visions.de
+
+**Source Commit:** c57426f01e03d0baf943abb7454f5c8767b053ef
+
+**Backend Started At:** 2026-01-13T11:37:05.788898+00:00
+
+**Verification:**
+- `pms_verify_deploy.sh`: rc=0 (commit prefix match c57426f)
+- `pms_admin_ui_static_smoke.sh`: PASS (commit match, login page 200, i18n strings present)
+- Guard check: `rg -n 'fetch\("/api/v1' frontend` → No matches (all converted to apiClient)
+
 ---
 
 # P3a: Idempotency + Audit Log (Public Booking Requests)
