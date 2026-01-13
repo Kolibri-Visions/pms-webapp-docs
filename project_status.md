@@ -181,7 +181,7 @@ Fixed production 500 error (ResponseValidationError) when GET /api/v1/bookings/{
 - **Result:** No more 500 ResponseValidationError on cancelled_by field. Legacy UUID values correctly mapped to actor='host' with cancelled_by_user_id populated.
 
 
-### Admin UI — Header: Profile Dropdown + Language Switch ✅ IMPLEMENTED
+### Admin UI — Header: Profile Dropdown + Language Switch ✅ VERIFIED
 
 **Date Completed:** 2026-01-08
 
@@ -277,7 +277,20 @@ open https://admin.fewo.kolibri-visions.de/dashboard
 - Language and profile dropdowns work on all pages
 ```
 
-**Status**: ✅ IMPLEMENTED (NOT VERIFIED)
+**Status**: ✅ VERIFIED
+
+**PROD Evidence (2026-01-13):**
+- Verification Date: 2026-01-13
+- Admin URL: https://admin.fewo.kolibri-visions.de
+- Container: pms-admin
+- SOURCE_COMMIT: c57426f01e03d0baf943abb7454f5c8767b053ef
+- Smoke Test: backend/scripts/pms_admin_ui_static_smoke.sh → rc=0 (EXPECTED_COMMIT=c57426f)
+  - Container SOURCE_COMMIT matched prefix c57426f
+  - UI strings verified present:
+    - "Abmelden" (Logout button)
+    - "Deutsch" (German language option)
+    - "English" (English language option)
+    - "العربية" (Arabic language option)
 
 **Runbook Reference:**
 - Section: "Admin UI — Header: Language Switch + Profile Dropdown" in `backend/docs/ops/runbook.md` (line ~18747)
@@ -4065,6 +4078,7 @@ To mark Phase 21 as VERIFIED in production:
   - Runbook: "Availability Block Overlap Returns 500 Instead of 409" troubleshooting entry with verification commands
   - Location: `backend/docs/ops/runbook.md:3523-3564`
 - 📝 **Status:** Phase 21 remains **IMPLEMENTED (NOT VERIFIED)** - awaiting production verification after this hotfix
+- 📝 **UPDATE (2026-01-13):** This legacy note is outdated. Phase 21 is now ✅ VERIFIED in PROD (availability smoke rc=0, commit c57426f). See "PROD Evidence (Re-verified: 2026-01-13)" in Phase 21 section above.
 - 🔧 **Verification after deployment:**
   ```bash
   # HOST-SERVER-TERMINAL
