@@ -22387,6 +22387,157 @@ AGENCY_ID="<uuid>" \
 
 ---
 
+## Pricing v1 Rate Plans MVP
+
+**Overview:** Rate Plans API with CRUD endpoints and quote integration for property pricing configuration.
+
+**Purpose:** Allow property managers to create and manage rate plans with seasonal overrides, and integrate them into quote calculations for accurate pricing.
+
+**Architecture:**
+- **Database**: `rate_plans` and `rate_plan_seasons` tables (migration: `20260106150000_add_pricing_v1.sql`)
+- **Agency Resolution**: Agency determined by `get_current_agency_id()` dependency (domain/x-agency-id header + DB validation)
+- **RBAC**: Endpoints use `require_agency_roles("manager", "admin")` dependency (checks team_members.role in DB, not Supabase JWT role claim which is often only "authenticated")
+- **Property Scope**: Rate plans can be property-specific (property_id) or agency-wide (property_id IS NULL)
+- **Quote Integration**: Quote endpoint accepts optional rate_plan_id or auto-selects active rate plan
+
+**API Endpoints:**
+
+Manager/Admin:
+- `GET /api/v1/pricing/rate-plans?property_id=&active=&limit=&offset=` - List rate plans
+- `POST /api/v1/pricing/rate-plans` - Create rate plan (with optional seasons)
+- `PATCH /api/v1/pricing/rate-plans/{id}` - Update rate plan fields
+- `DELETE /api/v1/pricing/rate-plans/{id}` - Delete rate plan (cascade deletes seasons)
+- `POST /api/v1/pricing/quote` - Calculate quote (optional rate_plan_id parameter)
+
+**Database Tables:**
+- `rate_plans` - Rate plan configurations with base pricing
+- `rate_plan_seasons` - Seasonal overrides for date-range specific pricing
+
+**Verification Commands:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# [HOST-SERVER-TERMINAL] Run rate plans smoke test
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<manager/admin JWT>>>"
+# Optional:
+# export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
+# export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+./backend/scripts/pms_pricing_rate_plans_smoke.sh
+echo "rc=$?"
+
+# Expected output: All 6 tests pass, rc=0
+```
+
+**Common Issues:**
+
+### PATCH Rate Plan Returns 404
+
+**Symptom:** PATCH /api/v1/pricing/rate-plans/{id} returns 404 for existing rate plan.
+
+**Root Cause:** Rate plan does not belong to user's agency, or rate_plan_id is invalid.
+
+**How to Debug:**
+```bash
+# Check rate plan exists and agency (Supabase SQL Editor)
+SELECT id, agency_id, property_id, name
+FROM rate_plans
+WHERE id = '<rate_plan_id>';
+
+# Verify user has manager/admin role in team_members
+SELECT role FROM team_members
+WHERE agency_id = '<agency_id>' AND user_id = '<user_id>';
+# Must return 'manager' or 'admin'
+```
+
+**Solution:**
+- Verify rate plan UUID is correct
+- Ensure user's agency (via get_current_agency_id) matches rate_plans.agency_id
+- Check user has manager or admin role in team_members table for the agency
+
+### Quote Does Not Use Specified rate_plan_id
+
+**Symptom:** POST /api/v1/pricing/quote with rate_plan_id returns 404 or uses different rate plan.
+
+**Root Cause:** Specified rate plan not found, or not applicable to property (wrong agency or property mismatch).
+
+**How to Debug:**
+```bash
+# Test quote with specific rate_plan_id
+curl -X POST "$API_BASE_URL/api/v1/pricing/quote" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "property_id": "<property_id>",
+    "check_in": "2026-07-15",
+    "check_out": "2026-07-18",
+    "adults": 2,
+    "rate_plan_id": "<rate_plan_id>"
+  }' | jq '.rate_plan_id, .rate_plan_name, .message'
+
+# Check if rate plan applies to property (Supabase SQL Editor)
+SELECT id, name, property_id, active, agency_id
+FROM rate_plans
+WHERE id = '<rate_plan_id>';
+# property_id must match quote property_id OR be NULL (agency-wide)
+```
+
+**Solution:**
+- Verify rate_plan_id belongs to same agency as property
+- Ensure rate plan property_id matches quote property_id OR is NULL (agency-wide)
+- If 404 returned: rate plan does not exist or does not belong to agency
+
+### Seasonal Override Not Applied
+
+**Symptom:** Quote returns base_nightly_cents instead of seasonal override rate.
+
+**Root Cause:** Seasonal override date range does not include check_in date, or season is inactive.
+
+**How to Debug:**
+```bash
+# Check seasons for rate plan (Supabase SQL Editor)
+SELECT id, date_from, date_to, nightly_cents, active
+FROM rate_plan_seasons
+WHERE rate_plan_id = '<rate_plan_id>'
+ORDER BY date_from;
+
+# Season applies if: check_in >= date_from AND check_in < date_to AND active = true
+# Example: check_in='2026-07-15', date_from='2026-06-01', date_to='2026-08-31' → MATCH
+```
+
+**Solution:**
+- Verify check_in >= date_from AND check_in < date_to
+- Ensure season active = true
+- Check nightly_cents is not NULL in seasonal override
+- If multiple seasons overlap check_in, most recent date_from wins (ORDER BY date_from DESC LIMIT 1)
+
+### Cannot Set Rate Plan Field to NULL
+
+**Symptom:** PATCH request to clear optional field (e.g., {"currency": null}) does not update database.
+
+**Root Cause:** Field not provided in request body (omitted vs explicitly null).
+
+**How to Debug:**
+```bash
+# Test PATCH with explicit NULL value
+curl -X PATCH "$API_BASE_URL/api/v1/pricing/rate-plans/<id>" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"currency": null}' | jq '.currency'
+
+# Should return null, not previous value
+```
+
+**Solution:**
+- Backend uses Pydantic model_fields_set to detect provided fields (including explicit null)
+- Verify PATCH payload includes field with null value: `{"currency": null}`
+- Omitting field entirely leaves it unchanged; null value clears it
+
+---
+
 ## P2 Pricing Management UI
 
 **Overview:** Admin UI for managing fees and taxes with create/list/toggle capabilities.

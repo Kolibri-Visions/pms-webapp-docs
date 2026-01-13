@@ -3164,6 +3164,78 @@ echo "rc=$?"
 
 ---
 
+# Pricing v1 Rate Plans MVP (CRUD + Quote Integration)
+
+**Implementation Date:** 2026-01-13
+
+**Scope:** Add PATCH/DELETE endpoints for rate plans and quote integration with optional rate_plan_id parameter for production-safe rate plan management.
+
+**Features Implemented:**
+
+1. **Pydantic Schemas** (`backend/app/schemas/pricing.py`):
+   - Added `RatePlanUpdate` schema for PATCH endpoint (all fields optional)
+   - Added `rate_plan_id` field to `QuoteRequest` for specific rate plan selection
+
+2. **API Routes** (`backend/app/api/routes/pricing.py`):
+   - PATCH /api/v1/pricing/rate-plans/{id} - Update rate plan fields (dynamic UPDATE with model_fields_set for NULL support)
+   - DELETE /api/v1/pricing/rate-plans/{id} - Delete rate plan (cascade deletes seasons)
+   - Updated POST /api/v1/pricing/quote - Accept optional rate_plan_id to use specific rate plan instead of auto-select
+   - Single-statement agency enforcement with RETURNING (avoid TOCTOU)
+   - Manager/admin RBAC via `require_agency_roles("manager", "admin")` (DB-backed team_members.role)
+
+3. **Quote Integration**:
+   - If rate_plan_id provided: Use specified rate plan (404 if not found or wrong agency/property)
+   - If not provided: Auto-select active rate plan (property-specific first, then agency-wide)
+   - Seasonal override logic unchanged (check_in >= date_from AND check_in < date_to)
+
+4. **SQL Patterns**:
+   - Dynamic UPDATE with correct param indexing (fields $1..$k, WHERE id=${param_idx} AND agency_id=${param_idx+1})
+   - Pydantic v2 model_fields_set for detecting provided fields (including explicit NULL)
+   - Single-statement UPDATE/DELETE with RETURNING to verify success
+   - Returns 404 if rate plan not found or doesn't belong to agency
+
+5. **Smoke Test** (`backend/scripts/pms_pricing_rate_plans_smoke.sh`):
+   - Test 1: List rate plans (GET /rate-plans)
+   - Test 2: Create rate plan with seasons (POST /rate-plans)
+   - Test 3: Update rate plan fields (PATCH /rate-plans/{id})
+   - Test 4: Quote with auto-selected rate plan (POST /quote)
+   - Test 5: Quote with specific rate_plan_id (POST /quote with rate_plan_id)
+   - Test 6: Delete rate plan (DELETE /rate-plans/{id})
+   - Env vars: API_BASE_URL, JWT_TOKEN (not HOST/MANAGER_JWT_TOKEN)
+   - All tests must pass (rc=0)
+
+6. **Documentation** (DOCS SAFE MODE - add-only with rg/sed proof):
+   - runbook.md:22390 - "Pricing v1 Rate Plans MVP" section
+   - scripts/README.md:7470 - Rate plans smoke test documentation
+   - project_status.md - This entry
+
+**Architecture:**
+- **RBAC**: `require_agency_roles("manager", "admin")` dependency (checks team_members.role in DB, not Supabase JWT role which is often only "authenticated")
+- **Agency Resolution**: `get_current_agency_id()` dependency (domain/x-agency-id header + DB validation)
+- **Property Scope**: Rate plans support property-specific (property_id) or agency-wide (property_id IS NULL)
+- **NULL Field Support**: PATCH uses model_fields_set to detect provided fields including explicit NULL
+- **Tenant Isolation**: All queries include agency_id filter with single-statement enforcement
+
+**Migration:**
+- No new migration required (uses existing `20260106150000_add_pricing_v1.sql` tables: rate_plans, rate_plan_seasons)
+
+**Status:** ✅ IMPLEMENTED (NOT VERIFIED)
+
+**Notes:**
+- Rate Plans CRUD is now complete with GET/POST/PATCH/DELETE endpoints
+- Quote endpoint supports both auto-select and explicit rate_plan_id selection
+- RBAC uses DB-backed team_members.role (not JWT role claim)
+- Single-statement UPDATE/DELETE prevents TOCTOU race conditions
+- Seasonal override applied if check_in >= date_from AND check_in < date_to AND active = true
+- If multiple seasons overlap, most recent date_from wins (ORDER BY date_from DESC LIMIT 1)
+
+**Dependencies:**
+- Existing pricing foundation (rate_plans and rate_plan_seasons tables)
+- Properties domain (rate plans scoped to properties or agency-wide)
+- Team members RBAC (require_agency_roles dependency)
+
+---
+
 # P2 Pricing Management UI (Fees & Taxes)
 
 **Implementation Date:** 2026-01-08
