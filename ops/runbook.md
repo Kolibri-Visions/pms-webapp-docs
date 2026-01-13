@@ -22601,6 +22601,47 @@ curl -X PATCH "$API_BASE_URL/api/v1/pricing/rate-plans/<id>" \
 - Verify PATCH payload includes field with null value: `{"currency": null}`
 - Omitting field entirely leaves it unchanged; null value clears it
 
+### Smoke Test — DELETE Step Shows Blank HTTP Code
+
+**Symptom:** `pms_pricing_rate_plans_smoke.sh` Test 6 (DELETE) shows blank HTTP code or fails with "HTTP code: (empty)".
+
+**Root Cause:** One of:
+1. **curl HTTP code capture bug**: Old script didn't properly separate HTTP code from response body
+2. **Redirects not followed**: Missing `-L` flag caused 307 redirects to be treated as final response
+3. **Invalid JWT token**: Token expired, malformed, or missing (curl fails silently)
+4. **404 after DELETE re-run**: Rate plan was already deleted in previous test run (idempotent cleanup not handled)
+
+**How to Debug:**
+```bash
+# Verify JWT token is valid (3 parts, length > 100 chars)
+echo $JWT_TOKEN | tr '.' '\n' | wc -l  # Should output: 3
+echo ${#JWT_TOKEN}  # Should be > 100
+
+# Manual DELETE with verbose output
+curl -L -v -X DELETE "$API_BASE_URL/api/v1/pricing/rate-plans/<rate_plan_id>" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -w "\nHTTP_CODE: %{http_code}\n" \
+  -o /tmp/delete_response.json
+
+# Check response body
+cat /tmp/delete_response.json
+
+# If 404: Verify rate plan is absent (idempotent cleanup)
+curl -X GET "$API_BASE_URL/api/v1/pricing/rate-plans?limit=100" \
+  -H "Authorization: Bearer $JWT_TOKEN" | jq '.items[] | select(.id=="<rate_plan_id>")'
+# Should return empty (rate plan confirmed deleted)
+```
+
+**Solution:**
+- **Updated script available** (commit d4a219a+): Run latest `pms_pricing_rate_plans_smoke.sh` with:
+  - JWT token preflight validation (checks length and structure before running tests)
+  - Robust HTTP code capture with `-w "%{http_code}"` and separate `-o` for body
+  - curl `-L` flag everywhere (follows redirects)
+  - DELETE idempotent handling: 404 treated as success if resource confirmed absent via GET list
+- **Idempotent DELETE semantics**: Test 6 accepts 204/200 (success) or 404 (already deleted, verified absent)
+- **Manual verification**: Use `-L` and `-w "%{http_code}"` flags in curl for reliable HTTP status capture
+- **JWT refresh**: If token expired, obtain new manager/admin JWT from Supabase auth
+
 ---
 
 ## P2 Pricing Management UI

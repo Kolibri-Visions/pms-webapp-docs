@@ -3236,6 +3236,19 @@ echo "rc=$?"
 - Registry now skips modules with missing deps (degraded mode) instead of crashing entire app
 - Awaiting PROD deployment verification
 
+**Smoke Script Hardening (2026-01-13):**
+- Test 6 (DELETE) failed with blank HTTP code on PROD after d4a219a deployment
+- Root causes: curl HTTP code capture bug, missing `-L` redirects, 404-after-re-run not handled
+- Hardened `pms_pricing_rate_plans_smoke.sh` with:
+  - JWT token preflight validation (checks length > 100 chars, 3-part structure)
+  - Robust HTTP code capture via new `request_with_code()` helper (curl `-w "%{http_code}"` with separate `-o` for body)
+  - curl `-L` flag everywhere to follow redirects (avoids 307 traps)
+  - DELETE idempotent handling: 404 treated as success if resource confirmed absent via GET list (allows safe re-runs)
+  - Debug bundle output on failures (method, URL, curl RC, HTTP code, stderr, response body head)
+  - Retry logic with exponential backoff for 503 errors (MAX_RETRIES=5, Fibonacci-like delays)
+- Updated backend/scripts/README.md with JWT preflight, DELETE semantics, HTTP capture docs
+- Updated backend/docs/ops/runbook.md with troubleshooting entry: "Smoke Test — DELETE Step Shows Blank HTTP Code"
+
 **Dependencies:**
 - Existing pricing foundation (rate_plans and rate_plan_seasons tables)
 - Properties domain (rate plans scoped to properties or agency-wide)
