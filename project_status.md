@@ -4,6 +4,7 @@
 **Last Updated (actual):** 2026-01-10
 **Current Phase:** Phase 21 - Inventory/Availability Production Hardening
 **Current Phase (actual):** (see latest VERIFIED evidence blocks dated 2026-01-10 below)
+**Note (2026-01-13):** Latest VERIFIED evidence blocks now include 2026-01-13 (see "Admin UI /pricing 404 Fix (2026-01-13)" entry below).
 
 ## Overview
 
