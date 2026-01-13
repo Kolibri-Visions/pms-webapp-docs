@@ -28935,3 +28935,86 @@ curl -k -sS -I "https://fewo.kolibri-visions.de/" | egrep -i 'HTTP/|x-middleware
 ```
 
 ---
+
+### Admin UI Returns 404 for API Calls (Relative fetch Paths)
+
+**Symptom:** Admin pages (e.g., `/pricing`) return 404 errors when trying to fetch API data. Browser DevTools shows failed requests like `https://admin.fewo.kolibri-visions.de/api/v1/pricing/fees` (404 Not Found).
+
+**Root Cause:** Frontend code uses relative `fetch("/api/v1/...")` calls instead of `apiClient`. Relative paths resolve to the current hostname (admin.*) which does not host the API. The API is hosted on api.* subdomain.
+
+**Impact:**
+- Admin pages fail to load data
+- Users see empty states or error messages
+- Admin functionality is broken on admin.* subdomain
+
+**Architecture:**
+- API backend runs on `api.fewo.kolibri-visions.de` (port 8000)
+- Admin UI runs on `admin.fewo.kolibri-visions.de` (Next.js frontend)
+- Public website runs on `fewo.kolibri-visions.de` (same Next.js app, different routing)
+
+**How to Debug:**
+```bash
+# Check if page uses relative fetch calls (INCORRECT)
+rg -n 'fetch\("/api/v1' frontend/app/pricing/page.tsx
+# Expected: No matches (all should use apiClient)
+# If matches found: Page needs fixing
+
+# Check browser DevTools network tab
+# Look for failed requests to https://admin.fewo.kolibri-visions.de/api/v1/*
+# Should be: https://api.fewo.kolibri-visions.de/api/v1/*
+```
+
+**Solution:**
+
+1. **Replace relative fetch calls with apiClient:**
+   ```typescript
+   // WRONG: Relative fetch (hits admin.* host)
+   const res = await fetch("/api/v1/properties?limit=50", {
+     credentials: "include",
+   });
+
+   // CORRECT: Use apiClient (routes to api.* host)
+   import { useAuth } from "../lib/auth-context";
+   import { apiClient, ApiError } from "../lib/api-client";
+   
+   const { accessToken } = useAuth();
+   const data = await apiClient.get("/api/v1/properties?limit=50", accessToken);
+   ```
+
+2. **Add accessToken guard checks:**
+   ```typescript
+   const fetchData = async () => {
+     if (!accessToken) return; // Don't fetch without token
+     try {
+       const data = await apiClient.get("/api/v1/...", accessToken);
+       // ...
+     } catch (error) {
+       if (error instanceof ApiError) {
+         // Handle API errors with status codes
+       }
+     }
+   };
+   ```
+
+3. **Verify no relative fetches remain:**
+   ```bash
+   # Guard check (should return no matches)
+   rg -n 'fetch\("/api/v1' frontend
+   ```
+
+**Prevention:**
+
+Add guard check to CI/pre-commit hooks:
+```bash
+# Reject commits with relative /api/v1 fetch calls
+if rg -q 'fetch\("/api/v1' frontend; then
+  echo "ERROR: Found relative fetch('/api/v1') calls. Use apiClient instead."
+  exit 1
+fi
+```
+
+**Reference Commits:**
+- Fix for frontend/app/pricing/page.tsx: `frontend: route pricing API calls via apiClient (fix admin-domain 404)`
+
+
+---
