@@ -13224,6 +13224,248 @@ docker logs --since 10m coolify-proxy 2>&1 \
   - Review Traefik documentation: https://doc.traefik.io/traefik/routing/routers/
   - Test rule syntax in isolation before deploying
 
+### Public Website SSL Shows TRAEFIK DEFAULT CERT (certresolver Label Typo)
+
+**Purpose:** Diagnose and fix fewo.kolibri-visions.de (public website) serving Traefik's default self-signed certificate instead of a valid Let's Encrypt certificate, specifically when caused by malformed Docker label keys (e.g., trailing whitespace).
+
+#### Symptoms
+
+**Browser:**
+- Certificate warning: "Your connection is not private" / "NET::ERR_CERT_AUTHORITY_INVALID"
+- Certificate shown as self-signed with subject/issuer: `CN=TRAEFIK DEFAULT CERT`
+- Site content loads (200 OK) but SSL verification fails
+
+**CLI Verification (HOST-SERVER-TERMINAL):**
+```bash
+# Check certificate for public website
+openssl s_client -servername fewo.kolibri-visions.de \
+  -connect fewo.kolibri-visions.de:443 </dev/null 2>/dev/null \
+  | openssl x509 -noout -subject -issuer -dates
+
+# Output with TRAEFIK DEFAULT CERT (PROBLEM):
+# subject=CN = TRAEFIK DEFAULT CERT
+# issuer=CN = TRAEFIK DEFAULT CERT
+# notBefore=Jan  1 00:00:00 2024 GMT
+# notAfter=Jan  1 00:00:00 2025 GMT
+
+# After fix (Let's Encrypt):
+# subject=CN = fewo.kolibri-visions.de
+# issuer=C = US, O = Let's Encrypt, CN = R13
+# notBefore=Jan 12 21:00:00 2026 GMT
+# notAfter=Apr 12 21:00:00 2026 GMT
+
+# Quick test: curl without -k should work after fix
+curl -I https://fewo.kolibri-visions.de
+# Expected: HTTP/2 200 (no certificate errors)
+```
+
+#### Root Cause: Malformed certresolver Label Key
+
+**Most Common:** Docker label key has trailing whitespace or typo, preventing Traefik from parsing the `certresolver` directive.
+
+**Example of BAD label (trailing space before `=`):**
+```
+traefik.http.routers.public-website-https.tls.certresolver =letsencrypt
+                                                            ↑
+                                                     (space here)
+```
+
+**Correct label (no whitespace):**
+```
+traefik.http.routers.public-website-https.tls.certresolver=letsencrypt
+```
+
+**Traefik Behavior:**
+- Traefik v3 logs: `"field not found, node: certresolver"` when it cannot parse the label
+- Router is created with `tls=true` but no cert resolver attached
+- Traefik serves its built-in default self-signed certificate
+
+#### Diagnosis Steps
+
+**1. Check Current Certificate (HOST-SERVER-TERMINAL):**
+```bash
+openssl s_client -servername fewo.kolibri-visions.de \
+  -connect fewo.kolibri-visions.de:443 </dev/null 2>/dev/null \
+  | openssl x509 -noout -subject -issuer
+
+# If output shows "TRAEFIK DEFAULT CERT": Problem confirmed
+```
+
+**2. Check Traefik Logs for certresolver Parsing Errors (HOST-SERVER-TERMINAL):**
+```bash
+# Check recent Traefik logs for certresolver/ACME errors
+docker logs --since 15m coolify-proxy 2>&1 \
+  | grep -E "certresolver|acme|letsencrypt|error|field not found"
+
+# Look for:
+# - "field not found, node: certresolver" → Label key typo/whitespace
+# - "unable to obtain ACME certificate" → DNS or challenge failure
+# - "Creating router public-website-https" → Router loaded successfully
+```
+
+**3. Inspect Docker Labels for Trailing Whitespace (HOST-SERVER-TERMINAL):**
+```bash
+# List container for public website (adjust name if needed)
+docker ps --format 'table {{.Names}}\t{{.Image}}' | grep -i public
+
+# Inspect labels and show non-printable characters
+docker inspect pms-public-website --format '{{json .Config.Labels}}' \
+  | python3 -m json.tool | grep -E 'certresolver|tls' | cat -A
+
+# Look for:
+# - Trailing whitespace shown as spaces before $ (line end marker)
+# - Correct: "...certresolver": "letsencrypt"$
+# - Wrong:   "...certresolver ": "letsencrypt"$ (space before closing quote)
+# - Wrong:   "... certresolver": "letsencrypt"$ (space before colon)
+
+# Alternative: directly inspect labels array
+docker inspect pms-public-website \
+  | jq -r '.[0].Config.Labels | to_entries[] | select(.key | contains("certresolver")) | "\(.key) = \(.value)"'
+
+# Check for whitespace in key name
+```
+
+**4. Verify Traefik Certificate Resolver Name (HOST-SERVER-TERMINAL):**
+```bash
+# Confirm cert resolver name configured in Traefik
+docker inspect coolify-proxy --format '{{range .Args}}{{println .}}{{end}}' \
+  | grep certificatesresolvers | head -5
+
+# Look for:
+# --certificatesresolvers.letsencrypt.acme.email=...
+# --certificatesresolvers.letsencrypt.acme.storage=...
+# Resolver name is "letsencrypt" in this example
+```
+
+#### Fix Steps (Coolify UI or Docker Compose)
+
+**Option A: Fix via Coolify UI (Recommended)**
+
+1. Navigate to: Coolify Dashboard → pms-public-website → Configuration → Labels
+2. Locate the certresolver label:
+   - Key: `traefik.http.routers.public-website-https.tls.certresolver`
+   - Value: `letsencrypt`
+3. **Check for trailing spaces in key:**
+   - Delete the label entry
+   - Re-add with exact key (copy-paste from here to avoid typos):
+     ```
+     traefik.http.routers.public-website-https.tls.certresolver
+     ```
+   - Set value: `letsencrypt` (or your resolver name from step 4 diagnosis)
+4. **Important:** Click "Save" then "Redeploy" (NOT just restart)
+   - Container labels only update on redeploy, not restart
+
+**Option B: Fix via Docker Compose (if not using Coolify UI)**
+
+Edit `docker-compose.yml` or service labels section:
+```yaml
+labels:
+  # Ensure NO trailing whitespace in key names
+  traefik.enable: "true"
+  traefik.http.routers.public-website-https.rule: "Host(`fewo.kolibri-visions.de`)"
+  traefik.http.routers.public-website-https.tls: "true"
+  traefik.http.routers.public-website-https.tls.certresolver: "letsencrypt"  # ← NO space before colon or =
+  traefik.http.routers.public-website-https.entrypoints: "websecure"
+```
+
+Redeploy:
+```bash
+docker compose up -d --force-recreate pms-public-website
+```
+
+**5. Wait for Let's Encrypt Certificate Issuance (30-90 seconds):**
+```bash
+# Monitor ACME logs
+docker logs -f --since 2m coolify-proxy 2>&1 | grep -E "fewo\.kolibri-visions\.de|acme|certificate"
+
+# Look for:
+# - "Serving default certificate for request..."  → Still using default (wait)
+# - "Certificate obtained for domain [fewo.kolibri-visions.de]" → Success!
+```
+
+#### Verification After Fix
+
+**1. Check Certificate via OpenSSL (HOST-SERVER-TERMINAL):**
+```bash
+openssl s_client -servername fewo.kolibri-visions.de \
+  -connect fewo.kolibri-visions.de:443 </dev/null 2>/dev/null \
+  | openssl x509 -noout -subject -issuer -dates
+
+# Expected output with Let's Encrypt:
+# subject=CN = fewo.kolibri-visions.de
+# issuer=C = US, O = Let's Encrypt, CN = R13  (or R10, R11, etc.)
+# notBefore=Jan 12 21:00:00 2026 GMT
+# notAfter=Apr 12 21:00:00 2026 GMT  (90 days validity)
+```
+
+**2. Test with curl (HOST-SERVER-TERMINAL):**
+```bash
+# curl WITHOUT -k flag should work
+curl -I https://fewo.kolibri-visions.de
+
+# Expected: HTTP/2 200 (no SSL errors)
+# If you still need -k, certificate is not yet valid
+```
+
+**3. Browser Test:**
+- Open https://fewo.kolibri-visions.de
+- Click lock icon → View Certificate
+- Verify:
+  - Issued to: fewo.kolibri-visions.de
+  - Issued by: Let's Encrypt (R13 or similar)
+  - Valid dates: Current date within range
+  - No security warnings
+
+**4. Optional: Check Traefik Logs (HOST-SERVER-TERMINAL):**
+```bash
+# Verify no "field not found" errors for certresolver
+docker logs --since 10m coolify-proxy 2>&1 \
+  | grep -i "fewo.kolibri-visions.de" | grep -i error
+
+# Expected: No output (no errors)
+```
+
+#### Common Issues
+
+**Issue: www subdomain also shows default cert**
+
+**Cause:** DNS record for www.fewo.kolibri-visions.de missing or no Traefik router for www.
+
+**Solutions:**
+1. **Add www DNS record** (if you want to serve www):
+   - Create DNS A or CNAME record: `www.fewo.kolibri-visions.de` → same IP as apex domain
+   - Update Traefik router rule to include www:
+     ```
+     traefik.http.routers.public-website-https.rule: "Host(`fewo.kolibri-visions.de`) || Host(`www.fewo.kolibri-visions.de`)"
+     ```
+   - Redeploy service
+2. **Remove www from router rule** (if you don't want to serve www):
+   - Keep rule as: `Host(\`fewo.kolibri-visions.de\`)`
+   - www will return DNS error (expected)
+
+**Issue: Certificate still shows TRAEFIK DEFAULT CERT after 5+ minutes**
+
+**Checks:**
+- DNS resolves correctly: `nslookup fewo.kolibri-visions.de` (must return server IP)
+- Port 80 open for HTTP-01 challenge: `curl http://fewo.kolibri-visions.de/.well-known/acme-challenge/test`
+- Traefik ACME storage writable: Check Traefik args for acme.storage path and permissions
+- Check ACME logs for specific failure: `docker logs coolify-proxy 2>&1 | grep -A 5 "unable to obtain"`
+
+**Issue: Typo reappears after redeploy from Coolify**
+
+**Cause:** Coolify may store labels with whitespace if originally entered that way.
+
+**Fix:**
+- Delete label entirely in Coolify UI
+- Re-add from scratch with clean copy-paste
+- Or edit Coolify database/config directly (advanced)
+
+#### Related Documentation
+
+- Traefik v3 routers: https://doc.traefik.io/traefik/routing/routers/
+- Let's Encrypt with Traefik: https://doc.traefik.io/traefik/https/acme/
+- Docker label format: https://docs.docker.com/compose/compose-file/compose-file-v3/#labels
+
 ---
 
 ## Monitoring & Troubleshooting
