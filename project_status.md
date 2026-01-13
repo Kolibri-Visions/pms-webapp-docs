@@ -1,7 +1,7 @@
 # PMS-Webapp Project Status
 
 **Last Updated:** 2026-01-05
-**Last Updated (actual):** 2026-01-10
+**Last Updated (actual):** 2026-01-13
 **Current Phase:** Phase 21 - Inventory/Availability Production Hardening
 **Current Phase (actual):** (see latest VERIFIED evidence blocks dated 2026-01-10 below)
 **Note (2026-01-13):** Latest VERIFIED evidence blocks now include 2026-01-13 (see "Admin UI /pricing 404 Fix (2026-01-13)" entry below).
@@ -3772,8 +3772,11 @@ echo "rc=$?"
 
 ---
 
+# Channel Manager — Sync Batch Details (API + Admin UI Modal) ✅ VERIFIED
 
 **Date Completed:** 2026-01-02 to 2026-01-03
+
+**Status:** ✅ VERIFIED
 
 **Key Features:**
 - ✅ Sync batches history table with pagination
@@ -3797,6 +3800,20 @@ echo "rc=$?"
 - ✅ Smoke test script: `backend/scripts/pms_sync_batch_details_smoke.sh`
 - ✅ Runbook section: "Verify Sync Batch Details (PROD)" with curl examples
 - ✅ **PROD E2E Verified (2026-01-03):** HOST-SERVER-TERMINAL smoke test (`backend/scripts/pms_sync_batch_details_smoke.sh`) returned HTTP 200 for list + details endpoints. Admin UI Batch Details Modal successfully displays batch ff237759… with 3 operations (availability_update, pricing_update, bookings_sync) all success, including batch_id, connection_id, statuses, and durations.
+
+**PROD Evidence (Verified: 2026-01-13):**
+- API Base URL: https://api.fewo.kolibri-visions.de
+- /api/v1/ops/version:
+  - source_commit: 08a0c5a7c152d2eee1d0fe1958843e67006e0597
+  - started_at: 2026-01-13T20:22:04.142683+00:00
+- Deploy verification: `backend/scripts/pms_verify_deploy.sh` rc=0 (commit match)
+- Smoke script: `backend/scripts/pms_sync_batch_details_smoke.sh` rc=0
+- Sample IDs (from successful run):
+  - CID: c1df8491-197a-4881-aec6-18e4297f5f79
+  - batch_id: 5b1cd12c-8a16-42ec-a7dc-5cc290e15743
+  - task_id: f4d6b121-d093-440c-89b4-2c91083438d9
+- Note: Script expects `API` + `TOKEN` env vars (not HOST + JWT_TOKEN)
+- Admin UI evidence: "Full Sync Batch Details" modal shows operations array with status/direction/task_id/duration/error + Copy JSON button
 
 **Expected Fields:**
 ```json
