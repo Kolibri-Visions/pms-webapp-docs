@@ -22633,13 +22633,15 @@ curl -X GET "$API_BASE_URL/api/v1/pricing/rate-plans?limit=100" \
 ```
 
 **Solution:**
-- **Updated script available** (commit d4a219a+): Run latest `pms_pricing_rate_plans_smoke.sh` with:
+- **Updated script available** (commit 71e1ce2+): Run latest `pms_pricing_rate_plans_smoke.sh` with enhanced DELETE handling:
   - JWT token preflight validation (checks length and structure before running tests)
-  - Robust HTTP code capture with `-w "%{http_code}"` and separate `-o` for body
-  - curl `-L` flag everywhere (follows redirects)
+  - Robust HTTP code capture using `-D` (headers file), `-o` (body file), `-w "%{http_code}"` (status)
+  - Always prints captured HTTP code to console: "DELETE returned HTTP 204"
+  - curl `-k` flag (ignore SSL errors), `-L` flag (follow redirects)
   - DELETE idempotent handling: 404 treated as success if resource confirmed absent via GET list
+  - If status capture fails or unexpected: Prints first 120 lines of headers, first 200 lines of body
 - **Idempotent DELETE semantics**: Test 6 accepts 204/200 (success) or 404 (already deleted, verified absent)
-- **Manual verification**: Use `-L` and `-w "%{http_code}"` flags in curl for reliable HTTP status capture
+- **Manual verification**: Use `-k -L -D <headers_file> -o <body_file> -w "%{http_code}"` flags in curl for reliable HTTP status capture
 - **JWT refresh**: If token expired, obtain new manager/admin JWT from Supabase auth
 
 ---

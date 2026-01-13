@@ -3249,6 +3249,21 @@ echo "rc=$?"
 - Updated backend/scripts/README.md with JWT preflight, DELETE semantics, HTTP capture docs
 - Updated backend/docs/ops/runbook.md with troubleshooting entry: "Smoke Test — DELETE Step Shows Blank HTTP Code"
 
+**Smoke Script Enhanced DELETE Handling (2026-01-13):**
+- After commit 71e1ce2 deployment, Test 6 (DELETE) still failed with blank HTTP code in PROD
+- Backend logs confirmed API returned HTTP 204 No Content, but script failed to capture status
+- Root cause: HTTP code capture from `request_with_code()` helper still not reliable for empty body responses (204)
+- Enhanced DELETE test with direct curl approach:
+  - Separate temp files for headers (`-D`) and body (`-o`) instead of relying on helper function
+  - Added `-k` flag to ignore SSL certificate errors (allows testing against self-signed certs)
+  - Always prints captured HTTP code to console: "DELETE returned HTTP 204"
+  - Explicit empty/invalid status check before evaluating result
+  - Best-effort verification: After successful 204, checks rate plan absent from GET list
+  - Enhanced debug output: First 120 lines of headers, first 200 lines of body on failure
+- Updated backend/scripts/README.md HTTP Code Capture section with DELETE-specific details
+- Updated backend/docs/ops/runbook.md Solution section to reference commit 71e1ce2+ and enhanced features
+- Status: IMPLEMENTED (not VERIFIED until PROD smoke test rc=0)
+
 **Dependencies:**
 - Existing pricing foundation (rate_plans and rate_plan_seasons tables)
 - Properties domain (rate plans scoped to properties or agency-wide)
