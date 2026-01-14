@@ -21606,6 +21606,47 @@ requested → under_review → confirmed (approved)
 
 ---
 
+**Problem**: Approve returns 500 Internal Server Error (AttributeError: 'NoneType' object has no attribute 'internal_note')
+
+**Symptom**: POST /api/v1/booking-requests/{id}/approve returns 500 when client sends request without JSON body (Content-Length: 0) or with empty body {}. Backend logs show: `AttributeError: 'NoneType' object has no attribute 'internal_note'` at audit event emission.
+
+**Root Cause** (before fix): The approve endpoint accepted optional body (`input: ApproveInput | None = Body(default=None)`), but audit event metadata directly accessed `input.internal_note` without checking if `input` was None, causing AttributeError crash after successful DB transaction.
+
+**Impact**: Database transition succeeded (booking approved) but response crashed with 500, leaving client uncertain about approval status.
+
+**Solution** (after fix):
+- Audit event now guards field access: `"internal_note": input.internal_note if input else None`
+- Approve accepts missing/empty body without crashing (internal_note defaults to None)
+- Idempotent approve already handled (re-approving confirmed booking returns 200)
+- Improved logging: catch-all exception handler in database.py no longer mislabels application errors as "database error"
+
+**How to test approve endpoint:**
+```bash
+# Approve without body (recommended - simpler request)
+curl -X POST "https://api.fewo.kolibri-visions.de/api/v1/booking-requests/{id}/approve" \
+  -H "Authorization: Bearer $JWT_TOKEN"
+# Expected: 200 OK with status=confirmed, or 409 if already cancelled/dates conflict
+
+# Approve with empty body (also valid)
+curl -X POST "https://api.fewo.kolibri-visions.de/api/v1/booking-requests/{id}/approve" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+
+# Approve with internal note (optional)
+curl -X POST "https://api.fewo.kolibri-visions.de/api/v1/booking-requests/{id}/approve" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"internal_note": "Approved after availability check"}'
+```
+
+**Idempotency behavior:**
+- Already confirmed: Returns 200 with message "Booking request already approved (idempotent)"
+- Already cancelled/declined: Returns 409 with "Cannot approve cancelled booking request"
+- Fresh approval: Returns 200 with status=confirmed, sets confirmed_at timestamp
+
+---
+
 #### Update (2026-01-12): P1 Smoke Script Hardened for Public Properties Response
 
 **Issue**: The P1 smoke script (`pms_p1_booking_request_smoke.sh`) failed in production (commit 66ca49e) when discovering properties via GET `/api/v1/public/properties`. The script assumed the response shape was always `{items: [...]}`, but the public properties endpoint returns a plain array `[...]` by default (backward compatible), and only returns `{items: [...], total: N}` when `paginated=true` query parameter is used.

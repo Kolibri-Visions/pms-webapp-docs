@@ -2903,6 +2903,21 @@ This fixes "jq: error: Cannot iterate over null (null)" failures in production. 
 
 Status remains IMPLEMENTED until prod verification (pms_verify_deploy.sh + pms_p1_booking_request_smoke.sh rc=0 with Step E retry success).
 
+**Update (2026-01-14):** Approve endpoint hardened: missing body no longer causes 500; idempotent approve; clearer logging.
+
+1. **AttributeError Fix**: Fixed crash when approve endpoint called without JSON body. Audit event metadata now guards field access: `input.internal_note if input else None`. Database transaction succeeded but response crashed with 500, leaving client uncertain. Now accepts missing/empty body without error.
+
+2. **Improved Logging**: Database.py catch-all exception handler no longer mislabels application errors (AttributeError, TypeError) as "database error". Now logs as "Unexpected application error during request DB session" with exception type for clarity.
+
+3. **Integration Tests**: Added `test_booking_requests_approve.py` with 4 tests covering: approve with no body, approve with empty body, idempotent approval (already confirmed), and decline attempt on cancelled booking (409 conflict).
+
+**Affected Files**:
+- backend/app/api/routes/booking_requests.py (line 556: audit metadata guard)
+- backend/app/core/database.py (line 907: improved logging label)
+- backend/tests/integration/test_booking_requests_approve.py (new integration tests)
+- backend/docs/ops/runbook.md (troubleshooting section added)
+- backend/scripts/README.md (note on approve endpoint body handling)
+
 **PROD Evidence (Verified: 2026-01-10)**:
 - **Verification Date**: 2026-01-10
 - **API Base URL**: https://api.fewo.kolibri-visions.de
