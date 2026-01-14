@@ -2144,8 +2144,42 @@ guest_fk_smoke_rc=0
 - ✅ FK violations properly handled: 422 Unprocessable Entity (not 500)
 - ✅ Both smoke tests passed bug-free (rc=0)
 
-**Tooling Reliability Improvement (2026-01-06)**: The `pms_booking_guest_id_fk_smoke.sh` script was enhanced with automatic date window shifting to prevent false failures. If Test 1 encounters 409 (double_booking), the script now automatically shifts the date window by SHIFT_DAYS (default 7) and retries up to MAX_WINDOW_TRIES (default 10) times. This eliminates flakiness when testing on already-booked dates. Status: ✅ IMPLEMENTED. Verification criteria: pms_verify_deploy.sh commit match + run script on booked window and observe auto-shift succeeds (rc=0).
+**Tooling Reliability Improvement (2026-01-06)**: The `pms_booking_guest_id_fk_smoke.sh` script was enhanced with automatic date window shifting to prevent false failures. If Test 1 encounters 409 (double_booking), the script now automatically shifts the date window by SHIFT_DAYS (default 7) and retries up to MAX_WINDOW_TRIES (default 10) times. This eliminates flakiness when testing on already-booked dates. Status: ✅ VERIFIED.
 
+**PROD Evidence (Tooling Auto-Shift Verified: 2026-01-14)**:
+
+**Deployment Verification**:
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Source Commit**: 564dc86b099ad188a34f27b8c071c9781be29e0c
+- **Started At**: 2026-01-14T14:41:05.588210+00:00
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=564dc86` → rc=0 (commit match)
+
+**Smoke Test Results** (`backend/scripts/pms_booking_guest_id_fk_smoke.sh`):
+
+Run #1 (demonstrates auto-shift working):
+```
+- Attempt 1/10: dates 2027-01-20 → 2027-01-23 returned 409 double_booking
+- Auto-shifted +7 days to 2027-01-27 → 2027-01-30 (attempt 2/10)
+- Test 1 (guest_id omitted): 201 Created, guest_id=null ✅
+- Test 2 (invalid guest_id): 422 with actionable message mentioning guest_id ✅
+- rc=0
+```
+
+Run #2 (demonstrates stability across multiple shifts):
+```
+- Attempt 1/10: 2027-01-20 → 2027-01-23 returned 409
+- Attempt 2/10: 2027-01-27 → 2027-01-30 returned 409
+- Attempt 3/10: 2027-02-03 → 2027-02-06 returned 201 ✅
+- Test 2 (invalid guest_id): 422 ✅
+- rc=0
+```
+
+**Key Findings**:
+- ✅ Auto-shift functionality working as designed (409 → shift +7 days → retry)
+- ✅ Script handles multiple overlapping bookings (shifted 3 times in run #2)
+- ✅ Both test cases (guest_id omitted, invalid guest_id) pass after auto-shift
+- ✅ Eliminates false failures when testing on already-booked windows
+- ✅ Smoke test passed consistently (rc=0 on both runs)
 
 **Related Improvement (2026-01-05)**: See standalone entry below for booking concurrency smoke script reliability (commit 1897cf0, VERIFIED).
 
