@@ -30205,4 +30205,105 @@ E2E_ADMIN_PASSWORD="password" \
 # ✅ Invite dialog is in-page (not browser prompt)
 ```
 
+### Pointer Events Intercepted (Submit Button Click)
+
+**Overview:** As of commit f6090d1+, the smoke script uses **dialog-scoped locators** to avoid clicking elements behind modal overlays.
+
+**Symptom:** Test fails with error like:
+- "Element is outside of the viewport"
+- "pointer events are intercepted by <div class='fixed inset-0 z-50 ...'>"
+- Submit button click times out or has no effect
+
+**Root Cause:** The submit button selector (`page.locator()`) is finding a button behind the modal overlay instead of the button inside the dialog. This happens when:
+1. Multiple buttons with same text exist (one visible in dialog, others hidden in page)
+2. Playwright's click actionability checks detect the overlay blocking the click
+3. `.first()` on page-level selector picks wrong element
+
+**How It's Fixed:**
+
+The script now:
+1. Calls `findVisibleDialog()` to get a reference to the visible dialog element
+2. Scopes all subsequent searches to that dialog: `inviteDialog.locator(...)`
+3. Uses dialog-scoped selectors for:
+   - Email input: `inviteDialog.locator('input[type="email"]').first()`
+   - Role select: `inviteDialog.locator('select[name*="role"]').first()`
+   - Submit button: `inviteDialog.locator('button[type="submit"]').first()`
+4. Tries normal click first, falls back to `click({ force: true })` if intercepted
+
+**Debugging Steps:**
+
+1. **Check console logs:**
+```
+✅ Submit button clicked (normal)    # Success with normal click
+⚠️  Normal click failed (...), trying force click...  # Fallback triggered
+✅ Submit button clicked (force)     # Success with force click
+```
+
+2. **Review screenshots:**
+```bash
+# Screenshots are in temp directory (auto-cleaned on exit)
+# Copy them immediately after failure:
+ls -la /tmp/tmp.*/screenshots/
+cp -r /tmp/tmp.*/screenshots /tmp/epic-a-failure-debug
+
+# Check these files:
+# - team-invite-dialog.png: Dialog state before submit
+# - team-invite-created.png: State after submit attempt
+```
+
+3. **Verify dialog z-index:**
+```bash
+# Open admin UI manually and inspect dialog
+open https://admin.fewo.kolibri-visions.de/team
+# Click "Mitglied einladen"
+# F12 DevTools → Inspect submit button
+# Check:
+#   - Button is inside dialog container (not sibling)
+#   - Dialog has z-50 or higher
+#   - No other fixed overlays with higher z-index
+```
+
+4. **Test manual click:**
+```bash
+# If manual click works but test fails:
+# - Check button selector matches actual rendered HTML
+# - Verify button is not disabled during form validation
+# - Check for JavaScript intercepting submit events
+```
+
+**Solution (If Still Failing):**
+
+If both normal and force click fail:
+
+1. **Update button selector in script:**
+```typescript
+// In pms_epic_a_ui_polish_smoke.sh, adjust submitButton selector:
+const submitButton = inviteDialog.locator('button[type="submit"]').first();
+// Or use more specific selector if your UI has custom attributes:
+const submitButton = inviteDialog.getByRole('button', { name: /einladen|senden|invite/i });
+```
+
+2. **Increase timeouts:**
+```typescript
+await expect(submitButton).toBeVisible({ timeout: 20000 }); // Increase from 15s
+await submitButton.click({ timeout: 15000 }); // Increase from 10s
+```
+
+3. **Check for form validation blocking submit:**
+Some forms disable submit button until validation passes. Ensure email input is properly filled and valid.
+
+**Verification:**
+```bash
+# Re-run smoke test
+E2E_ADMIN_EMAIL="admin@example.com" \
+E2E_ADMIN_PASSWORD="password" \
+./backend/scripts/pms_epic_a_ui_polish_smoke.sh
+
+# Expected output:
+# ✅ Team invite dialog found via selector: [role="dialog"]
+# ✅ Filled email: smoke-epic-a+1705420800000@example.com
+# ✅ Submit button clicked (normal)
+# ✅ Invite submitted
+```
+
 ---
