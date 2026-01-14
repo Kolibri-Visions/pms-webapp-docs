@@ -3759,7 +3759,7 @@ echo "rc=$?"
 - `backend/docs/ops/runbook.md` - "P3 Public Direct Booking Hardening (Consolidated)" section with common issues, debugging steps, production testing checklist
 - Related individual P3 smoke scripts: `pms_p3a_idempotency_smoke.sh`, `pms_p3b_domain_host_cors_smoke.sh`, `pms_p3c_audit_review_smoke.sh`
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
 
 **PROD Evidence (Verified: 2026-01-10):**
 - **API Base URL:** https://api.fewo.kolibri-visions.de
@@ -3799,10 +3799,28 @@ echo "rc=$?"
 - **Features:** Supports both `HOST` and `API_BASE_URL` env vars, clear delegation message
 - **Documentation:** Updated `backend/scripts/README.md` and `backend/docs/ops/runbook.md`
 
-**Verification Required:**
-- Run `pms_verify_deploy.sh` rc=0 (commit match after deploy)
-- Run `pms_p3_direct_booking_hardening_smoke.sh` rc=0 (or `pms_public_direct_booking_hardening_smoke.sh`)
-- Test CORS with `CORS_ALLOWED_ORIGINS` env var to verify bugfix works
+**PROD Evidence (Post-Bugfix Verification: 2026-01-14):**
+- **API Base URL:** https://api.fewo.kolibri-visions.de
+- **Source Commit:** f8bf0dfe707776f1c7b049c5f4e15e41a0840a2c
+- **Started At:** 2026-01-14T08:42:04.076271+00:00
+- **Deploy Verification:** `backend/scripts/pms_verify_deploy.sh` rc=0 (commit match)
+- **Smoke Script:** `backend/scripts/pms_p3_direct_booking_hardening_smoke.sh` (canonical)
+- **Smoke Result:** rc=0 (all tests PASS)
+- **Key IDs:**
+  - Property ID (auto-picked): 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
+  - Agency ID (auto-derived): ffd0123a-10b6-40cd-8ad5-66eee9757ab7
+  - Booking Request ID: 21816145-a031-478b-8d05-9148d0896584
+- **Tests Verified:**
+  - CORS allow-origin header: ✅ (OPTIONS /api/v1/public/ping with Origin https://fewo.kolibri-visions.de returned HTTP 200 with access-control-allow-origin header)
+  - Idempotency first request: ✅ (created booking request)
+  - Idempotency retry same key: ✅ (returned same booking_request_id)
+  - Idempotency conflict (409): ✅ (payload mismatch with same key returned HTTP 409)
+  - Audit log event: ✅ (booking request creation logged)
+
+**Verification Notes:**
+- CORS bugfix confirmed working: `CORS_ALLOWED_ORIGINS` env var now properly honored by middleware
+- Canonical script (`pms_p3_direct_booking_hardening_smoke.sh`) successfully delegates to combined script
+- All P3a/P3b/P3c components verified functional after bugfix deployment
 
 ---
 
