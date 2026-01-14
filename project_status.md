@@ -3759,7 +3759,7 @@ echo "rc=$?"
 - `backend/docs/ops/runbook.md` - "P3 Public Direct Booking Hardening (Consolidated)" section with common issues, debugging steps, production testing checklist
 - Related individual P3 smoke scripts: `pms_p3a_idempotency_smoke.sh`, `pms_p3b_domain_host_cors_smoke.sh`, `pms_p3c_audit_review_smoke.sh`
 
-**Status:** ✅ VERIFIED
+**Status:** ✅ IMPLEMENTED
 
 **PROD Evidence (Verified: 2026-01-10):**
 - **API Base URL:** https://api.fewo.kolibri-visions.de
@@ -3785,6 +3785,24 @@ echo "rc=$?"
 - This is a convenience wrapper that consolidates P3a/b/c tests for quick production validation
 - Individual P3a, P3b, P3c components are already ✅ VERIFIED separately
 - Consolidated script verified in production with all 5 tests passing
+
+**CORS Bugfix Applied (2026-01-14):**
+- **Issue:** `CORS_ALLOWED_ORIGINS` environment variable was not being honored by CORS middleware
+- **Root Cause:** `main.py` used `settings.cors_origins` instead of `settings.effective_cors_origins`
+- **Fix:** Updated `app/main.py:124` to use `settings.effective_cors_origins` (falls back to `ALLOWED_ORIGINS` if not set)
+- **Impact:** `CORS_ALLOWED_ORIGINS` now works as intended per P3b specification
+- **Backward Compatibility:** Existing `ALLOWED_ORIGINS` configurations continue to work (fallback behavior)
+
+**Canonical Script Added (2026-01-14):**
+- **Script:** `backend/scripts/pms_p3_direct_booking_hardening_smoke.sh`
+- **Purpose:** Canonical/primary smoke test name for P3 (wraps `pms_public_direct_booking_hardening_smoke.sh`)
+- **Features:** Supports both `HOST` and `API_BASE_URL` env vars, clear delegation message
+- **Documentation:** Updated `backend/scripts/README.md` and `backend/docs/ops/runbook.md`
+
+**Verification Required:**
+- Run `pms_verify_deploy.sh` rc=0 (commit match after deploy)
+- Run `pms_p3_direct_booking_hardening_smoke.sh` rc=0 (or `pms_public_direct_booking_hardening_smoke.sh`)
+- Test CORS with `CORS_ALLOWED_ORIGINS` env var to verify bugfix works
 
 ---
 

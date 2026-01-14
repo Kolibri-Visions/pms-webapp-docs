@@ -24229,6 +24229,112 @@ docker logs pms-backend --tail 100 | grep -i audit
 - [P3c Runbook Section](#p3c-audit-review-actions--requestcorrelation-id--idempotency-review-endpoints) - Audit details
 - [Scripts README](../../scripts/README.md#p3-public-direct-booking-hardening-smoke-test-consolidated) - Script usage guide
 
+
+### P3 Configuration: CORS_ALLOWED_ORIGINS
+
+**Overview:** P3b introduced explicit CORS configuration for public endpoints via the `CORS_ALLOWED_ORIGINS` environment variable. A bug in the initial implementation prevented this variable from being honored by the CORS middleware. This has been fixed.
+
+**CORS Configuration Hierarchy:**
+1. **`CORS_ALLOWED_ORIGINS`** (preferred, P3b): Explicit CORS origins for public endpoints (no wildcards by default)
+2. **`ALLOWED_ORIGINS`** (fallback): Legacy/general allowed origins setting
+
+**How It Works:**
+- The `effective_cors_origins` property in `app/core/config.py` implements the fallback logic
+- CORS middleware in `app/main.py` uses `settings.effective_cors_origins` (not `settings.cors_origins`)
+- If `CORS_ALLOWED_ORIGINS` is set: Use it exclusively
+- If `CORS_ALLOWED_ORIGINS` is NOT set: Fall back to `ALLOWED_ORIGINS`
+
+**Environment Variable Format:**
+```bash
+# Comma-separated list of origins (no wildcards by default)
+CORS_ALLOWED_ORIGINS="https://fewo.kolibri-visions.de,https://www.customer.com,https://admin.customer.com"
+
+# Must include protocol (https://) and no trailing slash
+# Wildcards (*) are NOT supported by default (FastAPI CORSMiddleware behavior)
+```
+
+**Verification Commands:**
+
+```bash
+# Test CORS preflight with specific origin
+curl -X OPTIONS "$HOST/api/v1/public/booking-requests" \
+  -H "Origin: https://fewo.kolibri-visions.de" \
+  -H "Access-Control-Request-Method: POST" \
+  -i
+
+# Expected: HTTP 200 with headers:
+# access-control-allow-origin: https://fewo.kolibri-visions.de
+# access-control-allow-credentials: true
+# access-control-allow-methods: GET,POST,PUT,DELETE,PATCH
+```
+
+**Troubleshooting: Origin Not Allowed**
+
+**Symptom:** Browser console shows CORS error: "Access to fetch at '...' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present".
+
+**Root Cause:** Frontend origin not in `CORS_ALLOWED_ORIGINS` (or `ALLOWED_ORIGINS` fallback).
+
+**How to Debug:**
+```bash
+# Check backend logs on startup
+docker logs pms-backend 2>&1 | grep -i "cors\|allowed"
+
+# Verify CORS preflight manually
+curl -X OPTIONS "$HOST/api/v1/public/ping" \
+  -H "Origin: https://your-frontend-origin.com" \
+  -i | grep -i "access-control"
+
+# If no access-control headers: origin not allowed
+```
+
+**Solution:**
+1. Add frontend origin to `CORS_ALLOWED_ORIGINS` in Coolify:
+   ```
+   CORS_ALLOWED_ORIGINS=https://fewo.kolibri-visions.de,https://your-frontend-origin.com
+   ```
+2. Restart backend container
+3. Test CORS preflight again (should return Allow-Origin header)
+
+### P3 Canonical Smoke Test
+
+**Script Name:** `backend/scripts/pms_p3_direct_booking_hardening_smoke.sh`
+
+**Purpose:** This is the canonical/primary smoke test script for P3 Direct Booking Hardening. It wraps the underlying consolidated script (`pms_public_direct_booking_hardening_smoke.sh`) and provides:
+- Canonical naming convention for P3 verification
+- Support for both `HOST` and `API_BASE_URL` environment variable naming
+- Clear delegation message showing which underlying script is executed
+
+**Why Two Scripts?**
+- `pms_p3_direct_booking_hardening_smoke.sh`: Canonical name for P3 (use this for documentation/SOPs)
+- `pms_public_direct_booking_hardening_smoke.sh`: Implementation script (can be used directly)
+
+**Usage:**
+```bash
+# Canonical script (recommended for SOPs)
+HOST=https://api.fewo.kolibri-visions.de \
+JWT_TOKEN="eyJ..." \
+./backend/scripts/pms_p3_direct_booking_hardening_smoke.sh
+
+# Alternative with API_BASE_URL (automatically mapped to HOST)
+API_BASE_URL=https://api.fewo.kolibri-visions.de \
+JWT_TOKEN="eyJ..." \
+./backend/scripts/pms_p3_direct_booking_hardening_smoke.sh
+```
+
+**Expected Output:**
+```
+ℹ ════════════════════════════════════════════════════════════════
+ℹ P3 Direct Booking Hardening Smoke Test (Canonical Script)
+ℹ Delegating to: pms_public_direct_booking_hardening_smoke.sh
+ℹ ════════════════════════════════════════════════════════════════
+
+ℹ Starting P3 Public Direct Booking Hardening smoke test...
+[... test execution ...]
+✅ All P3 Public Direct Booking Hardening smoke tests passed! 🎉
+```
+
+**Exit Code:** Same as underlying script (0 = success, 1+ = failures)
+
 ---
 
 ## Customer Domain Onboarding SOP
