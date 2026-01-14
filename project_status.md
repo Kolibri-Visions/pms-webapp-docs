@@ -165,7 +165,7 @@ Fixed production 500 error (ResponseValidationError) when GET /api/v1/bookings/{
 
 **Status:** ✅ VERIFIED
 
-**Production Evidence:**
+**Production Evidence (Backend Admin Detail Endpoints / cancelled_by fix):**
 - **Verification Date:** 2026-01-07
 - **API Base URL:** https://api.fewo.kolibri-visions.de
 - **Deployed Commit:** a22da6660b7ad24a309429249c1255e575be37bc
@@ -181,7 +181,9 @@ Fixed production 500 error (ResponseValidationError) when GET /api/v1/bookings/{
 - **Result:** No more 500 ResponseValidationError on cancelled_by field. Legacy UUID values correctly mapped to actor='host' with cancelled_by_user_id populated.
 
 
-### Admin UI — Header: Profile Dropdown + Language Switch ✅ VERIFIED
+### Admin UI — Header: Profile Dropdown + Language Switch ✅ IMPLEMENTED
+
+**NOTE:** Pending VERIFIED status - needs automated Admin UI verification (manual browser checklist only at time of initial documentation).
 
 **Date Completed:** 2026-01-08
 
@@ -277,7 +279,9 @@ open https://admin.fewo.kolibri-visions.de/dashboard
 - Language and profile dropdowns work on all pages
 ```
 
-**Status**: ✅ VERIFIED
+**Status**: ✅ IMPLEMENTED
+
+**NOTE:** The PROD Evidence block below was added later (2026-01-13) via automated smoke test. If this constitutes sufficient automated verification per project rules, status can be upgraded to VERIFIED.
 
 **PROD Evidence (2026-01-13):**
 - Verification Date: 2026-01-13
