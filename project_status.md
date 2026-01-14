@@ -2960,6 +2960,23 @@ Status remains IMPLEMENTED until prod verification (pms_verify_deploy.sh + pms_p
   - Curl header quoting fixed (no "curl: (6)" errors) ✅
   - Step E retry logic with date shifting (up to 5 attempts) ✅
 
+**PROD Evidence (Approve Body Hardening - Verified: 2026-01-14)**:
+- **Verification Date**: 2026-01-14
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Agency ID**: ffd0123a-10b6-40cd-8ad5-66eee9757ab7
+- **Property ID**: 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
+- **Source Commit**: 29c1f99fe0c67798bab4da872d7d2ed84b268e35
+- **Deploy Verification**: backend/scripts/pms_verify_deploy.sh rc=0 (commit match)
+- **Smoke Script**: backend/scripts/pms_public_booking_requests_workflow_smoke.sh rc=0
+- **Key Test Results**:
+  - BR1 created: 75397182-f620-4575-be80-2d275afc43ff
+    - Review → under_review ✅
+    - Approve → confirmed (booking_id: 75397182-f620-4575-be80-2d275afc43ff) ✅
+    - Re-approve idempotent (same booking_id, no 500) ✅
+  - BR2 created: 4fa59ecc-555a-4b44-8338-cf826cc341cf
+    - Decline → cancelled ✅
+- **Verification**: Approve endpoint accepts missing/empty body without 500 error. Audit event metadata guards `input.internal_note` access. Idempotent approval returns 200 with "already approved" message. Database logging no longer mislabels application errors.
+
 
 **Cleanup (2026-01-12)**: Admin `/buchung` route now redirects to public booking form `https://fewo.kolibri-visions.de/buchung` to avoid duplicate booking request forms. Server-side redirect preserves query parameters. The public form is the single source of truth (no deletion, maintaining compatibility).
  **Correction (2026-01-12)**: Redirect implemented via Next.js middleware (host-based). Only admin hosts (admin.fewo.kolibri-visions.de) redirect to public form. Public host (fewo.kolibri-visions.de) renders original booking form (restored from git). Middleware returns 308 Permanent Redirect with no-store cache control.

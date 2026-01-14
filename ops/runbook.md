@@ -21645,6 +21645,8 @@ curl -X POST "https://api.fewo.kolibri-visions.de/api/v1/booking-requests/{id}/a
 - Already cancelled/declined: Returns 409 with "Cannot approve cancelled booking request"
 - Fresh approval: Returns 200 with status=confirmed, sets confirmed_at timestamp
 
+**PROD Verified (2026-01-14):** Approve endpoint accepts missing/empty body without 500 error. Smoke test (`pms_public_booking_requests_workflow_smoke.sh`) rc=0 with commit 29c1f99. See project_status.md for full evidence.
+
 ---
 
 #### Update (2026-01-12): P1 Smoke Script Hardened for Public Properties Response
