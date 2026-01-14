@@ -3895,6 +3895,18 @@ echo "rc=$?"
 - Canonical script (`pms_p3_direct_booking_hardening_smoke.sh`) successfully delegates to combined script
 - All P3a/P3b/P3c components verified functional after bugfix deployment
 
+**PROD Evidence (Re-verified: 2026-01-14)**:
+- **Verification Date**: 2026-01-14
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Source Commit**: 21b7d7e5b42e3106e806c02c1b1999e2b6922d30
+- **Started At**: 2026-01-14T13:29:05.035555+00:00
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=21b7d7e` → rc=0 (commit match)
+- **Smoke Script**: `backend/scripts/pms_p3_direct_booking_hardening_smoke.sh` → rc=0
+- **Diagnostics Verified**:
+  - Missing `JWT_TOKEN` exits early with clear error + rc=1 ✅
+  - Audit-log auth preflight returns HTTP 200 when JWT is provided ✅
+- **Verification**: P3 consolidated smoke is production-safe and now fails fast with actionable guidance when JWT is missing/unauthorized.
+
 ---
 
 # Channel Manager — Sync Batch Details (API + Admin UI Modal) ✅ VERIFIED
