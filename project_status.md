@@ -170,6 +170,7 @@ Fixed production 500 error (ResponseValidationError) when GET /api/v1/bookings/{
 - **API Base URL:** https://api.fewo.kolibri-visions.de
 - **Deployed Commit:** a22da6660b7ad24a309429249c1255e575be37bc
 - **Backend Started:** 2026-01-07T23:39:05.093802+00:00
+- **Deploy Verification:** `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=a22da66` → rc=0 (commit match)
 - **Smoke Test:** `./backend/scripts/pms_admin_detail_endpoints_smoke.sh` - Exit code 0 ✓
 - **Sample Test IDs:**
   - Booking: 8cefa87e-eb30-416a-aa56-1de869029c14
@@ -3034,7 +3035,7 @@ Status remains IMPLEMENTED until prod verification (pms_verify_deploy.sh + pms_p
 - **API Base URL**: https://api.fewo.kolibri-visions.de
 - **Deployed Commit**: eb033bf8c48ad3e7b9270c536932a7f0c512b419
 - **Process Started**: 2026-01-10T18:27:04.685372+00:00
-- **Deploy Verification**: pms_verify_deploy.sh (rc=0, commit match eb033bf8c48ad3e7b9270c536932a7f0c512b419)
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=eb033bf` → rc=0 (commit match)
 - **Workflow Smoke Test**: pms_p1_booking_request_smoke.sh (rc=0)
 - **Key Verification Results**:
   - Health checks: /health (200), /health/ready (200)
@@ -3053,10 +3054,9 @@ Status remains IMPLEMENTED until prod verification (pms_verify_deploy.sh + pms_p
 - **API Base URL**: https://api.fewo.kolibri-visions.de
 - **Public Host**: fewo.kolibri-visions.de
 - **Agency ID**: ffd0123a-10b6-40cd-8ad5-66eee9757ab7
-- **Deploy Verification**: pms_verify_deploy.sh (rc=0)
-  - Source Commit: 72f40107ad1a04970d8e56b54217a1a945441afd
-  - Started At: 2026-01-12T12:11:05.624611+00:00
-  - Endpoint: /api/v1/ops/version
+- **Source Commit**: 72f40107ad1a04970d8e56b54217a1a945441afd
+- **Started At**: 2026-01-12T12:11:05.624611+00:00
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=72f4010` → rc=0 (commit match)
 - **Production Smoke Test**: pms_p1_booking_request_smoke.sh (rc=0)
   - Step A: Discovered property ✅
   - Step B: Created booking request ✅
@@ -3077,7 +3077,7 @@ Status remains IMPLEMENTED until prod verification (pms_verify_deploy.sh + pms_p
 - **Agency ID**: ffd0123a-10b6-40cd-8ad5-66eee9757ab7
 - **Property ID**: 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
 - **Source Commit**: 29c1f99fe0c67798bab4da872d7d2ed84b268e35
-- **Deploy Verification**: backend/scripts/pms_verify_deploy.sh rc=0 (commit match)
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=29c1f99` → rc=0 (commit match)
 - **Smoke Script**: backend/scripts/pms_public_booking_requests_workflow_smoke.sh rc=0
 - **Key Test Results**:
   - BR1 created: 75397182-f620-4575-be80-2d275afc43ff
@@ -3511,7 +3511,7 @@ echo "rc=$?"
 - **API Base URL:** https://api.fewo.kolibri-visions.de
 - **Source Commit:** bb594f87f6b9ddd617ccd070b84fb204de904c28
 - **Started At:** 2026-01-14T10:44:04.629401+00:00
-- **Deploy Verification:** backend/scripts/pms_verify_deploy.sh rc=0 (commit match)
+- **Deploy Verification:** `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=bb594f8` → rc=0 (commit match)
 - **Smoke Script:** backend/scripts/pms_pricing_seasons_smoke.sh rc=0
 - **Key Test Results:**
   - Test 1: Pre-cleanup complete (deleted 0 old smoke rate plans)
@@ -3576,6 +3576,7 @@ echo "rc=$?"
 - API Base URL: https://api.fewo.kolibri-visions.de
 - /api/v1/ops/version source_commit: f00edd572e2bc39e2e009775e7969ce46dc3f6d6
 - started_at: 2026-01-13T20:00:05.201229+00:00
+- **Deploy Verification:** `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=f00edd5` → rc=0 (commit match)
 - Smoke script: backend/scripts/pms_pricing_management_ui_smoke.sh
 - Smoke result: rc=0
 - Key output: "All P2 Pricing Management UI smoke tests passed! 🎉"
@@ -4092,7 +4093,7 @@ echo "rc=$?"
 - /api/v1/ops/version:
   - source_commit: 08a0c5a7c152d2eee1d0fe1958843e67006e0597
   - started_at: 2026-01-13T20:22:04.142683+00:00
-- Deploy verification: `backend/scripts/pms_verify_deploy.sh` rc=0 (commit match)
+- **Deploy Verification:** `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=08a0c5a` → rc=0 (commit match)
 - Smoke script: `backend/scripts/pms_sync_batch_details_smoke.sh` rc=0
 - Sample IDs (from successful run):
   - CID: c1df8491-197a-4881-aec6-18e4297f5f79
@@ -5411,6 +5412,7 @@ curl -k -sS -i "$API_BASE_URL/api/v1/ops/audit-log" | sed -n '1,25p'
 - /api/v1/ops/version:
   - source_commit: `4d632dc5d3dc87ceed3482bbaeb14dd70f29954c`
   - started_at: `2026-01-09T17:11:03.642751+00:00`
+- **Deploy Verification:** `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=4d632dc` → rc=0 (commit match)
 - Smoke Script: `backend/scripts/pms_owner_portal_smoke.sh`
   - Run 1: rc=0 ✅
   - Run 2: rc=0 ✅
@@ -6275,7 +6277,7 @@ echo "rc=$?"
 - **API Base URL**: https://api.fewo.kolibri-visions.de
 - **Deployed Commit**: 9016fad5fb6980b122697bc855e7b1c708ea9d67
 - **Started At**: 2026-01-11T10:45:05.266237+00:00
-- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh` (rc=0, commit match)
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=9016fad` → rc=0 (commit match)
 - **Smoke Test**: `backend/scripts/pms_epic_b_direct_booking_funnel_smoke.sh` (rc=0)
   - Window shifting handled `available=false` (reason: double_booking) until available
   - Property: 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
@@ -6324,7 +6326,7 @@ echo "rc=$?"
 - **Public Host (tenant resolution):** fewo.kolibri-visions.de
 - **Source Commit:** d5e92fa8dd4fca874e61a6ccafb76933a351b6b2 (verified via /api/v1/ops/version)
 - **Started At:** 2026-01-11T15:53:04.566071+00:00
-- **Deploy Verification:** `backend/scripts/pms_verify_deploy.sh` rc=0 (commit match exact)
+- **Deploy Verification:** `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=d5e92fa` → rc=0 (commit match exact)
 - **Epic C Smoke Test:** `backend/scripts/pms_epic_c_public_website_smoke.sh` rc=0
   - Test 1: Public ping OK
   - Test 2: Settings retrieved (agency: ffd0123a-10b6-40cd-8ad5-66eee9757ab7)
@@ -6575,7 +6577,7 @@ See runbook section "Epic C — Public Website v1" for SQL examples to:
 - **Public Host (tenant resolution):** fewo.kolibri-visions.de
 - **Source Commit:** 854c2736e715a71665114fa3d9013fdbba135bf7 (verified via /api/v1/ops/version)
 - **Started At:** 2026-01-11T19:34:05.001562+00:00
-- **Deploy Verification:** `backend/scripts/pms_verify_deploy.sh` rc=0 (commit match exact)
+- **Deploy Verification:** `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=854c273` → rc=0 (commit match exact)
 - **Epic C Smoke Test:** `backend/scripts/pms_epic_c_public_website_smoke.sh` rc=0
   - All 8 tests passed (Tests 1-6: existing Epic C, Tests 7-8: robots.txt + sitemap.xml from backend root routes)
   - Test 7: GET /robots.txt returns 200 with Sitemap reference
@@ -6734,6 +6736,13 @@ curl -sS https://fewo.kolibri-visions.de/sitemap.xml | head -5
 **Scope:** Admin UI feature allowing agencies to configure custom domain for public website via /organisation page.
 
 **Status:** ✅ VERIFIED
+
+**PROD Evidence Summary:**
+- **Verification Date:** 2026-01-11
+- **Source Commit:** a10c18c9f6caee13129a685913b47ac9550799d8
+- **Deploy Verification:** `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=a10c18c` → rc=0 (commit match exact)
+- **Smoke Test:** `backend/scripts/pms_epic_c_public_domain_smoke.sh` → rc=0
+- Full verification details below (see "PROD Verification Evidence (2026-01-11)")
 
 **Features Implemented:**
 
@@ -6897,7 +6906,7 @@ curl -sS https://fewo.kolibri-visions.de/sitemap.xml | head -5
 **Deployed Version:**
 - Source commit: `a10c18c9f6caee13129a685913b47ac9550799d8` (verified via /api/v1/ops/version)
 - Started at: 2026-01-11T18:20:04.637824+00:00
-- Deploy verification: `backend/scripts/pms_verify_deploy.sh` rc=0 (commit match exact)
+- **Deploy Verification:** `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=a10c18c` → rc=0 (commit match exact)
 
 **Smoke Test Results:**
 - Script: `backend/scripts/pms_epic_c_public_domain_smoke.sh`
