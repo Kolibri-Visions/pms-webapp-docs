@@ -30101,4 +30101,108 @@ ls -la /tmp/tmp.*/screenshots/
 - Second test (/team): Reuses existing session (no login redirect)
 - Login flow logs: "ℹ️  Detected login redirect", "✅ Filled email field", "✅ Filled password field", "✅ Clicked login button", "✅ Login successful"
 
+### Dialog Detection Fails (Heuristic Approach)
+
+**Overview:** As of commit d4e7d45+, the smoke script uses **heuristic dialog detection** instead of relying on single selectors like `[role="dialog"]`. Custom Tailwind modals may not have standard ARIA attributes, so the script tries multiple detection patterns.
+
+**Symptom:** Test fails with "Organisation edit dialog did not become visible within 15000ms" or "Team invite dialog did not become visible within 15000ms"
+
+**Root Cause:** None of the dialog detection candidates matched a visible element. This can happen if:
+1. Dialog uses non-standard classes/attributes not in our candidate list
+2. Dialog animation takes longer than 15 seconds
+3. Dialog is rendered but has `display: none` or `visibility: hidden`
+4. z-index stacking issue (dialog rendered behind other elements)
+
+**How Dialog Detection Works:**
+
+The script uses `expectAnyVisible()` which tries multiple selector candidates:
+
+**Organisation Edit Dialog:**
+- `[role="dialog"]:visible`, `[role="alertdialog"]:visible`, `[data-state="open"]:visible`
+- `div.fixed.inset-0.z-50:visible` (Tailwind overlay pattern)
+- Buttons: "Abbrechen", "Cancel", "Speichern", "Save"
+
+**Team Invite Dialog:**
+- Same standard selectors as above
+- Buttons: "Einladen", "Senden", "Send", "Abbrechen", "Cancel"
+- Form inputs: email input via placeholder/label/type selectors
+
+The helper polls all candidates every 250ms for up to 15 seconds. As soon as ANY candidate becomes visible, it succeeds.
+
+**Debugging Steps:**
+
+1. **Check failure screenshots:**
+```bash
+# Look for special failure screenshot
+ls -la /tmp/tmp.*/screenshots/*-detection-failed.png
+
+# This screenshot is taken when all candidates fail
+# Shows the page state at failure time
+```
+
+2. **Verify dialog opens manually:**
+```bash
+# Open admin UI in browser
+open https://admin.fewo.kolibri-visions.de/organisation
+# Click "Bearbeiten" button
+# Inspect the dialog element (F12 DevTools)
+# Check for:
+#   - What classes/attributes it has
+#   - Is it visible (display, visibility, opacity)?
+#   - What z-index does it have?
+#   - Are there multiple dialog elements (hidden ones)?
+```
+
+3. **Check console logs for candidate results:**
+The script logs which candidate succeeded:
+```
+✅ Organisation edit dialog detected via candidate 4/8
+```
+If all fail, error message includes which candidates were tried.
+
+4. **Add missing selectors:**
+If your dialog uses different patterns, update the script:
+```typescript
+// In pms_epic_a_ui_polish_smoke.sh, add to dialogCandidates array:
+page.locator('your-custom-dialog-class:visible'),
+page.getByTestId('your-dialog-test-id'),
+```
+
+**Solution (Common Cases):**
+
+**Case 1: Dialog uses shadcn/ui or Radix UI primitives**
+These often use `data-state="open"` which is already in our candidates. If still failing, check for `data-radix-*` attributes:
+```typescript
+page.locator('[data-radix-dialog-content]:visible'),
+```
+
+**Case 2: Dialog has long animation (>1s)**
+Increase the initial wait timeout before detection:
+```typescript
+await page.waitForTimeout(2000); // Increase from 1000ms
+```
+
+**Case 3: Multiple hidden dialogs exist**
+The script avoids `.first()` on dialog selectors for this reason. But if you have persistent hidden dialogs, ensure candidates check `:visible` pseudo-selector.
+
+**Case 4: z-index stacking issue**
+Dialog rendered but not clickable/visible due to stacking:
+```bash
+# Check z-index in DevTools
+# Ensure dialog has z-50 or higher
+# Check for overlapping fixed elements
+```
+
+**Verification:**
+```bash
+# Re-run smoke test after fixes
+E2E_ADMIN_EMAIL="admin@example.com" \
+E2E_ADMIN_PASSWORD="password" \
+./backend/scripts/pms_epic_a_ui_polish_smoke.sh
+
+# Expected:
+# ✅ Organisation edit dialog detected via candidate X/Y
+# ✅ Invite dialog is in-page (not browser prompt)
+```
+
 ---

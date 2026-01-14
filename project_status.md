@@ -6081,6 +6081,7 @@ When automated verification passes in PROD with commit match:
 - **New**: Playwright UI smoke test validates client-side interactions, dialogs, toasts, and UI polish features
 - **Fix (2026-01-14)**: Playwright smoke script now generates proper playwright.config.ts with named projects (chromium/firefox/webkit) to fix "No named projects" error. Script tested and ready for PROD verification.
 - **Fix (2026-01-14)**: Smoke script now uses UI login form (E2E_ADMIN_EMAIL/E2E_ADMIN_PASSWORD) instead of JWT injection for reliable authentication in PROD. Implements `ensureLoggedIn()` helper with robust login flow detection and form selectors (German/English button support). Required env vars updated in docs.
+- **Fix (2026-01-14)**: Implemented **heuristic dialog detection** via `expectAnyVisible()` helper to handle custom Tailwind modals without standard ARIA attributes. Tries 8-12 selector candidates (role attributes, Tailwind patterns like `div.fixed.inset-0.z-50:visible`, dialog buttons, form inputs) polling every 250ms for 15s. Avoids `.first()` trap with hidden dialogs. On failure, saves `*-detection-failed.png` screenshot for debugging. Robust against shadcn/ui, Radix UI, custom modals.
 - Manual browser verification checklist still available in runbook for supplementary QA
 - Build verified: TypeScript compilation passes, no new runtime errors introduced
 
