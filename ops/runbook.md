@@ -29928,6 +29928,15 @@ echo "rc=$?"
 - Admin credentials with manager/admin role
 - Admin UI deployed with `/api/ops/version` endpoint
 
+**Required Environment Variables:**
+- `E2E_ADMIN_EMAIL`: Admin email for UI login (must have manager/admin role)
+- `E2E_ADMIN_PASSWORD`: Admin password for UI login
+- These credentials are used to perform actual UI login via the auth form (no JWT injection)
+
+**Known Non-Fatal Warnings:**
+- Admin `/api/ops/version` may return `SOURCE_COMMIT: (not set)` - This is a non-fatal warning until Coolify deployment config is updated to inject the commit SHA into the admin UI build
+- UI smoke may log "Invite not visible in list (may require page refresh)" - This is non-fatal if the POST `/api/v1/team/invites` returned status 201 and the test passed
+
 **Common Issues:**
 
 ### JWT Token Expired (Redirect to Login)
