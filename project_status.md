@@ -5643,7 +5643,23 @@ done
 
 **Scope:** Backoffice/Admin UI for staff (manager/admin) to manage property owners: list view, detail page with property assignment, statement generation, and CSV download.
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
+
+**PROD Evidence (Verified: 2026-01-14):**
+- **Verification Date:** 2026-01-14
+- **API Base URL:** https://api.fewo.kolibri-visions.de
+- **Deploy Verification:** `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=031fb30` → rc=0
+  - **Source Commit:** 031fb30e3284e32e13d48fb5d7b5b5efac045d1f
+  - **Started At:** 2026-01-14T17:34:04.127006+00:00
+- **Smoke Script:** `backend/scripts/pms_owner_o3_assignments_smoke.sh` → rc=0
+- **Key IDs / Findings:**
+  - Owner A ID: 5967f46c-f26d-4966-877c-2c4ca3901371
+  - Owner B ID: 270317c8-deed-447a-a3de-7282e429f9d1
+  - Unassigned property: 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
+  - Property owned by A: 6da0f8d2-677f-4182-a06c-db155f43704a
+  - Property owned by B: 971f7812-778b-4c2d-8110-da950d5352e4
+  - Assignable filter correct + mutual exclusion returns 400
+- **Verification:** O3 assignable properties filter + API behavior verified in PROD with commit match and rc=0 smoke.
 
 **Implementation Notes:**
 - UI deployed at `/owners` (list) and `/owners/[ownerId]` (detail)
@@ -5728,6 +5744,7 @@ done
 - Status ✅ IMPLEMENTED achieved via manual browser testing + integration tests + API smoke script
 - Status ✅ VERIFIED requires: PROD deployment + smoke script rc=0 + documented PROD evidence
 - API smoke script exists: `pms_owner_o3_assignments_smoke.sh` (tests API filtering logic)
+- **Update (2026-01-14):** ✅ VERIFIED status now achieved — see PROD Evidence block above with commit 031fb30, smoke rc=0, and documented findings.
 
 ---
 

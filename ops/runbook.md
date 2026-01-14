@@ -26739,6 +26739,79 @@ grep -A4 "command -v log_info" backend/scripts/pms_owner_statements_smoke.sh
 
 ---
 
+## Owner Portal O3 — PROD Verification (Assignable Properties Filter)
+
+**Overview:** Automated PROD verification for Owner Portal O3 assignable properties filter API behavior.
+
+**Purpose:** Verify that the `assignable_for_owner_id` query parameter on GET /api/v1/properties correctly filters properties and that mutual exclusion validation works as expected.
+
+**Verification Commands:**
+
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify deployment
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=<commit_hash>
+
+# Run O3 assignments smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="<manager/admin JWT>"
+export OWNER_A_AUTH_USER_ID="<Supabase auth.users.id for owner A>"
+export OWNER_B_AUTH_USER_ID="<Supabase auth.users.id for owner B>"
+# Optional:
+# export AGENCY_ID="<agency UUID>"
+./backend/scripts/pms_owner_o3_assignments_smoke.sh
+echo "rc=$?"
+
+# Expected output: All 2 tests pass, rc=0
+```
+
+**Common Issues:**
+
+### 401 "Token has expired" Error
+
+**Symptom:** Smoke test fails with `401 Unauthorized` and error message "Token has expired".
+
+**Root Cause:** MANAGER_JWT_TOKEN is expired. JWTs typically have short TTL (1-24 hours).
+
+**Solution:**
+Regenerate a fresh JWT token using one of these methods:
+
+```bash
+# Option 1: Use get_fresh_token.sh (if configured)
+export MANAGER_JWT_TOKEN=$(./backend/scripts/get_fresh_token.sh)
+
+# Option 2: Manual token generation via Supabase API
+# (requires SUPABASE_URL, SUPABASE_ANON_KEY, manager email/password)
+```
+
+**Verification:**
+After regenerating token, re-run the smoke test:
+```bash
+./backend/scripts/pms_owner_o3_assignments_smoke.sh
+# Should now pass with rc=0
+```
+
+### Token Validation with Supabase Kong
+
+**Important:** If manually validating JWT tokens via Supabase Kong endpoint `/auth/v1/user`, you MUST include both headers:
+- `Authorization: Bearer <token>` (the JWT)
+- `apikey: <anon_key>` (Supabase anon key)
+
+Without the `apikey` header, Kong will reject the request even if the JWT is valid.
+
+**Example:**
+```bash
+curl -X GET "https://<project>.supabase.co/auth/v1/user" \
+  -H "Authorization: Bearer $MANAGER_JWT_TOKEN" \
+  -H "apikey: $SUPABASE_ANON_KEY"
+```
+
+---
+
 
 ## Frontend Build Failures (pms-admin)
 
