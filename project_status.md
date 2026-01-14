@@ -283,6 +283,8 @@ open https://admin.fewo.kolibri-visions.de/dashboard
 
 **NOTE:** The PROD Evidence block below was added later (2026-01-13) via automated smoke test. If this constitutes sufficient automated verification per project rules, status can be upgraded to VERIFIED.
 
+**Automated Verification Available:** Playwright-based smoke test script available at `backend/scripts/pms_admin_ui_header_smoke.sh`. Tests login, header title (no greeting), language switch & persistence, profile dropdown, and profile stub pages navigation. See runbook section "Admin UI Header Verification (Automated)" for usage.
+
 **PROD Evidence (2026-01-13):**
 - Verification Date: 2026-01-13
 - Admin URL: https://admin.fewo.kolibri-visions.de

@@ -19902,6 +19902,154 @@ open https://admin.fewo.kolibri-visions.de/dashboard
 
 ---
 
+## Admin UI Header Verification (Automated)
+
+**Purpose:** Automated headless browser testing of Admin UI header features using Playwright in Docker.
+
+**Smoke Script:** `backend/scripts/pms_admin_ui_header_smoke.sh`
+
+**What It Verifies:**
+- Login flow with credentials
+- Header page title (no "Hello, email!" greeting)
+- Language switcher functionality (DE → EN, localStorage persistence)
+- Profile dropdown (display name, role, menu items)
+- Profile stub pages navigation and content
+
+**Usage:**
+```bash
+# HOST-SERVER-TERMINAL
+export ADMIN_EMAIL="admin@example.com"
+export ADMIN_PASSWORD="your-password"
+./backend/scripts/pms_admin_ui_header_smoke.sh
+# Expected: rc=0 (all tests pass)
+```
+
+**Common Issues:**
+
+### Login Fails (Timeout or Wrong Credentials)
+
+**Symptom:** Test 1 fails with timeout or "Login unsuccessful" message.
+
+**Root Causes:**
+1. **Wrong credentials** - ADMIN_EMAIL/ADMIN_PASSWORD incorrect
+2. **2FA enabled** - Test user requires two-factor authentication
+3. **Session already active** - User logged in elsewhere causing redirect
+4. **Slow page load** - Login page takes longer than PW_TIMEOUT_MS
+
+**How to Debug:**
+```bash
+# Run with visible browser (requires X11/display for container)
+export HEADLESS=false
+export ADMIN_EMAIL="admin@example.com"
+export ADMIN_PASSWORD="your-password"
+./backend/scripts/pms_admin_ui_header_smoke.sh
+
+# Increase timeout
+export PW_TIMEOUT_MS=60000
+export ADMIN_EMAIL="admin@example.com"
+export ADMIN_PASSWORD="your-password"
+./backend/scripts/pms_admin_ui_header_smoke.sh
+```
+
+**Solution:**
+- Verify credentials are correct for test user
+- Use test user without 2FA enabled (create dedicated smoke test account if needed)
+- Check screenshots in /tmp/pms_admin_ui_header_smoke/ for visual clues
+- Ensure ADMIN_URL is correct and accessible from host
+
+### Selectors Changed (UI Refactor)
+
+**Symptom:** Tests fail with "Timeout waiting for selector" or "Element not found" errors after UI changes.
+
+**Root Cause:** AdminShell component refactored, changing DOM structure or class names.
+
+**Where Selectors Are Used:**
+- **Login page**: `input[type="email"]`, `input[type="password"]`, `button` with text matching /login|anmelden/i
+- **Header title**: `header h1`
+- **Language button**: `button` containing 🇩🇪/🇬🇧 or DE/EN text
+- **Language options**: `button` containing "English" or 🇬🇧
+- **Profile button**: Last `header button` with `svg` child (User icon)
+- **Profile menu items**: `text="Profil"`, `text="Profil bearbeiten"`, `text="Sicherheit"`
+- **Stub pages**: `text="Demnächst verfügbar"`
+
+**How to Debug:**
+```bash
+# Run with visible browser to see what's happening
+export HEADLESS=false
+export ADMIN_EMAIL="admin@example.com"
+export ADMIN_PASSWORD="your-password"
+./backend/scripts/pms_admin_ui_header_smoke.sh
+
+# Check screenshots on failure
+ls -lh /tmp/pms_admin_ui_header_smoke/
+```
+
+**Solution:**
+- Update selectors in script heredoc (PLAYWRIGHT_EOF section)
+- Add data-testid attributes to AdminShell for more stable selectors
+- Consider using role-based selectors when possible
+
+### Timeout on Slow Pages
+
+**Symptom:** Tests fail with "Timeout exceeded" on navigation steps.
+
+**Root Cause:** Production environment slower than expected (cold start, DB query latency, network).
+
+**Solution:**
+```bash
+# Increase timeout to 60 seconds
+export PW_TIMEOUT_MS=60000
+export ADMIN_EMAIL="admin@example.com"
+export ADMIN_PASSWORD="your-password"
+./backend/scripts/pms_admin_ui_header_smoke.sh
+```
+
+### Docker Not Available
+
+**Symptom:** Script fails with "docker: command not found" or "Cannot connect to Docker daemon".
+
+**Root Cause:** Docker not installed or not running on host.
+
+**Solution:**
+```bash
+# Check Docker status
+docker --version
+docker ps
+
+# Start Docker daemon if needed (macOS)
+open -a Docker
+
+# Linux: ensure docker service running
+sudo systemctl start docker
+```
+
+### Screenshots Not Saved
+
+**Symptom:** Failure occurs but no screenshots in PW_SCREENSHOTS_DIR.
+
+**Root Cause:** Directory not writable or mount failed in container.
+
+**Solution:**
+```bash
+# Check directory permissions
+ls -ld /tmp/pms_admin_ui_header_smoke
+mkdir -p /tmp/pms_admin_ui_header_smoke
+chmod 755 /tmp/pms_admin_ui_header_smoke
+
+# Custom screenshots directory
+export PW_SCREENSHOTS_DIR=/home/user/screenshots
+mkdir -p "$PW_SCREENSHOTS_DIR"
+export ADMIN_EMAIL="admin@example.com"
+export ADMIN_PASSWORD="your-password"
+./backend/scripts/pms_admin_ui_header_smoke.sh
+```
+
+**Related Sections:**
+- [Admin UI — Header: Language Switch + Profile Dropdown](#admin-ui--header-language-switch--profile-dropdown)
+- [Admin UI Static Verification (Smoke Test)](#admin-ui-static-verification-smoke-test)
+
+---
+
 ## Frontend Build Failures (TSX/JSX Syntax Errors)
 
 **Problem:** Coolify deployment fails with TypeScript/JSX syntax errors like:
