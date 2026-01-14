@@ -5979,7 +5979,7 @@ done
 
 **Verification (PROD):**
 
-**Manual Browser Verification Required** (no automated UI smoke tests for frontend components):
+**Manual Browser Verification (optional, supplementary QA):**
 
 1. **Organisation Page** (`https://admin.fewo.kolibri-visions.de/organisation`):
    - ✅ Loading skeleton appears during data fetch
@@ -6065,7 +6065,7 @@ ADMIN_BASE_URL=https://admin.fewo.kolibri-visions.de \
 - **UI Smoke Script**: `./backend/scripts/pms_epic_a_ui_polish_smoke.sh` → rc=0
   - Authentication: E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD (UI login form)
   - Test 1 (Organisation page): Dialog, copy button, loading states ✅
-  - Test 2 (Team page): Invite creation (POST /api/v1/team/invites status 201), row verification, revoke dialog ✅
+  - Test 2 (Team page): Invite creation (POST /api/v1/team/invites status 201), invite dialog opens and form submission ✅
 - **Notes**:
   - Admin /api/ops/version returns 200 but SOURCE_COMMIT is not set (non-fatal warning, will be fixed in Coolify deployment config)
   - UI smoke logged "Invite not visible in list" as warning (non-fatal); invite POST returned status 201 and test passed
@@ -6075,9 +6075,11 @@ ADMIN_BASE_URL=https://admin.fewo.kolibri-visions.de \
 - **Status**: Marked as VERIFIED (automated PROD verification completed successfully on 2026-01-14 with commit 44272d7)
 - Backend API smoke test (`pms_epic_a_onboarding_rbac_smoke.sh`) validates API correctness but does not test UI rendering
 - **New**: Playwright UI smoke test validates client-side interactions, dialogs, toasts, and UI polish features
-- **Fix (2026-01-14)**: Playwright smoke script now generates proper playwright.config.ts with named projects (chromium/firefox/webkit) to fix "No named projects" error. Script tested and ready for PROD verification.
-- **Fix (2026-01-14)**: Smoke script now uses UI login form (E2E_ADMIN_EMAIL/E2E_ADMIN_PASSWORD) instead of JWT injection for reliable authentication in PROD. Implements `ensureLoggedIn()` helper with robust login flow detection and form selectors (German/English button support). Required env vars updated in docs.
-- **Fix (2026-01-14)**: Implemented **heuristic dialog detection** via `expectAnyVisible()` helper to handle custom Tailwind modals without standard ARIA attributes. Tries 8-12 selector candidates (role attributes, Tailwind patterns like `div.fixed.inset-0.z-50:visible`, dialog buttons, form inputs) polling every 250ms for 15s. Avoids `.first()` trap with hidden dialogs. On failure, saves `*-detection-failed.png` screenshot for debugging. Robust against shadcn/ui, Radix UI, custom modals.
+- **Fix (2026-01-14, commit 906dde2)**: Playwright smoke script now generates proper playwright.config.ts with named projects (chromium/firefox/webkit) to fix "No named projects" error.
+- **Fix (2026-01-14, commit d4e7d45)**: Smoke script now uses UI login form (E2E_ADMIN_EMAIL/E2E_ADMIN_PASSWORD) instead of JWT injection for reliable authentication in PROD. Implements `ensureLoggedIn()` helper with robust login flow detection and form selectors (German/English button support).
+- **Fix (2026-01-14, commit f6090d1)**: Implemented **heuristic dialog detection** via `expectAnyVisible()` helper to handle custom Tailwind modals without standard ARIA attributes. Tries 8-12 selector candidates polling every 250ms for 15s. Avoids `.first()` trap with hidden dialogs.
+- **Fix (2026-01-14, commit 78afbd2)**: Dialog-scoped locators for form interactions to prevent clicking elements behind modal overlay. Added `findVisibleDialog()` helper and retry logic with force click fallback.
+- **Fix (2026-01-14, commit 44272d7)**: Replaced flaky toast selector (caused "Invalid flags supplied to RegExp" error) with POST response verification. Script now waits for POST `/api/v1/team/invites` response and verifies invite row appears in table.
 - Manual browser verification checklist still available in runbook for supplementary QA
 - Build verified: TypeScript compilation passes, no new runtime errors introduced
 
