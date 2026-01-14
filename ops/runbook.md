@@ -29889,3 +29889,130 @@ curl -sS https://example.com/file.md | sed -n '1,20p'
 **Solution**: This is expected. Use the automated publish workflow instead. Do not attempt to work around this with different credentials.
 
 ---
+
+## Epic A UI Polish — Automated UI Smoke (Playwright)
+
+**Overview:** Automated UI testing for Epic A "Admin UI: Organisation & Team Production-Grade Polish" using Playwright in Docker. Verifies in-page dialogs, success feedback, and UI interactions work correctly.
+
+**Purpose:** Enable automated verification of Epic A UI polish features:
+- In-page dialogs (not browser popups) on /organisation and /team
+- Success/error feedback with toasts/banners (not alert popups)
+- Interactive elements (copy buttons, invite creation/revocation)
+- Mobile-responsive layout
+
+**Verification Commands:**
+
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify both backend and admin UI deployment with matching commits
+./backend/scripts/pms_verify_deploy.sh \
+  API_BASE_URL=https://api.fewo.kolibri-visions.de \
+  ADMIN_BASE_URL=https://admin.fewo.kolibri-visions.de \
+  EXPECT_COMMIT=<commit_hash>
+
+# Run automated UI smoke test
+ADMIN_BASE_URL=https://admin.fewo.kolibri-visions.de \
+MANAGER_JWT_TOKEN="<manager/admin JWT>" \
+./backend/scripts/pms_epic_a_ui_polish_smoke.sh
+echo "rc=$?"
+
+# Expected: All tests pass, rc=0
+```
+
+**Prerequisites:**
+- Docker installed and running on host machine
+- Manager/admin JWT token with valid session
+- Admin UI deployed with `/api/ops/version` endpoint
+
+**Common Issues:**
+
+### JWT Token Expired (Redirect to Login)
+
+**Symptom:** Test fails with "Redirected to login page - JWT token may be expired or invalid"
+
+**Root Cause:** MANAGER_JWT_TOKEN is expired. JWTs typically have short TTL (1-24 hours).
+
+**Solution:**
+```bash
+# Regenerate a fresh JWT token
+export MANAGER_JWT_TOKEN=$(./backend/scripts/get_fresh_token.sh)
+
+# Or manually via Supabase API
+# (requires SUPABASE_URL, SUPABASE_ANON_KEY, manager email/password)
+
+# Retry smoke test
+ADMIN_BASE_URL=https://admin.fewo.kolibri-visions.de \
+MANAGER_JWT_TOKEN="$MANAGER_JWT_TOKEN" \
+./backend/scripts/pms_epic_a_ui_polish_smoke.sh
+```
+
+### Docker Not Running
+
+**Symptom:** Error "Docker is not running or not accessible"
+
+**Solution:**
+```bash
+# Check Docker status
+docker ps
+
+# On Linux: ensure Docker service is running
+sudo systemctl status docker
+sudo systemctl start docker
+
+# On macOS: ensure Docker Desktop is running
+open -a Docker
+
+# Check permissions
+docker run hello-world
+```
+
+### Admin ops/version Endpoint Missing
+
+**Symptom:** Admin verification in pms_verify_deploy.sh returns 404
+
+**Root Cause:** Admin UI not deployed with `/api/ops/version` endpoint yet.
+
+**Solution:**
+- Ensure `frontend/app/api/ops/version/route.ts` is deployed
+- Endpoint exposes `source_commit` from `process.env.SOURCE_COMMIT` or `process.env.NEXT_PUBLIC_SOURCE_COMMIT`
+- Verify endpoint manually:
+```bash
+curl -sS https://admin.fewo.kolibri-visions.de/api/ops/version | jq
+# Expected: {"service":"pms-admin","source_commit":"abc123",...}
+```
+
+### localStorage Key Mismatch
+
+**Symptom:** Tests redirect to login even with valid JWT, or UI shows "not authenticated"
+
+**Root Cause:** Playwright script sets JWT in localStorage with key `pms_jwt`, but frontend expects a different key.
+
+**Solution:**
+1. Check frontend code for localStorage key:
+```bash
+cd /data/repos/pms-webapp/frontend
+rg "localStorage.getItem|localStorage.setItem" --type ts | grep -i "jwt\|token\|auth"
+```
+
+2. Update Playwright test script (`pms_epic_a_ui_polish_smoke.sh`) to use correct key in `addInitScript` section
+
+3. Script already tries multiple common keys: `pms_jwt`, `token`, `jwt`, `authToken`. If none work, add your key to the list.
+
+### Test Fails But Manual UI Works
+
+**Symptom:** Automated test fails (e.g., element not found), but manually clicking through UI works fine.
+
+**Root Cause:** UI element selectors in Playwright test don't match actual rendered HTML, or timing issues.
+
+**Debugging:**
+1. Check screenshots in `/tmp/<tempdir>/screenshots/` for failure point
+2. Adjust selectors in test script to match your UI components
+3. Increase wait timeouts if elements load slowly
+4. Verify German text matches: "Bearbeiten", "Mitglied einladen", "Widerrufen", etc.
+
+**Solution:** Update test.spec.ts in `pms_epic_a_ui_polish_smoke.sh` with correct selectors and timing.
+
+---

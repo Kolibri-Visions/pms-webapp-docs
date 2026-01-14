@@ -6015,10 +6015,69 @@ export JWT_TOKEN="<<<admin JWT token>>>"
 # Expected: rc=0, all 6 tests pass
 ```
 
+**Automated UI Verification (New):**
+
+The following scripts enable automated verification of Epic A UI Polish features:
+
+**Admin UI ops/version Endpoint:**
+- **File**: `frontend/app/api/ops/version/route.ts`
+- **Purpose**: Public endpoint exposing `source_commit` for deployment verification
+- **Returns**: `{"service":"pms-admin","source_commit":"abc123","started_at":"...","environment":"..."}`
+
+**Enhanced Deploy Verification:**
+- **Script**: `backend/scripts/pms_verify_deploy.sh` (enhanced)
+- **New Features**:
+  - Accepts CLI-style `VAR=VALUE` arguments for convenience
+  - Optional admin UI verification if `ADMIN_BASE_URL` is provided
+  - Verifies both backend and admin commits match `EXPECT_COMMIT`
+- **Usage**:
+```bash
+./backend/scripts/pms_verify_deploy.sh \
+  API_BASE_URL=https://api.fewo.kolibri-visions.de \
+  ADMIN_BASE_URL=https://admin.fewo.kolibri-visions.de \
+  EXPECT_COMMIT=abc123
+```
+
+**Automated UI Smoke Test (Playwright):**
+- **Script**: `backend/scripts/pms_epic_a_ui_polish_smoke.sh`
+- **Purpose**: Automated UI testing using Playwright in Docker
+- **Tests**:
+  - /organisation: Dialog editing, copy buttons, loading states
+  - /team: Invite creation/revocation, in-page dialogs, toasts, badges
+- **Usage**:
+```bash
+ADMIN_BASE_URL=https://admin.fewo.kolibri-visions.de \
+MANAGER_JWT_TOKEN="<jwt>" \
+./backend/scripts/pms_epic_a_ui_polish_smoke.sh
+```
+- **Production-safe**: Creates throwaway invites with `smoke-epic-a+<timestamp>@example.com`, revokes as cleanup
+- **Prerequisites**: Docker installed, manager JWT token
+
+**PROD Evidence Template (for future VERIFIED status):**
+
+When automated verification passes in PROD with commit match:
+
+```markdown
+**PROD Evidence (Verified: YYYY-MM-DD):**
+- **Verification Date**: YYYY-MM-DD
+- **Admin Base URL**: https://admin.fewo.kolibri-visions.de
+- **Deploy Verification**: `./pms_verify_deploy.sh ADMIN_BASE_URL=... EXPECT_COMMIT=abc123` → rc=0
+  - **Admin Source Commit**: abc123... (full SHA)
+  - **Backend Source Commit**: abc123... (full SHA, same as admin)
+  - **Started At**: YYYY-MM-DDTHH:MM:SS+00:00
+- **UI Smoke Script**: `./pms_epic_a_ui_polish_smoke.sh` → rc=0
+- **Key Results**:
+  - Organisation page: dialog, copy button, skeleton ✅
+  - Team page: invite creation, revoke dialog, toasts ✅
+  - Screenshots: org-page-loaded.png, team-invite-dialog.png
+- **Verification**: Epic A UI polish features (in-page dialogs, toasts, badges, copy buttons) verified in PROD with automated Playwright tests and commit match.
+```
+
 **Notes:**
-- **Status**: Marked as IMPLEMENTED (not VERIFIED) because no automated PROD verification exists for frontend UI components (skeletons, dialogs, toasts, badges)
-- Backend API smoke test (`pms_epic_a_onboarding_rbac_smoke.sh`) validates API correctness but does not test UI rendering or client-side interactions
-- Manual browser verification checklist provided in runbook for QA/stakeholder sign-off
+- **Status**: Marked as IMPLEMENTED (automated verification tools now available, awaiting PROD verification run with commit match)
+- Backend API smoke test (`pms_epic_a_onboarding_rbac_smoke.sh`) validates API correctness but does not test UI rendering
+- **New**: Playwright UI smoke test validates client-side interactions, dialogs, toasts, and UI polish features
+- Manual browser verification checklist still available in runbook for supplementary QA
 - Build verified: TypeScript compilation passes, no new runtime errors introduced
 
 **Dependencies:**
