@@ -2002,7 +2002,26 @@ Implemented database-level exclusion constraint to prevent overlapping bookings 
 - ✅ Exclusion violations return 409
 - ✅ Smoke test passes: 1 success (201), 9 conflicts (409), 0 errors (500)
 
-**Status**: Implemented (still awaiting production verification of original exclusion constraint + FK fix)
+**Status**: ✅ VERIFIED
+
+**PROD Evidence (Verified: 2026-01-14)**:
+- **Verification Date**: 2026-01-14
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Agency ID**: ffd0123a-10b6-40cd-8ad5-66eee9757ab7
+- **Property ID**: 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
+- **Guest ID**: 1e9dd87c-ba39-4ec5-844e-e4c66e1f4dc1
+- **Source Commit**: 8ab8492ed829abd2668d17480bfb03fd9239aac4
+- **Started At**: 2026-01-14T16:04:04.443845+00:00
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=8ab8492` → rc=0 (commit match)
+- **Smoke Script**: `backend/scripts/pms_booking_concurrency_smoke.sh` → rc=0
+- **Key Results (Auto-Shift + Concurrency)**:
+  - Attempt 1: 2027-01-20 → 2027-01-23: 0×201, 10×409, 0×500 → auto-shift
+  - Attempt 2: 2027-01-27 → 2027-01-30: 0×201, 10×409, 0×500 → auto-shift
+  - Attempt 3: 2027-02-03 → 2027-02-06: 0×201, 10×409, 0×500 → auto-shift
+  - Attempt 4: 2027-02-10 → 2027-02-13: 0×201, 10×409, 0×500 → auto-shift
+  - Attempt 5: 2027-02-17 → 2027-02-20: 0×201, 10×409, 0×500 → auto-shift
+  - Attempt 6 (PASS): 2027-02-24 → 2027-02-27: 1×201, 9×409, 0×500 ✅
+- **Verification**: Race-safe booking constraint + API mapping verified (exactly 1 success, 9 conflicts, no 500s). Auto-shift logic prevented false failures on already-booked windows.
 
 ---
 
@@ -2030,7 +2049,26 @@ Implemented database-level exclusion constraint to prevent overlapping bookings 
 - ✅ No bash parsing errors ("syntax error" or "unbound variable")
 - ✅ All counters are valid integers (0-10 range)
 
-**Status**: Smoke script stabilized; still awaiting production verification (pms_verify_deploy.sh + smoke rc=0 + commit match)
+**Status**: ✅ VERIFIED
+
+**PROD Evidence (Verified: 2026-01-14)**:
+- **Verification Date**: 2026-01-14
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Agency ID**: ffd0123a-10b6-40cd-8ad5-66eee9757ab7
+- **Property ID**: 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
+- **Guest ID**: 1e9dd87c-ba39-4ec5-844e-e4c66e1f4dc1
+- **Source Commit**: 8ab8492ed829abd2668d17480bfb03fd9239aac4
+- **Started At**: 2026-01-14T16:04:04.443845+00:00
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=8ab8492` → rc=0 (commit match)
+- **Smoke Script**: `backend/scripts/pms_booking_concurrency_smoke.sh` → rc=0
+- **Key Results (Auto-Shift + Concurrency)**:
+  - Attempt 1: 2027-01-20 → 2027-01-23: 0×201, 10×409, 0×500 → auto-shift
+  - Attempt 2: 2027-01-27 → 2027-01-30: 0×201, 10×409, 0×500 → auto-shift
+  - Attempt 3: 2027-02-03 → 2027-02-06: 0×201, 10×409, 0×500 → auto-shift
+  - Attempt 4: 2027-02-10 → 2027-02-13: 0×201, 10×409, 0×500 → auto-shift
+  - Attempt 5: 2027-02-17 → 2027-02-20: 0×201, 10×409, 0×500 → auto-shift
+  - Attempt 6 (PASS): 2027-02-24 → 2027-02-27: 1×201, 9×409, 0×500 ✅
+- **Verification**: Race-safe booking constraint + API mapping verified (exactly 1 success, 9 conflicts, no 500s). Auto-shift logic prevented false failures on already-booked windows.
 
 ---
 
