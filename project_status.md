@@ -3898,9 +3898,9 @@ echo "rc=$?"
 **PROD Evidence (Re-verified: 2026-01-14)**:
 - **Verification Date**: 2026-01-14
 - **API Base URL**: https://api.fewo.kolibri-visions.de
-- **Source Commit**: 21b7d7e5b42e3106e806c02c1b1999e2b6922d30
-- **Started At**: 2026-01-14T13:29:05.035555+00:00
-- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=21b7d7e` → rc=0 (commit match)
+- **Source Commit**: ae64aeb4506c363ded6f82dbe7f5d733dcb08658
+- **Started At**: 2026-01-14T13:48:14.251849+00:00
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=ae64aeb` → rc=0 (commit match)
 - **Smoke Script**: `backend/scripts/pms_p3_direct_booking_hardening_smoke.sh` → rc=0
 - **Diagnostics Verified**:
   - Missing `JWT_TOKEN` exits early with clear error + rc=1 ✅
