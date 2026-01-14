@@ -29913,9 +29913,10 @@ git fetch origin main && git reset --hard origin/main
   ADMIN_BASE_URL=https://admin.fewo.kolibri-visions.de \
   EXPECT_COMMIT=<commit_hash>
 
-# Run automated UI smoke test
+# Run automated UI smoke test with admin credentials
+E2E_ADMIN_EMAIL="admin@example.com" \
+E2E_ADMIN_PASSWORD="password" \
 ADMIN_BASE_URL=https://admin.fewo.kolibri-visions.de \
-MANAGER_JWT_TOKEN="<manager/admin JWT>" \
 ./backend/scripts/pms_epic_a_ui_polish_smoke.sh
 echo "rc=$?"
 
@@ -29924,7 +29925,7 @@ echo "rc=$?"
 
 **Prerequisites:**
 - Docker installed and running on host machine
-- Manager/admin JWT token with valid session
+- Admin credentials with manager/admin role
 - Admin UI deployed with `/api/ops/version` endpoint
 
 **Common Issues:**
@@ -30045,5 +30046,59 @@ PW_PROJECT=firefox MANAGER_JWT_TOKEN="<jwt>" \
 2. Verify Docker can pull images: `docker run hello-world`
 3. Check temp directory has both files: Look for "Generated Playwright config" in output
 4. Review diagnostics output showing Playwright version and temp dir contents
+
+### Auth via UI Login (New Method)
+
+**Overview:** As of commit 906dde2+, the smoke script authenticates via UI login form instead of JWT injection to localStorage. This method is more reliable and matches real user workflows.
+
+**Symptom:** Test fails with "Failed to authenticate: still on login page after login attempt"
+
+**Root Cause:** Login credentials incorrect, or login form selectors don't match the actual admin UI.
+
+**Solution:**
+
+1. **Verify Credentials:**
+```bash
+# Test credentials manually
+open https://admin.fewo.kolibri-visions.de/login
+# Enter E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD manually
+# Ensure login succeeds and user has manager/admin role
+```
+
+2. **Check Environment Variables:**
+```bash
+echo "Email: $E2E_ADMIN_EMAIL"
+echo "Password length: ${#E2E_ADMIN_PASSWORD}"
+# Verify both are set and email has valid format
+```
+
+3. **Debug Login Form Selectors:**
+If credentials are correct but login fails, the login form might use custom selectors. Check the admin UI HTML:
+- Email input should match: `input[type="email"]` or `input[name*="email" i]`
+- Password input should match: `input[type="password"]`
+- Submit button should match: `button:has-text("Anmelden")`, `button:has-text("Login")`, or `button[type="submit"]`
+
+4. **Check User Role:**
+```bash
+# Verify user has manager/admin role (not just staff)
+# In Supabase Dashboard → Authentication → Users → Check "role" metadata
+# Or query team_members table:
+psql $DATABASE_URL -c "SELECT role FROM team_members WHERE user_id = (SELECT id FROM auth.users WHERE email = 'admin@example.com');"
+# Expected: 'manager' or 'admin'
+```
+
+5. **Review Screenshots for Debugging:**
+After a failed run, check screenshots:
+```bash
+# Screenshots are saved before script cleans up temp dir
+# Copy them quickly after failure:
+ls -la /tmp/tmp.*/screenshots/
+# Look for login page screenshot to see what went wrong
+```
+
+**Expected Behavior:**
+- First test (/organisation): Detects login redirect, fills form, submits, waits for redirect away from /login
+- Second test (/team): Reuses existing session (no login redirect)
+- Login flow logs: "ℹ️  Detected login redirect", "✅ Filled email field", "✅ Filled password field", "✅ Clicked login button", "✅ Login successful"
 
 ---

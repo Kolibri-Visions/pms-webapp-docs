@@ -6046,12 +6046,14 @@ The following scripts enable automated verification of Epic A UI Polish features
   - /team: Invite creation/revocation, in-page dialogs, toasts, badges
 - **Usage**:
 ```bash
+E2E_ADMIN_EMAIL="admin@example.com" \
+E2E_ADMIN_PASSWORD="password" \
 ADMIN_BASE_URL=https://admin.fewo.kolibri-visions.de \
-MANAGER_JWT_TOKEN="<jwt>" \
 ./backend/scripts/pms_epic_a_ui_polish_smoke.sh
 ```
+- **Authentication**: Uses UI login form (email/password) instead of JWT injection for reliable PROD testing
 - **Production-safe**: Creates throwaway invites with `smoke-epic-a+<timestamp>@example.com`, revokes as cleanup
-- **Prerequisites**: Docker installed, manager JWT token
+- **Prerequisites**: Docker installed, admin credentials with manager/admin role
 
 **PROD Evidence Template (for future VERIFIED status):**
 
@@ -6078,6 +6080,7 @@ When automated verification passes in PROD with commit match:
 - Backend API smoke test (`pms_epic_a_onboarding_rbac_smoke.sh`) validates API correctness but does not test UI rendering
 - **New**: Playwright UI smoke test validates client-side interactions, dialogs, toasts, and UI polish features
 - **Fix (2026-01-14)**: Playwright smoke script now generates proper playwright.config.ts with named projects (chromium/firefox/webkit) to fix "No named projects" error. Script tested and ready for PROD verification.
+- **Fix (2026-01-14)**: Smoke script now uses UI login form (E2E_ADMIN_EMAIL/E2E_ADMIN_PASSWORD) instead of JWT injection for reliable authentication in PROD. Implements `ensureLoggedIn()` helper with robust login flow detection and form selectors (German/English button support). Required env vars updated in docs.
 - Manual browser verification checklist still available in runbook for supplementary QA
 - Build verified: TypeScript compilation passes, no new runtime errors introduced
 
