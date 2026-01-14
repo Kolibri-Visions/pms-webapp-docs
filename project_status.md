@@ -6074,6 +6074,7 @@ ADMIN_BASE_URL=https://admin.fewo.kolibri-visions.de \
 **Notes:**
 - **Status**: Marked as VERIFIED (automated PROD verification completed successfully on 2026-01-14 with commit 44272d7)
 - Backend API smoke test (`pms_epic_a_onboarding_rbac_smoke.sh`) validates API correctness but does not test UI rendering
+- **Admin Endpoint Caching Fix**: Admin `/api/ops/version` endpoint was returning `source_commit: null` due to Next.js static optimization. Fixed by adding force-dynamic exports (`runtime="nodejs"`, `dynamic="force-dynamic"`, `revalidate=0`, `fetchCache="force-no-store"`), calling `noStore()` from `next/cache`, and using bracket notation for env vars (`process.env["SOURCE_COMMIT"]`). Deploy verify script updated with cachebust query. See runbook section "Admin /api/ops/version returns source_commit: null" for details.
 - **New**: Playwright UI smoke test validates client-side interactions, dialogs, toasts, and UI polish features
 - **Fix (2026-01-14, commit 906dde2)**: Playwright smoke script now generates proper playwright.config.ts with named projects (chromium/firefox/webkit) to fix "No named projects" error.
 - **Fix (2026-01-14, commit d4e7d45)**: Smoke script now uses UI login form (E2E_ADMIN_EMAIL/E2E_ADMIN_PASSWORD) instead of JWT injection for reliable authentication in PROD. Implements `ensureLoggedIn()` helper with robust login flow detection and form selectors (German/English button support).

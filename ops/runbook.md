@@ -29994,6 +29994,41 @@ curl -sS https://admin.fewo.kolibri-visions.de/api/ops/version | jq
 # Expected: {"service":"pms-admin","source_commit":"abc123",...}
 ```
 
+### Admin /api/ops/version returns source_commit: null
+
+**Symptom:** Admin endpoint returns `{"service":"pms-admin","source_commit":null,"started_at":null,"environment":"production"}` even though `SOURCE_COMMIT` env var is set in container. Response headers show `x-nextjs-cache: HIT` and response stays null even with cachebust query parameter.
+
+**Root Cause:** Next.js statically optimizes route responses at build time, preventing runtime environment variables from being read.
+
+**Solution:**
+Force dynamic runtime rendering in `frontend/app/api/ops/version/route.ts`:
+- Add `export const runtime = "nodejs"`
+- Add `export const dynamic = "force-dynamic"`
+- Add `export const revalidate = 0`
+- Add `export const fetchCache = "force-no-store"`
+- Import and call `unstable_noStore()` from `next/cache` at top of GET() handler: `import { unstable_noStore as noStore } from "next/cache"` then `noStore()` in function body
+- Use bracket notation for ALL env reads: `process.env["SOURCE_COMMIT"]`, `process.env["NEXT_PUBLIC_SOURCE_COMMIT"]`, `process.env["STARTED_AT"]`, `process.env["NODE_ENV"]`
+- Keep `Cache-Control: no-store, must-revalidate` in response headers
+- Update `pms_verify_deploy.sh` to add cachebust query with timestamp and Cache-Control header
+
+**Verification:**
+```bash
+# In Coolify container terminal, check SOURCE_COMMIT env var
+docker exec -it pms-admin-container env | grep SOURCE_COMMIT
+# Example output: SOURCE_COMMIT=2dedc18acc2251752b5b8e4f73328e7aa35f6283
+
+# Direct curl with cachebust (from host or workstation)
+curl -sS "https://admin.fewo.kolibri-visions.de/api/ops/version?cb=$(date +%s)" -H "Cache-Control: no-cache" | jq .source_commit
+# Expected: equals $SOURCE_COMMIT from container (not null)
+
+# Via deploy verification script (includes admin check with cachebust)
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+export EXPECT_COMMIT="2dedc18"
+./backend/scripts/pms_verify_deploy.sh
+# Expected: "Admin commit verification passed: 2dedc18acc22..."
+```
+
 ### localStorage Key Mismatch
 
 **Symptom:** Tests redirect to login even with valid JWT, or UI shows "not authenticated"
