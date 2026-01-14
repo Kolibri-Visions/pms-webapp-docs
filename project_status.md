@@ -3072,6 +3072,19 @@ Status remains IMPLEMENTED until prod verification (pms_verify_deploy.sh + pms_p
 
 **Ops Note (2026-01-10):** Hardened `pms_pricing_quote_smoke.sh` for non-empty PROD environments. Script is now idempotent (reuses SMOKE-P2 artifacts: rate plan, fee, tax) and uses baseline+delta verification instead of absolute totals. Tax delta verification accounts for (a) existing taxes applied to taxable delta and (b) newly-added SMOKE tax on full taxable amount. Safe to re-run unlimited times in PROD without creating endless artifacts or false failures. See backend/scripts/README.md for full PROD safety features.
 
+**PROD Evidence (Re-verified: 2026-01-14)**:
+- **Verification Date**: 2026-01-14
+- **API Domain**: api.fewo.kolibri-visions.de
+- **Source Commit**: c3db7de71a395e6d927b4a59273f48147fe91783
+- **Started At**: 2026-01-14T11:51:04.537156+00:00
+- **Deploy Verification**: backend/scripts/pms_verify_deploy.sh rc=0 (commit match)
+- **Smoke Scripts** (all rc=0):
+  - backend/scripts/pms_pricing_quote_smoke.sh → rc=0
+  - backend/scripts/pms_pricing_seasons_smoke.sh → rc=0
+  - backend/scripts/pms_pricing_rate_plans_smoke.sh → rc=0
+  - backend/scripts/pms_pricing_management_ui_smoke.sh → rc=0
+- **Verification**: All P2 Pricing components verified in production. Rate plans, seasonal overrides, quote calculation, fees, taxes, and management UI all operational.
+
 ---
 
 # P2 Extension: Pricing Fees and Taxes
