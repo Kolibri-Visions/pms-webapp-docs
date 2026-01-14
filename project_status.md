@@ -6059,20 +6059,22 @@ ADMIN_BASE_URL=https://admin.fewo.kolibri-visions.de \
 - **Verification Date**: 2026-01-14
 - **API Base URL**: https://api.fewo.kolibri-visions.de
 - **Admin Base URL**: https://admin.fewo.kolibri-visions.de
-- **Backend Source Commit**: 44272d76db78079308a0b89ba828bbd92e15966e
-- **Started At**: 2026-01-14T22:01:06.580110+00:00
-- **Deploy Verification**: `./backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=44272d7` → rc=0
+- **Backend Source Commit**: 9c77be1e886824190188f8ea4aa438b9fd41a684
+- **Admin Source Commit**: 9c77be1e886824190188f8ea4aa438b9fd41a684 (admin started_at=null is expected, not set by Next.js runtime)
+- **Started At**: 2026-01-14T23:01:04.751462+00:00
+- **Deploy Verification**: `./backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=9c77be1` → rc=0 (both backend and admin commit verification passed)
 - **UI Smoke Script**: `./backend/scripts/pms_epic_a_ui_polish_smoke.sh` → rc=0
   - Authentication: E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD (UI login form)
   - Test 1 (Organisation page): Dialog, copy button, loading states ✅
   - Test 2 (Team page): Invite creation (POST /api/v1/team/invites status 201), invite dialog opens and form submission ✅
 - **Notes**:
-  - Admin /api/ops/version returns 200 but SOURCE_COMMIT is not set (non-fatal warning, will be fixed in Coolify deployment config)
+  - Admin /api/ops/version now correctly returns source_commit after caching fix (commit 9c77be1)
   - UI smoke logged "Invite not visible in list" as warning (non-fatal); invite POST returned status 201 and test passed
 - **Verification**: Epic A UI polish features (in-page dialogs, toasts, badges, copy buttons) verified in PROD with automated Playwright tests and commit match
 
 **Notes:**
-- **Status**: Marked as VERIFIED (automated PROD verification completed successfully on 2026-01-14 with commit 44272d7)
+- **Status**: Marked as VERIFIED (automated PROD verification completed successfully on 2026-01-14 with commit 9c77be1)
+- **Verification Update**: PROD Evidence updated to reflect re-verification after admin endpoint caching fix. This supersedes previous evidence from commit 44272d7 where admin source_commit returned null.
 - Backend API smoke test (`pms_epic_a_onboarding_rbac_smoke.sh`) validates API correctness but does not test UI rendering
 - **Admin Endpoint Caching Fix**: Admin `/api/ops/version` endpoint was returning `source_commit: null` due to Next.js static optimization. Fixed by adding force-dynamic exports (`runtime="nodejs"`, `dynamic="force-dynamic"`, `revalidate=0`, `fetchCache="force-no-store"`), calling `noStore()` from `next/cache`, and using bracket notation for env vars (`process.env["SOURCE_COMMIT"]`). Deploy verify script updated with cachebust query. See runbook section "Admin /api/ops/version returns source_commit: null" for details.
 - **New**: Playwright UI smoke test validates client-side interactions, dialogs, toasts, and UI polish features
