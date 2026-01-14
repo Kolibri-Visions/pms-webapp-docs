@@ -2181,6 +2181,25 @@ Run #2 (demonstrates stability across multiple shifts):
 - ✅ Eliminates false failures when testing on already-booked windows
 - ✅ Smoke test passed consistently (rc=0 on both runs)
 
+**PROD Evidence (Re-verified: 2026-01-14 — guest_id FK / multi-shift)**:
+- **Verification Date**: 2026-01-14
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Source Commit**: b11b3090324ddd2c0b030f7b8804ea94f8b3da72
+- **Started At**: 2026-01-14T15:39:05.800767+00:00
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=b11b309` → rc=0 (commit match)
+- **Smoke Script**: `backend/scripts/pms_booking_guest_id_fk_smoke.sh` → rc=0
+- **Evidence Snippet**:
+  ```
+  Attempt 1/10: 2027-01-20 → 2027-01-23 => 409 double_booking, shift +7 days
+  Attempt 2/10: 2027-01-27 → 2027-01-30 => 409 double_booking, shift +7 days
+  Attempt 3/10: 2027-02-03 → 2027-02-06 => 409 double_booking, shift +7 days
+  Attempt 4/10: 2027-02-10 → 2027-02-13 => 409 double_booking, shift +7 days
+  Attempt 5/10: 2027-02-17 → 2027-02-20 => 201 Created (guest_id=null) ✅
+  Test 2: invalid guest_id => 422 Unprocessable Entity ✅
+  Final: rc=0
+  ```
+- **Note**: Re-run confirms auto-shift works even after 4 consecutive overlaps; eliminates flaky failures in booked windows.
+
 **Related Improvement (2026-01-05)**: See standalone entry below for booking concurrency smoke script reliability (commit 1897cf0, VERIFIED).
 
 ---
