@@ -3325,6 +3325,20 @@ Status remains IMPLEMENTED until prod verification (pms_verify_deploy.sh + pms_p
 - Verification date: 2026-01-13
 - Note: Script requires `HOST` env var (not API_BASE_URL)
 
+**PROD Evidence (Re-verified: 2026-01-14):**
+- **Verification Date**: 2026-01-14
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Source Commit (ops/version)**: e69ac15721dc579d775f6d42ea5be4fdef6fac65
+- **Started At (ops/version)**: 2026-01-14T12:17:05.365582+00:00
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=e69ac15` → rc=0 (commit match)
+- **Smoke Scripts**:
+  - `backend/scripts/pms_pricing_quote_smoke.sh` → rc=0 (verifies fees+taxes breakdown functionality)
+  - `backend/scripts/pms_pricing_seasons_smoke.sh` → rc=0 (verifies seasonal rate overrides)
+  - `backend/scripts/pms_pricing_rate_plans_smoke.sh` → rc=0 (verifies CRUD operations)
+  - `backend/scripts/pms_pricing_management_ui_smoke.sh` → rc=0 (verifies admin UI integration)
+- **Quote Breakdown Verified**: Comprehensive quote calculation includes subtotal, fees (per_stay/per_night/per_person/percent), taxable_amount, taxes, and total_cents
+- **Note**: This re-verification uses the standard automated PROD verification format (deploy verify + smoke scripts with explicit rc=0). Previous evidence blocks (2026-01-08, 2026-01-13) retained for historical context but superseded by this verification.
+
 **Verification Commands:**
 ```bash
 # HOST-SERVER-TERMINAL
