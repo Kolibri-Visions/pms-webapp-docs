@@ -3907,6 +3907,15 @@ echo "rc=$?"
   - Audit-log auth preflight returns HTTP 200 when JWT is provided ✅
 - **Verification**: P3 consolidated smoke is production-safe and now fails fast with actionable guidance when JWT is missing/unauthorized.
 
+**PROD Evidence (Follow-up Deploy: 2026-01-14)**:
+- **Verification Date**: 2026-01-14
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Source Commit**: 166f9a69d747ce7f9b36662ff35eb82556cf7285
+- **Started At**: 2026-01-14T14:07:04.839379+00:00
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=166f9a6` → rc=0 (commit match)
+- **Smoke Script**: `backend/scripts/pms_p3_direct_booking_hardening_smoke.sh` → rc=0
+- **Note**: Follow-up deploy after docs evidence fix; runtime behavior unchanged. Evidence now matches current `/api/v1/ops/version`.
+
 ---
 
 # Channel Manager — Sync Batch Details (API + Admin UI Modal) ✅ VERIFIED
