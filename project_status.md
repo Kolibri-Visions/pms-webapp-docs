@@ -3315,8 +3315,24 @@ echo "rc=$?"
 - Verifies: quote outside season uses base rate, quote inside overlap uses highest priority season, DELETE cascade deletes seasons
 - Implementation note: Seasons can ONLY be created via POST /rate-plans with seasons array. No PATCH support for seasons field (per RatePlanUpdate schema). To modify seasons: create new rate plan or recreate existing.
 - Documentation: backend/docs/ops/runbook.md#p2-pricing-seasonality and backend/scripts/README.md (Pricing Seasonality Smoke Test section)
-- Awaiting PROD verification: pms_verify_deploy.sh rc=0 + pms_pricing_seasons_smoke.sh rc=0
 - 2026-01-14: Script hardening — pre-cleanup no longer fails on 0 matches; explicit HTTP error output with hints (401/403/422 troubleshooting).
+
+**Status:** ✅ VERIFIED
+
+**PROD Evidence (2026-01-14):**
+- **Verification Date:** 2026-01-14
+- **API Base URL:** https://api.fewo.kolibri-visions.de
+- **Source Commit:** bb594f87f6b9ddd617ccd070b84fb204de904c28
+- **Started At:** 2026-01-14T10:44:04.629401+00:00
+- **Deploy Verification:** backend/scripts/pms_verify_deploy.sh rc=0 (commit match)
+- **Smoke Script:** backend/scripts/pms_pricing_seasons_smoke.sh rc=0
+- **Key Test Results:**
+  - Test 1: Pre-cleanup complete (deleted 0 old smoke rate plans)
+  - Test 2: Created rate plan with 2 overlapping seasons (ID: 4fb84ecb-33e7-4bda-bc87-1d1e35a0fbc3)
+  - Test 3: Quote outside season uses base rate (10000 cents) ✅
+  - Test 4: Quote in overlap uses Season B rate (20000 cents, ORDER BY date_from DESC) ✅
+  - Test 5: Deleted rate plan successfully (HTTP 204) ✅
+- **Verification:** All 5 tests passed, overlap priority resolution confirmed
 
 ---
 
