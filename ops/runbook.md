@@ -30015,4 +30015,35 @@ rg "localStorage.getItem|localStorage.setItem" --type ts | grep -i "jwt\|token\|
 
 **Solution:** Update test.spec.ts in `pms_epic_a_ui_polish_smoke.sh` with correct selectors and timing.
 
+### Error: No named projects are specified in the configuration file
+
+**Symptom:** Playwright fails with `Error: No named projects are specified in the configuration file` when running `pms_epic_a_ui_polish_smoke.sh`.
+
+**Root Cause:** Playwright requires a playwright.config.ts with named projects when using the `--project` flag. Earlier versions of the script (before commit 991e373) didn't generate this config file.
+
+**Solution:**
+The issue is fixed in the current version of the script. It now generates both `playwright.config.ts` (with named projects: chromium, firefox, webkit) and `test.spec.ts` in the temp directory before running tests.
+
+**Verification:**
+```bash
+# Re-run the smoke test with the fixed script
+MANAGER_JWT_TOKEN="<jwt>" \
+ADMIN_BASE_URL=https://admin.fewo.kolibri-visions.de \
+./backend/scripts/pms_epic_a_ui_polish_smoke.sh
+
+# Use a different browser if needed
+PW_PROJECT=firefox MANAGER_JWT_TOKEN="<jwt>" \
+./backend/scripts/pms_epic_a_ui_polish_smoke.sh
+```
+
+**Prerequisites:**
+- Docker installed and running
+- Fresh manager/admin JWT token (tokens expire after 1-24 hours)
+
+**If Still Failing:**
+1. Check Docker is running: `docker ps`
+2. Verify Docker can pull images: `docker run hello-world`
+3. Check temp directory has both files: Look for "Generated Playwright config" in output
+4. Review diagnostics output showing Playwright version and temp dir contents
+
 ---

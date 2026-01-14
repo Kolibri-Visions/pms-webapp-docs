@@ -6077,6 +6077,7 @@ When automated verification passes in PROD with commit match:
 - **Status**: Marked as IMPLEMENTED (automated verification tools now available, awaiting PROD verification run with commit match)
 - Backend API smoke test (`pms_epic_a_onboarding_rbac_smoke.sh`) validates API correctness but does not test UI rendering
 - **New**: Playwright UI smoke test validates client-side interactions, dialogs, toasts, and UI polish features
+- **Fix (2026-01-14)**: Playwright smoke script now generates proper playwright.config.ts with named projects (chromium/firefox/webkit) to fix "No named projects" error. Script tested and ready for PROD verification.
 - Manual browser verification checklist still available in runbook for supplementary QA
 - Build verified: TypeScript compilation passes, no new runtime errors introduced
 
