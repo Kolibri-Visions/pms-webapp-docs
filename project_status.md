@@ -3316,6 +3316,7 @@ echo "rc=$?"
 - Implementation note: Seasons can ONLY be created via POST /rate-plans with seasons array. No PATCH support for seasons field (per RatePlanUpdate schema). To modify seasons: create new rate plan or recreate existing.
 - Documentation: backend/docs/ops/runbook.md#p2-pricing-seasonality and backend/scripts/README.md (Pricing Seasonality Smoke Test section)
 - Awaiting PROD verification: pms_verify_deploy.sh rc=0 + pms_pricing_seasons_smoke.sh rc=0
+- 2026-01-14: Script hardening — pre-cleanup no longer fails on 0 matches; explicit HTTP error output with hints (401/403/422 troubleshooting).
 
 ---
 

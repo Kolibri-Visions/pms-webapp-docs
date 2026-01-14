@@ -22917,6 +22917,28 @@ curl -X POST "$HOST/api/v1/pricing/quote" \
 
 **Best Practice:** Avoid overlapping seasons unless intentional tiered pricing.
 
+### Smoke Script Stops at Test 1 (Pre-cleanup)
+
+**Symptom:** `pms_pricing_seasons_smoke.sh` exits at Test 1 with rc=1 before reaching Test 2.
+
+**Possible Causes:**
+1. JWT token expired (HTTP 401)
+2. User not manager/admin for agency (HTTP 403)
+3. Missing or invalid x-agency-id header (HTTP 422/400)
+
+**How to Debug:**
+- Check error output for HTTP code and hints
+- If HTTP 401: Refresh JWT_TOKEN (token expired)
+- If HTTP 403: Verify user has manager/admin role for the agency_id
+- If HTTP 422/400: Check x-agency-id header matches user's agency membership
+
+**Solution:**
+- Obtain fresh JWT token from Supabase auth
+- Verify user role in team_members table: `SELECT role FROM team_members WHERE user_id = '<user_id>' AND agency_id = '<agency_id>'`
+- Ensure AGENCY_ID env var matches user's agency (or omit for auto-detection)
+
+**Note:** Pre-cleanup is a no-op when no prior smoke rate plans exist (deleted 0 is expected on first run).
+
 ---
 
 ## P2 Pricing Management UI
