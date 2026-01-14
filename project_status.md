@@ -2348,6 +2348,26 @@ rc=0
 - ✅ Exit code 0 on success (no mismatch)
 - ✅ Script behavior reliable (no flaky failures)
 
+**PROD Evidence (Follow-up Deploy / Re-verified: 2026-01-14)**:
+- **Verification Date**: 2026-01-14
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Property ID**: 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
+- **Guest ID**: 1e9dd87c-ba39-4ec5-844e-e4c66e1f4dc1
+- **Source Commit**: cc1a1faead59eee73e70fb34d004880a91f5459f
+- **Started At**: 2026-01-14T16:29:03.766786+00:00
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=cc1a1fa` → rc=0 (commit match)
+- **Smoke Script**: `backend/scripts/pms_booking_concurrency_smoke.sh` → rc=0
+- **Key Results (Auto-Shift + Concurrency)**:
+  - Attempt 1: 2027-01-20 → 2027-01-23: 0×201, 10×409, 0×500 → auto-shift
+  - Attempt 2: 2027-01-27 → 2027-01-30: 0×201, 10×409, 0×500 → auto-shift
+  - Attempt 3: 2027-02-03 → 2027-02-06: 0×201, 10×409, 0×500 → auto-shift
+  - Attempt 4: 2027-02-10 → 2027-02-13: 0×201, 10×409, 0×500 → auto-shift
+  - Attempt 5: 2027-02-17 → 2027-02-20: 0×201, 10×409, 0×500 → auto-shift
+  - Attempt 6: 2027-02-24 → 2027-02-27: 0×201, 10×409, 0×500 → auto-shift
+  - Attempt 7: 2027-03-03 → 2027-03-06: 0×201, 10×409, 0×500 → auto-shift
+  - Attempt 8: 2027-03-10 → 2027-03-13: 1×201, 9×409, 0×500 → PASS
+- **Verification**: Race-safe booking constraint + auto-shift logic verified in PROD with commit cc1a1fa. Auto-shift succeeded after 7 retries, finding free window on attempt 8 (exactly 1 success, 9 conflicts, no 500s).
+
 ---
 
 ### SCRIPTS - Smoke User Cleanup Helper (Safe Dry-Run + Optional Delete) ✅

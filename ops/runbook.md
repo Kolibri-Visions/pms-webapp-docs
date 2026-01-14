@@ -20621,6 +20621,13 @@ When rerunning the concurrency smoke test (e.g., after redeployment or for perio
 - Let the script use default dates (+14 days), which automatically advances with calendar time
 - Cancel any bookings created by previous test runs before reusing the same date range
 
+**Verification Requirements for Production Evidence**:
+When documenting concurrency smoke test results for production verification, always capture the following from the running deployment:
+- `/api/v1/ops/version` response: `source_commit` (full hash) and `started_at` timestamp
+- `pms_verify_deploy.sh EXPECT_COMMIT=<hash>` result: must show rc=0 with commit match confirmation
+- `pms_booking_concurrency_smoke.sh` exit code: must be rc=0 (PASS: 1×201, 9×409, 0×500)
+- Evidence must reference the **currently deployed commit** (not a previous or local commit)
+
 ### Troubleshooting
 
 ---
