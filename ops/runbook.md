@@ -29719,5 +29719,93 @@ fi
 **Reference Commits:**
 - Fix for frontend/app/pricing/page.tsx: `frontend: route pricing API calls via apiClient (fix admin-domain 404)`
 
+---
+
+## Public docs mirror (pms-webapp-docs) — source of truth + publish workflow
+
+**Overview**: The project maintains a public mirror repository for documentation because the main `PMS-Webapp` repository is private.
+
+**Source of Truth**: `PMS-Webapp/backend/docs` (private repository)
+
+**Public Mirror**: `pms-webapp-docs` repository mirrors the markdown files 1:1, especially `project_status.md` and other operational documentation.
+
+**Important**: Do NOT attempt manual pushes to `pms-webapp-docs` from the host server if the SSH key is read-only. This is expected behavior for security reasons. The read-only key error message is:
+
+```
+ERROR: The key you are authenticating with has been marked as read only.
+```
+
+**Publish Mechanism**:
+
+The mirror is updated through an automated publish workflow that:
+1. Reads the latest documentation from `PMS-Webapp/backend/docs`
+2. Copies files to the `pms-webapp-docs` repository
+3. Commits and pushes changes using appropriate credentials
+
+The exact mechanism may involve GitHub Actions, automated sync scripts, or other CI/CD tooling. Check the repository settings and workflows for details.
+
+**Verification Commands** (from HOST-SERVER-TERMINAL):
+
+To verify the mirror is 1:1 with the private repo, download the raw files and compare:
+
+```bash
+# Example: Verify project_status.md is in sync
+cd /tmp
+
+# Download raw file from public mirror (replace URL with actual mirror URL)
+curl -sS -o project_status_mirror.md \
+  https://raw.githubusercontent.com/your-org/pms-webapp-docs/main/project_status.md
+
+# Compare with private repo file
+cd /data/repos/pms-webapp
+sha256sum backend/docs/project_status.md
+sha256sum /tmp/project_status_mirror.md
+
+# Quick diff check (silent if identical)
+diff -q backend/docs/project_status.md /tmp/project_status_mirror.md
+echo "rc=$?"
+# Expected: rc=0 (files are identical)
+```
+
+**Note on curl error (23)**:
+
+When downloading large files and piping to `head` for preview, you may see:
+
+```
+curl: (23) Failure writing output to destination
+```
+
+This occurs because `head` closes the pipe early after reading its requested lines, causing curl to fail when trying to write remaining data. This is harmless for preview purposes but can be avoided by:
+
+```bash
+# Safe alternative 1: Download to file first
+curl -sS -o /tmp/file.md https://example.com/file.md
+head -20 /tmp/file.md
+
+# Safe alternative 2: Use sed for line extraction
+curl -sS https://example.com/file.md | sed -n '1,20p'
+```
+
+**Common Issues**:
+
+### Mirror is out of sync
+
+**Symptom**: `sha256sum` or `diff -q` shows differences between private repo and public mirror.
+
+**Cause**: Publish workflow has not run yet, or failed to complete.
+
+**Solution**:
+1. Check if there are pending commits in `PMS-Webapp/backend/docs` that haven't been published
+2. Trigger the publish workflow manually (if available)
+3. Check workflow logs for errors
+4. If workflow is broken, fix and re-run
+
+### Cannot push to mirror manually
+
+**Symptom**: `git push` to `pms-webapp-docs` fails with "read only" key error.
+
+**Cause**: SSH key configured on the host is intentionally read-only for security.
+
+**Solution**: This is expected. Use the automated publish workflow instead. Do not attempt to work around this with different credentials.
 
 ---
