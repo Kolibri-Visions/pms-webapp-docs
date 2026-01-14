@@ -3405,7 +3405,22 @@ echo "rc=$?"
 **Migration:**
 - No new migration required (uses existing `20260106150000_add_pricing_v1.sql` tables: rate_plans, rate_plan_seasons)
 
-**Status:** ✅ IMPLEMENTED (NOT VERIFIED)
+**Status:** ✅ VERIFIED
+
+**PROD Evidence (Verified: 2026-01-14)**:
+- **Verification Date:** 2026-01-14
+- **API Base URL:** https://api.fewo.kolibri-visions.de
+- **Property ID:** 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
+- **Deploy Verification:** `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=a519ed4` → rc=0
+  - **Source Commit:** a519ed4e135f8ac6fb8227558cc7404dfc783df9
+  - **Started At:** 2026-01-14T16:42:04.841723+00:00
+- **Smoke Script:** `backend/scripts/pms_pricing_rate_plans_smoke.sh` → rc=0
+- **Key Results:**
+  - Created rate plan ID: 7c3c7fb4-8b39-4052-bd3e-46ba5196e47d ✅
+  - Quote (auto-selected plan) ✅
+  - Quote (specific rate_plan_id; seasonal override applied) ✅
+  - DELETE returned HTTP 204 ✅
+- **Verification:** Rate plans CRUD (GET/POST/PATCH/DELETE) + quote integration verified in PROD with commit match and rc=0 smoke.
 
 **Notes:**
 - Rate Plans CRUD is now complete with GET/POST/PATCH/DELETE endpoints
