@@ -3075,15 +3075,17 @@ Status remains IMPLEMENTED until prod verification (pms_verify_deploy.sh + pms_p
 **PROD Evidence (Re-verified: 2026-01-14)**:
 - **Verification Date**: 2026-01-14
 - **API Domain**: api.fewo.kolibri-visions.de
-- **Source Commit**: c3db7de71a395e6d927b4a59273f48147fe91783
-- **Started At**: 2026-01-14T11:51:04.537156+00:00
-- **Deploy Verification**: backend/scripts/pms_verify_deploy.sh rc=0 (commit match)
+- **Source Commit**: e69ac15721dc579d775f6d42ea5be4fdef6fac65
+- **Started At**: 2026-01-14T12:17:05.365582+00:00
+- **Deploy Verification**: backend/scripts/pms_verify_deploy.sh rc=0 (commit match e69ac15)
 - **Smoke Scripts** (all rc=0):
   - backend/scripts/pms_pricing_quote_smoke.sh → rc=0
   - backend/scripts/pms_pricing_seasons_smoke.sh → rc=0
   - backend/scripts/pms_pricing_rate_plans_smoke.sh → rc=0
   - backend/scripts/pms_pricing_management_ui_smoke.sh → rc=0
 - **Verification**: All P2 Pricing components verified in production. Rate plans, seasonal overrides, quote calculation, fees, taxes, and management UI all operational.
+
+**Correction (2026-01-14):** Prior Source Commit/Started At values mistakenly referenced booking-requests docs commit (c3db7de). Corrected to actual /api/v1/ops/version output for P2 pricing verification deployment (e69ac15).
 
 ---
 
