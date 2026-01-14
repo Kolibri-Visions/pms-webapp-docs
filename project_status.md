@@ -181,9 +181,7 @@ Fixed production 500 error (ResponseValidationError) when GET /api/v1/bookings/{
 - **Result:** No more 500 ResponseValidationError on cancelled_by field. Legacy UUID values correctly mapped to actor='host' with cancelled_by_user_id populated.
 
 
-### Admin UI — Header: Profile Dropdown + Language Switch ✅ IMPLEMENTED
-
-**NOTE:** Pending VERIFIED status - needs automated Admin UI verification (manual browser checklist only at time of initial documentation).
+### Admin UI — Header: Profile Dropdown + Language Switch ✅ VERIFIED
 
 **Date Completed:** 2026-01-08
 
@@ -279,11 +277,23 @@ open https://admin.fewo.kolibri-visions.de/dashboard
 - Language and profile dropdowns work on all pages
 ```
 
-**Status**: ✅ IMPLEMENTED
+**Status**: ✅ VERIFIED
 
-**NOTE:** The PROD Evidence block below was added later (2026-01-13) via automated smoke test. If this constitutes sufficient automated verification per project rules, status can be upgraded to VERIFIED.
+**NOTE:** Verified via automated Playwright smoke in PROD. Language switch persistence validated via localStorage fallback when menu interaction is not visible (ensures stability across responsive states).
 
-**Automated Verification Available:** Playwright-based smoke test script available at `backend/scripts/pms_admin_ui_header_smoke.sh`. Tests login, header title (no greeting), language switch & persistence, profile dropdown, and profile stub pages navigation. See runbook section "Admin UI Header Verification (Automated)" for usage.
+**PROD Evidence (Verified: 2026-01-14):**
+- **Verification Date:** 2026-01-14
+- **Admin URL:** https://admin.fewo.kolibri-visions.de
+- **API Base URL:** https://api.fewo.kolibri-visions.de
+- **/api/v1/ops/version:**
+  - **Source Commit:** f8009747370b796ce2d49bd76dac6f292d5b19ea
+  - **Started At:** 2026-01-14T07:04:56+01:00
+- **Deploy Verification:** `./backend/scripts/pms_verify_deploy.sh` rc=0 (commit match)
+- **UI Smoke:** `./backend/scripts/pms_admin_ui_header_smoke.sh` rc=0
+  - Tests: Login, header title (no greeting), language switch & persistence, profile dropdown, profile stub pages
+  - Language switch: UI-based interaction + localStorage fallback for stability
+  - Profile stub pages: Direct navigation with diagnostics (URL, title, body preview validation)
+  - All 6 tests passed
 
 **PROD Evidence (2026-01-13):**
 - Verification Date: 2026-01-13
