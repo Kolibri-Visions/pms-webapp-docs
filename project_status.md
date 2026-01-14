@@ -3308,6 +3308,15 @@ echo "rc=$?"
 - Properties domain (rate plans scoped to properties or agency-wide)
 - Team members RBAC (require_agency_roles dependency)
 
+**P2 Seasonality Smoke Test (2026-01-14):**
+- Added dedicated smoke test: backend/scripts/pms_pricing_seasons_smoke.sh
+- Tests seasonal override logic with overlapping seasons (ORDER BY date_from DESC priority)
+- Pre-cleanup for rerunnable execution (deletes old SMOKE-P2-SEASON-* rate plans)
+- Verifies: quote outside season uses base rate, quote inside overlap uses highest priority season, DELETE cascade deletes seasons
+- Implementation note: Seasons can ONLY be created via POST /rate-plans with seasons array. No PATCH support for seasons field (per RatePlanUpdate schema). To modify seasons: create new rate plan or recreate existing.
+- Documentation: backend/docs/ops/runbook.md#p2-pricing-seasonality and backend/scripts/README.md (Pricing Seasonality Smoke Test section)
+- Awaiting PROD verification: pms_verify_deploy.sh rc=0 + pms_pricing_seasons_smoke.sh rc=0
+
 ---
 
 # P2 Pricing Management UI (Fees & Taxes)

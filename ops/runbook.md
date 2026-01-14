@@ -22794,6 +22794,131 @@ curl -X GET "$API_BASE_URL/api/v1/pricing/rate-plans?limit=100" \
 
 ---
 
+## P2 Pricing Seasonality
+
+**Overview:** Seasonal pricing overrides within rate plans for date-range specific pricing.
+
+**Purpose:** Enable property managers to configure seasonal pricing (e.g., high season rates) that automatically apply when booking dates fall within the season's date window.
+
+**Implementation Facts (from pricing.py):**
+- **Season creation**: Seasons can ONLY be created via `POST /api/v1/pricing/rate-plans` with `seasons` array
+- **No season updates**: `PATCH /api/v1/pricing/rate-plans/{id}` has NO seasons field (per RatePlanUpdate schema)
+- **No dedicated endpoints**: No separate POST/PATCH/DELETE endpoints for individual seasons
+- **Modification strategy**: To change seasons, create a new rate plan or DELETE and recreate
+- **Cascade delete**: DELETE rate plan automatically deletes all associated seasons (ON DELETE CASCADE)
+
+**Season Fields:**
+- `rate_plan_id`: Parent rate plan (FK to rate_plans.id)
+- `date_from`: Season start date (inclusive, YYYY-MM-DD)
+- `date_to`: Season end date (exclusive, YYYY-MM-DD)
+- `nightly_cents`: Override rate in cents (replaces rate_plan.base_nightly_cents)
+- `min_stay_nights`: Optional minimum stay override (NULL uses rate_plan.min_stay_nights)
+- `active`: Boolean flag to enable/disable season
+
+**Quote Calculation Logic (pricing.py:954-979):**
+
+Current behavior:
+```sql
+SELECT nightly_cents
+FROM rate_plan_seasons
+WHERE rate_plan_id = $1
+  AND $2 >= date_from
+  AND $2 < date_to
+  AND active = true
+ORDER BY date_from DESC
+LIMIT 1
+```
+
+- **Date matching**: `check_in >= date_from AND check_in < date_to` (date_to is EXCLUSIVE)
+- **Active filter**: Only `active=true` seasons considered
+- **Overlap resolution**: `ORDER BY date_from DESC LIMIT 1` (latest/highest date_from wins)
+- **Rate application**: Quote uses `season.nightly_cents` for entire stay: `subtotal = nightly_cents * nights`
+
+**Example:**
+- Season A: 2026-07-01 to 2026-08-01, nightly 15000 cents
+- Season B: 2026-07-15 to 2026-08-01, nightly 20000 cents (overlaps A)
+- Quote check_in=2026-07-20: Uses Season B (20000 cents) due to ORDER BY date_from DESC
+
+**Verification Commands:**
+
+```bash
+# Run seasonality smoke test
+HOST=https://api.fewo.kolibri-visions.de \
+JWT_TOKEN="<<<manager/admin JWT>>>" \
+./backend/scripts/pms_pricing_seasons_smoke.sh
+echo "rc=$?"
+```
+
+Expected: rc=0 (all 5 tests pass)
+
+**Common Issues:**
+
+### Quote Doesn't Use Seasonal Rate
+
+**Symptom:** Quote returns base rate even though check_in falls within season window.
+
+**Possible Causes:**
+1. Season inactive (active=false in database)
+2. Date window wrong: check_in must be >= date_from AND < date_to
+3. Wrong rate_plan_id in quote request
+4. Season not created (POST may have failed silently)
+
+**How to Debug:**
+```bash
+# List rate plans with seasons
+curl -X GET "$HOST/api/v1/pricing/rate-plans?limit=10" \
+  -H "Authorization: Bearer $JWT_TOKEN" | jq '.items[] | {id, name, seasons}'
+
+# Test quote with explicit rate_plan_id
+curl -X POST "$HOST/api/v1/pricing/quote" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "property_id": "<property_id>",
+    "check_in": "2026-07-20",
+    "check_out": "2026-07-22",
+    "adults": 2,
+    "rate_plan_id": "<rate_plan_id>"
+  }' | jq '.nightly_cents'
+```
+
+**Solution:**
+1. Verify season exists in rate_plan.seasons array (GET /api/v1/pricing/rate-plans)
+2. Check season.active = true
+3. Verify date_from < date_to and check_in within range
+4. If season missing: Create new rate plan with corrected seasons array
+
+### Can't Update/Toggle Season Active Flag
+
+**Symptom:** Need to deactivate season without deleting rate plan.
+
+**Root Cause:** No season update endpoints. PATCH /api/v1/pricing/rate-plans/{id} has no seasons field.
+
+**Workaround Options:**
+1. **Direct DB update** (admin only, not recommended for production):
+   ```sql
+   UPDATE rate_plan_seasons SET active = false WHERE id = '<season_id>';
+   ```
+2. **DELETE and recreate rate plan** with updated seasons array
+3. **Feature request**: Add dedicated season management endpoints
+
+**NOTE:** This is a current limitation of the API design.
+
+### Overlapping Seasons Unclear Priority
+
+**Symptom:** Multiple active seasons overlap, unclear which rate applies.
+
+**Current Behavior:** `ORDER BY date_from DESC LIMIT 1` (latest date_from wins)
+
+**Example:**
+- Season A: date_from=2026-07-01, nightly=15000
+- Season B: date_from=2026-07-15, nightly=20000
+- Quote check_in=2026-07-20: Season B wins (higher date_from)
+
+**Best Practice:** Avoid overlapping seasons unless intentional tiered pricing.
+
+---
+
 ## P2 Pricing Management UI
 
 **Overview:** Admin UI for managing fees and taxes with create/list/toggle capabilities.
