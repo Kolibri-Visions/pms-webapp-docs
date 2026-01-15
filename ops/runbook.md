@@ -5309,6 +5309,8 @@ console.log(`Mode: ${mode}, BG: ${bg}, Text: ${text}`);
 
 **Smoke Script:** `backend/scripts/pms_branding_ui_smoke.sh`
 
+**Note:** Script auto-installs `@playwright/test@1.57.0` inside the Docker container before running tests. No host node_modules required. First run may take 30-60 seconds for npm install; subsequent runs use Docker layer caching.
+
 **Usage:**
 
 ```bash

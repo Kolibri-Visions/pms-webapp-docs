@@ -4501,7 +4501,7 @@ Re-verified 2026-01-15 via `backend/scripts/pms_p2_full_smoke.sh` (rc=0) on comm
   - Screenshot on success
 - **Status**: Script created and documented in runbook (backend/docs/ops/runbook.md line 5298+)
 - **Pending**: PROD verification run (awaiting E2E_ADMIN_EMAIL/PASSWORD + Docker for VERIFIED status)
-- **Note**: Script is READ-ONLY and PROD-safe (no data creation/modification)
+- **Note**: Script is READ-ONLY and PROD-safe (no data creation/modification). Auto-installs @playwright/test@1.57.0 inside container (no host node_modules needed).
 
 **Phase B Hardening (2026-01-04):**
 - ✅ **CSS Variable "undefined" Bug Fix**: API token field mismatch caused undefined values in CSS variables
