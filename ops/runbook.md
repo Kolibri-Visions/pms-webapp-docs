@@ -28597,6 +28597,23 @@ WHERE agency_id = '<agency_id>'
 - To force property default: Ensure property_id matches, is_default=true, archived_at IS NULL, active=true
 - Priority: Property default > Agency default > Single plan > Error 422
 
+**Resolution Precedence (Detailed)**:
+
+When quote endpoint is called without rate_plan_id, the system resolves in this order:
+
+1. **Property-specific default** (property_id matches, is_default=true, active, not archived)
+2. **Single property-specific plan fallback** (exactly 1 active property plan, no default needed)
+3. **Agency-level default** (property_id IS NULL, is_default=true, active, not archived)
+4. **Single agency-level plan fallback** (exactly 1 active agency plan, no default needed)
+5. **Error 422** with counts if multiple plans exist in any checked scope
+
+**Example Error**: "No default rate plan set for property <UUID>. Property-specific active: 2, agency-level active: 5. Set one as default or provide rate_plan_id."
+
+**How to Fix 422**:
+- If you want one property plan to auto-select: Archive or delete the others, OR set one as default
+- If you want an agency plan to be used: Remove all property plans for this property, ensure only one agency plan exists OR set one as default
+- For explicit control: Always provide rate_plan_id in quote requests
+
 ### Booking Request Creation Returns 400 (Bad Request)
 
 **Symptom:** POST /api/v1/public/booking-requests returns 400 with validation error.

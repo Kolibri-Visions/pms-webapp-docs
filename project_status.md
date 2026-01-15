@@ -4199,6 +4199,13 @@ echo "rc=$?"
    - backend/docs/ops/runbook.md: Troubleshooting (422 errors, wrong plan selection)
    - backend/docs/project_status.md: This entry
 
+**Update (2026-01-15)**: Property-first fallback logic
+- Single property plan fallback now works even when multiple agency plans exist
+- Resolution checks property scope FIRST (default → single plan), then agency scope
+- Error messages now include counts: property_specific_active_count, agency_active_count
+- Smoke script updated: Test 6 validates property fallback with multiple agency plans
+- See commit 6d9c194 for database constraint fix, see next commit for fallback logic fix
+
 **Architecture:**
 - **Deterministic Resolution**: Strict 4-step priority with clear error messages
 - **Safety First**: Never picks archived or inactive plans
