@@ -4101,13 +4101,27 @@ Re-verified 2026-01-15 via `backend/scripts/pms_p2_full_smoke.sh` (rc=0) on comm
 - **No DB Changes**: Computes from existing pricing_fees, pricing_taxes config
 - **Pure Function**: No side effects, repeatable results
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
 
 **Notes:**
 - No DB schema changes required (computes from existing data)
 - All new response fields optional (backwards compatible)
 - Rounding matches financial industry standards (ROUND_HALF_UP)
 - Fee type support: percent, per_stay, per_night, per_person (v1 complete set)
+
+**PROD Evidence (Verified: 2026-01-15):**
+- **Verification Date**: 2026-01-15
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Admin Base URL**: https://admin.fewo.kolibri-visions.de
+- **Backend Source Commit**: 6dae0171259c9815f7a3b5adbe1a7914a08e184e
+- **Backend Started At**: 2026-01-15T17:44:03.752588+00:00
+- **Admin Source Commit**: 6dae0171259c9815f7a3b5adbe1a7914a08e184e
+- **Admin Started At**: 2026-01-15T17:41:56.352Z
+- **Commit Match Verification**: Both backend (/api/v1/ops/version) and admin (/api/ops/version) confirmed at 6dae017
+- **Deploy Verification**: backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=6dae017 → rc=0 (commit match)
+- **Smoke Test**: backend/scripts/pms_pricing_totals_smoke.sh → rc=0
+  - Test Environment: AGENCY_ID=ffd0123a-10b6-40cd-8ad5-66eee9757ab7, PROPERTY_ID=23dd8fda-59ae-4b2f-8489-7a90f5d46c66
+  - Totals arithmetic consistency validated (subtotal + fees + taxes = total)
 
 **Verification Commands (for VERIFIED status later):**
 ```bash
