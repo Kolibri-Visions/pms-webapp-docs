@@ -4400,9 +4400,9 @@ Re-verified 2026-01-15 via `backend/scripts/pms_p2_full_smoke.sh` (rc=0) on comm
 ### Theming & Branding (Admin + Future Client) 🟡
 
 **Date Started:** 2026-01-03
-**Status:** Phase A - API + DB ✅ VERIFIED (PROD read-path verified; UI minimal/pending)
+**Status:** Phase A - API + DB ✅ VERIFIED; Phase B (UI) ✅ VERIFIED
 
-**PROD Evidence (Verified: 2026-01-15; current deployed commit):**
+**PROD Evidence — Phase A (Verified: 2026-01-15; commit 8ca5257):**
 - **Verification Date**: 2026-01-15
 - **API Base URL**: https://api.fewo.kolibri-visions.de
 - **Admin Base URL**: https://admin.fewo.kolibri-visions.de
@@ -4416,6 +4416,26 @@ Re-verified 2026-01-15 via `backend/scripts/pms_p2_full_smoke.sh` (rc=0) on comm
   - Test 1: GET /api/v1/branding → 200 (tokens returned with defaults)
   - Note: BRANDING_PUT_TEST=false (PUT endpoint not tested in this verification)
 - **Verification**: Branding API Phase A (GET read-path) verified operational in production. Effective branding tokens with computed defaults returned successfully. PUT write-path not verified in this test run.
+
+**PROD Evidence — Phase B (UI) (Verified: 2026-01-15; current deployed commit):**
+- **Verification Date**: 2026-01-15
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Admin Base URL**: https://admin.fewo.kolibri-visions.de
+- **Backend Source Commit**: 51e5e27872a7608e40f01d2fc552e39c1fd26b5b
+- **Backend Started At**: 2026-01-15T11:18:04.967445+00:00
+- **Admin Source Commit**: 51e5e27872a7608e40f01d2fc552e39c1fd26b5b
+- **Admin Started At**: 2026-01-15T11:16:49.873Z
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=51e5e27` → rc=0 (commit match; both backend and admin verification passed)
+- **Smoke Script**: `backend/scripts/pms_branding_ui_smoke.sh` → rc=0
+- **UI Check**: Branding CSS tokens present and non-empty on `/organisation`:
+  - --t-primary #1551B2
+  - --t-accent #8B5CF6
+  - --t-bg #FFFFFF
+  - --t-surface #F9FAFB
+  - --t-text #111827
+  - --t-border #E5E7EB
+  - --t-radius 0.5rem
+- **Verification**: Branding Phase B (UI) verified operational in production. Admin UI successfully loads and applies theme tokens via ThemeProvider. All 7 CSS variables (`--t-*`) resolve to valid color/radius values. Automated Playwright test passed in PROD.
 
 **Goal:** Enable per-tenant white-label branding with theme tokens for admin UI and future client-facing site.
 
