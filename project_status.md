@@ -3878,6 +3878,24 @@ Re-verified 2026-01-15 via `backend/scripts/pms_p2_full_smoke.sh` (rc=0) on comm
   - Audit log event (booking request created): PASS ✅
 - **Verification**: P3a idempotency and audit logging verified operational in production using canonical smoke script.
 
+**PROD Evidence (Re-verified: 2026-01-15; current deployed commit):**
+- **Verification Date**: 2026-01-15
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Admin Base URL**: https://admin.fewo.kolibri-visions.de
+- **Backend Source Commit**: 8ca5257ce2f8ee3c149a30501967e8801843f132
+- **Backend Started At**: 2026-01-15T09:00:03.815295+00:00
+- **Admin Source Commit**: 8ca5257ce2f8ee3c149a30501967e8801843f132
+- **Admin Started At**: 2026-01-15T08:57:28.566Z
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=8ca5257` → rc=0 (commit match; both backend and admin verification passed)
+- **Smoke Script**: `backend/scripts/pms_p3_direct_booking_hardening_smoke.sh` → rc=0
+- **Tests Verified**:
+  - CORS preflight (P3b): PASS ✅
+  - Idempotency first request (P3a): PASS ✅
+  - Idempotency retry same key (P3a): PASS ✅
+  - Idempotency conflict 409 (P3a): PASS ✅
+  - Audit log event found (P3c): PASS ✅
+- **Note**: Test 5 (audit log) requires `JWT_TOKEN` (admin/manager) for audit-log endpoint authentication. Token obtainable via `backend/scripts/get_fresh_token.sh` (requires `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SB_EMAIL`, `SB_PASSWORD`). Sanity check: JWT must have 3 parts.
+
 ---
 
 # P3b: Domain Tenant Resolution + Host Allowlist + CORS (Public Endpoints)
@@ -3987,6 +4005,19 @@ Re-verified 2026-01-15 via `backend/scripts/pms_p2_full_smoke.sh` (rc=0) on comm
 - Tests host allowlist (403 for unauthorized hosts), CORS preflight, domain resolution
 - Graceful skips in proxy environments (expected behavior)
 
+**PROD Evidence (Re-verified: 2026-01-15; current deployed commit):**
+- **Verification Date**: 2026-01-15
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Admin Base URL**: https://admin.fewo.kolibri-visions.de
+- **Backend Source Commit**: 8ca5257ce2f8ee3c149a30501967e8801843f132
+- **Backend Started At**: 2026-01-15T09:00:03.815295+00:00
+- **Admin Source Commit**: 8ca5257ce2f8ee3c149a30501967e8801843f132
+- **Admin Started At**: 2026-01-15T08:57:28.566Z
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=8ca5257` → rc=0 (commit match; both backend and admin verification passed)
+- **Smoke Script**: `backend/scripts/pms_p3_direct_booking_hardening_smoke.sh` → rc=0
+- **Tests Verified**: CORS preflight component verified as part of consolidated P3 smoke test (Test 1: PASS ✅)
+- **Note**: P3b CORS/Host allowlist verified operational via consolidated smoke script. Test 5 (audit log) requires `JWT_TOKEN` (admin/manager).
+
 ---
 
 # P3c: Audit Review Actions + Request/Correlation ID + Idempotency (Review Endpoints)
@@ -4095,6 +4126,19 @@ Re-verified 2026-01-15 via `backend/scripts/pms_p2_full_smoke.sh` (rc=0) on comm
 - Smoke script: `backend/scripts/pms_p3c_audit_review_smoke.sh`
 - Tests approve/decline with Idempotency-Key, audit log verification, idempotent replay
 - Requires admin JWT token for review endpoints and audit log access
+
+**PROD Evidence (Re-verified: 2026-01-15; current deployed commit):**
+- **Verification Date**: 2026-01-15
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Admin Base URL**: https://admin.fewo.kolibri-visions.de
+- **Backend Source Commit**: 8ca5257ce2f8ee3c149a30501967e8801843f132
+- **Backend Started At**: 2026-01-15T09:00:03.815295+00:00
+- **Admin Source Commit**: 8ca5257ce2f8ee3c149a30501967e8801843f132
+- **Admin Started At**: 2026-01-15T08:57:28.566Z
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=8ca5257` → rc=0 (commit match; both backend and admin verification passed)
+- **Smoke Script**: `backend/scripts/pms_p3_direct_booking_hardening_smoke.sh` → rc=0
+- **Tests Verified**: Audit log component verified as part of consolidated P3 smoke test (Test 5: PASS ✅)
+- **Note**: P3c audit logging verified operational via consolidated smoke script. Test 5 requires `JWT_TOKEN` (admin/manager) for audit-log endpoint authentication. Token obtainable via `backend/scripts/get_fresh_token.sh`.
 
 ---
 
@@ -4216,6 +4260,25 @@ Re-verified 2026-01-15 via `backend/scripts/pms_p2_full_smoke.sh` (rc=0) on comm
   - Idempotency conflict 409 (P3a): PASS ✅
   - Audit log event found (P3c): PASS ✅
 - **Verification**: Complete P3 consolidated verification in production. All components (idempotency, CORS/host allowlist, audit logging) verified operational using canonical smoke script. Both backend and admin deployments confirmed at same commit.
+
+**PROD Evidence (Re-verified: 2026-01-15; current deployed commit):**
+- **Verification Date**: 2026-01-15
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Admin Base URL**: https://admin.fewo.kolibri-visions.de
+- **Backend Source Commit**: 8ca5257ce2f8ee3c149a30501967e8801843f132
+- **Backend Started At**: 2026-01-15T09:00:03.815295+00:00
+- **Admin Source Commit**: 8ca5257ce2f8ee3c149a30501967e8801843f132
+- **Admin Started At**: 2026-01-15T08:57:28.566Z
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=8ca5257` → rc=0 (commit match; both backend and admin verification passed)
+- **Smoke Script**: `backend/scripts/pms_p3_direct_booking_hardening_smoke.sh` → rc=0
+- **Tests Verified**:
+  - CORS preflight (P3b): PASS ✅
+  - Idempotency first request (P3a): PASS ✅
+  - Idempotency retry same key (P3a): PASS ✅
+  - Idempotency conflict 409 (P3a): PASS ✅
+  - Audit log event found (P3c): PASS ✅
+- **Verification**: Complete P3 consolidated verification in production. All components (idempotency, CORS/host allowlist, audit logging) verified operational using canonical smoke script. Both backend and admin deployments confirmed at same commit.
+- **Note**: Test 5 (audit log) requires `JWT_TOKEN` (admin/manager) for audit-log endpoint authentication. Token obtainable via `backend/scripts/get_fresh_token.sh` (requires `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SB_EMAIL`, `SB_PASSWORD`). Sanity check: JWT must have 3 parts.
 
 ---
 
