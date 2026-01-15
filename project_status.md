@@ -4490,6 +4490,19 @@ Re-verified 2026-01-15 via `backend/scripts/pms_p2_full_smoke.sh` (rc=0) on comm
 - WEB-BROWSER: Access control verified (non-admin users see "Access Denied" page)
 - WEB-BROWSER: Error handling verified (API errors gracefully fallback to default theme)
 
+**Phase B UI Automated Smoke Test (2026-01-15):**
+- ✅ **New Script**: `backend/scripts/pms_branding_ui_smoke.sh` — Playwright-based UI smoke test for Phase B
+- **Purpose**: Automated verification that branding CSS theme tokens (--t-primary, --t-accent, --t-bg, etc.) are applied in Admin UI
+- **What It Tests**:
+  - Login via UI form (reuses Epic A ensureLoggedIn pattern)
+  - Navigate to /organisation (stable authenticated page)
+  - Read CSS variables from documentElement
+  - Assert all 7 theme tokens are non-empty
+  - Screenshot on success
+- **Status**: Script created and documented in runbook (backend/docs/ops/runbook.md line 5298+)
+- **Pending**: PROD verification run (awaiting E2E_ADMIN_EMAIL/PASSWORD + Docker for VERIFIED status)
+- **Note**: Script is READ-ONLY and PROD-safe (no data creation/modification)
+
 **Phase B Hardening (2026-01-04):**
 - ✅ **CSS Variable "undefined" Bug Fix**: API token field mismatch caused undefined values in CSS variables
   - Root cause: API returns `background`/`text_muted`, frontend expected `bg`/`textMuted`

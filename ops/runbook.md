@@ -5295,6 +5295,91 @@ console.log(`Mode: ${mode}, BG: ${bg}, Text: ${text}`);
 - Single client instance used throughout application
 - Instance persists across HMR and page reloads
 
+**Branding UI (Phase B) — Automated Verification (Playwright)**
+
+**Purpose:** Automated UI smoke test to verify branding theme tokens (CSS variables) are applied in Admin UI using Playwright.
+
+**EXECUTION LOCATION:** HOST-SERVER-TERMINAL
+
+**Prerequisites:**
+- Docker installed and running
+- Admin credentials with manager/admin role
+- Admin UI deployed and accessible
+- Backend branding API working
+
+**Smoke Script:** `backend/scripts/pms_branding_ui_smoke.sh`
+
+**Usage:**
+
+```bash
+# EXECUTION LOCATION: HOST-SERVER-TERMINAL
+
+# Required environment variables
+export E2E_ADMIN_EMAIL="admin@example.com"
+export E2E_ADMIN_PASSWORD="your-password"
+
+# Optional: Custom URLs (defaults to production)
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"  # default
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"      # default
+
+# Run smoke test
+./backend/scripts/pms_branding_ui_smoke.sh
+
+# Expected output:
+# ℹ  Starting Branding UI Smoke Test (Phase B)...
+# ✅ Admin credentials provided
+# ✅ Docker is available and running
+# ℹ  Temp directory: /tmp/tmp.XXX
+# ✅ Generated Playwright test script
+# ✅ Generated Playwright config
+# ℹ  Running Playwright test in Docker...
+#
+# Running 1 test using 1 worker
+# ℹ️  Test: Branding CSS variables verification...
+# ℹ️  Navigating to: https://admin.fewo.kolibri-visions.de/organisation
+# ✅ Already logged in (no redirect detected)
+# ✅ Page loaded
+# ℹ️  CSS Variables read:
+#    --t-primary: #3b82f6
+#    --t-accent: #8b5cf6
+#    --t-bg: #ffffff
+#    --t-surface: #f9fafb
+#    --t-text: #111827
+#    --t-border: #e5e7eb
+#    --t-radius: 0.375rem
+# ✅ All CSS theme tokens are non-empty
+# ✅ Test passed: Branding CSS tokens verified
+# ✅ Playwright test passed!
+# ℹ  Screenshots saved:
+# -rw-r--r--  1 user  staff  123456 Jan 15 10:00 /tmp/tmp.XXX/screenshots/branding-page-loaded.png
+# -rw-r--r--  1 user  staff  123456 Jan 15 10:00 /tmp/tmp.XXX/screenshots/branding-success.png
+```
+
+**What It Tests:**
+1. Login via UI form (reuses Epic A `ensureLoggedIn` pattern)
+2. Navigate to `/organisation` (stable authenticated page)
+3. Read CSS variables from `documentElement`:
+   - `--t-primary`, `--t-accent`, `--t-bg`, `--t-surface`, `--t-text`, `--t-border`, `--t-radius`
+4. Assert all CSS vars are non-empty (not empty strings)
+5. Screenshot on success
+
+**Exit Codes:**
+- `0` - All tests passed (CSS tokens applied and non-empty)
+- `1` - Configuration error or test failure
+
+**Troubleshooting:**
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| "E2E_ADMIN_EMAIL required" | Missing env var | Export `E2E_ADMIN_EMAIL` before running script |
+| "E2E_ADMIN_PASSWORD required" | Missing env var | Export `E2E_ADMIN_PASSWORD` before running script |
+| "Docker not running" | Docker daemon not started | Start Docker Desktop or `sudo systemctl start docker` |
+| Login fails | Invalid credentials | Verify credentials are correct and user has admin/manager role |
+| CSS variables empty | Theme provider not rendering | Check browser console for errors, verify API `/api/v1/branding` returns tokens |
+| Test timeout | Page slow to load | Increase timeout or check network/server performance |
+
+**Note:** This script is READ-ONLY and PROD-safe. It only reads CSS variables and takes screenshots; no data is created or modified.
+
 ---
 
 ## Redis + Celery Worker Setup (Channel Manager)
