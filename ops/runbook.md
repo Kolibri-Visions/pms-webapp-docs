@@ -28555,6 +28555,7 @@ ORDER BY property_id NULLS LAST, is_default DESC;
 **Symptom:** Quote endpoint selects unexpected rate plan when rate_plan_id not provided (e.g., agency default instead of property default).
 
 **Root Cause:** Default resolution priority not working as expected, or property-specific default is archived/inactive.
+- **Priority Order Clarification:** Property-specific defaults (where property_id matches the target property) ALWAYS override agency-level defaults (where property_id IS NULL). This is enforced by the ORDER BY property_id NULLS LAST clause in the default resolution query.
 
 **How to Debug:**
 ```bash
