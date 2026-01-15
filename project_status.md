@@ -1877,6 +1877,120 @@ EXPECT_COMMIT=014c54234e8d4a7360dca1f6a0a0f5a3bb715edb \
 **Evidence**: All checks passed - deploy verification framework operational in production.
 
 
+### OPS - Periodic Regression Verification (Sprint Checkpoint) ✅ VERIFIED
+
+**Date Completed:** 2026-01-15
+
+**Overview:**
+Comprehensive orchestrator script that runs multiple smoke tests in sequence to verify all critical features remain operational after deployment. Enables systematic regression verification at sprint milestones.
+
+**Purpose:**
+- Automate regression verification across all implemented features
+- Catch regressions early via comprehensive smoke test coverage
+- Enable periodic sprint checkpoint validation (pre-release, post-deploy)
+- Reduce manual verification time and human error
+- Provide single-command verification for PROD deployments
+
+**Business Impact:**
+- Quality assurance: automated regression prevents feature breakage
+- Deployment confidence: comprehensive smoke coverage before go-live
+- Time savings: 7 smoke tests in single command vs manual execution
+- Audit trail: exit codes and test results provide deployment evidence
+
+**Implementation:**
+
+1. **Regression Verify Script** (backend/scripts/pms_regression_verify.sh):
+   - Orchestrates 7 smoke tests in order:
+     1. pms_verify_deploy.sh - Deploy verification (backend + admin commit match)
+     2. pms_p3_direct_booking_hardening_smoke.sh - P3 Direct Booking Hardening
+     3. pms_epic_a_onboarding_rbac_smoke.sh - Epic A RBAC APIs
+     4. pms_epic_a_ui_polish_smoke.sh - Epic A UI (requires Docker; skipped if unavailable)
+     5. pms_branding_smoke.sh - Branding API Phase A
+     6. pms_branding_ui_smoke.sh - Branding UI Phase B (requires Docker; skipped if unavailable)
+     7. pms_sync_batch_details_smoke.sh - Channel sync batch details
+   - CLI-style argument parsing: supports VAR=VALUE syntax
+   - Docker availability detection: skips UI tests if Docker not available
+   - Summary output: tests run/passed/failed/skipped with failed test list
+   - Exit codes: 0=all passed, 1=config error, 2+=one or more failures
+   - Environment variable aliases: Exports API/TOKEN compatibility aliases for channel scripts
+
+2. **Environment Variables**:
+   - API_BASE_URL: API base URL (required)
+   - ADMIN_BASE_URL: Admin UI base URL (required for admin verification)
+   - EXPECT_COMMIT: Expected git commit SHA (required for deploy verification)
+   - JWT_TOKEN: Manager/admin JWT token (required for API smoke tests)
+   - AGENCY_ID: Agency UUID (required for tenant-scoped tests)
+   - E2E_ADMIN_EMAIL: Admin email for UI login (required for UI smoke tests)
+   - E2E_ADMIN_PASSWORD: Admin password for UI login (required for UI smoke tests)
+   - BRANDING_PUT_TEST: Enable PUT test in branding smoke (optional, default: false)
+
+3. **Documentation**:
+   - backend/scripts/README.md: Complete script documentation with usage examples, env vars, exit codes
+   - backend/docs/ops/runbook.md: "Periodic Regression Verification (Sprint Checkpoint)" section with verification procedure, common issues, troubleshooting
+
+**Files Changed:**
+- backend/scripts/pms_regression_verify.sh (new, +355 lines, executable)
+- backend/scripts/README.md (add-only: regression verify script documentation)
+- backend/docs/ops/runbook.md (add-only: regression verification section)
+
+**Expected Result:**
+- ✅ All 7 smoke tests pass in sequence
+- ✅ Docker unavailable: UI tests skipped gracefully
+- ✅ Summary output shows tests run/passed/failed/skipped
+- ✅ Exit code 0 when all executed tests pass
+- ✅ Channel script compatibility: API/TOKEN aliases exported automatically
+
+**PROD Evidence (Verified: 2026-01-15; commit 017a518):**
+- **Verification Date**: 2026-01-15
+- **Environment**: Production
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Admin Base URL**: https://admin.fewo.kolibri-visions.de
+- **Deployed Commit**: 017a518aa66ed5fdfd01cb6e27bb2f83cf651e1e
+- **Started At (API)**: 2026-01-15T17:14:27.362207+00:00
+- **Started At (Admin)**: 2026-01-15T15:13:52.950Z
+
+**Verification Commands:**
+```bash
+# Deploy verification
+API_BASE_URL=https://api.fewo.kolibri-visions.de \
+ADMIN_BASE_URL=https://admin.fewo.kolibri-visions.de \
+EXPECT_COMMIT=017a518 \
+./backend/scripts/pms_verify_deploy.sh
+# Result: rc=0 (commit match; both backend and admin verification passed)
+
+# Regression verification
+API_BASE_URL=https://api.fewo.kolibri-visions.de \
+ADMIN_BASE_URL=https://admin.fewo.kolibri-visions.de \
+EXPECT_COMMIT=017a518 \
+JWT_TOKEN="<redacted>" \
+AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7" \
+E2E_ADMIN_EMAIL="<redacted>" \
+E2E_ADMIN_PASSWORD="<redacted>" \
+./backend/scripts/pms_regression_verify.sh
+# Result: rc=0 (7/7 tests passed: 7 run, 7 passed, 0 failed, 0 skipped)
+```
+
+**Verification Results:**
+- ✅ Test 1: Deploy Verification → PASSED
+- ✅ Test 2: P3 Direct Booking Hardening → PASSED
+- ✅ Test 3: Epic A RBAC APIs → PASSED
+- ✅ Test 4: Epic A UI Polish → PASSED (Docker available)
+- ✅ Test 5: Branding API Phase A → PASSED
+- ✅ Test 6: Branding UI Phase B → PASSED (Docker available)
+- ✅ Test 7: Channel Sync Batch Details → PASSED
+- ✅ Summary: Tests Run: 7, Tests Passed: 7, Tests Failed: 0, Tests Skipped: 0
+- ✅ Exit code: 0 (all tests passed)
+
+**Verification:** Periodic regression verification framework operational in production. All 7 smoke tests passed consistently on deployed commit 017a518. Complete regression coverage verified: deploy verification, P3 hardening, Epic A APIs, Epic A UI, branding (API+UI), and channel sync batch details.
+
+**Reliability Improvements:**
+- Environment variable aliases (commit 017a518): Automatic API/TOKEN exports for channel script compatibility (fixes Test 7 HTTP 401 failures)
+- Docker detection: UI tests (4, 6) skipped gracefully when Docker unavailable (no false failures)
+- Clear error messages: Missing env vars fail fast with actionable guidance
+- Summary output: Easy-to-read test results with failed test list
+
+
+
 ### Channel Manager Admin UI ✅
 
 ### INVENTORY - Race-Safe Bookings via Exclusion Constraint ✅
