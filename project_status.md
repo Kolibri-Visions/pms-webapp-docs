@@ -6163,6 +6163,18 @@ ADMIN_BASE_URL=https://admin.fewo.kolibri-visions.de \
   - UI smoke logged "Invite not visible in list" as warning (non-fatal); invite POST returned status 201 and test passed
 - **Verification**: Epic A UI polish features (in-page dialogs, toasts, badges, copy buttons) verified in PROD with automated Playwright tests and commit match
 
+**PROD Evidence (Verification Update: 2026-01-15):**
+- **Verification Date**: 2026-01-15
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Admin Base URL**: https://admin.fewo.kolibri-visions.de
+- **Backend Source Commit**: 0d3692a201aeb694f9475ad62f418bb05d762fae
+- **Backend Started At**: 2026-01-15T01:21:03.845124+00:00
+- **Admin Source Commit**: 0d3692a201aeb694f9475ad62f418bb05d762fae
+- **Admin Started At**: 2026-01-15T01:21:37.767Z (non-null after fix ✅)
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=0d3692a` → rc=0 (commit match; both backend and admin verification passed)
+- **Fix Applied**: Admin /api/ops/version now computes started_at from process.uptime() instead of reading STARTED_AT env var, ensuring started_at is NEVER null in production
+- **Verification**: Both backend and admin deployments confirmed at same commit with complete metadata. Admin started_at now returns valid ISO 8601 timestamp instead of null, resolving deployment verification gap.
+
 **Notes:**
 - **Status**: Marked as VERIFIED (automated PROD verification completed successfully on 2026-01-14 with commit 9c77be1)
 - **Verification Update**: PROD Evidence updated to reflect re-verification after admin endpoint caching fix. This supersedes previous evidence from commit 44272d7 where admin source_commit returned null.
