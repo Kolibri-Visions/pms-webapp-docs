@@ -28513,6 +28513,89 @@ psql $DATABASE_URL -c "SELECT id, property_id, base_price_cents, currency FROM p
 - Configure pricing rules for property via admin UI or SQL insert
 - If pricing not needed: Smoke script warning is expected behavior (Test 3 shows "WARNING: Quote endpoint returned 503")
 
+### Quote Returns 422 "No Default Rate Plan Set"
+
+**Symptom:** Quote endpoint returns HTTP 422 with message "No default rate plan set. Found N active rate plan(s). Set one as default or provide explicit rate_plan_id."
+
+**Root Cause:** Multiple active rate plans exist for property/agency, but none are marked as default (is_default=false for all). Quote endpoint cannot determine which plan to use.
+
+**How to Debug:**
+```bash
+# Check rate plans for property
+curl -X GET "$API_BASE_URL/api/v1/pricing/rate-plans?property_id=<property_id>&limit=100" \
+  -H "Authorization: Bearer $JWT_TOKEN" | python3 -c "
+import sys, json
+plans = json.load(sys.stdin).get('items', [])
+print(f'Total plans: {len(plans)}')
+for p in plans:
+    print(f\"  {p['id'][:8]}... name={p['name']} is_default={p.get('is_default')} archived={p.get('archived_at') is not None} active={p.get('active')}\")
+"
+
+# Expected: If multiple plans exist and all have is_default=false, 422 is correct behavior
+
+# Check if any plan is set as default (Supabase SQL Editor)
+SELECT id, name, property_id, is_default, archived_at, active
+FROM rate_plans
+WHERE agency_id = '<agency_id>'
+  AND (property_id = '<property_id>' OR property_id IS NULL)
+  AND archived_at IS NULL
+  AND active = true
+ORDER BY property_id NULLS LAST, is_default DESC;
+# Should show at least one plan with is_default=true
+```
+
+**Solution:**
+- Set one rate plan as default via PATCH /api/v1/pricing/rate-plans/{id} with {"is_default": true}
+- Or use Admin UI: Navigate to rate plans list, click "Make Default" on preferred plan
+- Or provide explicit rate_plan_id in quote request body
+- Priority: Property-specific default > Agency-level default > Single plan fallback
+
+### Quote Selects Wrong Rate Plan (Default Resolution)
+
+**Symptom:** Quote endpoint selects unexpected rate plan when rate_plan_id not provided (e.g., agency default instead of property default).
+
+**Root Cause:** Default resolution priority not working as expected, or property-specific default is archived/inactive.
+
+**How to Debug:**
+```bash
+# Test quote without rate_plan_id
+curl -X POST "$API_BASE_URL/api/v1/pricing/quote" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "property_id": "<property_id>",
+    "check_in": "2026-07-15",
+    "check_out": "2026-07-17",
+    "adults": 2
+  }' | python3 -c "import sys, json; q=json.load(sys.stdin); print(f\"rate_plan_id={q.get('rate_plan_id')} rate_plan_name={q.get('rate_plan_name')}\")"
+
+# Check default plans (Supabase SQL Editor)
+-- Property-specific default (priority 1)
+SELECT id, name, 'property-default' as type
+FROM rate_plans
+WHERE agency_id = '<agency_id>'
+  AND property_id = '<property_id>'
+  AND is_default = true
+  AND archived_at IS NULL
+  AND active = true;
+
+-- Agency-level default (priority 2)
+SELECT id, name, 'agency-default' as type
+FROM rate_plans
+WHERE agency_id = '<agency_id>'
+  AND property_id IS NULL
+  AND is_default = true
+  AND archived_at IS NULL
+  AND active = true;
+```
+
+**Solution:**
+- Verify property-specific default exists and is not archived: archived_at IS NULL, active=true, is_default=true
+- If property default archived, system correctly falls back to agency default
+- If neither default exists and only one plan available, system auto-selects it (fallback)
+- To force property default: Ensure property_id matches, is_default=true, archived_at IS NULL, active=true
+- Priority: Property default > Agency default > Single plan > Error 422
+
 ### Booking Request Creation Returns 400 (Bad Request)
 
 **Symptom:** POST /api/v1/public/booking-requests returns 400 with validation error.

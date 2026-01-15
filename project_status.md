@@ -4152,6 +4152,97 @@ echo "rc=$?"
 
 ---
 
+# P2 Pricing v1 — Default Rate Plan Resolution (Quote)
+
+**Implementation Date:** 2026-01-15
+
+**Scope:** Deterministic default rate plan resolution for quote endpoint when rate_plan_id not provided by client. Implements 4-step priority: property default > agency default > single plan fallback > error.
+
+**Features Implemented:**
+
+1. **Rate Plan Resolver Service** (backend/app/services/rate_plan_resolver.py):
+   - resolve_rate_plan() implements 4-step priority resolution
+   - Step 1: Property-specific default (property_id matches, is_default=true, not archived, active)
+   - Step 2: Agency-level default (property_id IS NULL, is_default=true, not archived, active)
+   - Step 3: Fallback to single plan (when only one active non-archived plan exists)
+   - Step 4: Error 422 with actionable message ("No default rate plan set. Found N active rate plan(s)...")
+   - Never selects archived plans (archived_at IS NOT NULL filtered)
+   - Never selects inactive plans (active=false filtered)
+
+2. **Quote Endpoint Enhancement** (backend/app/api/routes/pricing.py):
+   - When rate_plan_id provided: Uses explicit plan (now checks archived_at + active for safety)
+   - When rate_plan_id NOT provided: Calls resolver with strict priority
+   - Returns rate_plan_id and rate_plan_name in response (already existed)
+   - Clear 422 errors with guidance when resolution fails
+
+3. **Resolution Priority** (deterministic order):
+   - Priority 1: Property-specific default (highest precedence)
+   - Priority 2: Agency-level default (agency-wide fallback)
+   - Priority 3: Single active plan (auto-select when unambiguous)
+   - Priority 4: Error 422 (no default, multiple plans → user must set default or provide explicit ID)
+
+4. **Safety Constraints**:
+   - Maintains "one default per agency" constraint (existing DB index from migration 20260115000000)
+   - Backwards compatible (existing behavior preserved when rate_plan_id provided)
+   - No schema changes (uses existing is_default, archived_at, active fields)
+
+5. **Smoke Script** (backend/scripts/pms_pricing_default_resolution_smoke.sh):
+   - PROD-safe and rerunnable
+   - Tests all 4 priority steps
+   - Validates property default > agency default precedence
+   - Validates 422 error when multiple plans, no default
+   - Validates single plan auto-selection fallback
+   - Cleanup: Archives all test rate plans
+
+6. **Documentation**:
+   - backend/scripts/README.md: Smoke script usage and priority order
+   - backend/docs/ops/runbook.md: Troubleshooting (422 errors, wrong plan selection)
+   - backend/docs/project_status.md: This entry
+
+**Architecture:**
+- **Deterministic Resolution**: Strict 4-step priority with clear error messages
+- **Safety First**: Never picks archived or inactive plans
+- **Backwards Compatible**: Explicit rate_plan_id behavior unchanged
+- **No Schema Changes**: Uses existing fields (is_default, archived_at, active)
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- Resolution order: Property default > Agency default > Single plan > Error 422
+- All queries filter archived_at IS NULL AND active=true (safety)
+- Error messages provide actionable guidance ("Set one as default...")
+- Maintains existing "one default per agency" constraint
+
+**Verification Commands (for VERIFIED status later):**
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify deploy
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# Run default resolution smoke test
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<manager/admin JWT>>>"
+export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
+./backend/scripts/pms_pricing_default_resolution_smoke.sh
+echo "rc=$?"
+
+# Expected output: All tests pass, rc=0
+
+# Manual verification
+# 1. Create property-specific default via API
+# 2. Call quote without rate_plan_id → should return that plan
+# 3. Archive property default
+# 4. Call quote again → should return agency-level default (if exists)
+# 5. Remove all defaults, create 2+ plans → quote should return 422
+```
+
+---
+
 # P3a: Idempotency + Audit Log (Public Booking Requests)
 
 **Implementation Date:** 2026-01-06
