@@ -30540,4 +30540,149 @@ E2E_ADMIN_PASSWORD="password" \
 # ✅ Invite submitted
 ```
 
+## Periodic Regression Verification (Sprint Checkpoint)
+
+**Overview:** Orchestrated regression pack that runs multiple smoke tests in sequence for comprehensive post-sprint verification.
+
+**Purpose:** Verify core functionality remains operational after deployments or sprint milestones. Combines deploy verification, API smoke tests, and UI smoke tests into a single automated run.
+
+**Script:** `backend/scripts/pms_regression_verify.sh`
+
+**Prerequisites:**
+- All smoke scripts available in `backend/scripts/`
+- JWT token with manager/admin role
+- Admin credentials for UI tests
+- Docker installed and running (for UI tests; if unavailable, UI tests are skipped with warnings)
+
+**Usage:**
+
+```bash
+# EXECUTION LOCATION: HOST-SERVER-TERMINAL
+
+# Required environment variables
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+export EXPECT_COMMIT="<commit_hash>"
+export JWT_TOKEN="<manager/admin JWT>"
+export AGENCY_ID="<agency UUID>"
+export E2E_ADMIN_EMAIL="admin@example.com"
+export E2E_ADMIN_PASSWORD="password"
+
+# Optional: Enable PUT test in branding smoke (default: false)
+export BRANDING_PUT_TEST="false"
+
+# Run regression pack
+./backend/scripts/pms_regression_verify.sh
+
+# Expected output:
+# ╔════════════════════════════════════════════════════════════╗
+# ║ PMS Periodic Regression Verification                       ║
+# ╚════════════════════════════════════════════════════════════╝
+#
+# ℹ  Validating configuration...
+# ✅ Configuration valid
+# ✅ Docker available (UI smoke tests will run)
+#
+# ╔════════════════════════════════════════════════════════════╗
+# ║ Test 1: Deploy Verification
+# ╚════════════════════════════════════════════════════════════╝
+# ...
+# ✅ Test 1 PASSED: Deploy Verification
+#
+# [... additional tests ...]
+#
+# ╔════════════════════════════════════════════════════════════╗
+# ║ Regression Verification - Summary                         ║
+# ╚════════════════════════════════════════════════════════════╝
+#
+# Tests Run:     7
+# Tests Passed:  7
+# Tests Failed:  0
+# Tests Skipped: 0
+#
+# ╔════════════════════════════════════════════════════════════╗
+# ║ ✅ All tests passed! 🎉                                    ║
+# ╚════════════════════════════════════════════════════════════╝
+```
+
+**Tests Executed (in order):**
+
+1. **Deploy Verification** (`pms_verify_deploy.sh`)
+   - Verifies backend and admin UI commit match `EXPECT_COMMIT`
+   - Checks `/health`, `/health/ready`, `/api/v1/ops/version`, `/api/ops/version`
+
+2. **P3 Direct Booking Hardening** (`pms_public_direct_booking_hardening_smoke.sh`)
+   - Idempotency-Key support
+   - CORS/Origin/Host allowlist
+   - Audit log for booking lifecycle
+
+3. **Epic A RBAC APIs** (`pms_epic_a_onboarding_rbac_smoke.sh`)
+   - Team invitations (create/list/revoke)
+   - Agency settings API
+   - GET /api/v1/me (role verification)
+
+4. **Epic A UI Polish** (`pms_epic_a_ui_polish_smoke.sh`)
+   - Organisation page dialogs
+   - Team page invite creation
+   - **Requires Docker** (skipped if unavailable)
+
+5. **Branding API Phase A** (`pms_branding_smoke.sh`)
+   - GET /api/v1/branding (token defaults)
+   - Optional: PUT /api/v1/branding (if `BRANDING_PUT_TEST=true`)
+
+6. **Branding UI Phase B** (`pms_branding_ui_smoke.sh`)
+   - CSS variables applied (`--t-primary`, `--t-accent`, etc.)
+   - ThemeProvider functionality
+   - **Requires Docker** (skipped if unavailable)
+
+7. **Channel Sync Batch Details** (`pms_sync_batch_details_smoke.sh`)
+   - GET /api/v1/channel-connections/{cid}/sync-batches
+   - GET /api/v1/channel-connections/{cid}/sync-batches/{batch_id}
+
+**Exit Codes:**
+- `0` - All executed tests passed
+- `1` - Configuration error (missing required env vars)
+- `2+` - One or more tests failed (exit code = 1 + number of failures)
+
+**Docker Not Available:**
+
+If Docker is not installed or not running, UI tests (Epic A UI Polish, Branding UI) are **skipped** with warnings but the script continues. The summary will show:
+
+```
+Tests Run:     5
+Tests Passed:  5
+Tests Failed:  0
+Tests Skipped: 2
+
+Skipped tests:
+  ⏭️  Test 4: Epic A UI Polish (Docker not available)
+  ⏭️  Test 6: Branding UI Phase B (Docker not available)
+```
+
+This is **not a failure**. To enable UI tests, install Docker and ensure it's running.
+
+**Common Issues:**
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| "Missing required environment variables" | One or more env vars not set | Export all required vars before running script |
+| UI tests skipped | Docker not available | Install Docker Desktop or start Docker daemon |
+| JWT_TOKEN expired | Token expired (24h TTL typical) | Refresh token using `./backend/scripts/get_fresh_token.sh` |
+| AGENCY_ID mismatch | Wrong agency for user | Verify JWT claims match agency_id |
+| Test 1 fails (deploy verify) | Commit mismatch or endpoint down | Check `EXPECT_COMMIT` matches deployed version |
+
+**Troubleshooting:**
+
+Individual test failures can be debugged by running the specific smoke script directly:
+
+```bash
+# Example: Debug Epic A RBAC test failure
+API_BASE_URL=https://api.fewo.kolibri-visions.de \
+JWT_TOKEN="$JWT_TOKEN" \
+AGENCY_ID="$AGENCY_ID" \
+./backend/scripts/pms_epic_a_onboarding_rbac_smoke.sh
+```
+
+Check the runbook section for each specific smoke script for detailed troubleshooting steps.
+
 ---
