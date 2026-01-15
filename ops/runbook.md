@@ -23050,6 +23050,32 @@ SELECT id, name, archived_at FROM rate_plans WHERE archived_at IS NOT NULL;
 - Verify pricing.py line ~97: `WHERE archived_at IS NULL` in SELECT query
 - If archived plans appear: Check migration 20260115000000 applied, backend logic includes filter
 
+### Admin UI Rate Plans Page Empty After Refresh
+
+**Symptom:** Navigating to /pricing/rate-plans shows "Keine Tarifpläne vorhanden" (empty state) after browser refresh or direct URL access, but works after navigating from another page.
+
+**Root Cause:** Auth context (Authorization header, x-agency-id) not initialized when page loads before Supabase session hydration completes. Page fetched data before token was available, resulting in failed request interpreted as empty list.
+
+**How to Debug:**
+```bash
+# Check browser DevTools Network tab
+# Look for GET /api/v1/pricing/rate-plans request
+# Expected: 200 OK with rate plans array
+# If 401/403/422: Auth headers missing or agency context not set
+# If request missing entirely: Page didn't wait for auth to load
+
+# Check browser Console for errors
+# Look for: "No access token" or auth-related warnings
+```
+
+**Solution:**
+- Frontend page must wait for authLoading state before fetching data
+- Check frontend/app/pricing/rate-plans/page.tsx uses authLoading from useAuth() hook
+- useEffect dependency must include authLoading: useEffect(() => {...}, [authLoading])
+- Show loading state while authLoading is true (not empty state)
+- Verify AuthContext initializes session before components mount
+- Pattern: if (authLoading || loading) return <LoadingSpinner /> (lines 200+)
+
 ---
 
 ## P2 Pricing – Full PROD Verification

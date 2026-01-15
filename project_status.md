@@ -3426,6 +3426,8 @@ Status remains IMPLEMENTED until prod verification (pms_verify_deploy.sh + pms_p
    - 409 error handling with user-friendly message (cannot archive default plan)
    - Toast notifications for success/error feedback
    - German labels throughout
+   - Refresh bug fix: Page now waits for authLoading before fetching (prevents empty state on direct URL/refresh)
+   - Navigation link: Added "Tarifpläne" entry in AdminShell sidebar under Pricing section
 
 4. **Admin UI - Global Layout Fix**:
    - Created frontend/app/booking-requests/layout.tsx (wraps in AdminShell)
