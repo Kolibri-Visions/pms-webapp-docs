@@ -28641,6 +28641,12 @@ If you want to force using a specific property that you know is clean, ensure it
 - Requires a clean property (0 active property-scoped plans)
 - Fails fast if no clean property available (no auto-mutation)
 
+**Auto-Select Clean Property**:
+- When PROPERTY_ID is not set, script fetches all properties for agency
+- Validates JSON responses (exits with clear error if non-JSON)
+- Prints response preview (first 200 chars) on parse errors for debugging
+- Requires valid JWT token with correct agency_id claim
+
 **Admin UI Requirement**:
 - All new Admin UI pages must use AdminShell layout (top bar + left nav)
 - Prefer route-group layouts: `(admin)/layout.tsx` or per-section `layout.tsx`

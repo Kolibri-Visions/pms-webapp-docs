@@ -4220,6 +4220,12 @@ echo "rc=$?"
 - Cleanup limited to SMOKE_DEFAULTRES_* plans for test property only
 - See backend/scripts/pms_pricing_default_resolution_smoke.sh for details
 
+**Fix (2026-01-15)**: JSON parsing for property auto-select
+- Fixed JSONDecodeError when PROPERTY_ID not set (heredoc stdin conflict)
+- Auto-select clean property now works correctly
+- Added non-JSON response detection with preview output
+- Script validates all API responses are valid JSON before parsing
+
 **Architecture:**
 - **Deterministic Resolution**: Strict 4-step priority with clear error messages
 - **Safety First**: Never picks archived or inactive plans
