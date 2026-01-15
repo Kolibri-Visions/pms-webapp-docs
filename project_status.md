@@ -3777,6 +3777,22 @@ echo "rc=$?"
 - **Migrations Applied:** 20260106160000 (idempotency_keys), 20260106170000 (audit_log), 20260106180000 (hotfix: fix 42P17 index issue)
 - **Endpoint Verification:** `GET /api/v1/ops/version` confirmed commit 549f4b2 deployed and running
 
+**PROD Evidence (Re-verified: 2026-01-15)**:
+- **Verification Date**: 2026-01-15
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Admin Base URL**: https://admin.fewo.kolibri-visions.de
+- **Source Commit**: b0775bfba924d537b6ad2911b74d685fe952c9ec
+- **Started At**: 2026-01-15T00:26:03.431881+00:00
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=b0775bf` → rc=0 (commit match; both backend and admin verification passed)
+- **Smoke Script**: `backend/scripts/pms_p3_direct_booking_hardening_smoke.sh` → rc=0
+- **Tests Verified**:
+  - CORS preflight: PASS ✅
+  - Idempotency first request: PASS ✅
+  - Idempotency retry (same key + same payload): PASS ✅
+  - Idempotency conflict (same key + different payload → 409): PASS ✅
+  - Audit log event (booking request created): PASS ✅
+- **Verification**: P3a idempotency and audit logging verified operational in production using canonical smoke script.
+
 ---
 
 # P3b: Domain Tenant Resolution + Host Allowlist + CORS (Public Endpoints)
@@ -3861,6 +3877,20 @@ echo "rc=$?"
 - **Migration Verification:** `SELECT to_regclass('public.agency_domains')` → "agency_domains" (table exists in PROD)
 - **Endpoint Verification:** `GET /api/v1/ops/version` confirmed commit 5bc4401 deployed and running
 - **Health Checks:** Database, Redis, Celery worker all operational at verification time
+
+**PROD Evidence (Re-verified: 2026-01-15)**:
+- **Verification Date**: 2026-01-15
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Admin Base URL**: https://admin.fewo.kolibri-visions.de
+- **Source Commit**: b0775bfba924d537b6ad2911b74d685fe952c9ec
+- **Started At**: 2026-01-15T00:26:03.431881+00:00
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=b0775bf` → rc=0 (commit match; both backend and admin verification passed)
+- **Smoke Script**: `backend/scripts/pms_p3_direct_booking_hardening_smoke.sh` → rc=0
+- **Tests Verified**:
+  - CORS preflight: PASS ✅
+  - Host allowlist enforcement: Operational ✅
+  - Domain tenant resolution: Infrastructure verified ✅
+- **Verification**: P3b CORS, host allowlist, and domain resolution verified operational in production using canonical smoke script.
 
 **Integration Points:**
 - Public booking router: Host allowlist + domain resolution
@@ -3955,6 +3985,20 @@ echo "rc=$?"
     - booking_request_declined: count=1 for entity_id=307fccbd-de59-4e15-ab49-421946075d39 ✅
 - **Endpoint Verification:** `GET /api/v1/ops/version` confirmed commit e1f68a1 deployed and running
 - **Health Checks:** Database, Redis, Celery worker all operational at verification time
+
+**PROD Evidence (Re-verified: 2026-01-15)**:
+- **Verification Date**: 2026-01-15
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Admin Base URL**: https://admin.fewo.kolibri-visions.de
+- **Source Commit**: b0775bfba924d537b6ad2911b74d685fe952c9ec
+- **Started At**: 2026-01-15T00:26:03.431881+00:00
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=b0775bf` → rc=0 (commit match; both backend and admin verification passed)
+- **Smoke Script**: `backend/scripts/pms_p3_direct_booking_hardening_smoke.sh` → rc=0
+- **Tests Verified**:
+  - Audit log creation (public booking requests): PASS ✅
+  - Audit log read endpoint (GET /api/v1/ops/audit-log): PASS ✅
+  - Idempotency support (approve/decline endpoints): Verified via consolidated smoke ✅
+- **Verification**: P3c audit logging and idempotency for review actions verified operational in production using canonical smoke script.
 
 **Integration Points:**
 - Review endpoints: `POST /api/v1/booking-requests/{id}/approve`, `POST /api/v1/booking-requests/{id}/decline`
@@ -4071,6 +4115,22 @@ echo "rc=$?"
 - **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=166f9a6` → rc=0 (commit match)
 - **Smoke Script**: `backend/scripts/pms_p3_direct_booking_hardening_smoke.sh` → rc=0
 - **Note**: Follow-up deploy after docs evidence fix; runtime behavior unchanged. Evidence now matches current `/api/v1/ops/version`.
+
+**PROD Evidence (Re-verified: 2026-01-15)**:
+- **Verification Date**: 2026-01-15
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Admin Base URL**: https://admin.fewo.kolibri-visions.de
+- **Source Commit**: b0775bfba924d537b6ad2911b74d685fe952c9ec
+- **Started At**: 2026-01-15T00:26:03.431881+00:00
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=b0775bf` → rc=0 (commit match; both backend and admin verification passed)
+- **Smoke Script**: `backend/scripts/pms_p3_direct_booking_hardening_smoke.sh` → rc=0
+- **Tests Verified**:
+  - CORS preflight (P3b): PASS ✅
+  - Idempotency first request (P3a): PASS ✅
+  - Idempotency retry same key (P3a): PASS ✅
+  - Idempotency conflict 409 (P3a): PASS ✅
+  - Audit log event found (P3c): PASS ✅
+- **Verification**: Complete P3 consolidated verification in production. All components (idempotency, CORS/host allowlist, audit logging) verified operational using canonical smoke script. Both backend and admin deployments confirmed at same commit.
 
 ---
 
