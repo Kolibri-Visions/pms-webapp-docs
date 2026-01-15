@@ -3726,6 +3726,18 @@ Re-verified 2026-01-15 via `backend/scripts/pms_p2_full_smoke.sh` (rc=0) on comm
   - Test 5: Deleted rate plan successfully (HTTP 204) ✅
 - **Verification:** All 5 tests passed, overlap priority resolution confirmed
 
+**Rate Plans: Default Plan Logic + Archiving (2026-01-15):**
+
+- Migration: `20260115000000_add_rate_plans_defaults.sql` adds `is_default`, `description`, `archived_at` columns
+- Partial unique index enforces at most one default per agency among non-archived plans
+- API logic: When creating/updating a plan with is_default=true, auto-unsets other agency defaults
+- Soft delete: DELETE /api/v1/pricing/rate-plans/{id} sets archived_at (prevents archiving default plan, returns 409)
+- List endpoint excludes archived plans, orders by is_default DESC
+- Schemas updated: RatePlanCreate/Update/Response include new fields
+- Status: ✅ IMPLEMENTED (not VERIFIED)
+- Next steps: Deploy + pms_verify_deploy.sh rc=0 + update pms_pricing_rate_plans_smoke.sh to test is_default/archiving
+
+
 ---
 
 # P2 Pricing Management UI (Fees & Taxes)
