@@ -23076,6 +23076,77 @@ SELECT id, name, archived_at FROM rate_plans WHERE archived_at IS NOT NULL;
 - Verify AuthContext initializes session before components mount
 - Pattern: if (authLoading || loading) return <LoadingSpinner /> (lines 200+)
 
+### Quote Totals Calculation Mismatch
+
+**Symptom:** Quote endpoint returns totals where total_cents ≠ subtotal_nightly_cents + fees_total_cents + taxes_total_cents, or rounding appears incorrect.
+
+**Root Cause:** Totals service not using ROUND_HALF_UP consistently, or fees/taxes configuration has invalid data causing calculation errors.
+
+**How to Debug**:
+```bash
+# Test quote endpoint
+curl -X POST "$API_BASE_URL/api/v1/pricing/quote" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "property_id": "<property_id>",
+    "check_in": "2026-07-15",
+    "check_out": "2026-07-17",
+    "adults": 2,
+    "children": 0
+  }' | python3 -c "import sys, json; d=json.load(sys.stdin); print(f'subtotal={d.get(\"subtotal_nightly_cents\")} fees={d.get(\"fees_total_cents\")} taxes={d.get(\"taxes_total_cents\")} total={d.get(\"total_cents\")}')"
+
+# Expected: total == subtotal + fees + taxes
+
+# Check fees configuration (Supabase SQL Editor)
+SELECT id, name, type, value_cents, value_percent, taxable
+FROM pricing_fees
+WHERE agency_id = '<agency_id>' AND active = true;
+
+# Check taxes configuration
+SELECT id, name, percent
+FROM pricing_taxes
+WHERE agency_id = '<agency_id>' AND active = true;
+```
+
+**Solution**:
+- Verify backend/app/services/pricing_totals.py uses Decimal with ROUND_HALF_UP for all percent calculations
+- Check fees/taxes configuration: percent fees must have value_percent set, fixed fees must have value_cents set
+- Validate taxable flag: only taxable fees should increase tax base
+- If mismatch persists: Check deployment of pricing_totals.py service, verify compute_totals() function exists
+- Rounding rule: 12.5 → 13 (HALF_UP), 10.4 → 10 (down), 10.5 → 11 (HALF_UP)
+
+### Quote Totals Fields Missing
+
+**Symptom:** Quote endpoint response does not include subtotal_nightly_cents, fees_total_cents, taxes_total_cents, or total_cents fields.
+
+**Root Cause:** Totals service not deployed, or quote endpoint not calling compute_totals() function.
+
+**How to Debug**:
+```bash
+# Check API version
+curl -sS "$API_BASE_URL/api/v1/ops/version" | jq '.source_commit, .started_at'
+
+# Test quote endpoint raw response
+curl -X POST "$API_BASE_URL/api/v1/pricing/quote" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "property_id": "<property_id>",
+    "check_in": "2026-07-15",
+    "check_out": "2026-07-17",
+    "adults": 2
+  }' | jq 'keys'
+
+# Expected: Should include "subtotal_nightly_cents", "fees_total_cents", "taxes_total_cents", "total_cents"
+```
+
+**Solution**:
+- Verify deployment includes backend/app/services/pricing_totals.py module
+- Check backend/app/api/routes/pricing.py imports compute_totals and calls it in quote endpoint
+- Verify quote response schema includes new totals fields (backward compatible, optional fields)
+- Redeploy if pricing_totals service missing
+
 ---
 
 ## P2 Pricing – Full PROD Verification

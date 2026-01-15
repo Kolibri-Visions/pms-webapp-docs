@@ -4040,6 +4040,104 @@ Re-verified 2026-01-15 via `backend/scripts/pms_p2_full_smoke.sh` (rc=0) on comm
 
 ---
 
+# P2 Pricing v1 — Totals v1 (Quote Breakdown)
+
+**Implementation Date:** 2026-01-15
+
+**Scope:** Deterministic totals calculation for pricing quotes with nightly subtotal, fees, taxes, and grand total breakdown. All in integer cents with ROUND_HALF_UP rounding.
+
+**Features Implemented:**
+
+1. **Totals Service** (backend/app/services/pricing_totals.py):
+   - Single source of truth for totals calculations
+   - Deterministic ROUND_HALF_UP rounding using Python Decimal
+   - Pure function with no side effects (no DB access, no state)
+   - Supports all fee types: percent, per_stay, per_night, per_person
+
+2. **Quote Endpoint Enhancement** (backend/app/api/routes/pricing.py):
+   - Integrated compute_totals() service call
+   - Added totals breakdown fields to response (backwards compatible)
+   - Replaced inline integer division with deterministic service
+   - Maintains full backwards compatibility
+
+3. **Response Schema** (backward compatible additions):
+   - subtotal_nightly_cents: Nightly rate × nights
+   - fees_total_cents: Sum of all fees (percent/per-night/per-stay/per-person)
+   - taxes_total_cents: Sum of all taxes on taxable base
+   - total_cents: subtotal + fees + taxes
+   - fees_breakdown: List of fee line items
+   - taxes_breakdown: List of tax line items
+
+4. **Calculation Logic**:
+   - Order: nights → nightly subtotal → fees → taxable base → taxes → total
+   - Rounding: ROUND_HALF_UP for all percent calculations (12.5 → 13)
+   - Taxable Base: subtotal_nightly_cents + taxable_fees_total
+   - Fee Types: percent (% of subtotal), per_night (fixed × nights), per_stay (fixed), per_person (fixed × guests × nights)
+
+5. **Unit Tests** (backend/app/services/test_pricing_totals.py):
+   - 12 test cases covering all fee types
+   - Rounding edge cases (12.5 → 13, 10.4 → 10)
+   - Arithmetic consistency validation
+   - All tests passing
+
+6. **Smoke Script** (backend/scripts/pms_pricing_totals_smoke.sh):
+   - PROD-safe and rerunnable
+   - Auto-detects agency/property if not provided
+   - Creates test rate plan (SMOKE-P2-TOTALS-* prefix)
+   - Validates totals consistency: total == subtotal + fees + taxes
+   - Validates ROUND_HALF_UP rounding
+   - Cleanup: Archives test rate plans
+
+7. **Documentation**:
+   - backend/docs/pricing_totals_v1_implementation.md: Complete implementation guide
+   - backend/scripts/README.md: Smoke script usage
+   - backend/docs/ops/runbook.md: Troubleshooting (mismatches, missing fields)
+   - backend/docs/project_status.md: This entry
+
+**Architecture:**
+- **Single Source of Truth**: All totals computed by pricing_totals.compute_totals() service
+- **Deterministic Rounding**: Decimal with ROUND_HALF_UP (not banker's rounding)
+- **Backwards Compatible**: All new fields optional, existing clients unchanged
+- **No DB Changes**: Computes from existing pricing_fees, pricing_taxes config
+- **Pure Function**: No side effects, repeatable results
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- No DB schema changes required (computes from existing data)
+- All new response fields optional (backwards compatible)
+- Rounding matches financial industry standards (ROUND_HALF_UP)
+- Fee type support: percent, per_stay, per_night, per_person (v1 complete set)
+
+**Verification Commands (for VERIFIED status later):**
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify deploy
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# Run totals smoke test
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<manager/admin JWT>>>"
+./backend/scripts/pms_pricing_totals_smoke.sh
+echo "rc=$?"
+
+# Expected output: All tests pass, rc=0
+
+# Manual verification
+# 1. Call quote endpoint with 2-night stay
+# 2. Verify response includes subtotal_nightly_cents, fees_total_cents, taxes_total_cents, total_cents
+# 3. Verify total == subtotal + fees + taxes
+# 4. Test with fees configuration (percent, per-night, per-stay)
+# 5. Test with taxes configuration
+# 6. Verify rounding: 12.5 → 13 (HALF_UP)
+```
+
+---
+
 # P3a: Idempotency + Audit Log (Public Booking Requests)
 
 **Implementation Date:** 2026-01-06
