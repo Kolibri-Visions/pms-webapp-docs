@@ -3202,15 +3202,16 @@ Status remains IMPLEMENTED until prod verification (pms_verify_deploy.sh + pms_p
 **PROD Evidence (Re-verified: 2026-01-15)**:
 - **Verification Date**: 2026-01-15
 - **API Domain**: api.fewo.kolibri-visions.de
-- **Source Commit**: f45aa6678337636f16a51053768c71411ea079c3
-- **Started At**: 2026-01-15T00:04:05.096998+00:00
-- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=f45aa66` → rc=0 (commit match; both backend and admin verification passed)
+- **Source Commit**: b107490037fdfd59a9ea4ee3e9f6571b6574eb35
+- **Started At**: 2026-01-15T00:16:04.914240+00:00
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=b107490` → rc=0 (commit match; both backend and admin verification passed)
 - **Full P2 Smoke Wrapper**: `backend/scripts/pms_p2_full_smoke.sh` → rc=0 (4/4 tests passed)
   - Test 1: Quote Calculation (Fees/Taxes) - PASSED
   - Test 2: Seasonal Rate Overrides - PASSED
   - Test 3: Rate Plan CRUD - PASSED
   - Test 4: Pricing Management UI - PASSED
 - **Verification**: Complete P2 pricing stack verified end-to-end in production using new comprehensive wrapper script. All components operational: rate plans, seasonal overrides, fees, taxes, quote calculation, and management UI APIs. Both backend and admin deployments confirmed at same commit.
+- **Note**: Source commit updated from f45aa66 to b107490 to reflect actual deployed commit in PROD. Commit b107490 is a docs-only redeploy (normalized VERIFIED evidence blocks + P2 full smoke wrapper script docs). Functionality unchanged; smoke tests verify same P2 pricing behavior.
 
 ---
 
