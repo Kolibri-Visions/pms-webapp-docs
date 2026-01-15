@@ -4383,7 +4383,22 @@ Re-verified 2026-01-15 via `backend/scripts/pms_p2_full_smoke.sh` (rc=0) on comm
 ### Theming & Branding (Admin + Future Client) 🟡
 
 **Date Started:** 2026-01-03
-**Status:** Phase A - API + DB Implemented (Frontend UI Minimal/Pending)
+**Status:** Phase A - API + DB ✅ VERIFIED (PROD read-path verified; UI minimal/pending)
+
+**PROD Evidence (Verified: 2026-01-15; current deployed commit):**
+- **Verification Date**: 2026-01-15
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Admin Base URL**: https://admin.fewo.kolibri-visions.de
+- **Backend Source Commit**: 8ca5257ce2f8ee3c149a30501967e8801843f132
+- **Backend Started At**: 2026-01-15T09:00:03.815295+00:00
+- **Admin Source Commit**: 8ca5257ce2f8ee3c149a30501967e8801843f132
+- **Admin Started At**: 2026-01-15T08:57:28.566Z
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=8ca5257` → rc=0 (commit match; both backend and admin verification passed)
+- **Smoke Script**: `backend/scripts/pms_branding_smoke.sh` → rc=0
+  - AGENCY_ID: ffd0123a-10b6-40cd-8ad5-66eee9757ab7
+  - Test 1: GET /api/v1/branding → 200 (tokens returned with defaults)
+  - Note: BRANDING_PUT_TEST=false (PUT endpoint not tested in this verification)
+- **Verification**: Branding API Phase A (GET read-path) verified operational in production. Effective branding tokens with computed defaults returned successfully. PUT write-path not verified in this test run.
 
 **Goal:** Enable per-tenant white-label branding with theme tokens for admin UI and future client-facing site.
 
