@@ -6175,6 +6175,17 @@ ADMIN_BASE_URL=https://admin.fewo.kolibri-visions.de \
 - **Fix Applied**: Admin /api/ops/version now computes started_at from process.uptime() instead of reading STARTED_AT env var, ensuring started_at is NEVER null in production
 - **Verification**: Both backend and admin deployments confirmed at same commit with complete metadata. Admin started_at now returns valid ISO 8601 timestamp instead of null, resolving deployment verification gap.
 
+**PROD Evidence (Re-verified: 2026-01-15; docs-only redeploy drift):**
+- **Verification Date**: 2026-01-15
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Admin Base URL**: https://admin.fewo.kolibri-visions.de
+- **Backend Source Commit**: 2fedc0948fc392617006102e1342586afb2d6e6b
+- **Backend Started At**: 2026-01-15T05:42:04.142905+00:00
+- **Admin Source Commit**: 2fedc0948fc392617006102e1342586afb2d6e6b
+- **Admin Started At**: 2026-01-15T05:39:49.595Z (non-null ✅)
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=2fedc09` → rc=0 (commit match; both backend and admin verification passed)
+- **Note**: `2fedc09` is a docs-only commit that re-deployed both services; functional change for admin started_at was introduced in `0d3692a` and remains effective. This block records the latest deployed commit for audit/verification consistency.
+
 **Notes:**
 - **Status**: Marked as VERIFIED (automated PROD verification completed successfully on 2026-01-14 with commit 9c77be1)
 - **Verification Update**: PROD Evidence updated to reflect re-verification after admin endpoint caching fix. This supersedes previous evidence from commit 44272d7 where admin source_commit returned null.
