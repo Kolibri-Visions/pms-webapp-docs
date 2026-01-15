@@ -3476,6 +3476,7 @@ Status remains IMPLEMENTED until prod verification (pms_verify_deploy.sh + pms_p
 - **Admin Source Commit**: 523977c9ded8046e47060abd02df155dfb53000b
 - **Admin Started At**: 2026-01-15T16:16:01.983Z
 - **Commit Match Verification**: Both backend (/api/v1/ops/version) and admin (/api/ops/version) confirmed at 523977c
+- **Deploy Verification**: backend/scripts/pms_verify_deploy.sh → rc=0 (commit match dc936f7423131f8fcae5ae4c6972fb6a6abe8449) on 2026-01-15
 - **Smoke Test**: backend/scripts/pms_pricing_rate_plans_smoke.sh → rc=0 (all 10 tests passed)
   - Test 7: Create Plan A with is_default=true ✅
   - Test 8: Create Plan B with is_default=true, Plan A auto-unset ✅
