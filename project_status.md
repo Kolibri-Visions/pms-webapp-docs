@@ -4357,7 +4357,24 @@ Re-verified 2026-01-15 via `backend/scripts/pms_p2_full_smoke.sh` (rc=0) on comm
 ### Channel Sync Console UX/Operability Hardening 🟡
 
 **Date Started:** 2026-01-03
-**Status:** Implemented (Pending User Verification after Deploy)
+**Status:** ✅ VERIFIED
+
+**PROD Evidence (Verified: 2026-01-15; current deployed commit):**
+- **Verification Date**: 2026-01-15
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Admin Base URL**: https://admin.fewo.kolibri-visions.de
+- **Backend Source Commit**: 8ca5257ce2f8ee3c149a30501967e8801843f132
+- **Backend Started At**: 2026-01-15T09:00:03.815295+00:00
+- **Admin Source Commit**: 8ca5257ce2f8ee3c149a30501967e8801843f132
+- **Admin Started At**: 2026-01-15T08:57:28.566Z
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=8ca5257` → rc=0 (commit match; both backend and admin verification passed)
+- **Smoke Script**: `backend/scripts/pms_sync_batch_details_smoke.sh` → succeeded
+  - Auto-picked `CID=c1df8491-197a-4881-aec6-18e4297f5f79`
+  - Auto-picked `batch_id=eb0cfb8c-d333-4cf9-a6f5-86d241c55b69`
+  - ✅ GET `/api/v1/channel-connections/{cid}/sync-batches` → 200
+  - ✅ GET `/api/v1/channel-connections/{cid}/sync-batches/{batch_id}` → 200
+  - batch_status=success; operations array populated (availability_update/pricing_update/bookings_sync)
+- **Verification**: Channel Sync Console batch details API endpoints verified operational in production. List batches and batch details retrieval working with proper status aggregation and operation details.
 
 **Changes:**
 - ✅ **Error state handling**: Added 403 Forbidden and 404 Not Found error messages for fetchLogs and fetchBatchDetails (previously only 401/503)
