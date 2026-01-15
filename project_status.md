@@ -4206,6 +4206,12 @@ echo "rc=$?"
 - Smoke script updated: Test 6 validates property fallback with multiple agency plans
 - See commit 6d9c194 for database constraint fix, see next commit for fallback logic fix
 
+**Update (2026-01-15)**: PROD-safe smoke test with property isolation
+- Smoke script now auto-creates isolated SMOKE property when target has existing plans
+- Prevents false failures on real PROD properties with live rate plans
+- Cleanup limited to SMOKE-prefixed artifacts only (never touches real data)
+- Script safe to run against any property without side effects
+
 **Architecture:**
 - **Deterministic Resolution**: Strict 4-step priority with clear error messages
 - **Safety First**: Never picks archived or inactive plans

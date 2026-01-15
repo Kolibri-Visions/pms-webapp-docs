@@ -28614,6 +28614,22 @@ When quote endpoint is called without rate_plan_id, the system resolves in this 
 - If you want an agency plan to be used: Remove all property plans for this property, ensure only one agency plan exists OR set one as default
 - For explicit control: Always provide rate_plan_id in quote requests
 
+### Default Resolution Smoke Fails on Dirty Property
+
+**Symptom:** `pms_pricing_default_resolution_smoke.sh` fails with "Property-specific active: 8, agency-level active: N/A" or similar.
+
+**Root Cause:** The target property has existing rate plans from real usage, causing ambiguity in resolution tests.
+
+**Solution (Automatic):** The smoke script now auto-detects this and creates an isolated SMOKE property. You should see:
+```
+⚠️  Property has 8 existing non-smoke rate plans. Creating isolated SMOKE property...
+✅ Created isolated property: <UUID>
+```
+
+If you want to force using a specific property that you know is clean, ensure it has 0 active property-specific rate plans before running the script.
+
+**Cleanup:** Script archives only SMOKE-prefixed rate plans. If isolated property cleanup fails, manually delete property with ID shown in logs.
+
 ### Booking Request Creation Returns 400 (Bad Request)
 
 **Symptom:** POST /api/v1/public/booking-requests returns 400 with validation error.
