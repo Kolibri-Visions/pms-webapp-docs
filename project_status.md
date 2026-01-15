@@ -3258,6 +3258,22 @@ Status remains IMPLEMENTED until prod verification (pms_verify_deploy.sh + pms_p
   - Test 4: Pricing Management UI - PASSED
 - **Note**: Docs-only redeploys may change source_commit later; this block records the verified deployment commit.
 
+**PROD Evidence (Re-verified: 2026-01-15; current deployed commit):**
+- **Verification Date**: 2026-01-15
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Admin Base URL**: https://admin.fewo.kolibri-visions.de
+- **Backend Source Commit**: 8ca5257ce2f8ee3c149a30501967e8801843f132
+- **Backend Started At**: 2026-01-15T09:00:03.815295+00:00
+- **Admin Source Commit**: 8ca5257ce2f8ee3c149a30501967e8801843f132
+- **Admin Started At**: 2026-01-15T08:57:28.566Z
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=8ca5257` → rc=0 (commit match; both backend and admin verification passed)
+- **Full P2 Smoke Wrapper**: `backend/scripts/pms_p2_full_smoke.sh` → rc=0 (4/4 tests passed)
+  - Test 1: Quote Calculation (Fees/Taxes) - PASSED
+  - Test 2: Seasonal Rate Overrides - PASSED
+  - Test 3: Rate Plan CRUD - PASSED
+  - Test 4: Pricing Management UI - PASSED
+- **Test Environment**: PROPERTY_ID=23dd8fda-59ae-4b2f-8489-7a90f5d46c66, AGENCY_ID=ffd0123a-10b6-40cd-8ad5-66eee9757ab7
+
 ---
 
 # P2 Extension: Pricing Fees and Taxes
@@ -3430,6 +3446,9 @@ Re-verified 2026-01-15 via `backend/scripts/pms_p2_full_smoke.sh` (rc=0) on comm
 
 **PROD Evidence (Re-verified: 2026-01-15; verified at commit 06a6cf7):**
 Re-verified 2026-01-15 via `backend/scripts/pms_p2_full_smoke.sh` (rc=0) on commit `06a6cf7`. Deploy verification: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=06a6cf7` → rc=0 (commit match; both backend and admin verification passed). See the P2 Pricing v1 Foundation re-verification block above for full details.
+
+**PROD Evidence (Re-verified: 2026-01-15; current deployed commit):**
+Re-verified 2026-01-15 via `backend/scripts/pms_p2_full_smoke.sh` (rc=0) on commit `8ca5257`. Deploy verification: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=8ca5257` → rc=0 (commit match; both backend and admin verification passed). See the P2 Pricing v1 Foundation re-verification block above for full details.
 
 ---
 
@@ -3757,6 +3776,9 @@ Re-verified 2026-01-15 via `backend/scripts/pms_p2_full_smoke.sh` (rc=0) on comm
 
 **PROD Evidence (Re-verified: 2026-01-15; verified at commit 06a6cf7):**
 Re-verified 2026-01-15 via `backend/scripts/pms_p2_full_smoke.sh` (rc=0) on commit `06a6cf7`. Deploy verification: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=06a6cf7` → rc=0 (commit match; both backend and admin verification passed). See the P2 Pricing v1 Foundation re-verification block above for full details.
+
+**PROD Evidence (Re-verified: 2026-01-15; current deployed commit):**
+Re-verified 2026-01-15 via `backend/scripts/pms_p2_full_smoke.sh` (rc=0) on commit `8ca5257`. Deploy verification: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=8ca5257` → rc=0 (commit match; both backend and admin verification passed). See the P2 Pricing v1 Foundation re-verification block above for full details.
 
 ---
 
