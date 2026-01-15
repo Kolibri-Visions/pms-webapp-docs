@@ -22844,6 +22844,81 @@ curl -X GET "$API_BASE_URL/api/v1/pricing/rate-plans?limit=100" \
 
 ---
 
+## P2 Pricing – Full PROD Verification
+
+**Overview:** Comprehensive P2 pricing verification using the wrapper script that runs all P2 smoke tests in order.
+
+**Purpose:** Verify complete P2 pricing functionality (rate plans, seasons, fees, taxes, quotes, management UI) in production with a single command.
+
+**Verification Script:** `backend/scripts/pms_p2_full_smoke.sh`
+
+**Prerequisites:**
+- Manager/admin JWT token with valid permissions
+- Property ID for testing (existing property in PROD)
+- Access to HOST-SERVER-TERMINAL or local workstation with network access to API
+
+**Verification Checklist:**
+
+WHERE: HOST-SERVER-TERMINAL
+```bash
+# 1. Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# 2. Set environment variables
+export HOST="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<manager/admin JWT>"
+export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
+
+# 3. Run full P2 verification
+./backend/scripts/pms_p2_full_smoke.sh
+echo "rc=$?"
+
+# Expected: All 4 tests pass, rc=0
+```
+
+**Tests Executed (in order):**
+1. **Quote Calculation** (`pms_pricing_quote_smoke.sh`) - Fees/taxes breakdown
+2. **Seasonal Rates** (`pms_pricing_seasons_smoke.sh`) - Rate overrides by date range
+3. **Rate Plan CRUD** (`pms_pricing_rate_plans_smoke.sh`) - Create/update/delete operations
+4. **Management UI** (`pms_pricing_management_ui_smoke.sh`) - Admin API flows
+
+**Expected Output:**
+- Each test displays clear banner with test name
+- Progress messages for each step within tests
+- ✅ PASSED or ❌ FAILED status after each test
+- Final summary with counts (Tests Run/Passed/Failed)
+- Exit code 0 if all passed, non-zero if any failed
+
+**Common Issues:**
+
+**JWT_TOKEN: unbound variable**
+- **Cause:** JWT_TOKEN environment variable not set
+- **Solution:** Export JWT_TOKEN before running script
+- **Verification:** `echo ${JWT_TOKEN:0:20}` (should show first 20 chars)
+
+**PROPERTY_ID: unbound variable**
+- **Cause:** PROPERTY_ID environment variable not set
+- **Solution:** Export PROPERTY_ID with valid UUID
+- **Verification:** `curl -sS "$HOST/api/v1/properties/$PROPERTY_ID" -H "Authorization: Bearer $JWT_TOKEN"` (should return 200)
+
+**Individual test failures**
+- **Cause:** Specific P2 component issue (rate plans, fees, taxes, seasons)
+- **Solution:** Check individual test output above failure for error details
+- **Debugging:** Re-run failed test individually with verbose output
+
+**HOST vs API_BASE_URL mismatch**
+- **Cause:** Script expects HOST but some underlying scripts may use API_BASE_URL
+- **Solution:** Wrapper sets both automatically; ensure HOST is correct
+- **Verification:** `echo $HOST` and `echo $API_BASE_URL` (should match after script runs)
+
+**Related Sections:**
+- [P2 Pricing Seasonality](#p2-pricing-seasonality) - Season-specific verification
+- [P2 Pricing Management UI](#p2-pricing-management-ui) - UI-specific verification
+- [Scripts README: P2 Full Verification](../scripts/README.md) - Detailed script documentation
+
+---
+
 ## P2 Pricing Seasonality
 
 **Overview:** Seasonal pricing overrides within rate plans for date-range specific pricing.

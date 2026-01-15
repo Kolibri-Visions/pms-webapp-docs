@@ -3195,6 +3195,7 @@ Status remains IMPLEMENTED until prod verification (pms_verify_deploy.sh + pms_p
   - backend/scripts/pms_pricing_rate_plans_smoke.sh → rc=0
   - backend/scripts/pms_pricing_management_ui_smoke.sh → rc=0
 - **Verification**: All P2 Pricing components verified in production. Rate plans, seasonal overrides, quote calculation, fees, taxes, and management UI all operational.
+- **Full Verification Wrapper** (2026-01-15): Added `backend/scripts/pms_p2_full_smoke.sh` - comprehensive wrapper script that runs all 4 P2 smoke tests in order with clear summary output. Recommended entry point for complete P2 verification. See [Runbook: P2 Pricing – Full PROD Verification](ops/runbook.md) and [Scripts README](../scripts/README.md) for usage.
 
 **Correction (2026-01-14):** Prior Source Commit/Started At values mistakenly referenced booking-requests docs commit (c3db7de). Corrected to actual /api/v1/ops/version output for P2 pricing verification deployment (e69ac15).
 
