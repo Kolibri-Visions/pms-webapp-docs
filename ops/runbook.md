@@ -30554,6 +30554,8 @@ E2E_ADMIN_PASSWORD="password" \
 - Admin credentials for UI tests
 - Docker installed and running (for UI tests; if unavailable, UI tests are skipped with warnings)
 
+**Note:** Script automatically exports `API` and `TOKEN` environment variable aliases (API=$API_BASE_URL, TOKEN=$JWT_TOKEN) for compatibility with channel scripts that use legacy naming.
+
 **Usage:**
 
 ```bash
