@@ -22807,7 +22807,7 @@ export JWT_TOKEN="<<<manager/admin JWT>>>"
 ./backend/scripts/pms_pricing_rate_plans_smoke.sh
 echo "rc=$?"
 
-# Expected output: All 6 tests pass, rc=0
+# Expected output: All 10 tests pass, rc=0
 ```
 
 **Common Issues:**
@@ -22956,6 +22956,99 @@ curl -X GET "$API_BASE_URL/api/v1/pricing/rate-plans?limit=100" \
 - **Idempotent DELETE semantics**: Test 6 accepts 204/200 (success) or 404 (already deleted, verified absent)
 - **Manual verification**: Use `-k -L -D <headers_file> -o <body_file> -w "%{http_code}"` flags in curl for reliable HTTP status capture
 - **JWT refresh**: If token expired, obtain new manager/admin JWT from Supabase auth
+
+### Cannot Archive Default Rate Plan (409 Conflict)
+
+**Symptom:** DELETE /api/v1/pricing/rate-plans/{id} returns 409 Conflict for default rate plan.
+
+**Root Cause:** Backend prevents archiving default rate plans to maintain at least one active default per property/agency. User must set another plan as default before archiving.
+
+**How to Debug:**
+```bash
+# Check if rate plan is default (Supabase SQL Editor)
+SELECT id, name, is_default, archived_at
+FROM rate_plans
+WHERE id = '<rate_plan_id>';
+# If is_default=true and archived_at IS NULL, DELETE will return 409
+
+# List other rate plans for same property/agency
+SELECT id, name, is_default, active
+FROM rate_plans
+WHERE property_id = '<property_id>' AND archived_at IS NULL;
+# OR for agency-wide:
+SELECT id, name, is_default, active
+FROM rate_plans
+WHERE property_id IS NULL AND agency_id = '<agency_id>' AND archived_at IS NULL;
+```
+
+**Solution:**
+- Set another rate plan as default first via PATCH with is_default=true
+- Then archive the previous default plan via DELETE (will return 204)
+- Or use Admin UI "Make Default" button on another plan before archiving
+
+### Default Rate Plan Not Auto-Unset
+
+**Symptom:** Creating or updating a rate plan with is_default=true does not unset other default plans.
+
+**Root Cause:** Backend logic should auto-unset other defaults when is_default=true, but this may fail if transaction rollback occurs or logic is not applied.
+
+**How to Debug:**
+```bash
+# Check how many defaults exist for property/agency (Supabase SQL Editor)
+SELECT id, name, is_default, property_id
+FROM rate_plans
+WHERE property_id = '<property_id>' AND is_default = true AND archived_at IS NULL;
+# Should return at most 1 row per property (partial unique index enforces this)
+
+# Test POST with is_default=true
+curl -X POST "$API_BASE_URL/api/v1/pricing/rate-plans" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "property_id": "<property_id>",
+    "name": "New Default Plan",
+    "currency": "EUR",
+    "base_nightly_cents": 10000,
+    "is_default": true
+  }' | jq '.is_default'
+# Should return true
+
+# Verify old default was unset
+curl -X GET "$API_BASE_URL/api/v1/pricing/rate-plans/<old_default_id>" \
+  -H "Authorization: Bearer $JWT_TOKEN" | jq '.is_default'
+# Should return false
+```
+
+**Solution:**
+- Backend uses UPDATE query to set is_default=false for all other rate plans with same property_id/agency_id before setting new default
+- Partial unique index enforces at most one default: `CREATE UNIQUE INDEX idx_rate_plans_default_per_property ON rate_plans (property_id, agency_id) WHERE is_default = true AND archived_at IS NULL`
+- If multiple defaults exist: Migration 20260115000000 may not be applied, or index was dropped/disabled
+
+### Archived Rate Plans Still Show in List
+
+**Symptom:** GET /api/v1/pricing/rate-plans returns archived rate plans (archived_at NOT NULL).
+
+**Root Cause:** List query should filter by archived_at IS NULL but may be missing this condition.
+
+**How to Debug:**
+```bash
+# Check archived_at column exists (Supabase SQL Editor)
+SELECT archived_at FROM rate_plans LIMIT 1;
+# Should not error (column exists since migration 20260115000000)
+
+# Test list endpoint
+curl -X GET "$API_BASE_URL/api/v1/pricing/rate-plans?limit=100" \
+  -H "Authorization: Bearer $JWT_TOKEN" | jq '.items[] | {id, name, archived_at}'
+# archived_at should be null for all returned items
+
+# Check if archived plans exist
+SELECT id, name, archived_at FROM rate_plans WHERE archived_at IS NOT NULL;
+```
+
+**Solution:**
+- Backend list query must include WHERE archived_at IS NULL filter (soft delete pattern)
+- Verify pricing.py line ~97: `WHERE archived_at IS NULL` in SELECT query
+- If archived plans appear: Check migration 20260115000000 applied, backend logic includes filter
 
 ---
 

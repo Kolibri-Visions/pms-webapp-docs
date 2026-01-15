@@ -3393,6 +3393,111 @@ Status remains IMPLEMENTED until prod verification (pms_verify_deploy.sh + pms_p
 
 ---
 
+# P2 Rate Plans CRUD E2E + Admin UI Layout Fix
+
+**Implementation Date:** 2026-01-15
+
+**Scope:** Complete Rate Plans CRUD with default plan logic, soft delete archiving, Admin UI management page, and global admin layout fix for all routes.
+
+**Features Implemented:**
+
+1. **Database Migration** (supabase/migrations/20260115000000_add_rate_plans_defaults.sql):
+   - Added is_default BOOLEAN NOT NULL DEFAULT false to rate_plans
+   - Added description TEXT to rate_plans
+   - Added archived_at TIMESTAMPTZ for soft delete pattern
+   - Partial unique index: idx_rate_plans_default_per_property ensures at most one default per (property_id, agency_id) WHERE is_default=true AND archived_at IS NULL
+   - Soft delete pattern: archived_at IS NULL for active plans, NOT NULL for archived plans
+
+2. **Backend API Updates** (backend/app/schemas/pricing.py, backend/app/api/routes/pricing.py):
+   - RatePlanCreate: Added description, is_default fields
+   - RatePlanResponse: Added description, is_default, archived_at fields
+   - RatePlanUpdate: Added description, is_default fields
+   - POST/PATCH: Auto-unset other defaults when is_default=true (UPDATE query sets is_default=false for all other plans with same property_id/agency_id)
+   - DELETE: Soft delete (SET archived_at=NOW()) instead of hard delete, returns 409 Conflict if archiving default plan
+   - GET list: Filters by archived_at IS NULL, orders by is_default DESC, created_at DESC (defaults first)
+
+3. **Admin UI - Rate Plans Management** (frontend/app/pricing/rate-plans/page.tsx):
+   - Full CRUD management UI for rate plans
+   - List view with default badge, property filter, pagination
+   - Create form with is_default checkbox, description field
+   - Edit form with same fields
+   - Make Default action button (PATCH with is_default=true)
+   - Archive button with confirmation dialog (DELETE soft delete)
+   - 409 error handling with user-friendly message (cannot archive default plan)
+   - Toast notifications for success/error feedback
+   - German labels throughout
+
+4. **Admin UI - Global Layout Fix**:
+   - Created frontend/app/booking-requests/layout.tsx (wraps in AdminShell)
+   - Created frontend/app/pricing/layout.tsx (wraps in AdminShell)
+   - Fixed missing top bar + left navigation on /booking-requests and /pricing routes
+   - Pattern: Each admin route needs layout.tsx calling getAuthenticatedUser() and wrapping children in AdminShell component
+   - Force dynamic rendering with dynamic='force-dynamic', revalidate=0, fetchCache='force-no-store'
+
+5. **Smoke Script Enhancement** (backend/scripts/pms_pricing_rate_plans_smoke.sh):
+   - Test 7: Create Plan A with is_default=true
+   - Test 8: Create Plan B with is_default=true, verify A auto-unset (default swap logic)
+   - Test 9: Try to archive default plan (expect 409 Conflict)
+   - Test 10: Set Plan A as default via PATCH, archive Plan B (expect 204), verify archived plans excluded from list
+   - Cleanup: Archive remaining test plans
+   - Total: 10 tests (previously 6)
+
+6. **Documentation Updates** (DOCS SAFE MODE - add-only):
+   - backend/scripts/README.md:7801-7804 - Tests 7-10 added to "What It Tests"
+   - backend/scripts/README.md:7842-7846 - Tests 7-10 added to "Expected Output"
+   - backend/scripts/README.md:7882-7885 - Tests 7-10 troubleshooting entries
+   - backend/docs/ops/runbook.md:22960-23051 - Three new common issues sections: "Cannot Archive Default Rate Plan (409 Conflict)", "Default Rate Plan Not Auto-Unset", "Archived Rate Plans Still Show in List"
+   - backend/docs/ops/runbook.md:22810 - Updated expected test count from 6 to 10
+   - backend/docs/project_status.md - This P2 entry
+
+**Architecture:**
+- **Default Plan Logic**: At most one default per (property_id, agency_id). POST/PATCH with is_default=true auto-unsets other defaults via UPDATE query before setting new default.
+- **Soft Delete**: DELETE endpoint sets archived_at=NOW() instead of hard delete. Returns 409 if plan is default (must unset default first).
+- **List Filtering**: GET /api/v1/pricing/rate-plans excludes archived plans (WHERE archived_at IS NULL), orders by is_default DESC (defaults first).
+- **Admin Layout Pattern**: Each admin route needs layout.tsx wrapping children in AdminShell, calling getAuthenticatedUser() for server-side auth + role lookup.
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- Migration 20260115000000 adds is_default, description, archived_at columns + partial unique index
+- DOCS SAFE MODE: All docs updated via add-only insertions with rg + sed proof
+- One commit: p2: rate plans crud e2e + admin layout fix
+- No Co-Authored-By lines (hard rule)
+- Not yet VERIFIED (requires PROD deployment + smoke rc=0 + UI manual verification)
+
+**Verification Commands (for VERIFIED status later):**
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify deploy (optional)
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# Run enhanced smoke test (10 tests including default/archive logic)
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<manager/admin JWT>>>"
+./backend/scripts/pms_pricing_rate_plans_smoke.sh
+echo "rc=$?"
+
+# Expected output: All 10 tests pass, rc=0
+
+# Manual UI verification
+# 1. Login as manager/admin
+# 2. Navigate to /pricing/rate-plans
+# 3. Verify rate plans list shows default badge on default plan
+# 4. Create new rate plan with is_default=true checkbox
+# 5. Verify previous default plan lost default badge
+# 6. Try to archive default plan (should show 409 error toast)
+# 7. Make another plan default via "Make Default" button
+# 8. Archive previous default (should succeed with 204)
+# 9. Verify archived plan no longer in list
+# 10. Navigate to /booking-requests and /pricing - verify top bar + left nav present
+```
+
+---
+
 # P2 Extension: Pricing Fees and Taxes
 
 **Implementation Date:** 2026-01-08
