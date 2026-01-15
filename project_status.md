@@ -6161,6 +6161,24 @@ done
 - Supabase Auth (auth.users for email/user_id mapping)
 - Existing tenant resolution via get_current_agency_id (JWT agency_id claim or x-agency-id header)
 
+**PROD Evidence (Re-verified: 2026-01-15; current deployed commit):**
+- **Verification Date**: 2026-01-15
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Admin Base URL**: https://admin.fewo.kolibri-visions.de
+- **Backend Source Commit**: 8ca5257ce2f8ee3c149a30501967e8801843f132
+- **Backend Started At**: 2026-01-15T09:00:03.815295+00:00
+- **Admin Source Commit**: 8ca5257ce2f8ee3c149a30501967e8801843f132
+- **Admin Started At**: 2026-01-15T08:57:28.566Z
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=8ca5257` → rc=0 (commit match; both backend and admin verification passed)
+- **API Smoke Script**: `backend/scripts/pms_epic_a_onboarding_rbac_smoke.sh` → rc=0
+  - Test 1: GET /api/v1/me (role=admin) ✅
+  - Test 2: GET /api/v1/agencies/current ✅
+  - Test 3: POST /api/v1/team/invites (create invitation) ✅
+  - Test 4: GET /api/v1/team/invites (list invitations) ✅
+  - Test 5: GET /api/v1/team/members (list members) ✅
+  - Test 6: POST /api/v1/team/invites/{id}/revoke ✅
+- **Verification**: Epic A Onboarding & RBAC APIs verified operational in production. All team management endpoints (invitations, members, agency settings) functioning correctly.
+
 ---
 
 ## Epic A — Admin UI: Organisation & Team Production-Grade Polish
@@ -6333,6 +6351,28 @@ ADMIN_BASE_URL=https://admin.fewo.kolibri-visions.de \
 - **Admin Started At**: 2026-01-15T05:39:49.595Z (non-null ✅)
 - **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=2fedc09` → rc=0 (commit match; both backend and admin verification passed)
 - **Note**: `2fedc09` is a docs-only commit that re-deployed both services; functional change for admin started_at was introduced in `0d3692a` and remains effective. This block records the latest deployed commit for audit/verification consistency.
+
+**PROD Evidence (Re-verified: 2026-01-15; current deployed commit):**
+- **Verification Date**: 2026-01-15
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Admin Base URL**: https://admin.fewo.kolibri-visions.de
+- **Backend Source Commit**: 8ca5257ce2f8ee3c149a30501967e8801843f132
+- **Backend Started At**: 2026-01-15T09:00:03.815295+00:00
+- **Admin Source Commit**: 8ca5257ce2f8ee3c149a30501967e8801843f132
+- **Admin Started At**: 2026-01-15T08:57:28.566Z
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=8ca5257` → rc=0 (commit match; both backend and admin verification passed)
+- **API Smoke Script**: `backend/scripts/pms_epic_a_onboarding_rbac_smoke.sh` → rc=0
+  - Test 1: GET /api/v1/me (role=admin) ✅
+  - Test 2: GET /api/v1/agencies/current ✅
+  - Test 3: POST /api/v1/team/invites (create invitation) ✅
+  - Test 4: GET /api/v1/team/invites (list invitations) ✅
+  - Test 5: GET /api/v1/team/members (list members) ✅
+  - Test 6: POST /api/v1/team/invites/{id}/revoke ✅
+- **UI Smoke Script**: `backend/scripts/pms_epic_a_ui_polish_smoke.sh` → rc=0
+  - Test 1: Organisation page (dialog open/close, copy button) ✅
+  - Test 2: Team page (invite creation POST /api/v1/team/invites status 201, invite dialog in-page) ✅
+  - Non-fatal warning: "Invite not visible in list (may require refresh/slower network)" - test passed
+- **Verification**: Complete Epic A verification in production. Both API endpoints and UI polish features (in-page dialogs, toasts, badges, copy buttons) verified operational. Backend and admin deployments confirmed at same commit.
 
 **Notes:**
 - **Status**: Marked as VERIFIED (automated PROD verification completed successfully on 2026-01-14 with commit 9c77be1)
