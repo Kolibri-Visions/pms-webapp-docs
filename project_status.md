@@ -3213,6 +3213,23 @@ Status remains IMPLEMENTED until prod verification (pms_verify_deploy.sh + pms_p
 - **Verification**: Complete P2 pricing stack verified end-to-end in production using new comprehensive wrapper script. All components operational: rate plans, seasonal overrides, fees, taxes, quote calculation, and management UI APIs. Both backend and admin deployments confirmed at same commit.
 - **Note**: Source commit updated from f45aa66 to b107490 to reflect actual deployed commit in PROD. Commit b107490 is a docs-only redeploy (normalized VERIFIED evidence blocks + P2 full smoke wrapper script docs). Functionality unchanged; smoke tests verify same P2 pricing behavior.
 
+**PROD Evidence (Re-verified: 2026-01-15; current deployed commit)**:
+- **Verification Date**: 2026-01-15
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Admin Base URL**: https://admin.fewo.kolibri-visions.de
+- **Backend Source Commit**: 0f265a6acfad0ce0f73405f74eda88ff58d31e17
+- **Backend Started At**: 2026-01-15T06:11:05.960255+00:00
+- **Admin Source Commit**: 0f265a6acfad0ce0f73405f74eda88ff58d31e17
+- **Admin Started At**: 2026-01-15T06:08:54.350Z
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=0f265a6` → rc=0 (commit match; both backend and admin verification passed)
+- **Full P2 Smoke Wrapper**: `backend/scripts/pms_p2_full_smoke.sh` → rc=0 (4/4 tests passed)
+  - Test 1: Quote Calculation (Fees/Taxes) - PASSED
+  - Test 2: Seasonal Rate Overrides - PASSED
+  - Test 3: Rate Plan CRUD - PASSED
+  - Test 4: Pricing Management UI - PASSED
+- **Verification**: Complete P2 pricing stack verified end-to-end in production using comprehensive wrapper script. All components operational: rate plans, seasonal overrides, fees, taxes, quote calculation, and management UI APIs. Both backend and admin deployments confirmed at same commit.
+- **Note**: This is a re-verification for the currently deployed commit 0f265a6.
+
 ---
 
 # P2 Extension: Pricing Fees and Taxes
@@ -3376,6 +3393,9 @@ echo "rc=$?"
 - ✅ Smoke test passes with comprehensive quote verification
 - ✅ Backward compatibility maintained (existing quote requests work)
 - ✅ All 9 smoke test steps pass (rate plans + fees + taxes + quote)
+
+**PROD Evidence (Re-verified: 2026-01-15; current deployed commit)**:
+Re-verified 2026-01-15 via `backend/scripts/pms_p2_full_smoke.sh` (rc=0) on commit 0f265a6. Deploy verification: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=0f265a6` → rc=0 (commit match; both backend and admin verification passed). See the P2 Pricing v1 Foundation re-verification block above for full details.
 
 ---
 
@@ -3694,6 +3714,9 @@ echo "rc=$?"
 - `pms_verify_deploy.sh`: rc=0 (commit prefix match c57426f)
 - `pms_admin_ui_static_smoke.sh`: PASS (commit match, login page 200, i18n strings present)
 - Guard check: `rg -n 'fetch\("/api/v1' frontend` → No matches (all converted to apiClient)
+
+**PROD Evidence (Re-verified: 2026-01-15; current deployed commit)**:
+Re-verified 2026-01-15 via `backend/scripts/pms_p2_full_smoke.sh` (rc=0) on commit 0f265a6. Deploy verification: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=0f265a6` → rc=0 (commit match; both backend and admin verification passed). See the P2 Pricing v1 Foundation re-verification block above for full details.
 
 ---
 
