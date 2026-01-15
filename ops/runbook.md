@@ -20325,6 +20325,34 @@ EXPECT_COMMIT=abc123def456 \
 - **No authentication**: Safe metadata only, no secrets exposed
 - **Cheap**: Suitable for frequent monitoring/alerting polls
 
+**Admin UI Version Endpoint**: `GET /api/ops/version`
+
+The admin UI (pms-admin) also exposes a `/api/ops/version` endpoint for deployment verification.
+
+**Response Schema**:
+```json
+{
+  "service": "pms-admin",
+  "source_commit": "81b848f...",
+  "started_at": "2026-01-15T01:11:03.457058+00:00",
+  "environment": "production"
+}
+```
+
+**Response Fields**:
+- `service`: Service name (always "pms-admin")
+- `source_commit`: Git commit SHA (from SOURCE_COMMIT env var, null if not set)
+- `started_at`: ISO 8601 timestamp of Node.js process start time (computed from process.uptime(), never null)
+- `environment`: Environment name (from NODE_ENV)
+
+**Key Differences from Backend**:
+- `started_at` is computed per Node.js process (not from env var), ensuring it's always a valid ISO timestamp
+- `started_at` represents when the Next.js server process started (may change after redeploy/restart)
+- No `api_version` field (frontend doesn't version API separately)
+
+**Usage in pms_verify_deploy.sh**:
+The deploy verification script checks both backend and admin `/ops/version` endpoints when `ADMIN_BASE_URL` is provided, ensuring both deployments match the expected commit.
+
 ### Workflow: Implemented → Verified
 
 **Step 1: Implementation**
