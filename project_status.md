@@ -3458,14 +3458,35 @@ Status remains IMPLEMENTED until prod verification (pms_verify_deploy.sh + pms_p
 - **List Filtering**: GET /api/v1/pricing/rate-plans excludes archived plans (WHERE archived_at IS NULL), orders by is_default DESC (defaults first).
 - **Admin Layout Pattern**: Each admin route needs layout.tsx wrapping children in AdminShell, calling getAuthenticatedUser() for server-side auth + role lookup.
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
 
 **Notes:**
 - Migration 20260115000000 adds is_default, description, archived_at columns + partial unique index
 - DOCS SAFE MODE: All docs updated via add-only insertions with rg + sed proof
 - One commit: p2: rate plans crud e2e + admin layout fix
 - No Co-Authored-By lines (hard rule)
-- Not yet VERIFIED (requires PROD deployment + smoke rc=0 + UI manual verification)
+- DB schema drift resolved: Migration applied PROD adding description, is_default, archived_at + partial unique index enforcing at most one default per (property_id, agency_id) WHERE archived_at IS NULL
+
+**PROD Evidence (Verified: 2026-01-15):**
+- **Verification Date**: 2026-01-15
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Admin Base URL**: https://admin.fewo.kolibri-visions.de
+- **Backend Source Commit**: 523977c9ded8046e47060abd02df155dfb53000b
+- **Backend Started At**: 2026-01-15T16:17:33.138485+00:00
+- **Admin Source Commit**: 523977c9ded8046e47060abd02df155dfb53000b
+- **Admin Started At**: 2026-01-15T16:16:01.983Z
+- **Commit Match Verification**: Both backend (/api/v1/ops/version) and admin (/api/ops/version) confirmed at 523977c
+- **Smoke Test**: backend/scripts/pms_pricing_rate_plans_smoke.sh → rc=0 (all 10 tests passed)
+  - Test 7: Create Plan A with is_default=true ✅
+  - Test 8: Create Plan B with is_default=true, Plan A auto-unset ✅
+  - Test 9: Archive default plan blocked with 409 Conflict ✅
+  - Test 10: Archive non-default plan returns 204, excluded from list ✅
+- **Manual UI Verification** (PROD):
+  - Hard refresh on /pricing/rate-plans loads rate plans list (no false empty state) ✅
+  - Sidebar shows "Pricing → Tarifpläne" navigation link and navigates correctly ✅
+  - /booking-requests still shows top bar + left navigation ✅
+  - Default badge displays correctly on default plans ✅
+  - Make Default action and Archive with 409 handling work as expected ✅
 
 **Verification Commands (for VERIFIED status later):**
 ```bash
