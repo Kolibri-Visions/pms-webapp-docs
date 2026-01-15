@@ -4212,6 +4212,14 @@ echo "rc=$?"
 - Cleanup limited to SMOKE-prefixed artifacts only (never touches real data)
 - Script safe to run against any property without side effects
 
+**Update (2026-01-15)**: Property-only smoke test with fail-fast isolation
+- Smoke test rewritten to test ONLY property-scoped rate plans (no agency-level plans)
+- Implements fail-fast property isolation (requires clean property with 0 active plans)
+- 6 deterministic tests: default priority, single-plan fallback, multi-plan error
+- PROD-safe: Does NOT auto-create properties or modify agency-level defaults
+- Cleanup limited to SMOKE_DEFAULTRES_* plans for test property only
+- See backend/scripts/pms_pricing_default_resolution_smoke.sh for details
+
 **Architecture:**
 - **Deterministic Resolution**: Strict 4-step priority with clear error messages
 - **Safety First**: Never picks archived or inactive plans

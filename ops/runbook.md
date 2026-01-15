@@ -28628,6 +28628,24 @@ When quote endpoint is called without rate_plan_id, the system resolves in this 
 
 If you want to force using a specific property that you know is clean, ensure it has 0 active property-specific rate plans before running the script.
 
+## Pricing Model Decision: Property-Scoped Rate Plans
+
+**Product Decision**: Rate plans are primarily property-scoped (Ferienwohnung/Ferienhaus pricing).
+
+- **Property-scoped rate plans** (property_id = UUID): Active pricing for a specific property
+- **Agency-level rate plans** (property_id IS NULL): Templates for copying/reference only
+
+**Smoke Test Implications**:
+- Default resolution smoke test only creates/tests property-scoped plans
+- Does NOT create or modify agency-level defaults (PROD-safe)
+- Requires a clean property (0 active property-scoped plans)
+- Fails fast if no clean property available (no auto-mutation)
+
+**Admin UI Requirement**:
+- All new Admin UI pages must use AdminShell layout (top bar + left nav)
+- Prefer route-group layouts: `(admin)/layout.tsx` or per-section `layout.tsx`
+- Ensures consistent navigation and user experience
+
 **Cleanup:** Script archives only SMOKE-prefixed rate plans. If isolated property cleanup fails, manually delete property with ID shown in logs.
 
 ### Booking Request Creation Returns 400 (Bad Request)
