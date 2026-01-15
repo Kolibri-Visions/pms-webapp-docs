@@ -1989,6 +1989,9 @@ E2E_ADMIN_PASSWORD="<redacted>" \
 - Clear error messages: Missing env vars fail fast with actionable guidance
 - Summary output: Easy-to-read test results with failed test list
 
+**NOTE (Docs-Only Redeploy):** Regression verification executed and recorded on commit 017a518 (rc=0, 7/7 tests passed). Current deployed commit is f3d6f01 (docs-only redeploy that added this VERIFIED status entry). Deploy verification confirms both backend and admin at f3d6f01: `pms_verify_deploy.sh EXPECT_COMMIT=f3d6f01` → rc=0 (backend started_at: 2026-01-15T12:15:05.220558+00:00, admin started_at: 2026-01-15T12:15:56.893Z).
+
+
 
 
 ### Channel Manager Admin UI ✅
