@@ -3565,7 +3565,7 @@ echo "rc=$?"
 - Templates: Client-side filtered (property_id === null check)
 - No breaking changes to route (/pricing/rate-plans remains same)
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
 
 **Notes:**
 - Route remains /pricing/rate-plans (no breaking changes)
@@ -3578,6 +3578,24 @@ echo "rc=$?"
 - P2 Pricing v1 — Rate Plans CRUD (Property-Scoped Model) ✅ VERIFIED
 - Migration 20260115130000 (separate unique indexes for agency vs property defaults)
 - Backend validation: forbids is_default=true for agency templates (HTTP 400)
+
+**PROD Evidence (Verified: 2026-01-16):**
+- **Verification Date**: 2026-01-16
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Admin Base URL**: https://admin.fewo.kolibri-visions.de
+- **Backend Source Commit**: be839b6cb15be8255c8b0886ab4468ddd09eb827
+- **Backend Started At**: 2026-01-16T11:10:04.871744+00:00
+- **Admin Source Commit**: be839b6cb15be8255c8b0886ab4468ddd09eb827
+- **Admin Started At**: 2026-01-16T11:07:50.513Z
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=be839b6` → rc=0 (commit prefix match)
+- **Manual UI Verification** (PROD):
+  - Success toast/banner now visible above topbar (not hidden behind navigation) ✅
+  - Tab counts ("Tarifpläne (N)", "Vorlagen (M)") remain stable across tab switching ✅
+  - Template copy workflow: Vorlagen count unchanged, Tarifpläne count increments, auto-switch to Tarifpläne tab works correctly ✅
+  - All CRUD operations (create, edit, archive, make default) show success feedback correctly ✅
+  - Property Selector dropdown persists selection to localStorage ✅
+  - Property-scoped plans filtered by API (property_id parameter), templates filtered client-side ✅
+- **Verification**: Property-aware rate plans admin UI fully operational in production. Both initial implementation (commit bee4b7b) and UX bugfix (commit be839b6) verified. Toast visibility and tab count accuracy issues resolved.
 
 **Verification Commands (for VERIFIED status later):**
 ```bash
