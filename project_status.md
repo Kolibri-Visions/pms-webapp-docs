@@ -3522,6 +3522,75 @@ echo "rc=$?"
 
 ---
 
+---
+
+## P2 Pricing v1 — Rate Plans Admin UI (Property-Aware)
+
+**Implementation Date:** 2026-01-16
+
+**Scope:** Make Admin UI /pricing/rate-plans property-aware with Property Selector, separate templates tab, and copy workflow.
+
+**Features Implemented:**
+
+1. **Property Selector** (frontend/app/pricing/rate-plans/page.tsx):
+   - Dropdown at top of page showing all agency properties
+   - Persisted to localStorage (key: "selectedPropertyId")
+   - Auto-selects first property on initial load
+
+2. **Tab-Based UI**:
+   - **"Tarifpläne" tab** (default): Shows only property-scoped rate plans (property_id != null)
+     - API call: GET /api/v1/pricing/rate-plans?property_id={selectedPropertyId}
+     - is_default checkbox enabled (can set as default for quotes)
+   - **"Vorlagen (Agentur)" tab**: Shows agency-level templates (property_id IS NULL)
+     - Filtered client-side from full rate plans list
+     - is_default checkbox hidden (templates cannot be default)
+
+3. **Template Copy Workflow**:
+   - "Als Tarifplan kopieren" button on each template
+   - Copies template to currently selected property (POST /api/v1/pricing/rate-plans)
+   - Appends " (Kopie)" to name, sets is_default=false, active=true
+   - Auto-switches to "Tarifpläne" tab to show newly created plan
+
+4. **German Localization**:
+   - All UI text in German: "Tarifpläne", "Vorlagen (Agentur)", "Eigenschaft wählen", etc.
+
+5. **Documentation** (DOCS SAFE MODE):
+   - backend/docs/ops/runbook.md:28657+ - "Admin UI Behavior (Property-Aware /pricing/rate-plans)" section
+   - backend/scripts/README.md:7976+ - "Admin UI Note" with property-scoped behavior
+   - backend/docs/project_status.md - This entry
+
+**Architecture:**
+- Property context persisted via localStorage (survives page reloads)
+- Property-scoped plans: API-filtered (property_id parameter)
+- Templates: Client-side filtered (property_id === null check)
+- No breaking changes to route (/pricing/rate-plans remains same)
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- Route remains /pricing/rate-plans (no breaking changes)
+- Property Selector required for "Tarifpläne" tab to show plans (prompts user if not selected)
+- Templates tab works without property selection (shows all agency templates)
+- Copy workflow requires property selection (button disabled if no property selected)
+
+**Dependencies:**
+- P2 Pricing v1 — Rate Plans CRUD (Property-Scoped Model) ✅ VERIFIED
+- Migration 20260115130000 (separate unique indexes for agency vs property defaults)
+- Backend validation: forbids is_default=true for agency templates (HTTP 400)
+
+**Verification Commands (for VERIFIED status later):**
+```bash
+# Manual UI verification steps:
+# 1. Login as manager/admin user
+# 2. Navigate to /pricing/rate-plans
+# 3. Verify Property Selector dropdown appears at top
+# 4. Select a property → verify "Tarifpläne" tab shows only property-scoped plans
+# 5. Switch to "Vorlagen (Agentur)" tab → verify templates shown, is_default checkbox hidden
+# 6. Click "Als Tarifplan kopieren" on a template → verify plan copied to selected property, tab switches to "Tarifpläne"
+# 7. Reload page → verify selected property persisted (localStorage)
+```
+
+
 # P2 Extension: Pricing Fees and Taxes
 
 **Implementation Date:** 2026-01-08

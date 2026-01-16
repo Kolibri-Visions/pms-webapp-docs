@@ -28654,6 +28654,16 @@ If you want to force using a specific property that you know is clean, ensure it
 
 **Cleanup:** Script archives only SMOKE-prefixed rate plans. If isolated property cleanup fails, manually delete property with ID shown in logs.
 
+**Admin UI Behavior (Property-Aware /pricing/rate-plans)**:
+- **Property Selector**: Dropdown at top, persisted to localStorage (key: "selectedPropertyId")
+- **Two Tabs**:
+  - "Tarifpläne" (default): Shows only property-scoped rate plans (property_id != null). API call includes `property_id` parameter.
+  - "Vorlagen (Agentur)": Shows agency-level templates (property_id IS NULL). Filtered client-side.
+- **Templates Restrictions**: is_default checkbox hidden for templates tab (cannot be set as default)
+- **Copy Template Workflow**: "Als Tarifplan kopieren" button copies template to selected property, switches to "Tarifpläne" tab to show new plan
+- **Route**: /pricing/rate-plans (no breaking changes)
+
+
 ### Booking Request Creation Returns 400 (Bad Request)
 
 **Symptom:** POST /api/v1/public/booking-requests returns 400 with validation error.
