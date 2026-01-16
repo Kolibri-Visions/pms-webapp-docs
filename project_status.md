@@ -8547,7 +8547,28 @@ curl -sS https://fewo.kolibri-visions.de/sitemap.xml | head -5
 }
 ```
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
+
+**PROD Evidence (2026-01-16):**
+
+**Deployed Version:**
+- Verification Date: 2026-01-16
+- API Base URL: https://api.fewo.kolibri-visions.de
+- Source Commit: 17b492a13cbbd3762519e4c004ffcc7bb1984178
+- Deploy Verification: backend/scripts/pms_verify_deploy.sh (rc=0)
+
+**Smoke Test Results:**
+- Script: backend/scripts/pms_season_template_apply_smoke.sh (rc=0)
+- PREVIEW dry_run=true summary:
+  - existing_active=0, would_archive=0, would_create=3, would_update=0, conflicts=0
+- After preview:
+  - count_after_preview=0
+- APPLY dry_run=false summary:
+  - existing_active=0, would_archive=0, would_create=3, would_update=0, conflicts=0
+- After apply:
+  - count_after_apply=3 (Hauptsaison/Nebensaison/Zwischensaison with dates 2026-02-01..03-01, nightly_cents=10000)
+
+**Conclusion:** P2.4 Apply Season Template feature fully operational in production with dry-run preview, atomic transactions, and conflict detection.
 
 **Notes:**
 - IMPLEMENTED status requires: Backend API complete, UI preview dialog complete, smoke script passing, docs updated
