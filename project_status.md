@@ -3858,6 +3858,63 @@ echo "rc=$?"
 
 ---
 
+## P2.3 Pricing — Rate Plans UI Polish (Hide Archived)
+
+**Implementation Date:** 2026-01-17
+
+**Scope:** Admin UI improvement to hide archived rate plans by default with optional toggle.
+
+**Features Implemented:**
+
+1. **UI State Management** (`frontend/app/pricing/rate-plans/page.tsx`):
+   - Added `showArchived` state (default: `false`)
+   - useEffect hook to refetch data when toggle changes
+   - Dynamic `include_archived` parameter in API calls
+
+2. **Toggle Control**:
+   - Checkbox positioned in page header (right side of tabs)
+   - German label: "Archivierte anzeigen"
+   - Default OFF (archived hidden)
+   - Affects both property plans and templates tabs
+
+3. **Visual Distinction**:
+   - Archived items show gray "archiviert" badge when toggle is ON
+   - Badge appears next to rate plan name in table
+
+4. **API Integration**:
+   - Property plans: `/api/v1/pricing/rate-plans?property_id={id}&include_archived={bool}`
+   - Templates: `/api/v1/pricing/rate-plans?include_archived={bool}`
+   - Backend API already supports `include_archived` parameter (from P2 implementation)
+
+**Status:** ✅ IMPLEMENTED
+
+**How to Verify in PROD:**
+
+```bash
+# Manual UI verification (no smoke script needed)
+# 1. Login as manager/admin
+# 2. Navigate to /pricing/rate-plans
+# 3. Verify archived items NOT shown by default
+# 4. Enable "Archivierte anzeigen" toggle
+# 5. Verify archived items appear with "archiviert" badge
+# 6. Disable toggle
+# 7. Verify archived items hidden again
+# 8. Switch between property plans and templates tabs
+# 9. Verify toggle affects both tabs
+```
+
+**Dependencies:**
+- P2 Pricing foundation (rate plans API with `include_archived` parameter)
+- P2.2 Rate Plan Seasons Editor (seasons functionality unaffected)
+
+**Notes:**
+- UI-only change (no backend modifications)
+- Improves UX by reducing clutter from archived items
+- Archived items still accessible when needed via toggle
+- Filter persists during session (not saved in localStorage)
+
+---
+
 # P2 Extension: Pricing Fees and Taxes
 
 **Implementation Date:** 2026-01-08

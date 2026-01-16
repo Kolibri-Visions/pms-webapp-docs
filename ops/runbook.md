@@ -22932,6 +22932,29 @@ rg -n "from.*schemas.pricing import" backend/app/api/routes/pricing.py
 
 ---
 
+## P2.3 Rate Plans Admin UI — Archived Items Hidden by Default
+
+### UI: Archived Items Hidden by Default
+
+**Behavior**: Rate Plans admin UI (`/pricing/rate-plans`) hides archived items by default.
+
+**Toggle Control**: "Archivierte anzeigen" checkbox in the page header
+- **Default**: OFF (archived items hidden)
+- **When ON**: Shows both active and archived items
+- **Visual Distinction**: Archived items display gray "archiviert" badge
+
+**Applies To**:
+- Property-scoped rate plans tab (Tarifpläne)
+- Agency-scoped templates tab (Vorlagen)
+
+**API Behavior**:
+- `include_archived=false` by default (excludes archived)
+- `include_archived=true` when toggle enabled (includes archived)
+
+**Note**: Archived items still exist in database and can be restored by staff if needed. Toggle only controls visibility in admin UI.
+
+---
+
 ## Pricing v1 Rate Plans MVP
 
 **Overview:** Rate Plans API with CRUD endpoints and quote integration for property pricing configuration.
