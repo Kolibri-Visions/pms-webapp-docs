@@ -31384,3 +31384,289 @@ git log --oneline -5
 - Educate team: "Only edit private repo backend/docs, never public repo"
 
 ---
+
+---
+
+## P2.4 Pricing: Apply Season Template (Preview + Atomic Apply)
+
+**Overview:** Enhanced season template application with dry-run preview and atomic transactional apply.
+
+**Purpose:** Allow staff (manager/admin) to preview changes before applying a season template to a rate plan, with conflict detection and atomic database operations to prevent partial updates.
+
+**Architecture:**
+- **Dry-Run Preview**: POST with `dry_run: true` returns summary of changes without committing to database
+- **Atomic Apply**: POST with `dry_run: false` uses database transaction (`async with db.transaction()`) to ensure all-or-nothing semantics
+- **Conflict Detection**: In merge mode, detects date range overlaps between template periods and existing seasons, returns 422 with detailed conflicts
+- **Soft Delete**: Replace mode archives existing seasons (sets archived_at) instead of hard delete
+- **Response Schema**: Comprehensive response with status, summary counts, detailed changes, and conflict list
+
+**API Endpoints:**
+
+Staff (manager/admin):
+- `POST /api/v1/pricing/rate-plans/{rate_plan_id}/apply-season-template`
+  - Request body: `ApplySeasonTemplateRequest`
+    - `template_id`: UUID of season template to apply
+    - `mode`: "replace" or "merge" (default: "replace")
+    - `dry_run`: boolean (default: false) - if true, returns preview without applying
+  - Response: `ApplySeasonTemplateResponse`
+    - `status`: "ok" or "error"
+    - `dry_run`: boolean (echoes request parameter)
+    - `rate_plan_id`: UUID
+    - `template_id`: UUID
+    - `mode`: string ("replace" or "merge")
+    - `summary`: counts of existing_active, would_archive, would_create, would_update, conflicts
+    - `changes`: detailed lists of archive_season_ids, create, update
+    - `conflicts`: list of conflict details (only in merge mode when overlaps detected)
+  - Status codes:
+    - 200 OK: Dry-run preview successful OR apply successful
+    - 422 Unprocessable Entity: Conflicts detected in merge mode (no changes applied)
+    - 404 Not Found: Rate plan or template not found
+    - 403 Forbidden: Insufficient permissions
+
+**Apply Modes:**
+
+1. **Replace Mode** (default):
+   - Archives ALL existing active seasons for the rate plan (sets archived_at)
+   - Creates new seasons from template periods (copies label, date_from, date_to)
+   - No conflict detection (always replaces everything)
+   - Use case: Full reset of seasonal pricing
+
+2. **Merge Mode**:
+   - Keeps existing active seasons
+   - Adds new seasons from template periods
+   - Conflict detection: Returns 422 if any template period overlaps with existing seasons
+   - Overlap rule: Two date ranges overlap if `date_from < other.date_to AND date_to > other.date_from`
+   - Use case: Add new seasons without losing existing configuration
+
+**Dry-Run Preview:**
+- Returns same response structure as actual apply, but with `dry_run: true`
+- No database changes committed
+- Shows exactly what WOULD happen if applied
+- Use case: UI preview dialog before confirmation
+
+**Database Transaction:**
+- All database writes wrapped in `async with db.transaction()`
+- If ANY operation fails (archive, create, update), entire transaction rolls back
+- Prevents partial updates (e.g., archived old seasons but failed to create new ones)
+- Ensures atomicity: either all changes succeed or none do
+
+**Response Structure Example (Dry-Run Replace Mode):**
+```json
+{
+  "status": "ok",
+  "dry_run": true,
+  "rate_plan_id": "123e4567-e89b-12d3-a456-426614174000",
+  "template_id": "123e4567-e89b-12d3-a456-426614174001",
+  "mode": "replace",
+  "summary": {
+    "existing_active": 3,
+    "would_archive": 3,
+    "would_create": 2,
+    "would_update": 0,
+    "conflicts": 0
+  },
+  "changes": {
+    "archive_season_ids": ["...", "...", "..."],
+    "create": [
+      {
+        "label": "Hauptsaison",
+        "date_from": "2026-06-01",
+        "date_to": "2026-08-31",
+        "nightly_cents": null,
+        "min_stay_nights": null
+      },
+      {
+        "label": "Nebensaison",
+        "date_from": "2026-09-01",
+        "date_to": "2026-10-31",
+        "nightly_cents": null,
+        "min_stay_nights": null
+      }
+    ],
+    "update": []
+  },
+  "conflicts": []
+}
+```
+
+**Response Structure Example (Merge Mode with Conflicts):**
+```json
+{
+  "status": "error",
+  "dry_run": false,
+  "rate_plan_id": "123e4567-e89b-12d3-a456-426614174000",
+  "template_id": "123e4567-e89b-12d3-a456-426614174001",
+  "mode": "merge",
+  "summary": {
+    "existing_active": 2,
+    "would_archive": 0,
+    "would_create": 0,
+    "would_update": 0,
+    "conflicts": 1
+  },
+  "changes": {
+    "archive_season_ids": [],
+    "create": [],
+    "update": []
+  },
+  "conflicts": [
+    {
+      "period_label": "Hauptsaison",
+      "period_date_from": "2026-06-01",
+      "period_date_to": "2026-08-31",
+      "conflicts_with_season_id": "123e4567-e89b-12d3-a456-426614174002",
+      "conflicts_with_date_from": "2026-07-01",
+      "conflicts_with_date_to": "2026-07-31",
+      "message": "Template period 'Hauptsaison' (2026-06-01 to 2026-08-31) overlaps with existing season (2026-07-01 to 2026-07-31)"
+    }
+  ]
+}
+```
+
+**Verification Commands:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# [HOST-SERVER-TERMINAL] Optional: Verify deploy after Coolify redeploy
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# [HOST-SERVER-TERMINAL] Run P2.4 smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<manager/admin JWT>>>"
+# Optional:
+# export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+./backend/scripts/pms_season_template_apply_smoke.sh
+echo "rc=$?"
+
+# Expected output: All 7 tests pass, rc=0
+```
+
+**Common Issues:**
+
+### Dry-Run Returns 200 But Apply Returns 422 (Conflicts)
+
+**Symptom:** Dry-run preview shows `conflicts: 0`, but actual apply (without dry_run) returns 422 with conflicts.
+
+**Root Cause:** Race condition - another user added a conflicting season between dry-run and apply.
+
+**How to Debug:**
+```bash
+# Check seasons list for rate plan
+curl -X GET "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/seasons?include_archived=false" \
+  -H "Authorization: Bearer $JWT_TOKEN" | jq '.[] | {id, label, date_from, date_to}'
+
+# Compare with template periods
+curl -X GET "$HOST/api/v1/pricing/season-templates/$TEMPLATE_ID" \
+  -H "Authorization: Bearer $JWT_TOKEN" | jq '.periods[] | {label, date_from, date_to}'
+```
+
+**Solution:**
+- Re-run dry-run preview to see current state
+- Use replace mode instead of merge mode to override conflicts
+- Or adjust template periods to avoid overlap
+
+### Apply Returns 200 But Seasons Not Updated
+
+**Symptom:** POST /api/v1/pricing/rate-plans/{id}/apply-season-template returns 200, but GET /seasons shows old seasons.
+
+**Root Cause:** Response was from dry-run preview (`dry_run: true` in request body).
+
+**How to Debug:**
+```bash
+# Check response dry_run field
+# Should be "dry_run": false for actual apply
+
+# Re-run apply without dry_run parameter or with dry_run: false
+curl -X POST "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/apply-season-template" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"template_id": "'$TEMPLATE_ID'", "mode": "replace", "dry_run": false}' | jq '.dry_run'
+```
+
+**Solution:**
+- Ensure request body has `"dry_run": false` or omits dry_run parameter (defaults to false)
+- Check UI code sends correct request payload
+
+### Replace Mode Archives Seasons But Fails to Create New Ones (Partial Update)
+
+**Symptom:** Existing seasons archived, but no new seasons created. Rate plan left with no active seasons.
+
+**Root Cause:** This should NEVER happen due to transaction wrapping. If it does, transaction was not properly used or database connection issue.
+
+**How to Debug:**
+```bash
+# Check backend logs for transaction errors
+# Look for: "Transaction rolled back" or "asyncpg.exceptions"
+
+# Verify all seasons for rate plan
+psql $DATABASE_URL -c "SELECT id, label, date_from, date_to, archived_at FROM rate_plan_seasons WHERE rate_plan_id = '$RATE_PLAN_ID' ORDER BY archived_at NULLS FIRST, date_from;"
+
+# Check if any seasons have archived_at set but were not supposed to be archived
+```
+
+**Solution:**
+- This indicates a bug in transaction handling or database connection issue
+- Manual recovery: Un-archive old seasons if needed:
+  ```sql
+  UPDATE rate_plan_seasons SET archived_at = NULL WHERE rate_plan_id = '$RATE_PLAN_ID' AND archived_at IS NOT NULL;
+  ```
+- Report bug with backend logs and database state
+
+### Merge Mode Does Not Detect Overlaps (Accepts Conflicting Periods)
+
+**Symptom:** Merge mode applies template with overlapping periods without returning 422.
+
+**Root Cause:** Overlap detection logic bug (date range comparison incorrect).
+
+**How to Debug:**
+```bash
+# Manual overlap check
+# Two ranges overlap if: date_from < other.date_to AND date_to > other.date_from
+
+# Example:
+# Existing: 2026-07-01 to 2026-07-31
+# Template: 2026-06-01 to 2026-08-31
+# Overlap: 2026-06-01 < 2026-07-31 AND 2026-08-31 > 2026-07-01 = TRUE
+
+# Check backend logs for overlap detection
+# Look for: "Overlap detected" or conflict details
+```
+
+**Solution:**
+- Verify backend/app/api/routes/pricing.py line ~2220-2240 (overlap detection logic)
+- Ensure comparison uses: `period.date_from < existing.date_to and period.date_to > existing.date_from`
+- Report bug if logic is incorrect
+
+### UI Preview Dialog Shows Wrong Counts
+
+**Symptom:** Preview dialog shows `would_create: 0` but template has 2 periods.
+
+**Root Cause:** UI not parsing response correctly or backend not returning correct summary.
+
+**How to Debug:**
+```bash
+# Test dry-run endpoint directly
+curl -X POST "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/apply-season-template" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"template_id": "'$TEMPLATE_ID'", "mode": "replace", "dry_run": true}' | jq '.summary'
+
+# Expected:
+# {
+#   "existing_active": N,
+#   "would_archive": N (replace mode) or 0 (merge mode),
+#   "would_create": 2 (if template has 2 periods),
+#   "would_update": 0,
+#   "conflicts": 0 or N
+# }
+```
+
+**Solution:**
+- If backend response is correct: Fix UI parsing (check frontend/app/pricing/rate-plans/page.tsx preview data handling)
+- If backend response is wrong: Fix backend logic (check pricing.py summary calculation)
+
+---

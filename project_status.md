@@ -8419,3 +8419,194 @@ curl -sS https://fewo.kolibri-visions.de/sitemap.xml | head -5
 - Feature is fully functional; 409 indicates domain not yet publicly reachable (expected for new/unconfigured domains)
 
 ---
+
+---
+
+# P2.4 Pricing — Apply Season Template: Preview + Atomic Apply Hardening
+
+**Implementation Date:** 2026-01-16
+
+**Scope:** Enhanced season template application with dry-run preview capability and atomic transactional apply with conflict detection.
+
+**Features Implemented:**
+
+1. **Enhanced Pydantic Schemas** (`backend/app/schemas/pricing.py`):
+   - Updated `ApplySeasonTemplateRequest`: Added `dry_run: bool` parameter (default: False)
+   - Added `SeasonChange`: Represents a season that will be created/updated
+   - Added `SeasonConflict`: Represents an overlap conflict with detailed info
+   - Added `ApplySeasonTemplateSummary`: Summary counts (existing_active, would_archive, would_create, would_update, conflicts)
+   - Added `ApplySeasonTemplateChanges`: Detailed change lists (archive_season_ids, create, update)
+   - Added `ApplySeasonTemplateResponse`: Comprehensive response structure with status, dry_run, summary, changes, conflicts
+
+2. **Enhanced API Endpoint** (`backend/app/api/routes/pricing.py` line ~2176):
+   - POST /api/v1/pricing/rate-plans/{rate_plan_id}/apply-season-template
+   - **Dry-Run Support**: Returns preview without committing to database when `dry_run: true`
+   - **Atomic Apply**: Wraps all database writes in `async with db.transaction()` for all-or-nothing semantics
+   - **Conflict Detection**: In merge mode, detects date range overlaps and returns 422 with detailed conflicts
+   - **Soft Delete**: Replace mode archives existing seasons (sets archived_at) instead of hard delete
+   - **Response Structure**: Returns comprehensive ApplySeasonTemplateResponse with summary, changes, conflicts
+   - **Modes**:
+     - Replace: Archives all existing active seasons, creates new from template
+     - Merge: Keeps existing seasons, adds new from template (returns 422 if overlaps detected)
+
+3. **UI Preview Dialog** (`frontend/app/pricing/rate-plans/page.tsx`):
+   - Added state: `showPreview`, `previewData`
+   - Enhanced `handleApplyTemplate`: First calls API with `dry_run: true` to show preview dialog
+   - Added `handleConfirmApply`: Calls API with `dry_run: false` after user confirmation
+   - Added Preview Dialog component with German text:
+     - Conflicts warning section (red box) if conflicts detected
+     - Summary section: existing active, will archive, will create counts
+     - New seasons preview list with labels and date ranges
+     - Cancel and Confirm buttons
+   - Updated button text: "Vorschau" (Preview) instead of "Vorlage anwenden"
+   - Toast notifications for success/error feedback
+
+4. **Smoke Script** (`backend/scripts/pms_season_template_apply_smoke.sh`):
+   - Test 1: Create test rate plan
+   - Test 2: Create test season template with 2 periods
+   - Test 3: Dry-run preview (merge mode) - expect would_create=2
+   - Test 4: Apply template (merge mode) - expect 200 OK
+   - Test 5: Verify seasons list has 2 seasons
+   - Test 6: Dry-run merge with conflicts - expect 422 with conflicts array
+   - Test 7: Apply template (replace mode) - archives existing, creates new
+   - Automatic cleanup via trap handler (PROD-safe)
+
+5. **Documentation** (DOCS SAFE MODE - add-only):
+   - **Runbook** (`backend/docs/ops/runbook.md`):
+     - New section: "P2.4 Pricing: Apply Season Template (Preview + Atomic Apply)"
+     - Architecture: dry-run pattern, transaction wrapping, conflict detection
+     - API endpoints: POST /apply-season-template with request/response examples
+     - Apply modes: Replace vs Merge with use cases
+     - Response structure examples (dry-run, merge with conflicts)
+     - Verification commands for PROD testing
+     - Common issues: 5 troubleshooting scenarios with debugging steps
+   - **Scripts README** (`backend/scripts/README.md`):
+     - New section: "Season Template Apply Smoke Test"
+     - What it tests: 7 tests covering dry-run, merge, replace, conflicts
+     - Usage: Required/optional env vars, example commands
+     - Expected output: Full test output example
+     - Troubleshooting: Test-specific failure scenarios
+   - **Project Status** (`backend/docs/project_status.md`):
+     - This entry documenting the feature
+
+**Technical Details:**
+
+**Dry-Run Preview:**
+- Request with `dry_run: true` performs all validation and conflict detection
+- Calculates exactly what changes would be made (archive IDs, create list, update list)
+- Returns comprehensive response with summary counts
+- NO database writes committed
+- Use case: UI preview dialog before user confirmation
+
+**Atomic Apply:**
+- All database writes wrapped in `async with db.transaction()`
+- Prevents partial updates (e.g., archived old seasons but failed to create new)
+- If ANY operation fails, entire transaction rolls back
+- Ensures atomicity: either all changes succeed or none do
+
+**Conflict Detection (Merge Mode):**
+- Detects date range overlaps between template periods and existing active seasons
+- Overlap rule: `period.date_from < existing.date_to AND period.date_to > existing.date_from`
+- Returns 422 Unprocessable Entity with detailed conflicts array
+- Each conflict includes: period label, period dates, conflicting season ID, conflicting dates, message
+- NO changes applied when conflicts detected (fails fast)
+
+**Replace Mode:**
+- Archives ALL existing active seasons (sets archived_at timestamp)
+- Creates new seasons from template periods (copies label, date_from, date_to)
+- NO conflict detection (always replaces everything)
+- Use case: Full reset of seasonal pricing
+
+**Merge Mode:**
+- Keeps existing active seasons unchanged
+- Adds new seasons from template periods
+- Conflict detection enabled (returns 422 if overlaps)
+- Use case: Add new seasons without losing existing configuration
+
+**Response Structure:**
+```typescript
+{
+  status: "ok" | "error",
+  dry_run: boolean,
+  rate_plan_id: UUID,
+  template_id: UUID,
+  mode: "replace" | "merge",
+  summary: {
+    existing_active: number,
+    would_archive: number,
+    would_create: number,
+    would_update: number,
+    conflicts: number
+  },
+  changes: {
+    archive_season_ids: UUID[],
+    create: SeasonChange[],
+    update: SeasonChange[]
+  },
+  conflicts: SeasonConflict[]
+}
+```
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- IMPLEMENTED status requires: Backend API complete, UI preview dialog complete, smoke script passing, docs updated
+- VERIFIED status requires: PROD deployment, smoke script rc=0 on PROD, manual UI verification with evidence
+- Dry-run preview allows users to see changes before committing
+- Transaction wrapping prevents database inconsistencies
+- Conflict detection in merge mode prevents accidental overlaps
+- Replace mode uses soft delete (archived_at) for audit trail
+
+**Dependencies:**
+- Existing tables: rate_plans, rate_plan_seasons, season_templates, season_template_periods
+- Pydantic schemas: pricing.py with new response models
+- Frontend: React state management, preview dialog component
+- Backend: asyncpg transaction support
+
+**Files Changed:**
+- Backend:
+  - `backend/app/schemas/pricing.py` (MODIFIED) - Added dry_run parameter and response models
+  - `backend/app/api/routes/pricing.py` (MODIFIED) - Enhanced endpoint with dry-run, transaction, conflict detection
+  - `backend/scripts/pms_season_template_apply_smoke.sh` (NEW) - Smoke test script
+- Frontend:
+  - `frontend/app/pricing/rate-plans/page.tsx` (MODIFIED) - Added preview dialog, state management, confirm flow
+- Documentation:
+  - `backend/docs/ops/runbook.md` (ADD-ONLY) - Appended P2.4 section
+  - `backend/scripts/README.md` (ADD-ONLY) - Appended smoke script docs
+  - `backend/docs/project_status.md` (ADD-ONLY) - This entry
+
+**Verification Commands (for VERIFIED status later):**
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify deploy (optional)
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# Run smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<manager/admin JWT>>>"
+./backend/scripts/pms_season_template_apply_smoke.sh
+echo "rc=$?"
+
+# Manual UI verification
+# 1. Login as manager/admin user
+# 2. Navigate to /pricing/rate-plans
+# 3. Click "Templates" tab
+# 4. Create test season template with 2 periods
+# 5. Click "Tarifpläne" tab
+# 6. Create test rate plan
+# 7. Click "Seasons" for the rate plan
+# 8. Click "Vorschau" button on template dropdown
+# 9. Verify preview dialog shows summary (would_create: 2)
+# 10. Click "Anwenden" to confirm
+# 11. Verify toast success message
+# 12. Verify seasons list shows 2 new seasons
+# 13. Try applying same template again (merge mode)
+# 14. Verify preview shows conflicts warning (red box)
+# 15. Try replace mode - verify archives existing and creates new
+```
+
+---
