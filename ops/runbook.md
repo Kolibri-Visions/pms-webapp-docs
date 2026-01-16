@@ -31670,3 +31670,231 @@ curl -X POST "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/apply-season-templat
 - If backend response is wrong: Fix backend logic (check pricing.py summary calculation)
 
 ---
+
+---
+
+## P2.5 Pricing: Quote v2 (Seasonal Breakdown + Fees + Taxes)
+
+**Overview:** Enhanced quote calculation with per-night seasonal pricing breakdown.
+
+**Purpose:** Provide accurate pricing quotes for booking requests with detailed breakdown showing seasonal rates applied to each night, plus fees and taxes.
+
+**Architecture:**
+- **Per-Night Calculation**: Loops through each night from check_in to check_out-1, queries rate_plan_seasons for applicable season
+- **Seasonal Pricing**: Each night gets rate from matching season (if any) or falls back to base_nightly_cents
+- **Breakdown Response**: Returns `nights_breakdown` array with date, nightly_cents, season_label, season_id for each night
+- **Fees & Taxes**: Applies pricing_fees and pricing_taxes from database (property-specific or agency-wide)
+- **Backward Compatibility**: Maintains existing `nightly_cents` field (set to first night's rate)
+
+**API Endpoints:**
+
+Staff (manager/admin/owner):
+- `POST /api/v1/pricing/quote`
+  - Request body: `QuoteRequest`
+    - `property_id`: UUID (required)
+    - `rate_plan_id`: UUID (required)
+    - `check_in`: date (required)
+    - `check_out`: date (required)
+    - `adults`: int (default: 1, range: 1-20)
+    - `children`: int (default: 0, range: 0-20)
+  - Response: `QuoteResponse`
+    - `property_id`, `rate_plan_id`, `check_in`, `check_out`, `nights`
+    - `nightly_cents`: int (first night's rate, for compatibility)
+    - `nights_breakdown`: list[NightBreakdown]
+      - `date`: date (the night date)
+      - `nightly_cents`: int (rate for this specific night)
+      - `season_label`: string | null (season name if applied)
+      - `season_id`: UUID | null (season ID if applied)
+    - `subtotal_cents`: int (sum of all night prices)
+    - `fees`: list[FeeLineItem] (name, type, amount_cents, taxable)
+    - `fees_total_cents`: int
+    - `taxable_amount_cents`: int (subtotal + taxable fees)
+    - `taxes`: list[TaxLineItem] (name, percent, amount_cents)
+    - `taxes_total_cents`: int
+    - `total_cents`: int (subtotal + fees + taxes)
+    - `currency`: string (e.g., "EUR")
+    - `message`: string | null (info message if no pricing configured)
+  - Status codes:
+    - 200 OK: Quote calculated successfully
+    - 400 Bad Request: Invalid input (check_in >= check_out, invalid dates)
+    - 404 Not Found: Property or rate plan not found
+    - 422 Unprocessable Entity: Rate plan resolver error (multiple plans, no default)
+
+**Per-Night Calculation Logic:**
+1. Loop: For each date from check_in to check_out-1
+2. Query rate_plan_seasons:
+   - WHERE rate_plan_id = $1 AND $2 >= date_from AND $2 < date_to AND active = true AND archived_at IS NULL
+   - ORDER BY date_from DESC LIMIT 1 (most recent season wins on overlaps)
+3. Use season.nightly_cents if found and not null, else use rate_plan.base_nightly_cents
+4. Build nights_breakdown array
+5. Calculate subtotal_cents as sum of all night prices
+
+**Example Quote Response (Spanning Two Seasons):**
+```json
+{
+  "property_id": "...",
+  "rate_plan_id": "...",
+  "check_in": "2026-02-10",
+  "check_out": "2026-02-20",
+  "nights": 10,
+  "adults": 2,
+  "children": 0,
+  "nightly_cents": 10000,
+  "nights_breakdown": [
+    {"date": "2026-02-10", "nightly_cents": 10000, "season_label": "Nebensaison", "season_id": "..."},
+    {"date": "2026-02-11", "nightly_cents": 10000, "season_label": "Nebensaison", "season_id": "..."},
+    {"date": "2026-02-12", "nightly_cents": 10000, "season_label": "Nebensaison", "season_id": "..."},
+    {"date": "2026-02-13", "nightly_cents": 10000, "season_label": "Nebensaison", "season_id": "..."},
+    {"date": "2026-02-14", "nightly_cents": 10000, "season_label": "Nebensaison", "season_id": "..."},
+    {"date": "2026-02-15", "nightly_cents": 15000, "season_label": "Hauptsaison", "season_id": "..."},
+    {"date": "2026-02-16", "nightly_cents": 15000, "season_label": "Hauptsaison", "season_id": "..."},
+    {"date": "2026-02-17", "nightly_cents": 15000, "season_label": "Hauptsaison", "season_id": "..."},
+    {"date": "2026-02-18", "nightly_cents": 15000, "season_label": "Hauptsaison", "season_id": "..."},
+    {"date": "2026-02-19", "nightly_cents": 15000, "season_label": "Hauptsaison", "season_id": "..."}
+  ],
+  "subtotal_cents": 125000,
+  "fees": [
+    {"name": "Cleaning Fee", "type": "per_stay", "amount_cents": 5000, "taxable": true}
+  ],
+  "fees_total_cents": 5000,
+  "taxable_amount_cents": 130000,
+  "taxes": [
+    {"name": "VAT", "percent": 10.0, "amount_cents": 13000}
+  ],
+  "taxes_total_cents": 13000,
+  "total_cents": 143000,
+  "currency": "EUR"
+}
+```
+
+**Admin UI:**
+- Location: `/pricing/quote`
+- Features:
+  - Property dropdown (auto-selects first)
+  - Rate plan dropdown (fetches plans for selected property)
+  - Date range inputs (check-in, check-out)
+  - Guests inputs (adults, children)
+  - "Berechnen" button triggers quote calculation
+  - Breakdown display: nights table (date, season, price), subtotal, fees, taxes, grand total
+  - German labels throughout
+  - Toast notifications for errors
+
+**Verification Commands:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# [HOST-SERVER-TERMINAL] Optional: Verify deploy after Coolify redeploy
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# [HOST-SERVER-TERMINAL] Run P2.5 smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="<<<manager/admin JWT>>>"
+# Optional:
+# export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
+# export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+./backend/scripts/pms_pricing_quote_v2_smoke.sh
+echo "rc=$?"
+
+# Expected output: All 7 tests pass, rc=0
+```
+
+**Common Issues:**
+
+### Subtotal Mismatch (Seasonal Pricing Not Applied)
+
+**Symptom:** Quote subtotal_cents doesn't match expected seasonal rates (e.g., expected 125000 for 5×10000 + 5×15000, got 100000).
+
+**Root Cause:** Per-night loop not querying seasons correctly, or falling back to base rate for all nights.
+
+**How to Debug:**
+```bash
+# Test quote with seasonal override
+curl -X POST "$HOST/api/v1/pricing/quote" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "property_id": "<property_id>",
+    "rate_plan_id": "<rate_plan_id>",
+    "check_in": "2026-02-10",
+    "check_out": "2026-02-20",
+    "adults": 2
+  }' | jq '{nights, subtotal_cents, nights_breakdown}'
+
+# Check if nights_breakdown shows correct season labels and rates
+# Each entry should show which season (if any) was applied to that night
+```
+
+**Solution:**
+- Verify season query WHERE clause: `date >= date_from AND date < date_to`
+- Check season date ranges don't have gaps (nights between seasons use base rate)
+- Ensure seasons are active and not archived
+
+### nights_breakdown Field Missing
+
+**Symptom:** Quote response doesn't include `nights_breakdown` field.
+
+**Root Cause:** Old version of backend before P2.5 deployed.
+
+**How to Debug:**
+```bash
+# Check deployed version
+curl -sS "$HOST/api/v1/ops/version" | jq '.source_commit'
+
+# Compare with expected commit (P2.5 implementation)
+# P2.5 should be in commit with message "p2.5: pricing quote v2 breakdown + ui + smoke"
+```
+
+**Solution:**
+- Deploy latest main branch with P2.5 changes
+- Verify backend/app/schemas/pricing.py includes `NightBreakdown` class
+- Verify backend/app/api/routes/pricing.py enhanced calculate_quote endpoint
+
+### Quote Returns 422 (Rate Plan Resolver Error)
+
+**Symptom:** POST /api/v1/pricing/quote returns 422 with message about multiple rate plans or no default.
+
+**Root Cause:** Property has multiple active rate plans and no default set, or rate_plan_id not provided.
+
+**How to Debug:**
+```bash
+# Check rate plans for property
+curl -X GET "$HOST/api/v1/pricing/rate-plans?property_id=<property_id>" \
+  -H "Authorization: Bearer $JWT_TOKEN" | jq '.[] | {id, name, is_default, property_id}'
+
+# Look for is_default=true entry, or count how many plans exist
+```
+
+**Solution:**
+- Option 1: Provide `rate_plan_id` explicitly in quote request
+- Option 2: Set one rate plan as default: PATCH /api/v1/pricing/rate-plans/{id} {"is_default": true}
+- Option 3: If only one rate plan exists, it should auto-select (no default needed)
+
+### Fees or Taxes Not Applied
+
+**Symptom:** Quote response shows fees_total_cents=0 or taxes_total_cents=0 when fees/taxes exist.
+
+**Root Cause:** Fees/taxes inactive, or property_id filter not matching.
+
+**How to Debug:**
+```bash
+# Check fees for property
+curl -X GET "$HOST/api/v1/pricing/fees?property_id=<property_id>" \
+  -H "Authorization: Bearer $JWT_TOKEN" | jq '.[] | {id, name, type, value_cents, active, property_id}'
+
+# Check taxes for property
+curl -X GET "$HOST/api/v1/pricing/taxes?property_id=<property_id>" \
+  -H "Authorization: Bearer $JWT_TOKEN" | jq '.[] | {id, name, percent, active, property_id}'
+
+# Verify active=true and property_id matches or is null (agency-wide)
+```
+
+**Solution:**
+- Ensure fees/taxes have active=true
+- Property-specific fees/taxes (property_id != null) override agency-wide (property_id IS NULL)
+- Check fee type is valid: per_stay, per_night, per_person, percent
+
+---

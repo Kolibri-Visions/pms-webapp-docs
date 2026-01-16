@@ -8631,3 +8631,210 @@ echo "rc=$?"
 ```
 
 ---
+
+# P2.5 Pricing — Quote v2: Seasonal Breakdown + Fees + Taxes
+
+**Implementation Date:** 2026-01-17
+
+**Scope:** Enhanced quote calculation endpoint with per-night seasonal pricing breakdown, plus comprehensive fees and taxes calculation.
+
+**Features Implemented:**
+
+1. **Enhanced Pydantic Schemas** (`backend/app/schemas/pricing.py`):
+   - Added `NightBreakdown`: Per-night pricing detail (date, nightly_cents, season_label, season_id)
+   - Updated `QuoteResponse`: Added `nights_breakdown: list[NightBreakdown]` field
+   - Updated `nightly_cents` description to indicate backward compatibility (first night's rate)
+   - Updated `subtotal_cents` description to reflect sum of all nights (not nights × single rate)
+
+2. **Enhanced API Endpoint** (`backend/app/api/routes/pricing.py` line ~1358):
+   - POST /api/v1/pricing/quote
+   - **Per-Night Calculation**: Loops through each night from check_in to check_out-1
+   - **Seasonal Query**: For each night, queries rate_plan_seasons to find applicable season
+     - WHERE rate_plan_id = $1 AND $2 >= date_from AND $2 < date_to AND active = true AND archived_at IS NULL
+     - ORDER BY date_from DESC LIMIT 1 (most recent season wins on overlaps)
+   - **Rate Selection**: Uses season.nightly_cents if found, else base_nightly_cents
+   - **Breakdown Building**: Constructs nights_breakdown array with date, rate, season info for each night
+   - **Subtotal Calculation**: Sum of all night prices (accurate for multi-season stays)
+   - **Fees & Taxes**: Existing logic unchanged (property-specific or agency-wide)
+   - **Backward Compatibility**: Sets `nightly_cents` to first night's rate for old clients
+
+3. **Admin UI** (`frontend/app/pricing/quote/page.tsx`):
+   - New route: `/pricing/quote` - "Preis berechnen" (Calculate Price)
+   - Left panel - Form inputs:
+     - Property dropdown (auto-selects first)
+     - Rate plan dropdown (fetches plans for selected property)
+     - Date range: check-in and check-out (HTML date inputs)
+     - Guests: adults (default 2) and children (default 0) number inputs
+     - "Berechnen" button triggers POST /api/v1/pricing/quote
+   - Right panel - Quote breakdown (German labels):
+     - Summary: dates, nights, guest count
+     - Nights breakdown table: "Nacht" (Date), "Saison" (Season label), "Preis" (Price per night)
+     - "Unterkunft gesamt" (Accommodation subtotal)
+     - Fees list: Name + Amount
+     - Taxes list: Name (%) + Amount
+     - "Gesamtpreis" (Grand Total) in highlighted green box
+   - Error handling: 400/404/422 with German toast messages
+   - Loading states: spinner, disabled buttons
+   - Empty state: "Wählen Sie eine Unterkunft und einen Tarifplan"
+
+4. **Smoke Script** (`backend/scripts/pms_pricing_quote_v2_smoke.sh`):
+   - Test 1: Create test rate plan (base_nightly_cents=10000)
+   - Test 2: Create season 1 (Nebensaison 2026-02-01 to 2026-02-15 @ 10000)
+   - Test 3: Create season 2 (Hauptsaison 2026-02-15 to 2026-02-28 @ 15000)
+   - Test 4: Create test cleaning fee (5000 cents, per_stay, taxable)
+   - Test 5: Create test tax (10% VAT)
+   - Test 6: Quote spanning two seasons (2026-02-10 to 2026-02-20):
+     - Verify 10 nights total
+     - Verify nights_breakdown field exists
+     - Verify breakdown has 2 entries: Nebensaison (5×10000) + Hauptsaison (5×15000)
+     - Verify subtotal = 125000 cents
+     - Verify fees >= 5000, taxes > 0
+     - Verify total = subtotal + fees + taxes
+   - Test 7: Quote with no seasonal override (2026-03-01 to 2026-03-05):
+     - Verify 4 nights @ base rate 10000
+     - Verify subtotal = 40000 cents
+   - Automatic cleanup via trap handler (PROD-safe)
+
+5. **Documentation** (DOCS SAFE MODE - add-only):
+   - **Runbook** (`backend/docs/ops/runbook.md`):
+     - New section: "P2.5 Pricing: Quote v2 (Seasonal Breakdown + Fees + Taxes)"
+     - Architecture: per-night calculation, seasonal query, breakdown response
+     - API endpoints: POST /quote with request/response examples
+     - Example response showing nights_breakdown spanning two seasons
+     - Admin UI description and features
+     - Verification commands for PROD testing
+     - Common issues: 5 troubleshooting scenarios with debugging steps
+   - **Scripts README** (`backend/scripts/README.md`):
+     - New section: "Pricing Quote v2 Smoke Test"
+     - What it tests: 7 tests covering seasonal pricing, fees, taxes
+     - Usage: Required/optional env vars, example commands
+     - Expected output: Full test output example with breakdown verification
+     - Troubleshooting: Test-specific failure scenarios
+   - **Project Status** (`backend/docs/project_status.md`):
+     - This entry documenting the feature
+
+**Technical Details:**
+
+**Per-Night Pricing Algorithm:**
+1. Initialize empty nights_breakdown array
+2. current_date = check_in
+3. Loop while current_date < check_out:
+   - Query rate_plan_seasons for season matching current_date
+   - If season found and season.nightly_cents not null: use season rate
+   - Else: use rate_plan.base_nightly_cents
+   - Append NightBreakdown(date=current_date, nightly_cents=rate, season_label=label, season_id=id)
+   - current_date += 1 day
+4. subtotal_cents = sum(night.nightly_cents for night in nights_breakdown)
+5. nightly_cents = nights_breakdown[0].nightly_cents (for compatibility)
+
+**Seasonal Query:**
+```sql
+SELECT id, label, nightly_cents
+FROM rate_plan_seasons
+WHERE rate_plan_id = $1
+  AND $2 >= date_from
+  AND $2 < date_to
+  AND active = true
+  AND archived_at IS NULL
+ORDER BY date_from DESC
+LIMIT 1
+```
+- Date comparison: night date must be >= date_from AND < date_to (date_to is exclusive)
+- Active filter: only considers active=true seasons
+- Archived filter: excludes archived_at IS NOT NULL seasons
+- Overlap handling: ORDER BY date_from DESC picks most recent season if multiple match
+
+**Backward Compatibility:**
+- Maintains all existing QuoteResponse fields
+- `nightly_cents` field still present (set to first night's rate)
+- `subtotal_cents` calculation changed from nights × single rate to sum of all nights
+- Old API clients without nights_breakdown awareness still work (use nightly_cents and subtotal_cents)
+
+**Example Calculation (Spanning Seasons):**
+```
+Input:
+  check_in: 2026-02-10
+  check_out: 2026-02-20 (10 nights)
+  rate_plan.base_nightly_cents: 10000
+  Season 1: Nebensaison 2026-02-01 to 2026-02-15 @ 10000
+  Season 2: Hauptsaison 2026-02-15 to 2026-02-28 @ 15000
+
+Breakdown:
+  2026-02-10: 10000 (Nebensaison)
+  2026-02-11: 10000 (Nebensaison)
+  2026-02-12: 10000 (Nebensaison)
+  2026-02-13: 10000 (Nebensaison)
+  2026-02-14: 10000 (Nebensaison)
+  2026-02-15: 15000 (Hauptsaison) ← season change
+  2026-02-16: 15000 (Hauptsaison)
+  2026-02-17: 15000 (Hauptsaison)
+  2026-02-18: 15000 (Hauptsaison)
+  2026-02-19: 15000 (Hauptsaison)
+
+Subtotal: (5 × 10000) + (5 × 15000) = 50000 + 75000 = 125000 cents
+```
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- IMPLEMENTED status requires: Backend API enhanced, nights_breakdown field added, Admin UI complete, smoke script passing, docs updated
+- VERIFIED status requires: PROD deployment, smoke script rc=0 on PROD, manual UI verification with evidence
+- Per-night calculation ensures accurate pricing for stays spanning multiple seasons
+- Backward compatibility maintained for existing API consumers
+- Admin UI provides user-friendly quote calculator with detailed breakdown
+
+**Dependencies:**
+- Existing tables: rate_plans, rate_plan_seasons, pricing_fees, pricing_taxes, properties
+- Pydantic schemas: pricing.py with NightBreakdown model
+- Frontend: React state management, useAuth context, apiClient
+- Backend: asyncpg for database queries, timedelta for date iteration
+
+**Files Changed:**
+- Backend:
+  - `backend/app/schemas/pricing.py` (MODIFIED) - Added NightBreakdown class, updated QuoteResponse
+  - `backend/app/api/routes/pricing.py` (MODIFIED) - Enhanced calculate_quote endpoint with per-night loop
+  - `backend/scripts/pms_pricing_quote_v2_smoke.sh` (NEW) - Smoke test script
+- Frontend:
+  - `frontend/app/pricing/quote/page.tsx` (NEW) - Quote calculator admin UI
+- Documentation:
+  - `backend/docs/ops/runbook.md` (ADD-ONLY) - Appended P2.5 section
+  - `backend/scripts/README.md` (ADD-ONLY) - Appended smoke script docs
+  - `backend/docs/project_status.md` (ADD-ONLY) - This entry
+
+**Verification Commands (for VERIFIED status later):**
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify deploy (optional)
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# Run smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="<<<manager/admin JWT>>>"
+./backend/scripts/pms_pricing_quote_v2_smoke.sh
+echo "rc=$?"
+
+# Manual UI verification
+# 1. Login as manager/admin user
+# 2. Navigate to /pricing/quote
+# 3. Select property from dropdown
+# 4. Select rate plan for that property
+# 5. Enter date range spanning two seasons (e.g., 2026-02-10 to 2026-02-20)
+# 6. Enter guest count (e.g., 2 adults, 0 children)
+# 7. Click "Berechnen" button
+# 8. Verify quote breakdown displays:
+#    - Nights table with dates, season labels, and prices
+#    - Subtotal shows sum of all nights
+#    - Fees section shows cleaning fee and other fees
+#    - Taxes section shows VAT or other taxes
+#    - Grand total highlighted in green
+# 9. Try quote with no seasonal override (dates outside seasons)
+# 10. Verify uses base_nightly_cents for all nights
+# 11. Try quote with single season (all nights in one season)
+# 12. Verify all nights show same season label
+```
+
+---
