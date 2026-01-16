@@ -3659,6 +3659,12 @@ echo "rc=$?"
    - Helper text explaining agency-wide templates vs property-specific rate plans
    - German localization throughout
 
+10. **Bugfix — Update Template with New Periods (2026-01-16)**:
+   - Fixed "Period not found" error when editing template to add periods
+   - Backend now uses replace-all strategy for period updates
+   - UI omits client-generated IDs in update payload
+   - Smoke script regression test added (create empty → update add periods)
+
 **Architecture:**
 - Templates are agency-scoped (reusable across properties)
 - Apply action copies template periods to rate plan seasons

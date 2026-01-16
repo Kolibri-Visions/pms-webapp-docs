@@ -23611,6 +23611,17 @@ curl -X GET "$HOST/api/v1/pricing/fees?property_id=<uuid>&active=false" \
 - Note: Templates are agency-wide, NOT property-specific
 - Application to rate plans: `/pricing/rate-plans` (per-property pricing)
 
+### Template Update - Adding Periods to Empty Template
+
+**Context:** Templates can be created with zero periods and later edited to add periods.
+
+**Behavior:** Update endpoint uses replace-all strategy:
+- All existing periods are deleted
+- New periods from request are inserted with fresh IDs
+- Previous period IDs are not preserved across updates
+
+**Bugfix (2026-01-16):** Prior version attempted to update periods by ID, causing "Period not found" errors when adding new periods. Replace-all strategy eliminates this issue.
+
 **Apply Modes:**
 - **replace**: Deletes existing rate plan seasons, inserts new ones from template
 - **merge**: Adds missing periods, skips overlaps (basic implementation)
