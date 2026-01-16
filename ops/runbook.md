@@ -23602,6 +23602,15 @@ curl -X GET "$HOST/api/v1/pricing/fees?property_id=<uuid>&active=false" \
 - POST /api/v1/pricing/rate-plans/{id}/apply-season-template (apply template to rate plan)
 - GET /api/v1/pricing/rate-plans/{id} (fetch single rate plan with seasons)
 
+**Admin UI:**
+- Route: `/pricing/seasons` (Saisons (Agentur))
+- Create templates with periods (label, date_from, date_to)
+- Edit templates and periods (add/remove/update dates and labels)
+- Archive templates
+- Period count display in template list
+- Note: Templates are agency-wide, NOT property-specific
+- Application to rate plans: `/pricing/rate-plans` (per-property pricing)
+
 **Apply Modes:**
 - **replace**: Deletes existing rate plan seasons, inserts new ones from template
 - **merge**: Adds missing periods, skips overlaps (basic implementation)

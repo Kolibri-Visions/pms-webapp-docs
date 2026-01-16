@@ -3651,30 +3651,21 @@ echo "rc=$?"
    - Returns rate plan with seasons[] for verification
    - Fixes Test 5 in smoke script (previous 405 error)
 
+9. **Admin UI — Periods Management (2026-01-16)**:
+   - Upgraded `/pricing/seasons` page to fully manage template periods
+   - Create templates with multiple date ranges (Hauptsaison, Mittelsaison, Nebensaison)
+   - Edit template periods (add/remove/update dates and labels)
+   - Period count display in template list
+   - Helper text explaining agency-wide templates vs property-specific rate plans
+   - German localization throughout
+
 **Architecture:**
 - Templates are agency-scoped (reusable across properties)
 - Apply action copies template periods to rate plan seasons
 - Quote resolution unchanged (uses property-scoped rate plan seasons only)
 - No changes to existing quote semantics
 
-**Status:** ✅ VERIFIED
-
-**PROD Evidence (Verified: 2026-01-16; commit 8dcf0d7):**
-- **Verification Date**: 2026-01-16
-- **API Base URL**: https://api.fewo.kolibri-visions.de
-- **Source Commit**: 8dcf0d78a1b7f9e7e59a27f54e0d4fde6ddf8441
-- **Backend Started**: 2026-01-16T14:05:54.954742+00:00
-- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh` with EXPECT_COMMIT=8dcf0d7 → rc=0 (commit match)
-- **Smoke Test**: `backend/scripts/pms_season_templates_smoke.sh` → rc=0 (all 5 tests passed)
-- **Tests Verified**:
-  - Create template with 3 periods (Hauptsaison, Mittelsaison, Nebensaison)
-  - List templates - verify template exists
-  - Create property-scoped rate plan
-  - Apply template to rate plan (replace mode)
-  - Verify 3 seasons created with correct dates and nightly_cents=10000
-  - Cleanup archived successfully
-- **Migration Applied**: supabase/migrations/20260116000000_add_season_templates.sql
-- **Tables Verified**: pricing_season_templates, pricing_season_template_periods
+**Status:** ✅ IMPLEMENTED
 
 **Notes:**
 - Templates are reusable patterns; actual pricing still property-specific via rate plans
@@ -3684,6 +3675,23 @@ echo "rc=$?"
 **Dependencies:**
 - P2 Pricing v1 Foundation (Rate Plans + Seasons) ✅ VERIFIED
 - Migration 20260116000000 (season templates tables)
+
+**Verification Commands (for VERIFIED status later):**
+```bash
+# Deploy verification
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# Run season templates smoke test
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<manager/admin JWT>>>"
+export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
+./backend/scripts/pms_season_templates_smoke.sh
+echo "rc=$?"
+
+# Expected output: All tests pass, rc=0
+```
 
 ---
 
