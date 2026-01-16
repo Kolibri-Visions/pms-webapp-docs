@@ -3797,7 +3797,26 @@ echo "rc=$?"
 **Bugfix (2026-01-17):**
 - Hotfix: Fixed startup crash due to missing `RatePlanSeasonCreate` import in `backend/app/api/routes/pricing.py`. Symptoms: NameError at module import time causing pms-backend restart loop. Solution: Added explicit import of `RatePlanSeasonCreate` to schema imports (commit: hotfix/pricing-seasons-import).
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
+
+**PROD Evidence (Verified: 2026-01-16):**
+- **Verification Date**: 2026-01-16
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Backend Source Commit**: 9b8d44f2aa23844a89ac0ae17484456b0730ec57
+- **Backend Started**: 2026-01-16T20:52:04.271454+00:00
+- **Environment**: development
+- **Deploy Verification**: /health=200, /health/ready=200 (db up, redis up, celery up), /api/v1/ops/version=200
+- **Smoke Test**: `backend/scripts/pms_rate_plan_seasons_smoke.sh` → rc=0 (all 8 tests passed)
+- **Tests Verified**: Property: 23dd8fda-59ae-4b2f-8489-7a90f5d46c66, Rate Plan: 2080ef68-a1bb-4bc8-b7d1-19983ee61f8a, Season1: 795a8d17-982d-4ca4-9091-360329fea433, Season2: c0cc3935-9f1c-4381-a8b2-c9c8b81a70f6
+  - Test 1 ✅: Created Season 1 (Hauptsaison)
+  - Test 2 ✅: Created Season 2 (Nebensaison)
+  - Test 3 ✅: Listed 2 seasons, sorted by date_from
+  - Test 4 ✅: Overlap validation rejected (422)
+  - Test 5 ✅: Updated Season 1 price
+  - Test 6 ✅: Invalid date range rejected (422)
+  - Test 7 ✅: Deleted Season 2 (204 No Content)
+  - Test 8 ✅: Archived season not in list (count=1)
+  - Cleanup: Test rate plan archived successfully
 
 **How to Verify in PROD:**
 
