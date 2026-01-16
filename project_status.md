@@ -4437,7 +4437,7 @@ echo "rc=$?"
 - **Smoke Test Isolation**: Fail-fast if property has existing plans; auto-select clean property if PROPERTY_ID not set
 - **Resolver Consistency**: Resolver already property-only (no agency fallback); validation enforces same model at CRUD level
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
 
 **Notes:**
 - Admin UI at /pricing/rate-plans exists but needs property context integration (follow-up task)
@@ -4471,6 +4471,24 @@ echo "rc=$?"
 # Expected output: All 7 tests pass, rc=0
 ```
 
+
+**PROD Evidence (Verified: 2026-01-16; commit 7af1dc2):**
+- **Verification Date**: 2026-01-16
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Source Commit**: 7af1dc25e43e1f51d2f6b07a6911590b9dfc48a5
+- **Backend Started**: 2026-01-16T08:53:03.967044+00:00
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh` → rc=0 (commit match; /api/v1/ops/version returned expected commit)
+- **Smoke Test**: `backend/scripts/pms_rate_plans_crud_smoke.sh` → rc=0 (all 7 tests passed)
+- **Property-Scoped Model Verified**:
+  - Property-specific rate plans (property_id = UUID): Can be set as default for quotes
+  - Agency-level rate plans (property_id IS NULL): Templates only, **cannot** be set as is_default=true (HTTP 400 enforced)
+  - Create Plan A (property default) → success
+  - Create Plan B (property non-default) → success
+  - Set Plan B as default → Plan A is_default=false (auto-unset verified)
+  - Archive semantics verified: archived_at set, active=false, is_default=false
+  - List filtering verified: archived plans excluded by default, include_archived=true shows them
+  - Forbid agency template default verified: POST with property_id=null, is_default=true → HTTP 400
+- **PROD-Safe Execution**: Isolated property; cleanup archives only SMOKE_RATEPLANS_* plans
 ---
 
 # P3a: Idempotency + Audit Log (Public Booking Requests)
