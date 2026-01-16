@@ -3740,6 +3740,102 @@ echo "rc=$?"
 
 ---
 
+## P2.2 Pricing — Rate Plan Seasons Editor
+
+**Implementation Date:** 2026-01-17
+
+**Scope:** Manual seasons editing interface for property-scoped rate plans with CRUD operations and template application.
+
+**Features Implemented:**
+
+1. **Database Migration** (`supabase/migrations/20260117000000_add_rate_plan_seasons_label_archived.sql`):
+   - Added `label TEXT NULL` column to `rate_plan_seasons` table for optional season names
+   - Added `archived_at TIMESTAMPTZ NULL` column for soft deletes
+   - Created index `idx_rate_plan_seasons_archived_at` for efficient filtering
+   - Updated table comment to reflect P2.2 manual editing support
+
+2. **Pydantic Schemas** (`backend/app/schemas/pricing.py`):
+   - Updated `RatePlanSeasonCreate`: Added `label` field (optional, max 255 chars)
+   - Updated `RatePlanSeasonResponse`: Added `label` and `archived_at` fields
+
+3. **API Routes** (`backend/app/api/routes/pricing.py`):
+   - GET `/api/v1/pricing/rate-plans/{rate_plan_id}/seasons` - List seasons (sorted by date_from)
+   - POST `/api/v1/pricing/rate-plans/{rate_plan_id}/seasons` - Create season (201)
+   - PATCH `/api/v1/pricing/rate-plans/{rate_plan_id}/seasons/{season_id}` - Update season
+   - DELETE `/api/v1/pricing/rate-plans/{rate_plan_id}/seasons/{season_id}` - Soft delete (204)
+   - Validation: Overlap detection (422), date range validation (422), price validation (422)
+   - RBAC: All endpoints require manager/admin role
+   - Tenant isolation: All operations scoped by agency_id via rate plan ownership
+
+4. **Admin UI** (`frontend/app/pricing/rate-plans/page.tsx`):
+   - Added "Seasons" button to each rate plan row in property tab
+   - Implemented comprehensive Seasons Editor modal with three sections:
+     - Current seasons list (table with label, dates, price, active status, actions)
+     - Add/Edit season form (label, date_from, date_to, nightly_cents, active)
+     - Apply template section (dropdown, replace/merge mode selection)
+   - Client-side validation (date ranges, price > 0)
+   - API error handling (422 overlaps, 404 not found)
+   - Success/error feedback via toasts
+   - German UI text throughout
+
+5. **Smoke Script** (`backend/scripts/pms_rate_plan_seasons_smoke.sh`):
+   - Test 1: Create Season 1 (Hauptsaison) - expect 201
+   - Test 2: Create Season 2 (Nebensaison) - expect 201
+   - Test 3: List seasons - verify count=2, sorted
+   - Test 4: Attempt overlap - expect 422 rejection
+   - Test 5: Update season price - expect 200
+   - Test 6: Attempt invalid date range - expect 422 rejection
+   - Test 7: Delete season - expect 204 No Content
+   - Test 8: Verify deleted season not listed - expect count=1
+   - Cleanup: Archive test rate plan
+   - Return rc=0 on success
+
+6. **Documentation** (add-only, DOCS SAFE MODE):
+   - `backend/docs/ops/runbook.md`: New section "P2.2 Rate Plan Seasons Editor" with endpoints, validation rules, verification commands, and troubleshooting
+   - `backend/scripts/README.md`: Complete smoke script documentation with usage, env vars, expected output, API endpoints tested, troubleshooting
+
+**Status:** ✅ IMPLEMENTED
+
+**How to Verify in PROD:**
+
+```bash
+# 1. Verify backend commit matches
+export API_BASE="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# 2. Run smoke script
+export HOST="https://api.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="<manager/admin JWT>"
+./backend/scripts/pms_rate_plan_seasons_smoke.sh
+echo "rc=$?"
+
+# Expected: rc=0, all 8 tests pass
+
+# 3. Manual UI verification
+# - Login as manager/admin
+# - Navigate to /pricing/rate-plans
+# - Select a property
+# - Click "Seasons" button on a rate plan
+# - Verify seasons editor modal opens
+# - Test create/edit/delete seasons
+# - Test apply template functionality
+# - Verify validation errors (overlap, invalid date range)
+```
+
+**Dependencies:**
+- Supabase Database (rate_plan_seasons table)
+- Pricing P2 foundation (rate_plans table)
+- Season Templates P2.1 (apply template feature)
+
+**Notes:**
+- Seasons are **property-scoped** (tied to property-scoped rate plans)
+- Templates are **agency-scoped** (can be applied to any property's rate plan)
+- Overlap detection prevents conflicting active seasons on the same rate plan
+- Soft delete preserves historical data (archived_at timestamp)
+- Admin UI provides immediate feedback with German translations
+
+---
+
 # P2 Extension: Pricing Fees and Taxes
 
 **Implementation Date:** 2026-01-08

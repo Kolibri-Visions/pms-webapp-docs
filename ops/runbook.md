@@ -22765,6 +22765,127 @@ AGENCY_ID="<uuid>" \
 
 ---
 
+## P2.2 Rate Plan Seasons Editor
+
+**Overview:** Manual seasons editing interface for property-scoped rate plans.
+
+**Purpose:** Allow staff to create/edit/delete seasonal pricing overrides directly on rate plans, with template application as a convenience feature.
+
+**Architecture:**
+- **UI Location**: `/pricing/rate-plans` → "Seasons" button per rate plan
+- **API Endpoints**: CRUD operations on `/api/v1/pricing/rate-plans/{rate_plan_id}/seasons`
+- **Database**: `rate_plan_seasons` table with label, date ranges, nightly_cents, archived_at
+- **Validation**: Server-side overlap detection (422), date range validation, price validation
+- **Soft Delete**: DELETE endpoint sets `archived_at` timestamp instead of hard delete
+
+**API Endpoints:**
+
+Staff (manager/admin):
+- `GET /api/v1/pricing/rate-plans/{rate_plan_id}/seasons?include_archived=` - List seasons for rate plan
+- `POST /api/v1/pricing/rate-plans/{rate_plan_id}/seasons` - Create new season
+- `PATCH /api/v1/pricing/rate-plans/{rate_plan_id}/seasons/{season_id}` - Update existing season
+- `DELETE /api/v1/pricing/rate-plans/{rate_plan_id}/seasons/{season_id}` - Soft delete season (204)
+
+**Validation Rules:**
+- No overlapping date ranges between active seasons (422 error if overlap detected)
+- `date_from` must be before `date_to` (422 error)
+- `nightly_cents` must be positive if provided (422 error)
+- All operations scoped by agency_id (tenant isolation)
+- Rate plan must exist and belong to agency (404 error)
+
+**Verification Commands:**
+
+```bash
+# HOST-SERVER-TERMINAL
+export HOST="https://api.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="<manager/admin JWT>"
+# Optional: export PROPERTY_ID="<uuid>"
+
+# Run smoke test
+./backend/scripts/pms_rate_plan_seasons_smoke.sh
+echo "rc=$?"
+
+# Expected output: All 8 tests pass, rc=0
+```
+
+**Common Issues:**
+
+### Season Overlaps with Existing Season (422)
+
+**Symptom:** POST or PATCH returns 422 with error: "Season overlaps with existing season. Date range YYYY-MM-DD to YYYY-MM-DD conflicts with another active season."
+
+**Root Cause:** New or updated season date range overlaps with an existing active, non-archived season for the same rate plan.
+
+**How to Debug:**
+```bash
+# List all seasons for the rate plan
+curl -X GET "$HOST/api/v1/pricing/rate-plans/{rate_plan_id}/seasons" \
+  -H "Authorization: Bearer $MANAGER_JWT_TOKEN"
+
+# Check for overlaps in date ranges
+# Overlap logic: (start1 < end2) AND (start2 < end1)
+```
+
+**Solution:**
+- Check existing seasons and adjust date ranges to avoid overlap
+- OR: Set conflicting season to `active=false` via PATCH
+- OR: Delete conflicting season via DELETE endpoint
+
+### Invalid Date Range (422)
+
+**Symptom:** POST or PATCH returns 422 with error: "date_from must be before date_to".
+
+**Root Cause:** `date_from` is greater than or equal to `date_to`.
+
+**How to Debug:**
+```bash
+# Check the payload dates
+echo "date_from: YYYY-MM-DD"
+echo "date_to: YYYY-MM-DD"
+# date_from must be strictly less than date_to
+```
+
+**Solution:**
+- Ensure `date_from < date_to` in the request payload
+- Verify date format is YYYY-MM-DD
+
+### Season Not Found (404)
+
+**Symptom:** PATCH or DELETE returns 404 with error: "Season not found".
+
+**Root Cause:** Season ID doesn't exist, doesn't belong to the specified rate plan, or rate plan doesn't belong to agency.
+
+**How to Debug:**
+```bash
+# Verify season exists and belongs to rate plan
+curl -X GET "$HOST/api/v1/pricing/rate-plans/{rate_plan_id}/seasons" \
+  -H "Authorization: Bearer $MANAGER_JWT_TOKEN"
+
+# Check if season_id is in the response
+```
+
+**Solution:**
+- Verify season_id is correct
+- Verify rate_plan_id is correct
+- Ensure JWT token has correct agency_id claim
+
+### Template Apply Fails
+
+**Symptom:** POST to `/api/v1/pricing/rate-plans/{rate_plan_id}/apply-template` fails with 422 or other error.
+
+**Root Cause:** Template periods cause overlaps in "merge" mode, or template doesn't exist.
+
+**How to Debug:**
+- Check template exists: GET `/api/v1/pricing/season-templates?active=true`
+- Check existing seasons: GET seasons endpoint
+- Try "replace" mode instead of "merge"
+
+**Solution:**
+- Use "replace" mode to clear existing seasons before applying template
+- OR: Manually delete conflicting seasons before applying template in "merge" mode
+
+---
+
 ## Pricing v1 Rate Plans MVP
 
 **Overview:** Rate Plans API with CRUD endpoints and quote integration for property pricing configuration.
