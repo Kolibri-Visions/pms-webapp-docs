@@ -4270,6 +4270,115 @@ echo "rc=$?"
 
 ---
 
+# P2 Pricing v1 — Rate Plan Archive Fix + Property-Only Resolver
+
+**Implementation Date:** 2026-01-16
+
+**Scope:** Fix rate plan archiving semantics so archived plans are properly excluded from quote resolution. Remove agency-level fallback from resolver (property-only resolution). Add diagnostics and integration tests.
+
+**Bug Fixed:**
+- Archive endpoint (DELETE /rate-plans/{id}) only set `archived_at`, leaving `active=true` and `is_default=true`
+- Archived plans could still be selected by resolver if they had `active=true`
+- No way to debug archived plans (list endpoint always filtered them out)
+
+**Features Implemented:**
+
+1. **Archive Endpoint Fix** (backend/app/api/routes/pricing.py:408-456):
+   - DELETE /api/v1/pricing/rate-plans/{id} now sets ALL required fields:
+     - `archived_at = NOW()` (soft delete timestamp)
+     - `active = false` (prevents runtime selection)
+     - `is_default = false` (removes default status)
+     - `updated_at = NOW()` (audit trail)
+   - Removed 409 check that prevented archiving default plans
+   - Default plans can now be archived (is_default=false set automatically)
+   - Archived plans completely excluded from resolution by all filters
+
+2. **List Endpoint Enhancement** (backend/app/api/routes/pricing.py:55-101):
+   - Added `include_archived` query parameter (default: false)
+   - GET /api/v1/pricing/rate-plans?include_archived=true shows archived plans
+   - Useful for debugging archive semantics and verifying archived_at/active/is_default fields
+   - Backwards compatible: default behavior unchanged (excludes archived)
+
+3. **Property-Only Resolver** (backend/app/services/rate_plan_resolver.py:1-139):
+   - Removed Steps 3-4 (agency-level default and fallback)
+   - Resolution now ONLY considers property-specific plans (property_id matches)
+   - Agency-level plans are templates only, NOT used at runtime
+   - Properties must have at least one active property-specific plan for pricing
+   - Updated docstring to reflect property-scoped pricing model
+   - Error messages updated: no longer mention agency-level counts
+
+4. **Smoke Script Improvements** (backend/scripts/pms_pricing_default_resolution_smoke.sh:478-534):
+   - Archive operation uses DELETE endpoint (not PATCH)
+   - Added post-archive diagnostics:
+     - Fetches plans with `include_archived=true`
+     - Verifies Plan A has archived_at set, active=false, is_default=false
+     - Fails test if archive semantics incorrect
+   - Cleanup function uses DELETE endpoint for all test plans
+   - Better error messages on archive failure
+
+5. **Integration Tests** (backend/tests/integration/test_rate_plan_resolution.py:719-885):
+   - test_archive_endpoint_sets_all_required_fields: Verifies archive sets archived_at, active=false, is_default=false, updated_at
+   - test_archive_default_plan_then_fallback_to_single_plan: Core smoke scenario (archive default → fallback to single plan)
+   - Both tests provide clear assertions and cleanup
+
+**Architecture Changes:**
+- **Property-Scoped Pricing**: Rate plans are strictly property-scoped at runtime (agency plans are templates only)
+- **Archive Semantics**: Archiving now sets 4 fields (archived_at, active, is_default, updated_at) for complete exclusion
+- **Resolution Priority** (property-only):
+  1. Property-specific default (property_id matches, is_default=true, active=true, archived_at IS NULL)
+  2. Property-specific fallback (exactly ONE active property plan)
+  3. Error 422 (no active property plans OR multiple property plans without default)
+
+**Breaking Changes:**
+- Agency-level rate plans NO LONGER used as fallback at runtime
+- Properties without property-specific active plans will return 422 (not fall back to agency plans)
+- Integration tests that expect agency fallback will FAIL (tests added for new behavior)
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- Archive operation can now archive default plans (sets is_default=false automatically)
+- Smoke test verifies archive semantics via include_archived=true diagnostics
+- Property-only resolver simplifies pricing model (no cross-scope fallback)
+- Existing integration tests for agency fallback may fail (new tests added)
+
+**Dependencies:**
+- Migration 20260115130000 (separate unique indexes for agency vs property defaults)
+- Quote endpoint calls resolve_rate_plan (backend/app/api/routes/pricing.py:1004-1026)
+- List endpoint filters archived_at IS NULL by default (backwards compatible)
+
+**Verification Commands (for VERIFIED status later):**
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify deploy
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# Run smoke test with archive diagnostics
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<manager/admin JWT>>>"
+export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+export PROPERTY_ID="<<<clean property UUID>>>"
+./backend/scripts/pms_pricing_default_resolution_smoke.sh
+echo "rc=$?"
+
+# Expected output: All 6 tests pass including archive diagnostics, rc=0
+
+# Manual verification
+# 1. Create property-specific Plan A (is_default=true)
+# 2. Create property-specific Plan B (is_default=false)
+# 3. Call quote without rate_plan_id → should return Plan A
+# 4. DELETE /api/v1/pricing/rate-plans/{plan_a_id}
+# 5. GET /api/v1/pricing/rate-plans?property_id={id}&include_archived=true
+#    → Verify Plan A has archived_at set, active=false, is_default=false
+# 6. Call quote again → should return Plan B (single-plan fallback)
+```
+
+---
+
 # P3a: Idempotency + Audit Log (Public Booking Requests)
 
 **Implementation Date:** 2026-01-06
