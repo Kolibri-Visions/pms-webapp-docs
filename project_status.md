@@ -3646,6 +3646,11 @@ echo "rc=$?"
    - backend/scripts/README.md - Smoke script documentation
    - backend/docs/project_status.md - This entry
 
+8. **Smoke Fix (2026-01-16)**:
+   - Added GET /api/v1/pricing/rate-plans/{id} detail endpoint
+   - Returns rate plan with seasons[] for verification
+   - Fixes Test 5 in smoke script (previous 405 error)
+
 **Architecture:**
 - Templates are agency-scoped (reusable across properties)
 - Apply action copies template periods to rate plan seasons

@@ -23600,6 +23600,7 @@ curl -X GET "$HOST/api/v1/pricing/fees?property_id=<uuid>&active=false" \
 - PATCH /api/v1/pricing/season-templates/{id}/periods/{period_id} (edit period)
 - DELETE /api/v1/pricing/season-templates/{id}/periods/{period_id} (remove period)
 - POST /api/v1/pricing/rate-plans/{id}/apply-season-template (apply template to rate plan)
+- GET /api/v1/pricing/rate-plans/{id} (fetch single rate plan with seasons)
 
 **Apply Modes:**
 - **replace**: Deletes existing rate plan seasons, inserts new ones from template
@@ -23627,6 +23628,14 @@ curl -X GET "$HOST/api/v1/pricing/fees?property_id=<uuid>&active=false" \
 - Verify seasons cover desired date ranges
 - Check season active=true
 - Use GET /api/v1/pricing/rate-plans/{id} to inspect seasons
+
+### 405 Method Not Allowed on Rate Plan Fetch
+
+**Symptom:** GET request to rate plan returns 405.
+
+**Root Cause:** Prior to 2026-01-16, no GET detail endpoint existed for single rate plan.
+
+**Solution:** Use GET /api/v1/pricing/rate-plans/{id} endpoint added in commit after 12aa7d2.
 
 ---
 ## OPS endpoints: Auth & Zugriff
