@@ -3886,7 +3886,20 @@ echo "rc=$?"
    - Templates: `/api/v1/pricing/rate-plans?include_archived={bool}`
    - Backend API already supports `include_archived` parameter (from P2 implementation)
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
+
+**PROD Evidence (Verified: 2026-01-16):**
+- **Verification Date**: 2026-01-16
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Backend Source Commit**: 45e6c1a1ea5cbf58d92b88783357bd96a04b6eb3
+- **Backend Started**: 2026-01-16T21:47:04.223524+00:00
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh` → rc=0 (commit match confirmed)
+- **UI Verification (Manual)**:
+  - **Default Behavior**: Archived rate plans hidden by default ✅
+  - **Toggle ON**: "Archivierte anzeigen" checkbox shows archived items with "archiviert" badge ✅
+  - **Toggle OFF**: Archived items hidden again ✅
+  - **Both Tabs**: Toggle affects both Property Plans (Tarifpläne) and Templates (Vorlagen) tabs ✅
+  - **Visual Distinction**: Gray "archiviert" badge visible when archived items shown ✅
 
 **How to Verify in PROD:**
 
