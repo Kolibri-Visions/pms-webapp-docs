@@ -10,6 +10,12 @@
 
 This document tracks the current state of the PMS-Webapp project, including completed phases, ongoing work, and next steps.
 
+
+---
+
+**📚 Documentation Note:** This file is automatically published to the public [pms-webapp-docs](https://github.com/Kolibri-Visions/pms-webapp-docs) repository via GitHub Actions. The source of truth is `PMS-Webapp/backend/docs`. Never edit the public repository directly - all changes must be made here in the private repo.
+
+---
 ## Status Semantics: Implemented vs Verified
 
 This project distinguishes between **Implemented** and **Verified** status for production features:

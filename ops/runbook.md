@@ -31119,3 +31119,78 @@ AGENCY_ID="$AGENCY_ID" \
 Check the runbook section for each specific smoke script for detailed troubleshooting steps.
 
 ---
+
+## Public Docs Mirror (pms-webapp-docs) Publishing
+
+**Overview:** Documentation publishing to public GitHub repository.
+
+**Purpose:** Automatically sync backend/docs to public pms-webapp-docs repository for external visibility.
+
+**Architecture:**
+- **Source of Truth**: PMS-Webapp/backend/docs (private repo)
+- **Publishing**: Automatic via GitHub Actions `.github/workflows/publish-docs.yml`
+- **Trigger**: Any push to main that modifies backend/docs/** files
+- **Sync Strategy**: rsync --delete (full mirror, preserves .git/)
+- **Commit Format**: "docs: publish from PMS-Webapp {short-sha} [skip ci]"
+
+**Critical Rules:**
+- ❌ NEVER commit directly to pms-webapp-docs public repository
+- ✅ ALWAYS edit files in PMS-Webapp/backend/docs (private repo)
+- ✅ GitHub Action automatically publishes within ~1 minute
+
+**Verification Commands:**
+
+```bash
+# Check latest Action run
+# Navigate to: https://github.com/Kolibri-Visions/PMS-Webapp/actions/workflows/publish-docs.yml
+
+# Verify public repo reflects latest private commit
+cd /path/to/pms-webapp-docs
+git pull origin main
+git log -1 --oneline
+# Should show: "docs: publish from PMS-Webapp {sha} [skip ci]"
+
+# Compare private source SHA with public commit message
+cd /path/to/PMS-Webapp
+git log -1 --oneline -- backend/docs/
+# SHA should match the SHA in public repo commit message
+```
+
+**Common Issues:**
+
+### Public Repo Out of Sync
+
+**Symptom:** Changes made to backend/docs not appearing in pms-webapp-docs after 5+ minutes.
+
+**Root Cause:** GitHub Action may have failed or not triggered.
+
+**How to Debug:**
+- Check Actions tab: https://github.com/Kolibri-Visions/PMS-Webapp/actions/workflows/publish-docs.yml
+- Look for failed runs (red X) or no recent runs
+- Check workflow logs for SSH key issues, rsync errors, or git push failures
+
+**Solution:**
+- If Action failed: Fix the error (usually SSH key or permissions), then manually trigger via workflow_dispatch
+- If Action didn't trigger: Verify .github/workflows/publish-docs.yml paths filter includes your changed files
+- Manual trigger: GitHub UI → Actions → "Publish Docs to Public Repo" → Run workflow
+
+### Accidental Manual Commit to Public Repo
+
+**Symptom:** Someone committed directly to pms-webapp-docs, causing conflicts with Action publishing.
+
+**Root Cause:** Manual edit violated the "never edit public repo" rule.
+
+**How to Debug:**
+```bash
+cd /path/to/pms-webapp-docs
+git log --oneline -5
+# Look for commits NOT from docs-bot
+```
+
+**Solution:**
+- Revert the manual commit in public repo
+- Make the equivalent change in PMS-Webapp/backend/docs instead
+- Let Action re-publish cleanly
+- Educate team: "Only edit private repo backend/docs, never public repo"
+
+---
