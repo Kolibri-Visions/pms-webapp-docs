@@ -4392,6 +4392,87 @@ echo "rc=$?"
 
 ---
 
+# P2 Pricing v1 — Rate Plans CRUD (Property-Scoped Model)
+
+**Implementation Date:** 2026-01-16
+
+**Scope:** Enforce property-scoped pricing model for rate plans CRUD operations. Forbid agency-level plans from being set as defaults (templates only). Add comprehensive smoke script with property isolation.
+
+**Features Implemented:**
+
+1. **Backend Validation** (backend/app/api/routes/pricing.py):
+   - POST /api/v1/pricing/rate-plans: Forbid is_default=true when property_id IS NULL (HTTP 400)
+   - PATCH /api/v1/pricing/rate-plans/{id}: Forbid setting is_default=true for agency-level plans (HTTP 400)
+   - Error messages explain: "Agency-level plans are templates only. Create a property-specific rate plan to use as default for quotes."
+   - Removed agency-level default logic from both create and update endpoints (property-only)
+   - Updated docstrings to document property-scoped pricing model
+
+2. **Property-Scoped Pricing Model**:
+   - **Property-specific plans** (property_id = UUID): Real pricing used for quotes. Can be set as default.
+   - **Agency-level plans** (property_id IS NULL): Templates only. **Cannot** be set as is_default=true.
+   - Resolver uses ONLY property-specific plans at runtime (no agency fallback per earlier commits)
+   - At most one is_default=true per property (auto-unsets other property defaults when setting new default)
+
+3. **Smoke Script** (backend/scripts/pms_rate_plans_crud_smoke.sh):
+   - 7 tests covering full CRUD lifecycle with property-scoped validation
+   - Property isolation: Auto-selects clean property (0 active plans) OR fail-fast if dirty
+   - Tests: create, update, set default (auto-unset), archive semantics, list filtering, forbid template defaults
+   - All test plans prefixed SMOKE_RATEPLANS_* for cleanup
+   - JWT token preflight: validates 3 parts (header.payload.signature)
+   - PROD-safe: Only creates property-scoped plans, cleanup archives created plans
+
+4. **Integration Tests** (backend/tests/integration/test_rate_plan_resolution.py):
+   - test_forbid_is_default_for_agency_templates_create: Verify POST rejects is_default=true for property_id=NULL (HTTP 400)
+   - test_forbid_is_default_for_agency_templates_update: Verify PATCH rejects is_default=true for agency-level plans (HTTP 400)
+   - Both tests verify error message contains "template" or "agency-level"
+
+5. **Documentation** (backend/scripts/README.md):
+   - Added "Rate Plans CRUD Smoke Test" section with full usage, expected output, troubleshooting
+   - Documented property-scoped pricing model and validation rules
+   - Included link to runbook for detailed troubleshooting
+
+**Architecture:**
+- **Property-Scoped Pricing**: Rate plans with property_id can be set as default for quotes; agency-level plans (property_id IS NULL) are templates only
+- **Validation Layer**: Backend enforces property-scoped model at API level (400 errors for template defaults)
+- **Smoke Test Isolation**: Fail-fast if property has existing plans; auto-select clean property if PROPERTY_ID not set
+- **Resolver Consistency**: Resolver already property-only (no agency fallback); validation enforces same model at CRUD level
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- Admin UI at /pricing/rate-plans exists but needs property context integration (follow-up task)
+- Existing pms_pricing_rate_plans_smoke.sh tests basic CRUD; new pms_rate_plans_crud_smoke.sh adds property-scoped validation
+- Breaking change: Agency-level plans can no longer be set as defaults (returns 400)
+- Smoke script requires clean property (0 active plans) or explicit PROPERTY_ID
+
+**Dependencies:**
+- Migration 20260115130000 (separate unique indexes for agency vs property defaults)
+- Rate plan resolver (property-only, no agency fallback)
+- Archive endpoint semantics (archived_at, active=false, is_default=false)
+
+**Verification Commands (for VERIFIED status later):**
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify deploy
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# Run CRUD smoke test (property-scoped validation)
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<manager/admin JWT>>>"
+export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+# PROPERTY_ID optional (auto-selects clean property if not set)
+./backend/scripts/pms_rate_plans_crud_smoke.sh
+echo "rc=$?"
+
+# Expected output: All 7 tests pass, rc=0
+```
+
+---
+
 # P3a: Idempotency + Audit Log (Public Booking Requests)
 
 **Implementation Date:** 2026-01-06
