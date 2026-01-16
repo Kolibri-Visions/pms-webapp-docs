@@ -4232,7 +4232,7 @@ echo "rc=$?"
 - **Backwards Compatible**: Explicit rate_plan_id behavior unchanged
 - **No Schema Changes**: Uses existing fields (is_default, archived_at, active)
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
 
 **Notes:**
 - Resolution order: Property default > Agency default > Single plan > Error 422
@@ -4267,6 +4267,19 @@ echo "rc=$?"
 # 4. Call quote again → should return agency-level default (if exists)
 # 5. Remove all defaults, create 2+ plans → quote should return 422
 ```
+
+**PROD Evidence (Verified: 2026-01-16; commit cbfa9a3):**
+- **Verification Date**: 2026-01-16
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Source Commit**: cbfa9a3b8089f5cb9bf7d1589a64f2a7f7d73706
+- **Backend Started**: 2026-01-16T07:27:04.984474+00:00
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh` → rc=0 (commit match; /api/v1/ops/version returned expected commit)
+- **Health Check**: /health status=up (checked_at 2026-01-16T08:10:23.065958+00:00)
+- **Ready Check**: /health/ready components db=up, redis=up, celery=up (checked_at 2026-01-16T08:10:25.267350Z)
+- **Smoke Test**: `backend/scripts/pms_pricing_default_resolution_smoke.sh` → rc=0 (all 6 tests passed)
+- **Property-Scoped Isolation**: PROD-safe execution; creates only SMOKE_DEFAULTRES_* rate plans on clean property; no agency-level rate plans modified; cleanup archives created plans only
+- **Archive Semantics Verified**: Post-archive diagnostics confirmed archived_at set, active=false, is_default=false for archived plans
+- **Property-Only Resolution Verified**: Quote endpoint correctly selects property-specific default → single property plan fallback → 422 error (no agency fallback)
 
 ---
 
