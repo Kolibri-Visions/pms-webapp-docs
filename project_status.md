@@ -3678,7 +3678,33 @@ echo "rc=$?"
 - Quote resolution unchanged (uses property-scoped rate plan seasons only)
 - No changes to existing quote semantics
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
+
+**PROD Evidence (Verified: 2026-01-16; commit f3e2047):**
+- **Verification Date**: 2026-01-16
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Backend Source Commit**: f3e2047d45e09ceeea6194f6904033b0ed94b3b2
+- **Backend Started**: 2026-01-16T18:05:04.015391+00:00
+- **Admin Source Commit**: f3e2047d45e09ceeea6194f6904033b0ed94b3b2
+- **Admin Started**: 2026-01-16T18:02:05.269Z
+- **Environment**: production
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh` with EXPECT_COMMIT=f3e2047 → rc=0 (commit match)
+- **Smoke Test**: `backend/scripts/pms_season_templates_smoke.sh` → rc=0 (all 8 tests passed)
+- **Tests Verified**:
+  - Test 1: Create template with 3 periods (Hauptsaison, Mittelsaison, Nebensaison)
+  - Test 2: List templates - verify template exists
+  - Test 3: Create property-scoped rate plan
+  - Test 4: Apply template to rate plan (replace mode)
+  - Test 5: Verify 3 seasons created with correct dates and nightly_cents
+  - Test 6: Create empty template → update to add 3 periods (regression test)
+  - Test 7: Rename template (metadata only) → verify name changed
+  - Test 8: Delete single period → verify period count decremented
+- **Bugfixes Included**:
+  - Periods management in create/edit flows (commit 6ef31af)
+  - Update template when adding periods (commit 4cbbc9c)
+  - UI update/delete/rename for 204 responses (commit f3e2047)
+- **Migration Applied**: supabase/migrations/20260116000000_add_season_templates.sql
+- **Tables Verified**: pricing_season_templates, pricing_season_template_periods
 
 **Notes:**
 - Templates are reusable patterns; actual pricing still property-specific via rate plans
