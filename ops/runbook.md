@@ -23577,6 +23577,58 @@ curl -X GET "$HOST/api/v1/pricing/fees?property_id=<uuid>&active=false" \
 - [Project Status: P2 Pricing Management UI](../project_status.md) - Implementation status
 
 ---
+
+## Season Templates (Agency-Wide Reusable Periods)
+
+**Overview:** Agency-level reusable season date windows for applying to multiple rate plans.
+
+**Purpose:** Define common season periods once (e.g., Hauptsaison, Mittelsaison, Nebensaison) and apply them to property-scoped rate plans. Each rate plan can then customize nightly_cents per season.
+
+**Architecture:**
+- Season templates are agency-scoped (not property-specific)
+- Templates contain periods (label, date_from, date_to, sort_order)
+- Apply action copies template periods into rate plan seasons
+- Copied seasons inherit rate_plan.base_nightly_cents initially
+- Quote resolution unchanged: uses ONLY property-scoped rate plan seasons
+
+**API Endpoints:**
+- GET /api/v1/pricing/season-templates (list agency templates)
+- POST /api/v1/pricing/season-templates (create template with periods)
+- PATCH /api/v1/pricing/season-templates/{id} (update template)
+- DELETE /api/v1/pricing/season-templates/{id} (archive template)
+- POST /api/v1/pricing/season-templates/{id}/periods (add period)
+- PATCH /api/v1/pricing/season-templates/{id}/periods/{period_id} (edit period)
+- DELETE /api/v1/pricing/season-templates/{id}/periods/{period_id} (remove period)
+- POST /api/v1/pricing/rate-plans/{id}/apply-season-template (apply template to rate plan)
+
+**Apply Modes:**
+- **replace**: Deletes existing rate plan seasons, inserts new ones from template
+- **merge**: Adds missing periods, skips overlaps (basic implementation)
+
+**Common Issues:**
+
+### Apply Endpoint Returns 404 (Template Not Found)
+
+**Symptom:** POST /api/v1/pricing/rate-plans/{id}/apply-season-template returns 404.
+
+**Root Cause:** Template ID doesn't exist or belongs to different agency.
+
+**Solution:**
+- Verify template_id exists: GET /api/v1/pricing/season-templates
+- Check agency_id matches (templates are agency-scoped)
+
+### Seasons Not Appearing in Quote
+
+**Symptom:** Applied seasons to rate plan but quote doesn't use seasonal rates.
+
+**Root Cause:** Quote resolution uses check_in date to find matching season. Check date overlap.
+
+**Solution:**
+- Verify seasons cover desired date ranges
+- Check season active=true
+- Use GET /api/v1/pricing/rate-plans/{id} to inspect seasons
+
+---
 ## OPS endpoints: Auth & Zugriff
 
 ### Current Behavior (as deployed)

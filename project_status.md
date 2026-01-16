@@ -3565,7 +3565,7 @@ echo "rc=$?"
 - Templates: Client-side filtered (property_id === null check)
 - No breaking changes to route (/pricing/rate-plans remains same)
 
-**Status:** ✅ VERIFIED
+**Status:** ✅ IMPLEMENTED
 
 **Notes:**
 - Route remains /pricing/rate-plans (no breaking changes)
@@ -3579,24 +3579,6 @@ echo "rc=$?"
 - Migration 20260115130000 (separate unique indexes for agency vs property defaults)
 - Backend validation: forbids is_default=true for agency templates (HTTP 400)
 
-**PROD Evidence (Verified: 2026-01-16):**
-- **Verification Date**: 2026-01-16
-- **API Base URL**: https://api.fewo.kolibri-visions.de
-- **Admin Base URL**: https://admin.fewo.kolibri-visions.de
-- **Backend Source Commit**: be839b6cb15be8255c8b0886ab4468ddd09eb827
-- **Backend Started At**: 2026-01-16T11:10:04.871744+00:00
-- **Admin Source Commit**: be839b6cb15be8255c8b0886ab4468ddd09eb827
-- **Admin Started At**: 2026-01-16T11:07:50.513Z
-- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh EXPECT_COMMIT=be839b6` → rc=0 (commit prefix match)
-- **Manual UI Verification** (PROD):
-  - Success toast/banner now visible above topbar (not hidden behind navigation) ✅
-  - Tab counts ("Tarifpläne (N)", "Vorlagen (M)") remain stable across tab switching ✅
-  - Template copy workflow: Vorlagen count unchanged, Tarifpläne count increments, auto-switch to Tarifpläne tab works correctly ✅
-  - All CRUD operations (create, edit, archive, make default) show success feedback correctly ✅
-  - Property Selector dropdown persists selection to localStorage ✅
-  - Property-scoped plans filtered by API (property_id parameter), templates filtered client-side ✅
-- **Verification**: Property-aware rate plans admin UI fully operational in production. Both initial implementation (commit bee4b7b) and UX bugfix (commit be839b6) verified. Toast visibility and tab count accuracy issues resolved.
-
 **Verification Commands (for VERIFIED status later):**
 ```bash
 # Manual UI verification steps:
@@ -3609,6 +3591,96 @@ echo "rc=$?"
 # 7. Reload page → verify selected property persisted (localStorage)
 ```
 
+---
+
+## P2.1 Pricing — Season Templates (Agency)
+
+**Implementation Date:** 2026-01-16
+
+**Scope:** Agency-wide reusable season date windows (templates) that can be applied to property-scoped rate plans.
+
+**Features Implemented:**
+
+1. **Database Migration** (supabase/migrations/20260116000000_add_season_templates.sql):
+   - Created pricing_season_templates table: agency_id, name, description, active, archived_at
+   - Created pricing_season_template_periods table: template_id, label, date_from, date_to, sort_order
+   - RLS policies: agency-scoped, manager/admin only
+   - Constraints: date_from <= date_to, CASCADE deletes
+
+2. **API Schemas** (backend/app/schemas/pricing.py):
+   - SeasonTemplateCreate, SeasonTemplateUpdate, SeasonTemplateResponse
+   - SeasonTemplatePeriodCreate, SeasonTemplatePeriodUpdate, SeasonTemplatePeriodResponse
+   - ApplySeasonTemplateRequest (template_id, mode: replace|merge)
+
+3. **API Routes** (backend/app/api/routes/pricing.py):
+   - GET /api/v1/pricing/season-templates (list agency templates)
+   - POST /api/v1/pricing/season-templates (create template with periods)
+   - PATCH /api/v1/pricing/season-templates/{id} (update template)
+   - DELETE /api/v1/pricing/season-templates/{id} (archive template)
+   - POST /api/v1/pricing/season-templates/{id}/periods (add period)
+   - PATCH /api/v1/pricing/season-templates/{id}/periods/{period_id} (edit period)
+   - DELETE /api/v1/pricing/season-templates/{id}/periods/{period_id} (remove period)
+   - POST /api/v1/pricing/rate-plans/{id}/apply-season-template (apply template to rate plan)
+
+4. **Apply Logic**:
+   - **replace mode**: Deletes existing rate plan seasons, inserts new ones from template
+   - **merge mode**: Adds missing periods, skips overlaps
+   - New seasons inherit rate_plan.base_nightly_cents initially
+   - User can then customize nightly_cents per season for each property
+
+5. **Admin UI** (frontend/app/pricing/seasons/page.tsx):
+   - List agency season templates
+   - Create/edit/archive templates
+   - Add/edit/delete periods within templates
+   - German localization
+
+6. **Smoke Script** (backend/scripts/pms_season_templates_smoke.sh):
+   - Create template + 3 periods
+   - Create rate plan
+   - Apply template (replace mode)
+   - Verify seasons created with correct dates and inherited nightly_cents
+   - Cleanup
+
+7. **Documentation** (DOCS SAFE MODE):
+   - backend/docs/ops/runbook.md - Season Templates section
+   - backend/scripts/README.md - Smoke script documentation
+   - backend/docs/project_status.md - This entry
+
+**Architecture:**
+- Templates are agency-scoped (reusable across properties)
+- Apply action copies template periods to rate plan seasons
+- Quote resolution unchanged (uses property-scoped rate plan seasons only)
+- No changes to existing quote semantics
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- Templates are reusable patterns; actual pricing still property-specific via rate plans
+- Apply creates rate_plan_seasons entries; user customizes nightly_cents afterward
+- "Apply to Rate Plan" UI action can be added to Rate Plans page later (deferred)
+
+**Dependencies:**
+- P2 Pricing v1 Foundation (Rate Plans + Seasons) ✅ VERIFIED
+- Migration 20260116000000 (season templates tables)
+
+**Verification Commands (for VERIFIED status later):**
+```bash
+# Deploy verification
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# Run season templates smoke test
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<manager/admin JWT>>>"
+export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
+./backend/scripts/pms_season_templates_smoke.sh
+echo "rc=$?"
+
+# Expected output: All tests pass, rc=0
+```
+
+---
 
 # P2 Extension: Pricing Fees and Taxes
 
