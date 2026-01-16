@@ -23611,6 +23611,11 @@ curl -X GET "$HOST/api/v1/pricing/fees?property_id=<uuid>&active=false" \
 - Note: Templates are agency-wide, NOT property-specific
 - Application to rate plans: `/pricing/rate-plans` (per-property pricing)
 
+**UI Operations (Bugfix 2026-01-16):**
+- Update, Delete, and Rename operations now handle 204 No Content responses correctly
+- Some endpoints (DELETE) return empty body; UI parses responses safely
+- To verify operations: check browser console for no JSON parse errors, verify state refreshes
+
 ### Template Update - Adding Periods to Empty Template
 
 **Context:** Templates can be created with zero periods and later edited to add periods.

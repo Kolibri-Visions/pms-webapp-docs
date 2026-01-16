@@ -3665,6 +3665,13 @@ echo "rc=$?"
    - UI omits client-generated IDs in update payload
    - Smoke script regression test added (create empty → update add periods)
 
+11. **Bugfix — UI Update/Delete/Rename for 204 Responses (2026-01-16)**:
+   - Fixed "Unexpected end of JSON input" error in Season Templates UI
+   - API client now safely handles 204 No Content responses
+   - Update, delete, and rename operations now work correctly
+   - UI refreshes state from server after each mutation
+   - Smoke script tests added for rename + delete-period operations
+
 **Architecture:**
 - Templates are agency-scoped (reusable across properties)
 - Apply action copies template periods to rate plan seasons
