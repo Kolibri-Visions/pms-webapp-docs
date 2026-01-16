@@ -3572,6 +3572,7 @@ echo "rc=$?"
 - Property Selector required for "Tarifpläne" tab to show plans (prompts user if not selected)
 - Templates tab works without property selection (shows all agency templates)
 - Copy workflow requires property selection (button disabled if no property selected)
+- **PROD UX Bugfix 2026-01-16** (commit bee4b7b): Fixed toast visibility (now appears above topbar) and tab count accuracy (stable across tab switching and after copy operation)
 
 **Dependencies:**
 - P2 Pricing v1 — Rate Plans CRUD (Property-Scoped Model) ✅ VERIFIED

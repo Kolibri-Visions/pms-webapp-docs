@@ -28663,6 +28663,10 @@ If you want to force using a specific property that you know is clean, ensure it
 - **Copy Template Workflow**: "Als Tarifplan kopieren" button copies template to selected property, switches to "Tarifpläne" tab to show new plan
 - **Route**: /pricing/rate-plans (no breaking changes)
 
+**Bugfix 2026-01-16** (commit bee4b7b):
+- **Success Feedback Visibility**: Toast/banner notifications now properly visible above topbar (fixed z-index stacking, no longer hidden behind navigation)
+- **Tab Counts Accuracy**: Tab badge counts ("Tarifpläne (N)", "Vorlagen (M)") remain stable and accurate when switching between tabs and after copy operation (fixed stale state issue)
+
 
 ### Booking Request Creation Returns 400 (Bad Request)
 
