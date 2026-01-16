@@ -3794,6 +3794,9 @@ echo "rc=$?"
    - `backend/docs/ops/runbook.md`: New section "P2.2 Rate Plan Seasons Editor" with endpoints, validation rules, verification commands, and troubleshooting
    - `backend/scripts/README.md`: Complete smoke script documentation with usage, env vars, expected output, API endpoints tested, troubleshooting
 
+**Bugfix (2026-01-17):**
+- Hotfix: Fixed startup crash due to missing `RatePlanSeasonCreate` import in `backend/app/api/routes/pricing.py`. Symptoms: NameError at module import time causing pms-backend restart loop. Solution: Added explicit import of `RatePlanSeasonCreate` to schema imports (commit: hotfix/pricing-seasons-import).
+
 **Status:** ✅ IMPLEMENTED
 
 **How to Verify in PROD:**

@@ -22884,6 +22884,52 @@ curl -X GET "$HOST/api/v1/pricing/rate-plans/{rate_plan_id}/seasons" \
 - Use "replace" mode to clear existing seasons before applying template
 - OR: Manually delete conflicting seasons before applying template in "merge" mode
 
+### Restart Loop on Deploy: NameError in pricing.py
+
+**Symptom:** pms-backend container enters restart loop after deploying P2.2. Runtime logs show:
+```
+NameError: name 'RatePlanSeasonCreate' is not defined
+  File "/app/app/api/routes/pricing.py", line 523, in <module>
+    season_input: RatePlanSeasonCreate,
+```
+Container exits with code 1, preventing uvicorn from importing app.main.
+
+**Root Cause:** Type annotation in endpoint signature references schema class that is not imported at module import time (Python 3.12 strict type checking).
+
+**How to Debug:**
+```bash
+# Check backend logs for import errors
+docker logs pms-backend 2>&1 | grep -A5 "NameError"
+
+# Verify schema exists in schemas/pricing.py
+cd backend
+python3 -c "from app.schemas.pricing import RatePlanSeasonCreate; print('OK')"
+
+# Verify import in routes/pricing.py
+rg -n "RatePlanSeasonCreate" backend/app/api/routes/pricing.py
+rg -n "from.*schemas.pricing import" backend/app/api/routes/pricing.py
+```
+
+**Solution:**
+- Add missing schema to import statement in `backend/app/api/routes/pricing.py`:
+  ```python
+  from ...schemas.pricing import (
+      ...
+      RatePlanSeasonCreate,  # Add this line
+      RatePlanSeasonResponse,
+      ...
+  )
+  ```
+- Optionally add `from __future__ import annotations` at top of file for forward compatibility
+- Verify: `python3 -m py_compile backend/app/api/routes/pricing.py`
+- Commit and push
+- Backend container should start successfully after redeploy
+
+**Prevention:**
+- Always verify endpoint signature types are imported when adding new endpoints
+- Run `python3 -m py_compile` on modified route files before committing
+- Use IDE with type checking enabled (Pyright, mypy)
+
 ---
 
 ## Pricing v1 Rate Plans MVP
