@@ -10071,6 +10071,8 @@ curl -X DELETE "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID" \
 
 **Verification Status Update Instructions:**
 
+**NOTE:** The template block below is legacy documentation from implementation phase. The actual PROD Evidence is documented above with verification date 2026-01-17. This template is retained for reference only and should be ignored.
+
 When marking as VERIFIED, update this section with:
 ```markdown
 **Status:** ✅ VERIFIED
@@ -10097,6 +10099,158 @@ Manual UI Tests:
 - ✓ Fallback toggle in Erweitert enables saving with gaps
 - ✓ Delete action works for plans without dependencies
 - ✓ Delete action returns 422 for plans with dependent bookings
+
+Tester: <name>
+Test Property ID: <uuid>
+```
+
+---
+
+# P2.12 Admin UI + API — Delete Rate Plans Parity
+
+**Implementation Date:** 2026-01-17
+
+**Status:** ✅ IMPLEMENTED (NOT VERIFIED)
+
+**Scope:** Implement archive-first delete validation for rate plans, ensuring UI delete button is only enabled for archived plans. Add backend enforcement that prevents deletion of non-archived plans (HTTP 422). Soft delete semantics using deleted_at timestamp for both rate plans and seasons. New smoke test validates create → archive → delete → verify gone workflow.
+
+**Purpose:** Establish deletion parity between UI and API by enforcing archive-first rule. Prevents accidental deletion of active rate plans and ensures consistent soft delete behavior across the system.
+
+### Features Implemented
+
+**1. Backend DELETE Endpoint with Archive-First Validation**:
+- DELETE /api/v1/pricing/rate-plans/{id} requires plan to be archived first
+- Returns HTTP 422 with message "Bitte erst archivieren" if plan is not archived (is_archived=false)
+- Soft delete: Sets deleted_at timestamp instead of hard delete
+- Cascades soft delete to associated seasons (sets deleted_at on all seasons)
+- Preserves audit trail for compliance and debugging
+- Returns HTTP 204 No Content on successful deletion
+
+**2. Frontend UI Delete Guard**:
+- Delete button in rate plans table only enabled for archived plans
+- Visual state: Button disabled (grayed out) if is_archived=false
+- Tooltip/hover text guides user to archive first
+- Delete confirmation dialog includes archive-first reminder
+- Graceful error handling if backend returns 422
+- UI automatically refreshes table after successful delete
+
+**3. Soft Delete Semantics**:
+- Rate plans: deleted_at column set to current timestamp
+- Seasons: All associated seasons also get deleted_at timestamp
+- Database queries automatically exclude deleted records (WHERE deleted_at IS NULL)
+- Soft-deleted records remain queryable for audit/compliance purposes
+- No data loss: Can potentially implement undelete feature in future
+
+**4. New Smoke Test Script**:
+- Script: backend/scripts/pms_objekt_preisplan_loeschen_smoke.sh
+- Workflow: Create rate plan → Archive plan → Delete plan → Verify gone
+- Validates archive-first rule enforcement (DELETE on non-archived returns 422)
+- Confirms soft delete behavior (deleted_at set, not hard delete)
+- Tests UI state (delete button disabled until archived)
+- Verifies cascade delete to seasons
+- Required env vars: HOST/API_BASE_URL, JWT_TOKEN/MANAGER_JWT_TOKEN, AGENCY_ID
+- Optional: PROPERTY_ID (creates temp property if not provided)
+
+### Files Changed
+
+**Backend**:
+- backend/app/api/routes/pricing.py
+  - Added DELETE /api/v1/pricing/rate-plans/{id} endpoint
+  - Archive-first validation logic
+  - Soft delete with deleted_at timestamp
+  - Cascade delete to seasons
+
+**Frontend**:
+- frontend/app/properties/[id]/rate-plans/page.tsx
+  - Delete button enabled only for archived plans
+  - Archive-first guard in UI state logic
+  - Error handling for 422 response
+  - Confirmation dialog with archive reminder
+
+**Scripts**:
+- backend/scripts/pms_objekt_preisplan_loeschen_smoke.sh (new)
+  - End-to-end delete workflow validation
+  - Archive-first rule testing
+  - Soft delete verification
+
+**Documentation**:
+- backend/docs/project_status.md (this file)
+- backend/docs/ops/runbook.md (P2.12 section)
+- backend/scripts/README.md (smoke script entry)
+
+### Dependencies
+
+**Required Features**:
+- P2.11 Admin UI — Objekt-Preispläne: Saisonpflicht + Edit Workflow
+  - Provides rate plans table with archive functionality
+  - Establishes one-active-plan-per-property rule
+  - Archive workflow must exist before delete can be implemented
+
+**Database Requirements**:
+- deleted_at column on rate_plans table
+- deleted_at column on rate_plan_seasons table
+- Indexes on deleted_at for query performance
+
+### Common Issues
+
+1. **Delete Button Disabled**: Plan is not archived, archive first → See "Delete Button Disabled" in runbook
+2. **DELETE Returns 422**: Plan is not archived (is_archived=false), expected behavior → See "DELETE Returns 422" in runbook
+3. **Seasons Not Deleted**: Cascade delete failed, check database constraints → See "Seasons Not Deleted" in runbook
+4. **Soft Delete Not Working**: deleted_at column missing or not set → See "Soft Delete Not Working" in runbook
+
+**Detailed Troubleshooting**: See [P2.12 Delete Rate Plans Troubleshooting](../docs/ops/runbook.md#p212-delete-rate-plans-archive-first-validation) in runbook.md
+
+### Related Documentation
+
+- [P2.12 Runbook](../docs/ops/runbook.md#p212-delete-rate-plans-archive-first-validation) - Operations guide with verification steps
+- [P2.11 Runbook](../docs/ops/runbook.md#p211-objekt-preispläne-saisonpflicht--vorlagencustom-editor) - Parent feature documentation
+- [Rate Plans DELETE API](../docs/ops/runbook.md#rate-plans-delete-api) - API endpoint documentation
+- [Smoke Test Guide](../scripts/README.md#pms_objekt_preisplan_loeschen_smokesh) - Test script usage
+
+### Notes
+
+- Archive-first rule is enforced at both UI and API levels (defense in depth)
+- Soft delete allows future undelete functionality if needed
+- Cascade delete ensures orphaned seasons don't remain in database
+- DELETE endpoint returns 422 (not 400) to indicate business rule violation
+- UI gracefully handles 422 response with user-friendly error message
+- Smoke test covers full workflow including negative cases (delete before archive)
+
+### Verification Commands (Template for VERIFIED Status)
+
+When marking as VERIFIED, update this section with:
+```markdown
+**Status:** ✅ VERIFIED
+
+**PROD Evidence (YYYY-MM-DD):**
+
+Backend Deployment:
+- API Base URL: https://api.fewo.kolibri-visions.de
+- Source Commit: <commit-hash>
+- Deploy Date: YYYY-MM-DD
+
+Frontend Deployment:
+- Admin UI URL: https://admin.fewo.kolibri-visions.de
+- Source Commit: <commit-hash>
+- Deploy Date: YYYY-MM-DD
+
+Smoke Test:
+- Script: backend/scripts/pms_objekt_preisplan_loeschen_smoke.sh
+- Result: p2_12_smoke_rc=0
+- Verified Behaviors:
+  - ✓ DELETE endpoint enforces archive-first rule (422 if not archived)
+  - ✓ Soft delete sets deleted_at timestamp (not hard delete)
+  - ✓ Cascade delete to seasons verified
+  - ✓ UI delete button disabled for non-archived plans
+  - ✓ Successful delete workflow: create → archive → delete → verify gone
+
+Manual UI Tests:
+- ✓ Delete button disabled for active (non-archived) plans
+- ✓ Archive action enables delete button
+- ✓ Delete confirmation dialog shows archive-first reminder
+- ✓ Successful delete removes plan from table
+- ✓ Backend returns 422 if attempting to delete non-archived plan
+- ✓ Soft delete verified via database query (deleted_at IS NOT NULL)
 
 Tester: <name>
 Test Property ID: <uuid>

@@ -33225,3 +33225,310 @@ curl "https://api.fewo.kolibri-visions.de/api/v1/pricing/season-templates" \
 - Verification pending: Manual UI testing in PROD environment
 
 ---
+
+## P2.12 Delete Rate Plans: Archive-First Validation
+
+**Purpose**: Enforce archive-first deletion rule for rate plans at both UI and API levels. Prevent accidental deletion of active plans and ensure consistent soft delete behavior.
+
+**Overview**: P2.12 implements delete parity between frontend and backend. The UI delete button is only enabled for archived rate plans (is_archived=true). The backend DELETE endpoint enforces the same rule, returning HTTP 422 if a non-archived plan is submitted. Both rate plans and seasons use soft delete (deleted_at timestamp) to preserve audit trails.
+
+### Features
+
+**1. Backend DELETE Endpoint**:
+- Endpoint: DELETE /api/v1/pricing/rate-plans/{id}
+- Archive-first validation: Returns 422 if is_archived=false
+- Error message: "Bitte erst archivieren"
+- Soft delete: Sets deleted_at timestamp (not hard delete)
+- Cascade: Also soft-deletes all associated seasons
+- Success response: HTTP 204 No Content
+
+**2. Frontend UI Delete Guard**:
+- Delete button disabled for non-archived plans (is_archived=false)
+- Visual state: Grayed out with tooltip "Bitte erst archivieren"
+- Archive action must be performed first
+- Confirmation dialog includes archive-first reminder
+- Graceful error handling for 422 responses
+- Auto-refresh table after successful delete
+
+**3. Soft Delete Semantics**:
+- Rate plans: deleted_at column set to current timestamp
+- Seasons: All associated seasons get deleted_at timestamp
+- Queries exclude deleted records: WHERE deleted_at IS NULL
+- Audit trail preserved for compliance
+- Future undelete feature possible
+
+### How to Verify in PROD
+
+**Prerequisites**:
+```bash
+# 1. Ensure user logged in with manager/admin role
+# 2. Navigate to: https://admin.fewo.kolibri-visions.de
+# 3. Go to: Objekte → [Select Property] → "Preispläne" tab
+```
+
+**Step-by-Step Verification**:
+
+1. **Delete Button Disabled for Active Plans**:
+   ```
+   - Open rate plans table for any property
+   - Locate active (non-archived) rate plan
+   - Expected: "Löschen" button disabled (grayed out)
+   - Hover over button
+   - Expected: Tooltip shows "Bitte erst archivieren"
+   - Click button (should do nothing)
+   ```
+
+2. **Archive Enables Delete**:
+   ```
+   - Click "Archivieren" action on active plan
+   - Confirm archival in dialog
+   - Expected: Plan status changes to archived (is_archived=true)
+   - Expected: "Löschen" button now enabled (not grayed)
+   - Visual confirmation: Button color/state changes
+   ```
+
+3. **Delete Workflow Success**:
+   ```
+   - Click "Löschen" on archived plan
+   - Expected: Confirmation dialog appears
+   - Message: "Dieser Preisplan wird gelöscht. Fortfahren?"
+   - Click "Löschen bestätigen"
+   - Expected: DELETE /api/v1/pricing/rate-plans/{id} called
+   - Expected: HTTP 204 response
+   - Expected: Plan removed from table
+   - Expected: Table auto-refreshes
+   ```
+
+4. **Backend Archive-First Enforcement (curl)**:
+   ```bash
+   # Create test plan (non-archived)
+   PLAN_ID=$(curl -X POST "https://api.fewo.kolibri-visions.de/api/v1/pricing/rate-plans" \
+     -H "Authorization: Bearer $JWT_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "property_id": "'"$PROPERTY_ID"'",
+       "name": "Test Delete Plan",
+       "base_nightly_cents": 10000,
+       "is_archived": false
+     }' | jq -r .id)
+
+   # Attempt delete without archiving (should fail)
+   curl -i -X DELETE "https://api.fewo.kolibri-visions.de/api/v1/pricing/rate-plans/$PLAN_ID" \
+     -H "Authorization: Bearer $JWT_TOKEN"
+
+   # Expected: HTTP 422 Unprocessable Entity
+   # Expected body: {"detail": "Bitte erst archivieren"}
+
+   # Archive the plan
+   curl -X PATCH "https://api.fewo.kolibri-visions.de/api/v1/pricing/rate-plans/$PLAN_ID" \
+     -H "Authorization: Bearer $JWT_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"is_archived": true}'
+
+   # Now delete should succeed
+   curl -i -X DELETE "https://api.fewo.kolibri-visions.de/api/v1/pricing/rate-plans/$PLAN_ID" \
+     -H "Authorization: Bearer $JWT_TOKEN"
+
+   # Expected: HTTP 204 No Content
+   ```
+
+5. **Soft Delete Verification**:
+   ```sql
+   -- In Supabase SQL Editor
+   SELECT id, name, is_archived, deleted_at, updated_at
+   FROM rate_plans
+   WHERE id = 'plan-uuid-here';
+
+   -- Expected: deleted_at IS NOT NULL (timestamp set)
+   -- Record still exists in database (soft delete)
+
+   -- Verify cascade to seasons
+   SELECT id, rate_plan_id, deleted_at
+   FROM rate_plan_seasons
+   WHERE rate_plan_id = 'plan-uuid-here';
+
+   -- Expected: All seasons have deleted_at IS NOT NULL
+   ```
+
+6. **Smoke Test Script**:
+   ```bash
+   # Run automated delete workflow test
+   cd /app  # or local backend directory
+
+   HOST=https://api.fewo.kolibri-visions.de \
+   JWT_TOKEN=$YOUR_JWT_TOKEN \
+   AGENCY_ID=$YOUR_AGENCY_ID \
+   ./backend/scripts/pms_objekt_preisplan_loeschen_smoke.sh
+
+   # Expected output:
+   # ✓ Created test property
+   # ✓ Created rate plan (non-archived)
+   # ✓ DELETE on non-archived plan returns 422
+   # ✓ Archived rate plan
+   # ✓ DELETE on archived plan returns 204
+   # ✓ Verified soft delete (deleted_at set)
+   # ✓ Verified cascade delete to seasons
+   # p2_12_smoke_rc=0
+   ```
+
+### Troubleshooting
+
+#### Delete Button Disabled (Expected Behavior)
+
+**Symptom**: Delete button is grayed out and not clickable.
+
+**Diagnosis**:
+1. This is expected for non-archived plans
+2. Check plan's is_archived status in table
+3. Tooltip should explain "Bitte erst archivieren"
+
+**Fix**:
+```bash
+# Archive the plan first
+# - Click "Archivieren" action in table row
+# - Confirm archival in dialog
+# - Delete button will become enabled after archive completes
+```
+
+#### DELETE Returns 422 (Expected for Non-Archived)
+
+**Symptom**: Backend DELETE endpoint returns HTTP 422 with message "Bitte erst archivieren".
+
+**Diagnosis**:
+1. This is expected and correct behavior
+2. The plan has is_archived=false
+3. Archive-first rule is being enforced
+
+**Fix**:
+```bash
+# Archive the plan via API
+curl -X PATCH "https://api.fewo.kolibri-visions.de/api/v1/pricing/rate-plans/$PLAN_ID" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"is_archived": true}'
+
+# Then retry delete
+curl -X DELETE "https://api.fewo.kolibri-visions.de/api/v1/pricing/rate-plans/$PLAN_ID" \
+  -H "Authorization: Bearer $JWT_TOKEN"
+
+# Expected: HTTP 204 No Content
+```
+
+#### Seasons Not Deleted
+
+**Symptom**: Rate plan deleted but seasons remain in database without deleted_at timestamp.
+
+**Diagnosis**:
+```sql
+-- Check if cascade delete worked
+SELECT id, rate_plan_id, deleted_at
+FROM rate_plan_seasons
+WHERE rate_plan_id = 'plan-uuid-here';
+
+-- Expected: All seasons have deleted_at IS NOT NULL
+-- If deleted_at IS NULL: Cascade delete failed
+```
+
+**Fix**:
+```bash
+# Check backend logs for errors during delete
+docker logs pms-backend --tail 100 | grep "DELETE.*rate-plans"
+
+# Common issues:
+# 1. Database constraint prevents cascade
+# 2. Backend code missing cascade logic
+# 3. Transaction rolled back due to error
+
+# Manual cascade fix (if needed):
+# SQL to soft-delete orphaned seasons
+UPDATE rate_plan_seasons
+SET deleted_at = NOW()
+WHERE rate_plan_id = 'plan-uuid-here'
+  AND deleted_at IS NULL;
+```
+
+#### Soft Delete Not Working
+
+**Symptom**: Rate plan hard-deleted (removed from database) instead of soft-deleted.
+
+**Diagnosis**:
+```sql
+-- Check if record still exists
+SELECT id, name, deleted_at
+FROM rate_plans
+WHERE id = 'plan-uuid-here';
+
+-- If returns 0 rows: Hard delete occurred (wrong behavior)
+-- If returns 1 row with deleted_at: Soft delete worked correctly
+```
+
+**Fix**:
+```bash
+# This indicates backend bug (should not happen)
+# 1. Check backend code: pricing.py DELETE endpoint
+# 2. Ensure it uses UPDATE SET deleted_at instead of DELETE
+# 3. Check database triggers (none should hard-delete)
+
+# If data lost:
+# - Check database backup/WAL logs
+# - Restore from backup if critical
+# - File bug report for hard delete behavior
+```
+
+#### UI Shows Deleted Plan
+
+**Symptom**: After successful delete, plan still appears in table.
+
+**Diagnosis**:
+1. Table didn't auto-refresh after delete
+2. Frontend cache issue
+3. Backend query not excluding deleted_at IS NOT NULL
+
+**Fix**:
+```bash
+# Frontend issue:
+# - Hard refresh browser: Cmd+Shift+R / Ctrl+F5
+# - Clear browser cache
+# - Check browser console for JS errors
+
+# Backend issue (if refresh doesn't help):
+curl "https://api.fewo.kolibri-visions.de/api/v1/pricing/rate-plans?property_id=$PROPERTY_ID" \
+  -H "Authorization: Bearer $JWT_TOKEN" | jq .
+
+# If deleted plan appears in API response:
+# - Backend query missing WHERE deleted_at IS NULL filter
+# - Check pricing.py list endpoint
+# - Ensure soft delete filter applied
+```
+
+### Related Documentation
+
+- [P2.12 Project Status](../docs/project_status.md#p212-admin-ui--api--delete-rate-plans-parity) - Implementation details
+- [P2.11 Runbook](../docs/ops/runbook.md#p211-objekt-preispläne-saisonpflicht--vorlagencustom-editor) - Parent feature
+- [Smoke Test Script](../scripts/README.md#pms_objekt_preisplan_loeschen_smokesh) - Automated testing guide
+- Rate Plans API: DELETE /api/v1/pricing/rate-plans/{id}
+
+### Dependencies
+
+**Required Features**:
+- P2.11 Admin UI — Objekt-Preispläne: Saisonpflicht + Edit Workflow
+  - Provides archive functionality (is_archived flag)
+  - Rate plans table UI foundation
+
+**Database Schema**:
+- rate_plans.deleted_at column (timestamp, nullable)
+- rate_plan_seasons.deleted_at column (timestamp, nullable)
+- Indexes on deleted_at for query performance
+
+**Files Modified**:
+- backend/app/api/routes/pricing.py (DELETE endpoint)
+- frontend/app/properties/[id]/rate-plans/page.tsx (UI delete guard)
+- backend/scripts/pms_objekt_preisplan_loeschen_smoke.sh (new smoke test)
+
+**PROD Verification (Pending):**
+- Status: NOT VERIFIED (awaiting PROD deployment)
+- Implementation date: 2026-01-17
+- Smoke test: pms_objekt_preisplan_loeschen_smoke.sh
+- Verification pending: Manual UI + API testing in PROD
+
+---
