@@ -33940,4 +33940,98 @@ WHERE id IN (SELECT season_to_archive FROM overlaps);
 - Logs warnings with instructions for manual cleanup
 - New data respects constraints immediately
 
+### Smoke Tests Fail with 409 (Leftover Active Plan)
+
+**Symptom:** P2.13 smoke tests fail immediately with HTTP 409: "Es existiert bereits ein aktiver Preisplan für dieses Objekt."
+
+**Root Cause:** Previous smoke test run failed to clean up, leaving an active rate plan behind on the test property.
+
+**How to Debug:**
+```bash
+# List active plans for property
+curl -X GET "$HOST/api/v1/pricing/rate-plans?property_id=$PROPERTY_ID" \
+  -H "Authorization: Bearer $JWT_TOKEN" | python3 -c "
+import sys, json
+plans = json.load(sys.stdin)
+active = [p for p in plans if p.get('archived_at') is None]
+print(f'Active plans: {len(active)}')
+for p in active:
+    print(f\"  - {p['id']}: {p['name']}\")
+"
+
+# Expected: 1 active plan with "- Smoke" suffix (orphaned from previous run)
+```
+
+**Solution (Option 1 - API Archive):**
+```bash
+# Archive orphaned plan via API (preferred)
+ORPHAN_ID="<plan-uuid-from-debug-output>"
+curl -X PATCH "$HOST/api/v1/pricing/rate-plans/$ORPHAN_ID/archive" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+
+# Then delete (optional)
+curl -X DELETE "$HOST/api/v1/pricing/rate-plans/$ORPHAN_ID" \
+  -H "Authorization: Bearer $JWT_TOKEN"
+```
+
+**Solution (Option 2 - Use Different Property):**
+```bash
+# Unset PROPERTY_ID to let script auto-select clean property
+unset PROPERTY_ID
+./backend/scripts/pms_preisplan_doppel_aktiv_smoke.sh
+```
+
+**Solution (Option 3 - DB Cleanup):**
+```sql
+-- Direct DB update (LAST RESORT, requires supabase_admin)
+UPDATE rate_plans
+SET archived_at = NOW()
+WHERE property_id = '<property-uuid>'
+  AND archived_at IS NULL
+  AND name LIKE '%- Smoke%';
+```
+
+**Expected Behavior:**
+- Smoke tests should clean up automatically on EXIT
+- If script is killed (Ctrl+C), cleanup may not run
+- Archive step requires PATCH method with `-d '{}'`, not DELETE
+
+**Prevention:**
+- Always let smoke scripts run to completion (trap EXIT cleanup)
+- Use Ctrl+C sparingly (trap may not catch all signals)
+- Verify cleanup succeeded by checking for "✓ Deleted" messages
+
+### Archive Endpoint Returns 422
+
+**Symptom:** Archive endpoint returns HTTP 422: "Plan muss zuerst archiviert werden, bevor er gelöscht werden kann."
+
+**Root Cause:** Calling DELETE endpoint instead of PATCH /archive, or missing required JSON body.
+
+**How to Debug:**
+```bash
+# Check archive call in script or manual test
+# WRONG (returns 422):
+curl -X DELETE "$HOST/api/v1/pricing/rate-plans/$PLAN_ID" ...
+
+# CORRECT (returns 200/204):
+curl -X PATCH "$HOST/api/v1/pricing/rate-plans/$PLAN_ID/archive" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+**Solution:**
+- Use PATCH method (not DELETE)
+- Use `/archive` endpoint suffix
+- Always include `-d '{}'` (empty JSON body required by FastAPI)
+- Include `Content-Type: application/json` header
+
+**Expected Behavior:**
+- PATCH /archive returns 200 or 204 (success)
+- Plan's `archived_at` is set to NOW()
+- Plan is no longer returned in active listings
+- DELETE endpoint can now be called (if archived_at is set)
+
 ---
