@@ -31897,4 +31897,52 @@ curl -X GET "$HOST/api/v1/pricing/taxes?property_id=<property_id>" \
 - Property-specific fees/taxes (property_id != null) override agency-wide (property_id IS NULL)
 - Check fee type is valid: per_stay, per_night, per_person, percent
 
+
+### Backend Startup Fails with Pydantic RecursionError (Import Loop)
+
+**Symptom:** Backend container restarts continuously. Coolify logs show Python RecursionError or TypeError during import:
+```
+RecursionError: maximum recursion depth exceeded
+File "/app/app/schemas/pricing.py", line 149, in <module>
+    class NightBreakdown(BaseModel):
+```
+OR
+```
+TypeError: Forward references must evaluate to types. Got FieldInfo(annotation=NoneType, required=True...)
+```
+
+**Root Cause:** Pydantic v2 schema with field name shadowing imported type (e.g., `date: date = Field(...)` where `date` is both a field name and a `datetime.date` type). This caused namespace collision and Pydantic repr recursion during module import.
+
+**How to Debug:**
+```bash
+# Reproduce crash locally with minimal import
+cd /path/to/backend
+python3 -c "import app.schemas.pricing as s; print('ok')"
+
+# If it crashes with RecursionError or TypeError, check for field names that shadow types
+# Common culprits: date, time, datetime, uuid, list, dict, etc.
+```
+
+**Solution (Applied in Hotfix):**
+1. Added `from __future__ import annotations` at top of pricing.py (enables PEP 563 postponed annotation evaluation)
+2. Renamed shadowing field from `date` to `night_date` in NightBreakdown schema
+3. Updated all references in API routes and frontend to use new field name
+
+**Verification:**
+```bash
+# After fix, minimal import must succeed
+python3 -c "import app.schemas.pricing as s; print('ok')"
+# Expected: "ok"
+
+# Backend should start successfully
+docker logs pms-backend --tail 50
+# Expected: "Uvicorn running on..." NOT RecursionError
+```
+
+**Prevention:**
+- Avoid field names that shadow imported types (date, uuid, list, etc.)
+- Use `from __future__ import annotations` in all Pydantic schema files
+- Test schema imports locally before deploying: `python3 -c "import app.schemas.MODULE"`
+
+---
 ---

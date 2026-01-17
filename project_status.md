@@ -8782,6 +8782,7 @@ Subtotal: (5 × 10000) + (5 × 15000) = 50000 + 75000 = 125000 cents
 - Per-night calculation ensures accurate pricing for stays spanning multiple seasons
 - Backward compatibility maintained for existing API consumers
 - Admin UI provides user-friendly quote calculator with detailed breakdown
+- **HOTFIX (2026-01-17)**: Pydantic import recursion fixed by renaming `date` field to `night_date` in NightBreakdown schema (field name was shadowing datetime.date type, causing RecursionError on module import). Added `from __future__ import annotations` to prevent future issues. Backend startup now reliable.
 
 **Dependencies:**
 - Existing tables: rate_plans, rate_plan_seasons, pricing_fees, pricing_taxes, properties
