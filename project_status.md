@@ -9194,7 +9194,34 @@ Documentation:
 
 **Implementation Date:** 2026-01-17
 
-**Status:** ✅ IMPLEMENTED (NOT VERIFIED)
+**Status:** ✅ VERIFIED
+
+**PROD Evidence (2026-01-17):**
+
+Backend Service:
+- API Base URL: https://api.fewo.kolibri-visions.de
+- Source Commit: 584bac38ae41ca355d373918e15a0a92b54308c7
+- Environment: development
+- API Version: 0.1.0
+- Started At: 2026-01-17T14:56:26.379693+00:00
+
+Deploy Verification:
+- Script: backend/scripts/pms_verify_deploy.sh
+- Result: verify_rc=0
+- Commit Match: ✓ (584bac3 matches /api/v1/ops/version)
+
+Smoke Test:
+- Script: backend/scripts/pms_objekt_preisplaene_saisonzeiten_apply_smoke.sh
+- Result: p2_9_smoke_rc=0
+- Test Property: 23dd8fda-59ae-4b2f-8489-7a90f5d46c66 (Ferienwohnung Berlin-Mitte - Smoke)
+
+Verified Behaviors:
+- ✓ Preview (dry_run=true) makes no database changes, seasons count remains 0
+- ✓ Apply merge (dry_run=false, mode=merge) creates seasons matching template periods
+- ✓ Conflict detection returns HTTP 422 with serializable conflict details (not 500)
+- ✓ Replace mode (dry_run=false, mode=replace) archives old seasons and creates new ones
+- ✓ Quote calculation with seasonal breakdown works correctly
+- ✓ Cleanup (trap EXIT) archives test resources successfully
 
 **Scope:** Comprehensive end-to-end smoke test validating the complete pricing chain from property validation through rate plan creation, season template management, preview/apply workflows (merge/replace modes), conflict detection, quote calculation with seasonal breakdown, and cleanup.
 
