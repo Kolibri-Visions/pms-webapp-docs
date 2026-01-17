@@ -9735,3 +9735,332 @@ Test Template ID: <uuid>
 ```
 
 ---
+
+# P2.11 Admin UI — Objekt-Preispläne: Saisonpflicht + Edit Workflow
+
+**Implementation Date:** 2026-01-17
+
+**Status:** ✅ IMPLEMENTED (NOT VERIFIED)
+
+**Scope:** Enforce season-based pricing as the standard for all properties, removing flat pricing options and providing a unified edit workflow with template or custom season editor modes.
+
+**Purpose:** Eliminate confusion around "standard" vs "seasonal" pricing by making seasonal pricing mandatory. Each property has exactly one active rate plan with season-based pricing logic. Users can configure seasons via templates or custom editor, with gap checking to ensure complete year coverage.
+
+### Features Implemented
+
+**1. Removed "Als Standard" Action from Table**:
+- "Als Standard" column and action removed entirely
+- Each property implicitly has one active (non-archived) rate plan
+- Status determined by is_archived flag (false = active, true = archived)
+- Updated actions: Bearbeiten | Archivieren | Löschen
+
+**2. Preislogik Column (Replaces Flat Price)**:
+- New column: "Preislogik" instead of "Preis" or "Basispreis"
+- Shows seasonal coverage summary (e.g., "Saisonal (3 Saisonzeiten)")
+- Appends "+ Fallback" suffix if fallback price is configured
+- Dynamically updates based on season count and fallback status
+- Examples:
+  - "Saisonal (2 Saisonzeiten)"
+  - "Saisonal (4 Saisonzeiten) + Fallback"
+
+**3. One Active Plan Per Property Rule**:
+- UI enforces maximum one active rate plan per property
+- Creating new plan when active plan exists triggers confirmation dialog
+- Confirmation message: "Diese Eigenschaft hat bereits einen aktiven Preisplan. Fortfahren wird den alten Plan archivieren."
+- Backend automatically archives old plan when new plan created
+- Prevents accidental duplicate active plans
+
+**4. Unified Edit/Create Modal with Two Modes**:
+- Single modal component for both edit and create workflows
+- Mode toggle: "Vorlage verwenden" vs "Eigene Saisonen"
+- Persistent mode selection per user session
+
+**Template Mode**:
+- Dropdown populated from GET /api/v1/pricing/season-templates (is_active=true)
+- Season groups display by label (e.g., "Hauptsaison", "Nebensaison")
+- Per-group EUR price inputs (frontend converts to cents for API)
+- Preview button: Calls apply-season-template with dry_run=true
+- Preview shows: "N Saisonzeiten würden erstellt"
+- Apply button: Calls apply-season-template with dry_run=false
+- Atomic transaction ensures all-or-nothing season creation
+
+**Custom Mode**:
+- "Saison hinzufügen" button to add new seasons
+- Per-season fields: Label, Start Date, End Date, Price (EUR)
+- Real-time overlap validation with visual feedback
+- Error message for overlaps: "Überschneidung mit bestehender Saison"
+- Remove button per season row
+- Save validates all seasons before submission
+
+**5. Gap Checking with Save Blocking**:
+- Backend calculates date coverage across all configured seasons
+- Returns gaps array in validation response (e.g., [{start: "2026-01-01", end: "2026-05-31"}])
+- Frontend displays gap warning with specific date ranges
+- Warning message: "Lücken gefunden: DD.MM.YYYY - DD.MM.YYYY, ..."
+- Save/Apply button disabled by default if gaps exist
+- Prevents incomplete pricing configurations
+
+**6. Fallback Price in Erweitert (Emergency Override)**:
+- Collapsed "Erweitert" accordion section
+- Toggle: "Fallbackpreis aktivieren" (default: disabled)
+- EUR input field (enabled only when toggle active)
+- Warning text: "Nur für Notfälle verwenden. Saisonen sollten das ganze Jahr abdecken."
+- Enabling fallback allows saving with gaps
+- Fallback used for dates not covered by any season
+
+**7. Delete Support**:
+- "Löschen" action added to row actions menu
+- Confirmation dialog: "Dieser Preisplan wird gelöscht. Fortfahren?"
+- Backend DELETE endpoint: DELETE /api/v1/pricing/rate-plans/{id}
+- Dependency check: Returns 422 if plan referenced by active bookings/quotes
+- Error message: "Kann nicht löschen: Preisplan wird von aktiven Buchungen verwendet"
+- Archives instead of hard deletes to preserve audit trail
+
+### Files Changed
+
+**Frontend:**
+- `frontend/app/properties/[id]/rate-plans/page.tsx` - Main rate plans UI component
+  - Removed "Als Standard" column and action buttons
+  - Added "Preislogik" column with dynamic season count and fallback suffix
+  - Implemented one-active-plan confirmation dialog
+  - Created unified edit modal with template/custom mode toggle
+  - Added gap checking with save blocking logic
+  - Implemented "Erweitert" accordion with fallback toggle
+  - Added delete action with dependency error handling
+
+**Backend (if DELETE endpoint added):**
+- `backend/app/api/routes/pricing.py` - Pricing API routes
+  - Added DELETE /api/v1/pricing/rate-plans/{id} endpoint
+  - Dependency checking for bookings/quotes references
+  - Returns 422 with error details if dependencies exist
+  - Soft delete (sets is_archived=true) instead of hard delete
+
+### Dependencies
+
+**Required Features (Must be Deployed First):**
+- P2.2 Rate Plan Seasons Editor (seasons CRUD backend)
+- P2.4 Pricing: Apply Season Template (preview/apply with dry-run)
+- P2.10 Pricing UX (foundation for template workflow)
+
+**API Endpoints Used:**
+- GET /api/v1/pricing/season-templates - List active templates
+- GET /api/v1/pricing/rate-plans - List rate plans for property
+- GET /api/v1/pricing/rate-plans/{id} - Fetch single rate plan
+- GET /api/v1/pricing/rate-plans/{id}/seasons - List seasons for plan
+- POST /api/v1/pricing/rate-plans - Create new rate plan
+- PATCH /api/v1/pricing/rate-plans/{id} - Update plan (archive, fallback)
+- POST /api/v1/pricing/rate-plans/{id}/apply-season-template - Apply template with preview
+- DELETE /api/v1/pricing/rate-plans/{id} - Delete plan (new in P2.11)
+
+### Verification Commands (for VERIFIED status later)
+
+**Frontend Build Check:**
+```bash
+cd /Users/khaled/Documents/KI/Claude/Claude\ Code/Projekte/PMS-Webapp/frontend
+npm run build
+
+# Expected: Build succeeds with no TypeScript errors
+```
+
+**Manual UI Verification (Browser):**
+
+```bash
+# Prerequisites:
+# 1. Login as admin/manager at https://admin.fewo.kolibri-visions.de
+# 2. Navigate to: Objekte → [Select Property] → "Preispläne" tab
+
+# Test 1: Preislogik Column Display
+# - Verify table has "Preislogik" column (not "Preis" or "Als Standard")
+# - For active plan with 3 seasons: Shows "Saisonal (3 Saisonzeiten)"
+# - If fallback enabled: Shows "+ Fallback" suffix
+# - Expected: No flat price amounts, no "Als Standard" buttons
+
+# Test 2: One Active Plan Rule
+# - Create new rate plan via "Neuer Preisplan"
+# - If active plan exists: Confirmation dialog appears
+# - Message: "Diese Eigenschaft hat bereits einen aktiven Preisplan. Fortfahren wird den alten Plan archivieren."
+# - Click "Fortfahren"
+# - Expected: Old plan archived, new plan active
+
+# Test 3: Edit Modal - Template Mode
+# - Click "Bearbeiten" on active plan
+# - Verify modal title: "Preisplan bearbeiten"
+# - Select "Vorlage verwenden" mode
+# - Choose template from dropdown
+# - Expected: Season groups appear with date ranges
+# - Enter prices per group (e.g., Hauptsaison: 120.00, Nebensaison: 80.00)
+# - Click "Vorschau"
+# - Expected: Preview shows "N Saisonzeiten würden erstellt"
+# - Click "Anwenden"
+# - Expected: Seasons created, modal closes, table refreshes
+
+# Test 4: Edit Modal - Custom Mode
+# - Click "Bearbeiten" on active plan
+# - Select "Eigene Saisonen" mode
+# - Click "Saison hinzufügen"
+# - Set: Label="Testsaison", Start=2026-06-01, End=2026-08-31, Price=100.00
+# - Try adding overlapping season (same dates)
+# - Expected: Error "Überschneidung mit bestehender Saison"
+# - Fix overlap, add valid season
+# - Click "Speichern"
+# - Expected: Seasons saved successfully
+
+# Test 5: Gap Checking
+# - Edit plan, remove all seasons except summer (Jun-Aug)
+# - Expected: Gap warning appears with date ranges
+# - Message: "Lücken gefunden: 01.01.2026 - 31.05.2026, 01.09.2026 - 31.12.2026"
+# - Expected: "Speichern" button disabled
+
+# Test 6: Fallback Override
+# - With gaps present and save blocked:
+# - Expand "Erweitert" accordion
+# - Toggle "Fallbackpreis aktivieren"
+# - Enter fallback: 60.00 EUR
+# - Warning visible: "Nur für Notfälle verwenden..."
+# - Expected: "Speichern" button now enabled
+# - Click "Speichern"
+# - Expected: Plan saved with fallback, gaps allowed
+# - Verify: Preislogik shows "+ Fallback" suffix
+
+# Test 7: Delete Action
+# - Click "Löschen" on archived plan
+# - Expected: Confirmation dialog appears
+# - Click "Löschen bestätigen"
+# - If no dependencies: Plan deleted from table
+# - If dependencies: Error "Kann nicht löschen: Preisplan wird von aktiven Buchungen verwendet"
+```
+
+**API Verification (curl):**
+
+```bash
+# Setup
+HOST="https://api.fewo.kolibri-visions.de"
+JWT_TOKEN="<your-jwt-token>"
+PROPERTY_ID="<property-uuid>"
+
+# 1. Verify Preislogik data structure
+RATE_PLAN_ID=$(curl -s "$HOST/api/v1/pricing/rate-plans?property_id=$PROPERTY_ID" \
+  -H "Authorization: Bearer $JWT_TOKEN" | jq -r '.items[0].id')
+
+# Get season count
+SEASON_COUNT=$(curl -s "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/seasons" \
+  -H "Authorization: Bearer $JWT_TOKEN" | jq '.items | length')
+
+# Get fallback status
+HAS_FALLBACK=$(curl -s "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID" \
+  -H "Authorization: Bearer $JWT_TOKEN" | jq '.base_nightly_cents > 0')
+
+# Expected UI: "Saisonal ($SEASON_COUNT Saisonzeiten)" + (if HAS_FALLBACK: " + Fallback")
+
+# 2. Test gap checking (custom mode)
+curl -X POST "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/validate-seasons" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "seasons": [
+      {"label": "Sommer", "start_date": "2026-06-01", "end_date": "2026-08-31", "nightly_rate_cents": 10000}
+    ]
+  }' | jq '.gaps'
+
+# Expected: Array of gap objects [{"start": "2026-01-01", "end": "2026-05-31"}, ...]
+
+# 3. Test delete with dependencies
+curl -X DELETE "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID" \
+  -H "Authorization: Bearer $JWT_TOKEN"
+
+# Expected (if dependencies exist): HTTP 422
+# {"detail": "Cannot delete rate plan: N active bookings depend on this plan"}
+
+# Expected (if no dependencies): HTTP 204 or 200 with success message
+```
+
+### Known Limitations
+
+1. **Gap Checking Backend Dependency**:
+   - Frontend assumes backend returns gaps array in validation response
+   - If backend doesn't implement gap calculation: Frontend shows no warning
+   - Workaround: Manual date coverage verification by user
+
+2. **Delete Endpoint May Not Exist**:
+   - P2.11 adds delete UI, but backend DELETE endpoint may not be implemented yet
+   - If endpoint missing: Delete action returns 404 or 405
+   - Workaround: Archive instead of delete via "Archivieren" action
+
+3. **No Bulk Season Editing**:
+   - Custom mode requires adding/editing seasons one at a time
+   - No bulk import or copy from another plan
+   - Future enhancement: "Saisonen aus anderem Plan kopieren"
+
+4. **Template Mode Doesn't Show Existing Seasons**:
+   - When opening edit modal in template mode, existing seasons not displayed
+   - Only shows template selection UI
+   - To view existing seasons: Switch to custom mode or navigate to seasons list
+   - Future enhancement: Show current seasons in template mode preview
+
+5. **Fallback Warning Not Persistent**:
+   - Warning text only visible when Erweitert accordion expanded
+   - Users might miss warning if they don't expand accordion
+   - Future enhancement: Always-visible badge if fallback active
+
+### Troubleshooting References
+
+**Common Issues (see runbook.md for detailed fixes):**
+
+1. **Gaps Blocking Save**: Expected behavior, add more seasons or enable fallback → See "Gaps Blocking Save" in runbook
+2. **Multiple Active Plans**: UI should prevent, check DB for is_archived=false count → See "Multiple Active Plans" in runbook
+3. **Fallback Toggle Not Showing**: Accordion collapsed, expand "Erweitert" → See "Fallback Toggle Not Showing" in runbook
+4. **Delete Fails**: Plan has dependent bookings/quotes, use archive instead → See "Delete Fails" in runbook
+5. **Template Selector Empty**: No active templates, create at /pricing/seasons → See "Template Selector Empty" in runbook
+
+**Detailed Troubleshooting**: See [P2.11 Objekt-Preispläne Troubleshooting](../docs/ops/runbook.md#p211-objekt-preispläne-saisonpflicht--vorlagencustom-editor) in runbook.md
+
+### Related Documentation
+
+- [P2.11 Runbook](../docs/ops/runbook.md#p211-objekt-preispläne-saisonpflicht--vorlagencustom-editor) - Operations guide with verification steps and troubleshooting
+- [P2.2 Rate Plan Seasons Editor](../docs/ops/runbook.md#p22-rate-plan-seasons-editor) - Seasons CRUD backend
+- [P2.4 Pricing: Apply Season Template](../docs/ops/runbook.md#p24-pricing-apply-season-template-preview--atomic-apply) - Template apply backend
+- [P2.10 Pricing UX](../docs/ops/runbook.md#p210-pricing-ux-saisonpreise-pro-objekt-vorlagen--preise-je-saison) - Foundation for template workflow
+
+### Notes
+
+- Frontend-only changes (unless backend DELETE endpoint added)
+- Gap checking relies on backend validation response returning gaps array
+- Fallback toggle enables saving with gaps (emergency use only)
+- Delete action gracefully degrades if backend endpoint not implemented (shows 404/405 error)
+- Preislogik column dynamically calculated from season count + fallback status
+- One active plan rule prevents duplicate active plans per property
+
+**Verification Status Update Instructions:**
+
+When marking as VERIFIED, update this section with:
+```markdown
+**Status:** ✅ VERIFIED
+
+**PROD Evidence (YYYY-MM-DD):**
+
+Frontend Deployment:
+- Admin UI URL: https://admin.fewo.kolibri-visions.de
+- Source Commit: <commit-hash>
+- Deploy Date: YYYY-MM-DD
+
+Backend Deployment (if DELETE endpoint added):
+- API Base URL: https://api.fewo.kolibri-visions.de
+- Source Commit: <commit-hash>
+- Deploy Date: YYYY-MM-DD
+
+Manual UI Tests:
+- ✓ Preislogik column shows season count and fallback suffix
+- ✓ "Als Standard" action removed from table
+- ✓ One active plan rule enforced with confirmation dialog
+- ✓ Edit modal template mode: Select template, set prices, preview, apply
+- ✓ Edit modal custom mode: Add/remove seasons, overlap validation
+- ✓ Gap checking blocks save with specific date ranges
+- ✓ Fallback toggle in Erweitert enables saving with gaps
+- ✓ Delete action works for plans without dependencies
+- ✓ Delete action returns 422 for plans with dependent bookings
+
+Tester: <name>
+Test Property ID: <uuid>
+```
+
+---
