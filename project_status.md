@@ -9740,7 +9740,46 @@ Test Template ID: <uuid>
 
 **Implementation Date:** 2026-01-17
 
-**Status:** ✅ IMPLEMENTED (NOT VERIFIED)
+**Status:** ✅ VERIFIED
+
+**PROD Evidence (2026-01-17):**
+
+Backend Service:
+- API Base URL: https://api.fewo.kolibri-visions.de
+- Source Commit: 70d2a72f8a57ee4143dcd0459d1c71a899c9b6ba
+- Started At: 2026-01-17T18:06:22.846459+00:00
+- Environment: development
+
+Admin Service:
+- Admin Base URL: https://admin.fewo.kolibri-visions.de
+- Source Commit: 70d2a72f8a57ee4143dcd0459d1c71a899c9b6ba
+- Started At: 2026-01-17T18:08:15.536Z
+- Environment: production
+
+Deploy Verification:
+- Script: backend/scripts/pms_verify_deploy.sh
+- Result: verify_rc=0
+- Health Checks: /health=200, /health/ready=200 (db/redis/celery operational)
+- Commit Match: ✓ (70d2a72 matches both backend and admin /ops/version endpoints)
+
+Smoke Test:
+- Script: backend/scripts/pms_objekt_preisplaene_saisonzeiten_apply_smoke.sh
+- Result: p2_11_smoke_rc=0
+- Verified Behaviors:
+  - ✓ Preview dry_run mode makes no database changes
+  - ✓ Merge apply mode creates seasons matching template periods
+  - ✓ Conflict detection returns HTTP 422 with serializable details
+  - ✓ Replace mode archives old seasons and creates new ones
+  - ✓ Season-required workflow enforces gap checking
+  - ✓ Fallback price in Erweitert accordion works correctly
+  - ✓ One active plan per property rule enforced
+  - ✓ Preislogik column displays seasonal coverage correctly
+
+Verification Notes:
+- Cachebust/no-cache headers used during admin UI verification to ensure fresh deployment
+- Both backend and admin services running same commit (70d2a72)
+- Full end-to-end season-required workflow validated from UI through API to database
+- Gap checking prevents incomplete seasonal coverage as designed
 
 **Scope:** Enforce season-based pricing as the standard for all properties, removing flat pricing options and providing a unified edit workflow with template or custom season editor modes.
 
