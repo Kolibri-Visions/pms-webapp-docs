@@ -9187,6 +9187,181 @@ Documentation:
 
 **Dependencies:**
 - P2.6 UI IA (property detail tabs and navigation changes)
+
+---
+
+# P2.9 QA — Combined pricing chain smoke (Objekt-Preisplaene & Saisonzeiten anwenden - Smoke)
+
+**Implementation Date:** 2026-01-17
+
+**Status:** ✅ IMPLEMENTED (NOT VERIFIED)
+
+**Scope:** Comprehensive end-to-end smoke test validating the complete pricing chain from property validation through rate plan creation, season template management, preview/apply workflows (merge/replace modes), conflict detection, quote calculation with seasonal breakdown, and cleanup.
+
+**Purpose:** This smoke test consolidates validation of the entire P2.x pricing feature set (P2.2 Seasons CRUD, P2.4 Template Apply, P2.5 Quote v2) into a single production-ready test script. It ensures all pricing components work together correctly in production environments.
+
+**What the Script Tests:**
+
+1. **Property Validation**:
+   - Auto-selects first available property if PROPERTY_ID not provided
+   - Validates property exists and is accessible
+   - Verifies GET /api/v1/properties endpoint returns valid data
+
+2. **Rate Plan Creation**:
+   - Creates property-scoped rate plan via POST /api/v1/pricing/rate-plans
+   - Validates base_nightly_cents, currency, min_stay_nights fields
+   - Verifies rate plan ID returned and accessible
+
+3. **Season Template Creation**:
+   - Creates season template with 2 periods (Hauptsaison, Nebensaison)
+   - Tests POST /api/v1/pricing/season-templates endpoint
+   - Validates template periods array structure and date ranges
+
+4. **Preview (Dry-Run)**:
+   - Executes dry-run preview of template apply (merge mode)
+   - Validates POST /api/v1/pricing/rate-plans/{id}/apply-season-template with dry_run=true
+   - Verifies response contains summary with would_create count
+
+5. **Apply Merge Mode**:
+   - Applies template in merge mode (preserve existing seasons, add new)
+   - Validates POST with dry_run=false returns 200
+   - Verifies GET /api/v1/pricing/rate-plans/{id}/seasons returns expected count
+
+6. **Conflict Detection**:
+   - Attempts to merge template with overlapping period
+   - Expects 422 Unprocessable Entity with conflicts array
+   - Validates conflict detection logic works correctly
+
+7. **Apply Replace Mode**:
+   - Applies template in replace mode (archives existing, creates new)
+   - Verifies summary shows would_archive > 0 and would_create matches template
+   - Confirms existing seasons archived and new seasons created
+
+8. **Quote Calculation Validation**:
+   - Calculates quote spanning multiple seasons
+   - Validates POST /api/v1/pricing/quote returns 200
+   - Verifies nights_breakdown field exists (v2 feature)
+   - Validates seasonal breakdown has correct entries, subtotal calculation
+   - Confirms fees and taxes applied correctly
+
+9. **Cleanup**:
+   - Archives test rate plan via DELETE /api/v1/pricing/rate-plans/{id}
+   - Archives test season template via DELETE /api/v1/pricing/season-templates/{id}
+   - Uses trap EXIT to ensure cleanup runs even on failure
+
+**Files Created:**
+
+Scripts:
+- `backend/scripts/pms_objekt_preisplaene_saisonzeiten_apply_smoke.sh` - Main smoke test script (estimated ~400-500 lines)
+
+Documentation:
+- `backend/scripts/README.md` (ADD-ONLY) - Added "P2.9 Combined Pricing Chain Smoke Test" section with:
+  - Purpose and location
+  - What it tests (9 test cases)
+  - Required/optional environment variables
+  - Usage examples (basic, with property/agency, using aliases)
+  - Expected output
+  - API endpoints tested (8 endpoints)
+  - Troubleshooting (9 failure scenarios + auth/DB errors)
+  - Production verification link
+
+- `backend/docs/ops/runbook.md` (ADD-ONLY) - Added "P2.9 Smoke: Objekt-Preisplaene & Saisonzeiten anwenden - Smoke" section with:
+  - Purpose and when to run
+  - How to run in PROD (prerequisites, env vars, run command)
+  - Expected output and exit codes
+  - Troubleshooting subsections:
+    - Auth Errors (401/403)
+    - Conflict Detection Fails (Test 6)
+    - Cleanup Issues
+    - Database 503 Errors
+  - Related links to backend endpoints and P2.x features
+
+- `backend/docs/project_status.md` (ADD-ONLY) - This entry
+
+**Environment Variables:**
+
+Required:
+- `HOST` or `API_BASE_URL`: PMS backend base URL (e.g., https://api.production.example.com)
+- `JWT_TOKEN` or `MANAGER_JWT_TOKEN`: JWT token with manager/admin role
+
+Optional:
+- `PROPERTY_ID`: Property UUID (default: auto-pick first property)
+- `AGENCY_ID`: Agency UUID for x-agency-id header (multi-tenant setups)
+
+**Usage Example:**
+```bash
+# Production test
+HOST=https://pms-backend.production.example.com \
+JWT_TOKEN="eyJ..." \
+./backend/scripts/pms_objekt_preisplaene_saisonzeiten_apply_smoke.sh
+
+# With specific property and agency
+HOST=https://pms-backend.production.example.com \
+JWT_TOKEN="eyJ..." \
+PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66" \
+AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7" \
+./backend/scripts/pms_objekt_preisplaene_saisonzeiten_apply_smoke.sh
+```
+
+**Expected Output:**
+```
+ℹ Starting P2.9 Combined Pricing Chain smoke tests...
+✅ Test 1 PASSED: Property validated
+✅ Test 2 PASSED: Created rate plan
+✅ Test 3 PASSED: Created season template
+✅ Test 4 PASSED: Dry-run preview returned would_create=2
+✅ Test 5 PASSED: Applied template (merge mode) - 2 seasons created
+✅ Test 6 PASSED: Conflict detection works - 422 returned
+✅ Test 7 PASSED: Applied template (replace mode) - archived 2, created 2
+✅ Test 8 PASSED: Quote calculation verified ✓
+✅ All P2.9 Combined Pricing Chain smoke tests passed!
+```
+
+**Common Failure Scenarios:**
+
+1. **Auth Errors (401/403)**: Invalid or expired JWT token, insufficient permissions
+2. **Property Not Found**: PROPERTY_ID invalid or no properties exist in database
+3. **Conflict Detection Broken**: Test 6 expects 422 but gets 200 (overlap detection logic broken)
+4. **Cleanup Failures**: DELETE endpoints return 404/500, orphaned test data remains
+5. **Database 503**: Connection pool exhausted, DB server unreachable
+6. **Quote Missing nights_breakdown**: Backend missing P2.5 v2 feature, deploy latest
+
+**API Endpoints Validated:**
+- GET /api/v1/properties
+- POST /api/v1/pricing/rate-plans
+- POST /api/v1/pricing/season-templates
+- POST /api/v1/pricing/rate-plans/{id}/apply-season-template
+- GET /api/v1/pricing/rate-plans/{id}/seasons
+- POST /api/v1/pricing/quote
+- DELETE /api/v1/pricing/rate-plans/{id}
+- DELETE /api/v1/pricing/season-templates/{id}
+
+**Dependencies:**
+- P2.2 Rate Plan Seasons Editor (seasons CRUD backend)
+- P2.4 Pricing: Apply Season Template (template apply backend with preview/merge/replace)
+- P2.5 Pricing: Quote v2 (seasonal breakdown backend)
+- Database migrations: rate_plans, season_templates, season_template_periods tables
+
+**Related Documentation:**
+- backend/scripts/README.md - P2.9 smoke script documentation
+- backend/docs/ops/runbook.md#p29-smoke-objekt-preisplaene--saisonzeiten-anwenden---smoke
+
+**Verification Checklist:**
+
+To mark this as VERIFIED, complete the following:
+
+- [ ] Run smoke script in PROD: `./backend/scripts/pms_objekt_preisplaene_saisonzeiten_apply_smoke.sh`
+- [ ] Verify exit code rc=0 (all tests passed)
+- [ ] Verify Test 6 correctly detects conflicts (422 returned)
+- [ ] Verify Test 8 quote calculation includes nights_breakdown field (v2)
+- [ ] Verify cleanup executes successfully (no orphaned SMOKE_TEST resources)
+- [ ] Test with PROPERTY_ID explicitly set (verify property validation)
+- [ ] Test in multi-tenant environment with AGENCY_ID (verify x-agency-id header)
+- [ ] Verify all 8 API endpoints return expected status codes
+- [ ] Check backend logs for errors during test execution
+- [ ] Update this entry: Change status to "✅ VERIFIED" and add verification date
+
+---
 - Properties domain (property detail page)
 - Pricing domain (rate plans API)
 

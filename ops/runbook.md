@@ -32500,3 +32500,158 @@ curl -I $FRONTEND_URL | grep -i "last-modified"
 - frontend/app/properties/[id]/page.tsx (property overview with summary)
 
 ---
+
+## P2.9 Smoke: Objekt-Preisplaene & Saisonzeiten anwenden - Smoke
+
+**Purpose**: Combined end-to-end smoke test for the complete pricing chain including property-scoped rate plans, season templates, preview/apply workflows (merge/replace modes), conflict detection, and quote calculation with seasonal breakdown.
+
+**When to Run**:
+- After deploying P2.x pricing features to PROD
+- As part of PROD release verification
+- Before marking P2.9 as VERIFIED in project_status.md
+
+**Smoke Script**: `backend/scripts/pms_objekt_preisplaene_saisonzeiten_apply_smoke.sh`
+
+### How to Run in PROD
+
+**Prerequisites**:
+- Valid JWT token with manager/admin role
+- Backend accessible via HTTPS
+- Database migrations applied (rate_plans, season_templates, season_template_periods tables exist)
+
+**Environment Variables**:
+```bash
+# Required
+export HOST=https://api.production.example.com              # or API_BASE_URL
+export JWT_TOKEN="eyJhbGc..."                                # or MANAGER_JWT_TOKEN
+
+# Optional
+export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"   # default: auto-pick first property
+export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"     # for multi-tenant setups
+```
+
+**Run**:
+```bash
+cd /app  # or wherever backend is deployed
+
+./backend/scripts/pms_objekt_preisplaene_saisonzeiten_apply_smoke.sh
+```
+
+**Expected Output**:
+```
+ℹ Starting P2.9 Combined Pricing Chain smoke tests...
+ℹ Auto-selected property: 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
+✅ Test 1 PASSED: Property validated (Property Name)
+✅ Test 2 PASSED: Created rate plan abc123...
+✅ Test 3 PASSED: Created season template def456...
+✅ Test 4 PASSED: Dry-run preview returned would_create=2
+✅ Test 5 PASSED: Applied template (merge mode) - 2 seasons created
+✅ Test 6 PASSED: Conflict detection works - 422 returned
+✅ Test 7 PASSED: Applied template (replace mode) - archived 2, created 2
+✅ Test 8 PASSED: Quote calculation verified ✓
+✅ All P2.9 Combined Pricing Chain smoke tests passed!
+```
+
+**Exit Code**: `rc=0` on success, `rc=1` on any test failure
+
+### Troubleshooting
+
+#### Auth Errors (401/403)
+
+**Symptom**: Test 1 or 2 fails with 401 Unauthorized or 403 Forbidden.
+
+**Root Cause**: Invalid JWT token or insufficient permissions.
+
+**How to Debug**:
+```bash
+# Check token expiry (decode JWT)
+echo "$JWT_TOKEN" | cut -d. -f2 | base64 -d | jq '.exp, .role'
+
+# Test token against /api/v1/properties endpoint
+curl -v -H "Authorization: Bearer $JWT_TOKEN" "$HOST/api/v1/properties?limit=1"
+```
+
+**Solution**:
+- Refresh JWT token if expired
+- Verify token has manager or admin role claim
+- Check user exists and has correct role in auth.users table
+
+#### Conflict Detection Fails (Test 6)
+
+**Symptom**: Test 6 expects 422 conflict but gets 200 OK instead.
+
+**Root Cause**: Backend conflict detection logic not working (season overlap check broken).
+
+**How to Debug**:
+```bash
+# Check backend logs for apply-season-template endpoint
+# Look for overlap detection logic execution
+
+# Verify existing seasons have correct date ranges
+curl -H "Authorization: Bearer $JWT_TOKEN" \
+  "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/seasons" | jq '.[] | {label, date_from, date_to}'
+```
+
+**Solution**:
+- Check backend/app/api/routes/pricing.py line ~2300-2400 (apply_season_template_to_rate_plan)
+- Verify overlap detection logic is active (not commented out)
+- Check season_template_periods have valid date ranges
+- Review backend error logs for exceptions during conflict detection
+
+#### Cleanup Issues
+
+**Symptom**: Script creates resources but fails to clean up on exit (orphaned test data).
+
+**Root Cause**: Script terminated before cleanup trap executes, or DELETE endpoints failing.
+
+**How to Debug**:
+```bash
+# List orphaned smoke test resources
+curl -H "Authorization: Bearer $JWT_TOKEN" \
+  "$HOST/api/v1/pricing/rate-plans?limit=100" | \
+  jq '.items[] | select(.name | startswith("SMOKE_TEST"))'
+
+# List orphaned templates
+curl -H "Authorization: Bearer $JWT_TOKEN" \
+  "$HOST/api/v1/pricing/season-templates?limit=100" | \
+  jq '.[] | select(.name | startswith("SMOKE_TEMPLATE"))'
+```
+
+**Solution**:
+- Manually archive orphaned resources via DELETE endpoints
+- Check DELETE endpoints return 200/204 (not 404/500)
+- Verify cleanup trap is executed (test with `set -x` debug mode)
+- If script killed abruptly (SIGKILL), run manual cleanup
+
+#### Database 503 Errors
+
+**Symptom**: Tests fail with 503 Service Unavailable errors.
+
+**Root Cause**: Database connection pool exhausted or DB server unreachable.
+
+**How to Debug**:
+```bash
+# Check backend health endpoint
+curl "$HOST/health" | jq '.'
+
+# Check database connectivity (from backend container)
+psql -h $DB_HOST -U $DB_USER -d $DB_NAME -c "SELECT 1;"
+
+# Review backend logs for connection errors
+docker logs pms-backend --tail 50 | grep -i "database\|connection\|pool"
+```
+
+**Solution**:
+- Restart backend to reset connection pool
+- Check database server status and resources (CPU, memory, connections)
+- Verify DATABASE_URL env var is correct
+- Scale up DB connection pool size if consistently exhausted
+
+**Related**:
+- backend/scripts/README.md - P2.9 smoke script documentation
+- backend/scripts/pms_objekt_preisplaene_saisonzeiten_apply_smoke.sh - Smoke script implementation
+- P2.2 Rate Plan Seasons Editor (seasons CRUD backend)
+- P2.4 Pricing: Apply Season Template (template apply backend)
+- P2.5 Pricing: Quote v2 (seasonal breakdown backend)
+
+---
