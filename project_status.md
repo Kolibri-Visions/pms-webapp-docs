@@ -9000,6 +9000,8 @@ echo "rc=$?"
 - Frontend-only implementation - no new backend endpoints added
 - Reuses existing API routes: GET/POST/PATCH/DELETE seasons, GET templates, POST apply-season-template
 
+**Hotfix (2026-01-17):** Fixed P2.4 apply-season-template endpoint to return 422 (not 500) on merge conflicts. Root cause: HTTPException detail contained non-JSON-serializable date/UUID objects from Pydantic `.dict()`. Fix: Changed to `.model_dump(mode='json')` which serializes dates/UUIDs to strings. Added unit test `test_season_template_apply_conflict.py` to verify JSON serializability. Smoke script Test 6 now expects 422 on conflicts (previously failed with 500). Status remains IMPLEMENTED until PROD verification with smoke rc=0.
+
 **Backend Dependencies:**
 - P2.2 Rate Plan Seasons Editor (seasons CRUD endpoints)
 - P2.4 Apply Season Template (dry-run preview + atomic apply endpoints)

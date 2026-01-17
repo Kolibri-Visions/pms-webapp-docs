@@ -32264,3 +32264,93 @@ echo $JWT_TOKEN | cut -d'.' -f2 | base64 -d | jq '.exp'
 
 ---
 
+
+### Apply Season Template Returns 500 on Merge Conflicts (Fixed)
+
+**Symptom:** POST /api/v1/pricing/rate-plans/{id}/apply-season-template with mode=merge returns HTTP 500 instead of 422 when conflicts are detected.
+
+**Error Example:**
+```
+HTTP 500 Internal Server Error
+{
+  "detail": "Internal server error"
+}
+```
+
+Or in backend logs:
+```
+TypeError: Object of type date is not JSON serializable
+TypeError: Object of type UUID is not JSON serializable
+```
+
+**Root Cause (Fixed in P2.7 Hotfix):** HTTPException detail dict contained non-JSON-serializable objects (Python date and UUID) from Pydantic `.dict()` method. When FastAPI tried to serialize the exception to JSON response, it raised TypeError, resulting in 500 instead of intended 422.
+
+**Fix Applied:** Changed conflict serialization from `.dict()` to `.model_dump(mode='json')` (Pydantic v2), which automatically converts:
+- `date` objects → ISO string (e.g., "2026-06-01")
+- `UUID` objects → string (e.g., "123e4567-...")
+- All other types → JSON-compatible primitives
+
+**How to Debug (if issue recurs):**
+```bash
+# Test merge mode with known conflicts
+curl -X POST "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/apply-season-template" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "template_id": "'$TEMPLATE_ID'",
+    "mode": "merge",
+    "dry_run": true
+  }' -w "\n%{http_code}\n"
+
+# Expected: 422 with JSON response containing conflicts array
+# NOT expected: 500 with internal server error
+```
+
+**Expected 422 Response:**
+```json
+{
+  "detail": {
+    "message": "Cannot apply template in merge mode: 1 conflict(s) detected",
+    "conflicts": [
+      {
+        "period_label": "Hauptsaison",
+        "period_date_from": "2026-06-01",
+        "period_date_to": "2026-08-31",
+        "conflicts_with_season_id": "123e4567-e89b-12d3-a456-426614174000",
+        "conflicts_with_date_from": "2026-07-01",
+        "conflicts_with_date_to": "2026-07-31",
+        "message": "Period 'Hauptsaison' (2026-06-01 to 2026-08-31) overlaps with existing season (2026-07-01 to 2026-07-31)"
+      }
+    ]
+  }
+}
+```
+
+**Verification:**
+```bash
+# Check backend logs for TypeError if 500 occurs
+# Should NOT see: "Object of type date is not JSON serializable"
+
+# Verify conflict response structure
+curl -X POST "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/apply-season-template" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"template_id": "'$TEMPLATE_ID'", "mode": "merge", "dry_run": true}' \
+  | jq '.detail.conflicts[0] | keys'
+
+# Expected: ["conflicts_with_date_from", "conflicts_with_date_to", "conflicts_with_season_id", "message", "period_date_from", "period_date_to", "period_label"]
+# All values should be strings (not objects)
+```
+
+**Prevention:**
+- Always use `.model_dump(mode='json')` instead of `.dict()` when serializing Pydantic models for HTTPException detail
+- Test API error responses with curl to verify JSON serializability
+- Unit tests should verify serialization with `json.dumps()` on exception detail
+
+**Related:**
+- backend/app/api/routes/pricing.py line ~2366 (conflict handling)
+- backend/app/schemas/pricing.py line ~389 (SeasonConflict model)
+- backend/tests/unit/test_season_template_apply_conflict.py (serialization tests)
+
+---
+
