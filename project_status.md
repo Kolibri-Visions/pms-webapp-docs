@@ -10296,3 +10296,88 @@ Test Property ID: <uuid>
 ```
 
 ---
+
+# P2.13 API + DB Hardening — Preispläne/Saisonpreise Invarianten
+
+**Implementation Date:** 2026-01-17
+
+**Status:** ✅ IMPLEMENTED
+
+**Scope:** Enforce pricing system invariants at DB and API level to prevent human errors (multiple active plans, season overlaps, missing pricing).
+
+**Features Implemented:**
+
+1. **Pricing Invariants Documentation** (`backend/docs/architecture/pricing_invariants.md`):
+   - Date semantics: Half-open intervals [date_from, date_to) (exclusive end)
+   - Price resolution logic with fallback support
+   - "One active plan per property" rule
+   - "No overlaps per plan" rule for seasons
+   - Coverage/gaps definition and handling
+   - Error response standards (German messages, HTTP 409/422)
+   - Migration strategy and glossary
+
+2. **Database Migration** (`supabase/migrations/20260117214810_harden_rate_plans_invariants.sql`):
+   - Added `fallback_price_cents` column to rate_plans table
+   - Partial unique index: ONE active rate plan per property (UNIQUE(property_id) WHERE archived_at IS NULL)
+   - Exclusion constraint: NO overlapping seasons per plan (GIST exclusion on daterange)
+   - Uses btree_gist extension for daterange overlap detection
+   - Graceful error handling for existing dirty data
+
+3. **API Hardening** (`backend/app/api/routes/pricing.py`):
+   - Create Rate Plan: Returns 409 Conflict if property already has active plan
+   - Create/Update Season: Returns 422 with German error if overlap detected
+   - Apply Season Template: Returns 422 in merge mode with conflict details
+   - Quote Endpoint: Returns 422 if no pricing available and no fallback (strict validation)
+   - All error messages in German with specific details (dates, labels, conflicting resources)
+
+4. **Schema Updates** (`backend/app/schemas/pricing.py`):
+   - Added `fallback_price_cents` to RatePlanCreate, RatePlanUpdate, RatePlanResponse
+   - Validation: `ge=0` for non-negative pricing
+
+5. **Smoke Scripts** (4 new negative test scripts):
+   - `pms_preisplan_doppel_aktiv_smoke.sh`: Tests 409 on duplicate active plan
+   - `pms_saison_overlap_smoke.sh`: Tests 422 on overlapping seasons
+   - `pms_quote_keine_saison_smoke.sh`: Tests 422 when no pricing + no fallback
+   - `pms_template_merge_konflikt_smoke.sh`: Tests 422 on merge conflicts
+   - All scripts use realistic German labels with "- Smoke" suffix
+   - trap EXIT cleanup handlers for PROD safety
+
+**Error Responses:**
+
+- **409 Conflict**: Duplicate active rate plan for same property
+  - Message: "Es existiert bereits ein aktiver Preisplan für dieses Objekt: '{name}'. Bitte archivieren Sie den bestehenden Plan zuerst."
+
+- **422 Unprocessable Entity**: Season overlaps, missing pricing, merge conflicts
+  - Season overlap: "Überschneidung mit bestehender Saison: {label} ({date_from} bis {date_to})"
+  - Missing pricing: "Keine Saison greift für Nacht {date}, kein Fallbackpreis definiert"
+  - Merge conflict: "Template kann nicht im Merge-Modus angewendet werden: {count} Überschneidung(en) erkannt"
+
+**Backward Compatibility:**
+- `fallback_price_cents` is nullable (NULL = no fallback, existing behavior)
+- DB constraints only enforce on new data (existing violations are warned)
+- Existing API consumers receive same HTTP status codes with clearer messages
+- Quote endpoint behavior change: soft-fail with message → hard-fail with 422 (stricter)
+
+**Dependencies:**
+- P2.11 Admin UI — Objekt-Preispläne: Saisonpflicht + Edit Workflow
+  - Provides rate plans table and archive functionality
+  - Establishes season-based pricing workflow
+
+**Database Requirements:**
+- PostgreSQL btree_gist extension (for exclusion constraints)
+- rate_plans.fallback_price_cents column
+- Partial unique index on rate_plans(property_id)
+- Exclusion constraint on rate_plan_seasons(rate_plan_id, daterange)
+
+**Common Issues:**
+
+1. **409 on Create Rate Plan**: Property already has active plan → See "409 Creating Rate Plan" in runbook
+2. **422 on Create Season**: Season overlaps with existing season → See "422 Creating Season" in runbook
+3. **422 on Quote**: No pricing for nights, no fallback → See "422 Quoting Without Coverage" in runbook
+4. **Migration Fails on Dirty Data**: Existing violations → See "Migration Fails" in runbook
+
+**Detailed Troubleshooting**: See [P2.13 Pricing Invariants](../docs/ops/runbook.md#p213-pricing-invariants-hardening) in runbook.md
+
+**Verification Status:** Not verified in PROD yet (pending deployment and smoke test execution)
+
+---

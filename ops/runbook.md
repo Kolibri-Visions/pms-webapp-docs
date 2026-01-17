@@ -33608,3 +33608,336 @@ curl "https://api.fewo.kolibri-visions.de/api/v1/pricing/rate-plans?property_id=
 - Verification pending: Manual UI + API testing in PROD
 
 ---
+
+## P2.13 Pricing Invariants Hardening
+
+**Overview:** Enforce pricing system invariants at DB and API level to prevent human errors.
+
+**Purpose:** Prevent multiple active rate plans per property, season overlaps, missing pricing scenarios through database constraints and API validations.
+
+**Architecture:**
+- **Database Constraints**:
+  - Partial unique index on rate_plans: ONE active plan per property
+  - Exclusion constraint on rate_plan_seasons: NO overlapping seasons per plan
+  - Uses PostgreSQL btree_gist extension for daterange overlap detection
+- **API Validations**:
+  - 409 Conflict: Duplicate active rate plan creation
+  - 422 Unprocessable Entity: Season overlaps, missing pricing, merge conflicts
+  - German error messages with specific details (dates, labels, conflicting resources)
+- **Fallback Pricing**:
+  - rate_plans.fallback_price_cents (nullable): Default price for nights without season coverage
+  - NULL = no fallback (strict coverage required)
+  - Non-NULL = gaps allowed (fallback used)
+
+**Invariants Documentation:** See backend/docs/architecture/pricing_invariants.md for complete specification
+
+**API Endpoints Affected:**
+
+- POST /api/v1/pricing/rate-plans (409 on duplicate active)
+- PATCH /api/v1/pricing/rate-plans/{id} (fallback_price_cents support)
+- POST /api/v1/pricing/rate-plans/{id}/seasons (422 on overlap)
+- PATCH /api/v1/pricing/rate-plans/{id}/seasons/{season_id} (422 on overlap)
+- POST /api/v1/pricing/rate-plans/{id}/apply-season-template (422 on merge conflicts)
+- POST /api/v1/pricing/quote (422 on missing pricing)
+
+**Smoke Scripts:**
+
+```bash
+# 1. Test duplicate active rate plan (409)
+./backend/scripts/pms_preisplan_doppel_aktiv_smoke.sh
+
+# 2. Test season overlap (422)
+./backend/scripts/pms_saison_overlap_smoke.sh
+
+# 3. Test quote without pricing/fallback (422)
+./backend/scripts/pms_quote_keine_saison_smoke.sh
+
+# 4. Test template merge conflicts (422)
+./backend/scripts/pms_template_merge_konflikt_smoke.sh
+```
+
+**Verification Commands:**
+
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify deploy (optional)
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# Run all P2.13 smoke tests
+export HOST="https://api.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="<<<manager/admin JWT>>>"
+export AGENCY_ID="<<<agency UUID>>>" # optional
+
+# Test 1: Duplicate active plan
+./backend/scripts/pms_preisplan_doppel_aktiv_smoke.sh
+echo "rc=$?"
+
+# Test 2: Season overlap
+./backend/scripts/pms_saison_overlap_smoke.sh
+echo "rc=$?"
+
+# Test 3: Quote without pricing
+./backend/scripts/pms_quote_keine_saison_smoke.sh
+echo "rc=$?"
+
+# Test 4: Template merge conflict
+./backend/scripts/pms_template_merge_konflikt_smoke.sh
+echo "rc=$?"
+```
+
+**Common Issues:**
+
+### 409 Creating Rate Plan (Duplicate Active Plan)
+
+**Symptom:** POST /api/v1/pricing/rate-plans returns 409 Conflict with message "Es existiert bereits ein aktiver Preisplan für dieses Objekt".
+
+**Root Cause:** Property already has an active (non-archived) rate plan. DB constraint allows only ONE active plan per property.
+
+**How to Debug:**
+```bash
+# Check for existing active plans
+curl -X GET "$HOST/api/v1/pricing/rate-plans?property_id=$PROPERTY_ID" \
+  -H "Authorization: Bearer $JWT_TOKEN" | python3 -c "
+import sys, json
+plans = json.load(sys.stdin)
+active = [p for p in plans if p.get('archived_at') is None]
+print(f'Active plans: {len(active)}')
+for p in active:
+    print(f\"  - {p['id']}: {p['name']}\")
+"
+
+# Expected: 1 active plan (the conflicting one)
+```
+
+**Solution:**
+- Archive existing active plan first: PATCH /api/v1/pricing/rate-plans/{id}/archive
+- Then create new plan
+- Or update existing plan instead of creating new one
+
+**Expected Behavior:**
+- This is correct enforcement of "one active plan per property" rule
+- Prevents confusion from multiple competing pricing strategies
+- Forces explicit archival before replacement
+
+### 422 Creating Season (Overlap Detected)
+
+**Symptom:** POST /api/v1/pricing/rate-plans/{id}/seasons returns 422 with message "Überschneidung mit bestehender Saison: {label} ({date_from} bis {date_to})".
+
+**Root Cause:** New season's date range overlaps with existing active season in same rate plan. DB exclusion constraint prevents overlaps.
+
+**How to Debug:**
+```bash
+# List existing seasons for rate plan
+curl -X GET "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID" \
+  -H "Authorization: Bearer $JWT_TOKEN" | python3 -c "
+import sys, json
+plan = json.load(sys.stdin)
+seasons = plan.get('seasons', [])
+print(f'Seasons ({len(seasons)}):')
+for s in seasons:
+    if s.get('archived_at') is None:
+        print(f\"  - {s['label']}: {s['date_from']} to {s['date_to']}\")
+"
+
+# Check if new season [NEW_FROM, NEW_TO) overlaps with any existing [FROM, TO)
+# Overlap if: NEW_FROM < TO AND NEW_TO > FROM
+```
+
+**Solution:**
+- Adjust new season dates to avoid overlap
+- Or archive conflicting existing season first
+- Or update existing season instead of creating new one
+
+**Date Semantics:**
+- Seasons use half-open intervals: [date_from, date_to) (exclusive end)
+- Example: [2026-06-01, 2026-08-31) covers nights June 1 through August 30 (not August 31)
+- Overlap check: daterange(A) && daterange(B) in PostgreSQL
+
+**Expected Behavior:**
+- This is correct enforcement of "no overlaps per plan" rule
+- Prevents ambiguous pricing (which season wins?)
+- Forces explicit non-overlapping season definitions
+
+### 422 Quoting Without Coverage (Missing Pricing)
+
+**Symptom:** POST /api/v1/pricing/quote returns 422 with message "Keine Saison greift für Nacht {date}, kein Fallbackpreis definiert".
+
+**Root Cause:** Quote requested for dates where no season matches AND rate plan has no fallback_price_cents configured.
+
+**How to Debug:**
+```bash
+# Get rate plan details
+curl -X GET "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID" \
+  -H "Authorization: Bearer $JWT_TOKEN" | python3 -c "
+import sys, json
+plan = json.load(sys.stdin)
+print(f\"Fallback price: {plan.get('fallback_price_cents', 'NULL')}\")
+print(f\"Seasons:\")
+for s in plan.get('seasons', []):
+    if s.get('archived_at') is None:
+        print(f\"  - {s['label']}: {s['date_from']} to {s['date_to']}\")
+"
+
+# Check if quote dates fall outside all seasons
+# If so, fallback_price_cents must be set
+```
+
+**Solution (Option 1 - Add Fallback Price):**
+```bash
+# Update rate plan to add fallback price (e.g., 100 EUR = 10000 cents)
+curl -X PATCH "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"fallback_price_cents": 10000}'
+
+# Now quote will use fallback for gap nights
+```
+
+**Solution (Option 2 - Add Covering Season):**
+```bash
+# Create season covering gap dates
+curl -X POST "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/seasons" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "label": "Nebensaison",
+    "date_from": "2026-05-01",
+    "date_to": "2026-06-01",
+    "nightly_cents": 8000
+  }'
+```
+
+**Expected Behavior:**
+- This is strict pricing validation (P2.13 hardening)
+- Prevents quotes with undefined pricing
+- Forces explicit coverage or fallback configuration
+
+### 422 Template Merge Conflict
+
+**Symptom:** POST /api/v1/pricing/rate-plans/{id}/apply-season-template with mode=merge returns 422 with message "Template kann nicht im Merge-Modus angewendet werden: {count} Überschneidung(en) erkannt".
+
+**Root Cause:** Template periods overlap with existing seasons, and merge mode requires no conflicts.
+
+**How to Debug:**
+```bash
+# Check error response for conflict details
+curl -X POST "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/apply-season-template" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "template_id": "...",
+    "mode": "merge",
+    "year": 2026,
+    "preview": true
+  }' | python3 -c "
+import sys, json
+resp = json.load(sys.stdin)
+if 'detail' in resp and 'conflicts' in resp['detail']:
+    conflicts = resp['detail']['conflicts']
+    print(f'Conflicts ({len(conflicts)}):')
+    for c in conflicts:
+        print(f\"  - {c.get('message', 'No message')}\")
+"
+```
+
+**Solution (Option 1 - Use Replace Mode):**
+```bash
+# Replace mode removes all existing seasons before adding template
+curl -X POST "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/apply-season-template" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "template_id": "...",
+    "mode": "replace",
+    "year": 2026,
+    "preview": false
+  }'
+```
+
+**Solution (Option 2 - Archive Conflicting Seasons):**
+```bash
+# Archive existing seasons that conflict
+curl -X PATCH "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/seasons/$SEASON_ID/archive" \
+  -H "Authorization: Bearer $JWT_TOKEN"
+
+# Then retry merge
+```
+
+**Expected Behavior:**
+- Merge mode is additive (keeps existing, adds new)
+- Replace mode is destructive (removes existing, adds new)
+- Conflicts in merge mode → 422 with details
+- No conflicts in replace mode → always succeeds
+
+### Migration Fails (Dirty Data)
+
+**Symptom:** Migration 20260117214810_harden_rate_plans_invariants.sql fails with constraint violation errors.
+
+**Root Cause:** Existing data violates new constraints (multiple active plans, overlapping seasons).
+
+**How to Debug:**
+```sql
+-- Find properties with multiple active plans
+SELECT property_id, COUNT(*) as active_count
+FROM rate_plans
+WHERE archived_at IS NULL AND property_id IS NOT NULL
+GROUP BY property_id
+HAVING COUNT(*) > 1;
+
+-- Find overlapping seasons within same plan
+SELECT s1.rate_plan_id, s1.id as season1_id, s2.id as season2_id,
+       s1.label as season1_label, s2.label as season2_label,
+       s1.date_from as s1_from, s1.date_to as s1_to,
+       s2.date_from as s2_from, s2.date_to as s2_to
+FROM rate_plan_seasons s1
+JOIN rate_plan_seasons s2
+  ON s1.rate_plan_id = s2.rate_plan_id
+  AND s1.id < s2.id
+  AND s1.archived_at IS NULL
+  AND s2.archived_at IS NULL
+WHERE daterange(s1.date_from, s1.date_to, '[)') &&
+      daterange(s2.date_from, s2.date_to, '[)');
+```
+
+**Solution (Clean Existing Data):**
+```sql
+-- Archive duplicate active plans (keep newest)
+WITH ranked_plans AS (
+  SELECT id, property_id, created_at,
+         ROW_NUMBER() OVER (PARTITION BY property_id ORDER BY created_at DESC) as rn
+  FROM rate_plans
+  WHERE archived_at IS NULL AND property_id IS NOT NULL
+)
+UPDATE rate_plans
+SET archived_at = NOW()
+WHERE id IN (SELECT id FROM ranked_plans WHERE rn > 1);
+
+-- Archive overlapping seasons (keep first created)
+WITH overlaps AS (
+  SELECT s2.id as season_to_archive
+  FROM rate_plan_seasons s1
+  JOIN rate_plan_seasons s2
+    ON s1.rate_plan_id = s2.rate_plan_id
+    AND s1.id < s2.id
+    AND s1.archived_at IS NULL
+    AND s2.archived_at IS NULL
+  WHERE daterange(s1.date_from, s1.date_to, '[)') &&
+        daterange(s2.date_from, s2.date_to, '[)')
+)
+UPDATE rate_plan_seasons
+SET archived_at = NOW()
+WHERE id IN (SELECT season_to_archive FROM overlaps);
+
+-- Re-run migration
+```
+
+**Expected Behavior:**
+- Migration continues even if constraints fail on existing data
+- Logs warnings with instructions for manual cleanup
+- New data respects constraints immediately
+
+---
