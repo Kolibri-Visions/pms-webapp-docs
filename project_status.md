@@ -10112,6 +10112,8 @@ Test Property ID: <uuid>
 
 **Status:** ✅ IMPLEMENTED (NOT VERIFIED)
 
+**Verification Status:** Pending smoke script fix (Step D archive endpoint corrected to use PATCH /archive instead of DELETE). Awaiting PROD smoke test execution after script update deployed.
+
 **Scope:** Implement archive-first delete validation for rate plans, ensuring UI delete button is only enabled for archived plans. Add backend enforcement that prevents deletion of non-archived plans (HTTP 422). Soft delete semantics using deleted_at timestamp for both rate plans and seasons. New smoke test validates create → archive → delete → verify gone workflow.
 
 **Purpose:** Establish deletion parity between UI and API by enforcing archive-first rule. Prevents accidental deletion of active rate plans and ensures consistent soft delete behavior across the system.

@@ -33414,6 +33414,45 @@ curl -X DELETE "https://api.fewo.kolibri-visions.de/api/v1/pricing/rate-plans/$P
 # Expected: HTTP 204 No Content
 ```
 
+#### Smoke Script Step D Returns 422 "muss zuerst archiviert"
+
+**Symptom**: Smoke test Step D (archive operation) returns HTTP 422 with error message "Rate plan muss zuerst archiviert werden" (expected only for DELETE endpoint).
+
+**Root Cause**:
+- Script is calling DELETE endpoint instead of PATCH /archive endpoint
+- Step D should archive the plan, not attempt deletion
+- Archive endpoint: `PATCH /api/v1/pricing/rate-plans/{id}/archive`
+- Delete endpoint: `DELETE /api/v1/pricing/rate-plans/{id}` (only for Step E)
+
+**Diagnosis**:
+```bash
+# Check which endpoint Step D is calling
+grep -A5 "Step D" backend/scripts/pms_objekt_preisplan_loeschen_smoke.sh
+
+# Expected: Should use PATCH with /archive suffix
+# Wrong: DELETE /api/v1/pricing/rate-plans/$PLAN_ID
+# Correct: PATCH /api/v1/pricing/rate-plans/$PLAN_ID/archive
+```
+
+**Fix**:
+```bash
+# Verify script uses correct archive endpoint for Step D
+# Step D should call: PATCH /api/v1/pricing/rate-plans/{id}/archive
+# Expected response: HTTP 204 No Content
+
+# Step E should call: DELETE /api/v1/pricing/rate-plans/{id}
+# Expected response: HTTP 204 No Content (only if archived in Step D)
+
+# If script is incorrect, update to use:
+# PATCH $HOST/api/v1/pricing/rate-plans/$PLAN_ID/archive (Step D)
+# DELETE $HOST/api/v1/pricing/rate-plans/$PLAN_ID (Step E)
+```
+
+**Expected Behavior**:
+- Step D: Archive endpoint returns 204, sets `is_archived=true`
+- Step E: Delete endpoint returns 204, sets `deleted_at` timestamp
+- If Step D calls DELETE by mistake, it will fail with 422 because plan is not yet archived
+
 #### Seasons Not Deleted
 
 **Symptom**: Rate plan deleted but seasons remain in database without deleted_at timestamp.
