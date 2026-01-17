@@ -32098,7 +32098,16 @@ Staff (manager/admin):
 - GET /api/v1/pricing/season-templates (list templates for dropdown)
 - POST /api/v1/pricing/rate-plans/{id}/apply-season-template (preview + apply)
 
-**Status**: ✅ IMPLEMENTED (Frontend complete, awaiting PROD verification)
+**Status**: ✅ VERIFIED in PROD (2026-01-17, commit 8b37450)
+
+**PROD Verification Evidence:**
+- Backend commit: 8b374502c7cb1e136109b9578b5dc663cd54cf63 (started 2026-01-17T13:53:05Z)
+- Admin commit: 8b374502c7cb1e136109b9578b5dc663cd54cf63 (started 2026-01-17T13:50:51Z)
+- Deploy verification: pms_verify_deploy.sh rc=0
+- Smoke tests:
+  - pms_rate_plan_seasons_smoke.sh rc=0 (P2.2 CRUD)
+  - pms_season_templates_smoke.sh rc=0 (P2.4 templates)
+  - pms_season_template_apply_smoke.sh rc=0 (P2.4 apply + merge conflict 422 after hotfix)
 
 **Verification Commands (Manual UI Testing):**
 

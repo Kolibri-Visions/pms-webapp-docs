@@ -8992,15 +8992,30 @@ echo "rc=$?"
    - Buttons remain tappable with adequate spacing
    - No cramped layouts or unreachable UI elements
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
+
+**PROD Evidence (Verified: 2026-01-17):**
+- **Verification Date:** 2026-01-17
+- **Backend Service:** pms-backend (api.fewo.kolibri-visions.de)
+  - **Source Commit:** 8b374502c7cb1e136109b9578b5dc663cd54cf63
+  - **Started At:** 2026-01-17T13:53:05.388852+00:00
+- **Admin Service:** pms-admin (admin.fewo.kolibri-visions.de)
+  - **Source Commit:** 8b374502c7cb1e136109b9578b5dc663cd54cf63
+  - **Started At:** 2026-01-17T13:50:51.742Z
+  - **Environment:** production
+- **Deploy Verification:**
+  - `backend/scripts/pms_verify_deploy.sh` → verify_rc=0 (commit match confirmed)
+- **Smoke Tests (PROD):**
+  - `backend/scripts/pms_rate_plan_seasons_smoke.sh` → rc=0 (P2.2 seasons CRUD verified)
+  - `backend/scripts/pms_season_templates_smoke.sh` → rc=0 (P2.4 templates verified)
+  - `backend/scripts/pms_season_template_apply_smoke.sh` → rc=0 (P2.4 template apply + merge conflict 422 verified)
+- **Hotfix Verification:** Test 6 "Dry-run merge with conflicts" now returns HTTP 422 (not 500) after hotfix 8b37450
 
 **Notes:**
-- IMPLEMENTED status: UI complete, uses existing backend endpoints from P2.2 and P2.4
-- VERIFIED status requires: Manual UI testing on PROD (11-step QA checklist) + backend smoke scripts pass
 - Frontend-only implementation - no new backend endpoints added
 - Reuses existing API routes: GET/POST/PATCH/DELETE seasons, GET templates, POST apply-season-template
-
-**Hotfix (2026-01-17):** Fixed P2.4 apply-season-template endpoint to return 422 (not 500) on merge conflicts. Root cause: HTTPException detail contained non-JSON-serializable date/UUID objects from Pydantic `.dict()`. Fix: Changed to `.model_dump(mode='json')` which serializes dates/UUIDs to strings. Added unit test `test_season_template_apply_conflict.py` to verify JSON serializability. Smoke script Test 6 now expects 422 on conflicts (previously failed with 500). Status remains IMPLEMENTED until PROD verification with smoke rc=0.
+- Hotfix (2026-01-17): Fixed P2.4 apply-season-template to return 422 (not 500) on merge conflicts via `.model_dump(mode='json')` serialization
+- All three backend smoke scripts passed in PROD (rc=0)
 
 **Backend Dependencies:**
 - P2.2 Rate Plan Seasons Editor (seasons CRUD endpoints)
