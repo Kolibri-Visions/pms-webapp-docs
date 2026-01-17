@@ -34034,4 +34034,165 @@ curl -X PATCH "$HOST/api/v1/pricing/rate-plans/$PLAN_ID/archive" \
 - Plan is no longer returned in active listings
 - DELETE endpoint can now be called (if archived_at is set)
 
+### Quote Returns 404 for Gap Pricing Test
+
+**Symptom:** Quote endpoint returns HTTP 404 "Rate plan not found or not applicable to property" when testing gap pricing (dates without season coverage).
+
+**Root Cause:** Rate plan lookup fails BEFORE gap pricing validation runs. Common causes:
+1. Rate plan created with `active = false`
+2. Rate plan archived between creation and quote request
+3. Rate plan belongs to different agency than quote request
+4. Wrong rate_plan_id passed in quote request
+
+**How to Debug:**
+```bash
+# Verify rate plan exists and is active
+curl -X GET "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID" \
+  -H "Authorization: Bearer $JWT_TOKEN" | python3 -c "
+import sys, json
+plan = json.load(sys.stdin)
+print(f\"Active: {plan.get('active')}\")
+print(f\"Archived: {plan.get('archived_at')}\")
+print(f\"Property ID: {plan.get('property_id')}\")
+print(f\"Agency ID: {plan.get('agency_id')}\")
+"
+
+# Expected:
+# Active: True
+# Archived: None
+# Property ID: <matches-quote-property>
+# Agency ID: <matches-x-agency-id-header>
+```
+
+**Solution:**
+- Ensure rate plan has `"active": true` in create payload
+- Verify rate plan exists before quote request (GET by ID returns 200)
+- Check x-agency-id header matches rate plan's agency_id
+- For smoke tests: Add verification step between creation and quote
+
+**Expected Behavior:**
+- Quote endpoint validates rate plan access first (404 if not found/applicable)
+- Only then validates gap pricing (422 if no coverage and no fallback)
+- This is correct HTTP semantics: auth/validation errors before business logic errors
+
+### Template Apply Validation Errors
+
+**Symptom:** Apply-season-template endpoint returns HTTP 422 with validation errors like "field required: template_id" or "field required: body".
+
+**Root Cause:** Request body missing required `template_id` field or has incorrect structure.
+
+**Correct Request Body:**
+```json
+{
+  "template_id": "UUID",        // REQUIRED - must be existing template
+  "mode": "merge",              // Optional, default="replace"
+  "dry_run": false,             // Optional, default=false
+  "price_overrides": {}         // Optional
+}
+```
+
+**Common Mistakes:**
+- Passing `periods` array instead of `template_id` (wrong: endpoint doesn't accept inline periods)
+- Using `merge_mode` instead of `mode` (wrong field name)
+- Missing `template_id` entirely
+- Passing invalid UUID format for `template_id`
+
+**How to Debug:**
+```bash
+# Verify template exists and is active
+curl -X GET "$HOST/api/v1/pricing/season-templates/$TEMPLATE_ID" \
+  -H "Authorization: Bearer $JWT_TOKEN"
+
+# Should return 200 with template details, not 404
+```
+
+**Solution:**
+1. Create template first: `POST /api/v1/pricing/season-templates`
+2. Extract template ID from response
+3. Pass template_id in apply request (not periods)
+
+**Template Cleanup:**
+Templates don't have archive endpoint - delete directly:
+```bash
+curl -X DELETE "$HOST/api/v1/pricing/season-templates/$TEMPLATE_ID" \
+  -H "Authorization: Bearer $JWT_TOKEN"
+```
+
+### Migration Constraint Failures (P2.13 DB Hardening)
+
+**Symptom:** Migration `20260117214810_harden_rate_plans_invariants.sql` fails with:
+- `duplicate key value violates unique constraint "idx_rate_plans_one_active_per_property"`
+- `conflicting key value violates exclusion constraint "rate_plan_seasons_no_overlap_excl"`
+
+**Root Cause:** Existing dirty data violates new constraints:
+1. Multiple active rate plans for same property
+2. Overlapping seasons within same rate plan
+
+**How to Debug:**
+```sql
+-- Find properties with multiple active plans
+SELECT property_id, COUNT(*) as active_count,
+       array_agg(id) as plan_ids, array_agg(name) as plan_names
+FROM rate_plans
+WHERE archived_at IS NULL AND property_id IS NOT NULL
+GROUP BY property_id
+HAVING COUNT(*) > 1;
+
+-- Find overlapping seasons
+SELECT s1.rate_plan_id,
+       s1.id as season1_id, s1.label as season1_label,
+       s2.id as season2_id, s2.label as season2_label,
+       s1.date_from as s1_from, s1.date_to as s1_to,
+       s2.date_from as s2_from, s2.date_to as s2_to
+FROM rate_plan_seasons s1
+JOIN rate_plan_seasons s2
+  ON s1.rate_plan_id = s2.rate_plan_id
+  AND s1.id < s2.id
+  AND s1.archived_at IS NULL
+  AND s2.archived_at IS NULL
+WHERE daterange(s1.date_from, s1.date_to, '[)') &&
+      daterange(s2.date_from, s2.date_to, '[)');
+```
+
+**Solution (Clean Dirty Data Before Migration):**
+```sql
+-- Archive duplicate active plans (keep newest per property)
+WITH ranked_plans AS (
+  SELECT id, property_id, created_at,
+         ROW_NUMBER() OVER (PARTITION BY property_id ORDER BY created_at DESC) as rn
+  FROM rate_plans
+  WHERE archived_at IS NULL AND property_id IS NOT NULL
+)
+UPDATE rate_plans
+SET archived_at = NOW()
+WHERE id IN (SELECT id FROM ranked_plans WHERE rn > 1);
+
+-- Archive overlapping seasons (keep first created per overlap group)
+WITH overlaps AS (
+  SELECT DISTINCT s2.id as season_to_archive
+  FROM rate_plan_seasons s1
+  JOIN rate_plan_seasons s2
+    ON s1.rate_plan_id = s2.rate_plan_id
+    AND s1.created_at < s2.created_at
+    AND s1.archived_at IS NULL
+    AND s2.archived_at IS NULL
+  WHERE daterange(s1.date_from, s1.date_to, '[)') &&
+        daterange(s2.date_from, s2.date_to, '[)')
+)
+UPDATE rate_plan_seasons
+SET archived_at = NOW()
+WHERE id IN (SELECT season_to_archive FROM overlaps);
+
+-- Re-run migration after cleanup
+```
+
+**Prevention:**
+- Migration has graceful error handling (continues even if constraints fail)
+- Logs warnings with cleanup instructions
+- New data respects constraints immediately via DB-level enforcement
+
+**Expected Behavior:**
+- Clean PROD environments: Migration succeeds without issues
+- Dirty data environments: Migration logs warnings, constraints added as NOT VALID, manual cleanup required before validation
+
 ---

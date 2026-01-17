@@ -10380,4 +10380,56 @@ Test Property ID: <uuid>
 
 **Verification Status:** Not verified in PROD yet (pending deployment and smoke test execution)
 
+**Verification Checklist (for PROD deployment):**
+
+To mark P2.13 as ✅ VERIFIED, complete all steps:
+
+1. **Deploy Verification:**
+   ```bash
+   export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+   ./backend/scripts/pms_verify_deploy.sh
+   # Expected: verify_rc=0, commit hash matches latest main
+   ```
+
+2. **Database Migration Applied:**
+   ```bash
+   # Verify constraints exist
+   psql $DATABASE_URL -c "SELECT conname FROM pg_constraint WHERE conname IN ('idx_rate_plans_one_active_per_property', 'rate_plan_seasons_no_overlap_excl');"
+   # Expected: 2 rows (both constraints exist)
+   ```
+
+3. **Smoke Tests Pass (all 4 must return rc=0):**
+   ```bash
+   export HOST="https://api.fewo.kolibri-visions.de"
+   export MANAGER_JWT_TOKEN="<<<manager/admin JWT>>>"
+   export AGENCY_ID="<<<agency UUID>>>"
+
+   ./backend/scripts/pms_preisplan_doppel_aktiv_smoke.sh && echo "✅ Test 1: rc=$?"
+   ./backend/scripts/pms_saison_overlap_smoke.sh && echo "✅ Test 2: rc=$?"
+   ./backend/scripts/pms_quote_keine_saison_smoke.sh && echo "✅ Test 3: rc=$?"
+   ./backend/scripts/pms_template_merge_konflikt_smoke.sh && echo "✅ Test 4: rc=$?"
+   ```
+
+4. **API Behavior Verification:**
+   - 409 Conflict on duplicate active plan creation
+   - 422 on season overlap with German error message
+   - 422 on quote gap pricing without fallback (not 404)
+   - 422 on template merge conflicts with conflict details
+
+5. **Cleanup Verification:**
+   - All smoke tests show "✓ Deleted" or "✓ Already gone (HTTP 404)" in cleanup
+   - No "MANUAL CLEANUP REQUIRED" warnings for normal cleanup
+   - No orphaned active plans left behind (check with GET /api/v1/pricing/rate-plans?property_id=)
+
+**Once all 5 checklist items pass, update Status to:**
+```markdown
+**Status:** ✅ VERIFIED
+
+**PROD Evidence (Verified: YYYY-MM-DD):**
+- Deploy: verify_rc=0, commit <hash>
+- Smoke Tests: All 4 passed (rc=0)
+- DB Constraints: Confirmed active in PROD
+- Manual QA: Tested duplicate plan 409, season overlap 422, quote gap 422
+```
+
 ---
