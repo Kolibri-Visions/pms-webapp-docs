@@ -32901,4 +32901,10 @@ supabase db push  # or equivalent migration command
 - P2.9 Combined Pricing Chain Smoke (end-to-end verification)
 - frontend/app/properties/[id]/rate-plans/page.tsx (UI implementation)
 
+**PROD Verification (2026-01-17):**
+- Backend commit ab69ad1 verified via /api/v1/ops/version
+- Admin commit ab69ad1 verified via /api/ops/version
+- Smoke test: pms_objekt_preisplaene_saisonzeiten_apply_smoke.sh → p2_10_api_smoke_rc=0
+- All preview/apply workflows, price overrides, and conflict detection validated in PROD
+
 ---
