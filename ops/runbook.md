@@ -31964,3 +31964,48 @@ docker logs pms-backend --tail 50
 **Mobile**: Tab navigation responsive at 360px width.
 
 ---
+
+### pms-admin build fails: NightBreakdown field mismatch (night_date)
+
+**Symptom:** Coolify deployment for pms-admin fails during `npm run build` with TypeScript error:
+```
+Type error: Property 'night_date' does not exist on type 'NightBreakdown'
+  at frontend/app/pricing/quote/page.tsx:418
+```
+
+**Root Cause:** TypeScript type definition for `NightBreakdown` was not updated after P2.5 backend hotfix that renamed `date` → `night_date` and `price_cents` → `nightly_cents` in the Pydantic schema (`backend/app/schemas/pricing.py`). Frontend code used the new field names but the TS type still defined the old names.
+
+**Context:** During P2.5 HOTFIX (2026-01-17), a Pydantic import recursion error was fixed by renaming the `date` field to `night_date` in `NightBreakdown` schema (field name was shadowing `datetime.date` type). The backend API and frontend display code were updated, but the TypeScript type definition was missed.
+
+**Fix:**
+- Updated `NightBreakdown` type in `frontend/app/pricing/quote/page.tsx` to use:
+  - `night_date: string` (primary field, matches backend)
+  - `date?: string` (optional fallback for backward compatibility)
+  - `nightly_cents: number` (primary field, matches backend)
+  - `price_cents?: number` (optional fallback for backward compatibility)
+  - `season_id?: string | null` (added field from backend)
+- Updated map loop in quote page to use defensive fallbacks:
+  ```typescript
+  const nightDate = night.night_date ?? night.date ?? "";
+  const nightlyCents = night.nightly_cents ?? night.price_cents ?? 0;
+  ```
+
+**Verification:**
+```bash
+# Check TypeScript type includes night_date
+rg -n "night_date" frontend/app/pricing/quote/page.tsx | head -5
+
+# Check defensive fallback usage in map loop
+sed -n '418,434p' frontend/app/pricing/quote/page.tsx
+
+# After deploy: verify commit matches
+curl -sS -H 'Cache-Control: no-cache' "https://admin.fewo.kolibri-visions.de/api/ops/version?cb=$(date +%s)" | jq .source_commit
+```
+
+**Prevention:**
+- When renaming backend schema fields that affect API responses, update TypeScript types in frontend immediately (before committing)
+- Run `npx tsc --noEmit` locally to catch type errors before pushing
+- Consider generating TypeScript types from OpenAPI schema for single source of truth
+
+---
+
