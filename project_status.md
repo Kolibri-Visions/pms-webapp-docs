@@ -8917,3 +8917,158 @@ echo "rc=$?"
   - `backend/docs/project_status.md` (ADD-ONLY) - This entry
 
 ---
+
+# P2.7 Objekt-Preispläne: Saison-Editor + Template Apply (UI)
+
+**Implementation Date:** 2026-01-17
+
+**Scope:** Full seasons management UI integrated into property-scoped rate plans page, including CRUD operations and template application with dry-run preview.
+
+**Features Implemented:**
+
+1. **Seasons Editor Modal** (`frontend/app/properties/[id]/rate-plans/page.tsx`):
+   - Opens as full-screen modal overlay when clicking "Saisons bearbeiten" on any rate plan
+   - Three sections: Current Seasons List | Add/Edit Form | Apply Template
+   - Responsive modal with vertical scroll and mobile-first design
+
+2. **List Seasons** (Section A):
+   - Table display: Label, Von, Bis, Preis/Nacht, Aktiv, Aktionen
+   - Default: Active seasons only (archived_at IS NULL)
+   - Optional toggle: "Archivierte anzeigen" (includes archived seasons)
+   - Empty state: Helpful message prompting user to create first season
+   - Horizontal scroll on mobile (overflow-x-auto)
+   - Actions per row: "Bearbeiten" | "Löschen"
+
+3. **Create/Edit Season Form** (Section B):
+   - Inline form with fields:
+     - Label (optional text, e.g., "Hauptsaison")
+     - Von (required date, YYYY-MM-DD)
+     - Bis (required date, YYYY-MM-DD)
+     - Preis pro Nacht (optional number in cents, with live EUR preview)
+     - Aktiv (checkbox, default true)
+   - Validation:
+     - Frontend: date_from < date_to (inline error display)
+     - Backend: Overlap detection, date range validation (422 errors surfaced as toasts)
+   - Submit: "Erstellen" or "Aktualisieren" button
+   - Cancel: "Abbrechen" clears form and exits edit mode
+   - Success feedback: Toast message + auto-refresh seasons list
+
+4. **Delete Season** (Section A Actions):
+   - Click "Löschen" → Confirmation dialog shows season details
+   - Confirm → Soft delete via DELETE endpoint (sets archived_at)
+   - Success: Season disappears from active list + toast notification
+   - Error: Toast shows API error detail
+
+5. **Apply Season Template** (Section C):
+   - Template dropdown: Lists all active season templates with period counts
+   - Mode selection (radio buttons):
+     - "Ersetzen (bestehende Seasons löschen)" - replace mode
+     - "Zusammenführen (bestehende Seasons behalten)" - merge mode
+   - Preview button: "Vorschau" (disabled if no template selected)
+   - Click "Vorschau" → POST with dry_run=true → Opens preview dialog
+
+6. **Template Preview Dialog**:
+   - Summary section:
+     - Bestehende aktive Seasons: N
+     - Werden archiviert: N (replace mode only)
+     - Werden erstellt: N
+     - Werden aktualisiert: N
+   - Detailed changes:
+     - Archive list (replace mode): Season labels/dates to be archived
+     - Create list: New seasons from template (labels/dates/prices)
+   - Conflict detection (merge mode):
+     - Red alert box if conflicts detected
+     - Lists each conflict with overlapping date ranges
+     - Suggests switching to replace mode or manual resolution
+   - Actions:
+     - "Abbrechen" (closes preview, no changes)
+     - "Übernehmen" (disabled if conflicts exist)
+   - Apply flow: Click "Übernehmen" → POST with dry_run=false → Success toast → Preview closes → Seasons list refreshes
+
+7. **Mobile-First Design** (360px+):
+   - Modal fits viewport with vertical scroll
+   - Tables scroll horizontally (overflow-x-auto)
+   - Form fields stack vertically
+   - Buttons remain tappable with adequate spacing
+   - No cramped layouts or unreachable UI elements
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- IMPLEMENTED status: UI complete, uses existing backend endpoints from P2.2 and P2.4
+- VERIFIED status requires: Manual UI testing on PROD (11-step QA checklist) + backend smoke scripts pass
+- Frontend-only implementation - no new backend endpoints added
+- Reuses existing API routes: GET/POST/PATCH/DELETE seasons, GET templates, POST apply-season-template
+
+**Backend Dependencies:**
+- P2.2 Rate Plan Seasons Editor (seasons CRUD endpoints)
+- P2.4 Apply Season Template (dry-run preview + atomic apply endpoints)
+
+**Files Changed:**
+- Frontend:
+  - `frontend/app/properties/[id]/rate-plans/page.tsx` (ALREADY MODIFIED in P2.6)
+    - Added seasons editor modal (lines 920-1197)
+    - Added season form state and handlers (lines 66-100, 287-296, 311-451)
+    - Added template apply logic with preview (lines 452-524, 1233-1323)
+    - No new files created - functionality integrated into existing page
+- Documentation:
+  - `backend/docs/ops/runbook.md` (ADD-ONLY) - P2.7 section with troubleshooting
+  - `backend/scripts/README.md` (ADD-ONLY) - P2.7 verification note referencing P2.2 and P2.4 smoke scripts
+  - `backend/docs/project_status.md` (ADD-ONLY) - This entry
+
+**API Endpoints Used:**
+- GET /api/v1/pricing/rate-plans/{id}/seasons?include_archived={bool}
+- POST /api/v1/pricing/rate-plans/{id}/seasons
+- PATCH /api/v1/pricing/rate-plans/{id}/seasons/{season_id}
+- DELETE /api/v1/pricing/rate-plans/{id}/seasons/{season_id}
+- GET /api/v1/pricing/season-templates
+- POST /api/v1/pricing/rate-plans/{id}/apply-season-template (with dry_run parameter)
+
+**Verification Steps (for VERIFIED status):**
+
+1. **Backend Smoke Tests (Required)**:
+   ```bash
+   # HOST-SERVER-TERMINAL
+   cd /data/repos/pms-webapp
+   
+   # Test P2.2 seasons CRUD endpoints
+   export HOST="https://api.fewo.kolibri-visions.de"
+   export JWT_TOKEN="<<<manager/admin JWT>>>"
+   ./backend/scripts/pms_rate_plan_seasons_smoke.sh
+   echo "rc=$?"  # Expected: rc=0
+   
+   # Test P2.4 template apply endpoints
+   ./backend/scripts/pms_season_template_apply_smoke.sh
+   echo "rc=$?"  # Expected: rc=0
+   ```
+
+2. **Manual UI Testing (Required - Mobile-First QA Checklist)**:
+   - Admin URL: https://admin.fewo.kolibri-visions.de
+   - Test browser: Chrome/Firefox with DevTools (mobile viewport 360x640)
+   - Steps:
+     1. Navigate: Objekte → Property → Tab "Objekt-Preispläne"
+     2. Click "Saisons bearbeiten" → Modal opens
+     3. Verify Section A: Seasons list displays correctly (or empty state)
+     4. Verify Section B: Create season with valid data → Success
+     5. Verify Section B: Edit season → Updates in list
+     6. Verify Section B: Invalid dates (Von > Bis) → Inline error
+     7. Verify Delete: Confirmation dialog → Season removed from list
+     8. Verify Section C: Select template → Click "Vorschau" → Preview opens
+     9. Verify Preview: Summary counts correct, detailed changes shown
+     10. Verify Apply: Click "Übernehmen" → Seasons list refreshes with template seasons
+     11. Verify Mobile: 360px width → Tables scroll, buttons tappable, no layout breaks
+   - Expected: All 11 steps pass without errors
+
+3. **Browser Console Check**:
+   - Open DevTools → Console tab
+   - Expected: No errors (red messages) during any operations
+   - Expected: All API requests return 200/201/204 (no 4xx/5xx errors)
+
+4. **PROD Evidence Requirements** (for VERIFIED status):
+   - Admin service commit SHA (from /api/ops/version)
+   - Smoke test outputs (rc=0 for both P2.2 and P2.4 scripts)
+   - Screenshot or confirmation of manual QA checklist completion
+   - Browser console clean (no errors)
+
+---
+

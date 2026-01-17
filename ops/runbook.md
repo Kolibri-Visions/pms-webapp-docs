@@ -32013,3 +32013,254 @@ curl -sS -H 'Cache-Control: no-cache' "https://admin.fewo.kolibri-visions.de/api
 
 ---
 
+
+## P2.7 Objekt-Preispläne: Saison-Editor + Template Apply (UI)
+
+**Overview:** Full seasons management UI within property-scoped rate plans, including CRUD operations and template application with preview.
+
+**Purpose:** Allow staff (manager/admin) to manage seasons directly from the property detail page, eliminating need to navigate away. Provides visual editor with template application preview for faster workflow.
+
+**Location:**
+- Navigate to: Objekte → Click property → Tab "Objekt-Preispläne" → Click "Saisons bearbeiten" on any rate plan
+- Route pattern: `/properties/{property_id}/rate-plans` (modal overlay for seasons editor)
+
+**Architecture:**
+- **Frontend-Only**: No new backend endpoints required; uses existing P2.2 and P2.4 endpoints
+- **Modal UI**: Seasons editor opens as full-screen modal with three sections:
+  1. Current Seasons List (with archived toggle)
+  2. Add/Edit Season Form (inline)
+  3. Apply Template (with dry-run preview)
+- **State Management**: React state handles seasons list, form data, template selection, preview data
+- **Mobile-First**: Responsive layout with overflow-x-auto tables, stacked buttons on mobile
+
+**Features:**
+
+1. **List Seasons** (Section A):
+   - Table showing: Label, Von (date_from), Bis (date_to), Preis/Nacht, Aktiv, Aktionen
+   - Default: Active seasons only (archived_at IS NULL)
+   - Optional: "Archivierte anzeigen" toggle to include archived seasons
+   - Empty state: "Keine Seasons vorhanden. Erstellen Sie eine neue Season unten."
+   - Actions per row: "Bearbeiten" | "Löschen"
+
+2. **Create/Edit Season Form** (Section B):
+   - Fields:
+     - Label (text, optional, e.g., "Hauptsaison")
+     - Von (date, required, YYYY-MM-DD)
+     - Bis (date, required, YYYY-MM-DD)
+     - Preis pro Nacht (number, cents, optional with live EUR preview)
+     - Aktiv (checkbox, default true)
+   - Validation:
+     - date_from < date_to (inline error if invalid)
+     - nightly_cents >= 0 (if provided)
+   - Submit: "Erstellen" or "Aktualisieren" (depending on edit mode)
+   - Cancel: "Abbrechen" (clears form and exits edit mode)
+   - Success: Toast message + refreshes seasons list
+   - Error: Toast with API error detail (e.g., "Overlap detected: ...")
+
+3. **Delete Season**:
+   - Click "Löschen" → Confirmation dialog: "Möchten Sie diese Season wirklich löschen?"
+   - Shows: Season label (if any) and date range
+   - Confirm → DELETE /api/v1/pricing/rate-plans/{id}/seasons/{season_id} (soft delete)
+   - Success: Season disappears from list (archived_at set), toast "Season gelöscht"
+   - Error: Toast with error message
+
+4. **Apply Season Template** (Section C):
+   - Dropdown: "Season-Vorlage" (lists all active templates with period counts)
+   - Radio buttons: "Ersetzen (bestehende Seasons löschen)" | "Zusammenführen (bestehende Seasons behalten)"
+   - Button: "Vorschau" (disabled if no template selected)
+   - Click "Vorschau" → POST with dry_run=true → Opens preview dialog
+
+5. **Template Preview Dialog**:
+   - Shows summary counts:
+     - Bestehende aktive Seasons: N
+     - Werden archiviert: N (replace mode only)
+     - Werden erstellt: N
+     - Werden aktualisiert: N (usually 0)
+   - Shows detailed changes:
+     - Archive list: "Diese Seasons werden archiviert: [labels/dates]"
+     - Create list: "Diese Seasons werden erstellt: [labels/dates/prices]"
+   - Conflict warning (merge mode only):
+     - Red alert box with conflict messages
+     - Example: "Template period 'Hauptsaison' (2026-06-01 to 2026-08-31) overlaps with existing season (2026-07-01 to 2026-07-31)"
+     - Suggests: "Bitte wählen Sie 'Ersetzen' Modus oder entfernen Sie die konfliktierenden Seasons manuell."
+   - Actions:
+     - "Abbrechen" (closes preview, no changes)
+     - "Übernehmen" (disabled if conflicts exist)
+   - Click "Übernehmen" → POST with dry_run=false → Applies template → Closes preview → Refreshes seasons list → Toast "Vorlage angewendet"
+
+**API Endpoints Used:**
+
+Staff (manager/admin):
+- GET /api/v1/pricing/rate-plans/{id}/seasons?include_archived=false (list seasons)
+- POST /api/v1/pricing/rate-plans/{id}/seasons (create season)
+- PATCH /api/v1/pricing/rate-plans/{id}/seasons/{season_id} (update season)
+- DELETE /api/v1/pricing/rate-plans/{id}/seasons/{season_id} (soft delete season)
+- GET /api/v1/pricing/season-templates (list templates for dropdown)
+- POST /api/v1/pricing/rate-plans/{id}/apply-season-template (preview + apply)
+
+**Status**: ✅ IMPLEMENTED (Frontend complete, awaiting PROD verification)
+
+**Verification Commands (Manual UI Testing):**
+
+```bash
+# PROD Admin UI: https://admin.fewo.kolibri-visions.de
+
+# Manual QA Checklist (Mobile-First: test at 360px width):
+# 1. Navigate to Objekte → Click any property → Tab "Objekt-Preispläne"
+# 2. Click "Saisons bearbeiten" on any rate plan → Seasons editor modal opens
+# 3. Verify Section A: Current Seasons List
+#    - Table shows seasons with all columns (Label, Von, Bis, Preis, Aktiv, Aktionen)
+#    - Empty state shows helpful message if no seasons
+#    - Horizontal scroll works on mobile (overflow-x-auto)
+# 4. Verify Section B: Create Season
+#    - Fill form: Label="Test Hauptsaison", Von=2026-06-01, Bis=2026-08-31, Preis=15000, Aktiv=checked
+#    - Click "Erstellen" → Success toast appears
+#    - Season appears in list with correct data
+# 5. Verify Section B: Edit Season
+#    - Click "Bearbeiten" on newly created season
+#    - Form populates with existing data
+#    - Change Preis to 18000
+#    - Click "Aktualisieren" → Success toast appears
+#    - Season updates in list
+# 6. Verify Section B: Validation
+#    - Try Von=2026-08-31, Bis=2026-06-01 → Inline error appears
+#    - Fix dates → Error clears
+# 7. Verify Delete Season
+#    - Click "Löschen" → Confirmation dialog appears with season details
+#    - Click "Löschen" → Success toast appears
+#    - Season disappears from list
+# 8. Verify Section C: Apply Template (Preview)
+#    - Select a template from dropdown
+#    - Choose "Ersetzen" mode
+#    - Click "Vorschau" → Preview dialog opens
+#    - Verify summary counts are correct
+#    - Verify "Werden erstellt" list shows template periods
+# 9. Verify Section C: Apply Template (Execute)
+#    - In preview dialog, click "Übernehmen"
+#    - Success toast appears
+#    - Preview closes
+#    - Seasons list refreshes with new seasons from template
+# 10. Verify Mobile Responsiveness (360px width)
+#    - Tables scroll horizontally without breaking layout
+#    - Buttons stack vertically and remain tappable
+#    - Modal fits screen with vertical scroll
+# 11. Close editor → Click "Schließen" → Modal closes, returns to rate plans list
+```
+
+**Common Issues:**
+
+### Seasons List Empty After Create (400/422 Error)
+
+**Symptom:** Click "Erstellen" → Toast shows error, season not created.
+
+**Root Cause:** Validation error from backend (e.g., date_from > date_to, overlap with existing season, invalid date format).
+
+**How to Debug:**
+```bash
+# Check browser DevTools Console for API error response
+# Look for: 422 Unprocessable Entity with detail field
+
+# Example error: "date_from must be before date_to"
+# Example error: "Season overlaps with existing season: Hauptsaison (2026-06-01 to 2026-08-31)"
+```
+
+**Solution:**
+- Fix date range: Ensure Von < Bis
+- Check for overlaps: List existing seasons, adjust date range to avoid conflicts
+- If error unclear: Check backend logs for validation details
+
+### Delete Season Succeeds But Season Still Visible
+
+**Symptom:** Click "Löschen" → Success toast appears, but season remains in list.
+
+**Root Cause:** UI not filtering archived seasons correctly (archived_at IS NOT NULL).
+
+**How to Debug:**
+```bash
+# Check API response after delete
+curl -X GET "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/seasons?include_archived=false" \
+  -H "Authorization: Bearer $JWT_TOKEN" | jq '.[] | {id, label, archived_at}'
+
+# Season should have archived_at set (not null)
+# If include_archived=false, season should NOT be in response
+```
+
+**Solution:**
+- If season has archived_at but still visible: Frontend not filtering correctly (check seasons.filter(s => !s.archived_at))
+- If season has no archived_at: Backend soft delete failed (check DELETE endpoint response)
+- Hard refresh UI (Cmd+Shift+R / Ctrl+F5) to clear cache
+
+### Template Preview Shows 0 Conflicts But Apply Returns 422
+
+**Symptom:** Dry-run preview shows `conflicts: 0`, but clicking "Übernehmen" returns 422 with conflict error.
+
+**Root Cause:** Race condition - another user added a conflicting season between preview and apply.
+
+**How to Debug:**
+```bash
+# Re-run dry-run to see current state
+curl -X POST "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/apply-season-template" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"template_id": "'$TEMPLATE_ID'", "mode": "merge", "dry_run": true}' | jq '.summary.conflicts'
+
+# If conflicts > 0: Preview data is stale
+```
+
+**Solution:**
+- Close preview dialog
+- Click "Vorschau" again to re-fetch latest preview
+- Or switch to "Ersetzen" mode to override conflicts
+
+### Template Apply Button Disabled (Grayed Out)
+
+**Symptom:** "Übernehmen" button in preview dialog is disabled despite no conflicts shown.
+
+**Root Cause:** UI logic disables button if `previewData.summary.conflicts > 0` (merge mode conflicts detected).
+
+**How to Debug:**
+- Check preview summary: If conflicts count > 0, button is correctly disabled
+- Check conflict list: Red alert box should show conflict details
+
+**Solution:**
+- Read conflict messages (e.g., "Template period overlaps with existing season")
+- Option 1: Switch to "Ersetzen" mode (replaces all existing seasons, no conflict check)
+- Option 2: Manually delete conflicting seasons first, then re-run preview
+
+### Stale Token Error (401 Unauthorized)
+
+**Symptom:** Any action (create, edit, delete, preview) returns 401 error.
+
+**Root Cause:** JWT token expired (typically after 1-24 hours depending on auth config).
+
+**How to Debug:**
+```bash
+# Check browser DevTools → Network tab → Failed request → Response
+# Look for: 401 Unauthorized with message "Token expired" or "Invalid token"
+
+# Decode JWT to check expiration
+echo $JWT_TOKEN | cut -d'.' -f2 | base64 -d | jq '.exp'
+# Compare with current timestamp: date +%s
+```
+
+**Solution:**
+- Refresh page to get new token (if using cookie-based auth)
+- Or log out and log back in
+- For API testing: Generate new JWT token with longer expiration
+
+### "Archivierte anzeigen" Toggle Not Working
+
+**Symptom:** Toggle "Archivierte anzeigen" checkbox, but list doesn't update.
+
+**Root Cause:** UI not re-fetching seasons with updated `include_archived` parameter.
+
+**How to Debug:**
+- Check DevTools Network tab: Should see GET request with `include_archived=true` when toggle is on
+- If no new request: Frontend state not triggering re-fetch
+
+**Solution:**
+- Hard refresh UI (Cmd+Shift+R / Ctrl+F5)
+- If still broken: Check frontend code (rate-plans/page.tsx) for useEffect dependency on showArchived state
+
+---
+
