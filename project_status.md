@@ -8774,7 +8774,18 @@ Breakdown:
 Subtotal: (5 × 10000) + (5 × 15000) = 50000 + 75000 = 125000 cents
 ```
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
+
+**PROD Evidence (Verified: 2026-01-17):**
+- API Base URL: https://api.fewo.kolibri-visions.de
+- Backend Source Commit: 8999f81adff3f1750abc4275764bc088af318d4e
+- Backend Started At: 2026-01-17T00:45:03.690943+00:00
+- Deploy Verification: `backend/scripts/pms_verify_deploy.sh` → verify_rc=0 (/health 200, /health/ready 200)
+- Smoke Test: `backend/scripts/pms_pricing_quote_v2_smoke.sh` → smoke_rc=0
+  - nights_breakdown: 10 entries (one per night) for 10-night date range
+  - Season transitions: First 5 nights Nebensaison @ 10000, next 5 nights Hauptsaison @ 15000
+  - Subtotal verified: 125000 cents (5×10000 + 5×15000)
+  - Fees, taxes, and total calculations verified
 
 **Notes:**
 - IMPLEMENTED status requires: Backend API enhanced, nights_breakdown field added, Admin UI complete, smoke script passing, docs updated
