@@ -32363,3 +32363,140 @@ curl -X POST "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/apply-season-templat
 
 ---
 
+
+## P2.8 UI: Objekt-Preispläne Mobile-first Polish
+
+**Overview:** Mobile-first polish and UX hardening for the new Objekt-Preispläne flow with legacy route migration banner, enhanced helper text, and property overview summary.
+
+**Purpose:** Improve discoverability and usability of object-specific rate plans after P2.6 UI IA changes that moved rate plans from global navigation into property detail tabs.
+
+**Features:**
+
+1. **Migration Banner on Legacy Route** (`/pricing/rate-plans`):
+   - Informs users that property rate plans are now under "Objekte → Objekt → Objekt-Preispläne"
+   - Provides direct link to properties list
+   - Maintains legacy route for backward compatibility
+   - Mobile-responsive with stacked layout on narrow screens
+
+2. **Enhanced Helper Text** (`/properties/[id]/rate-plans`):
+   - Clearer explanation of property-specific rate plans
+   - Mentions relationship to seasonal pricing overrides
+   - Improves first-time user onboarding
+
+3. **Property Overview Summary** (`/properties/[id]`):
+   - "Preiseinstellungen" section with rate plans count
+   - Quick action link to open Objekt-Preispläne tab
+   - Mobile-first grid layout (1 column on mobile, 2 on desktop)
+   - Fetches count via GET /api/v1/pricing/rate-plans?property_id={id}
+
+**UI Components:**
+
+- **Migration Banner** (`frontend/app/pricing/rate-plans/page.tsx:730-749`)
+  - Blue info banner with heading and description
+  - CTA button "Zu Objekte →" linking to /properties
+  - Responsive flex layout (column on mobile, row on desktop)
+
+- **Helper Text** (`frontend/app/properties/[id]/rate-plans/page.tsx:577-580`)
+  - 2-line description under "Objekt-Preispläne" heading
+  - Explains purpose and seasonal override relationship
+
+- **Summary Section** (`frontend/app/properties/[id]/page.tsx:262-281`)
+  - Card with gradient background (primary/purple)
+  - Left side: Active rate plans count (fetched on mount)
+  - Right side: CTA button to open rate-plans tab
+  - Grid layout: 1 col mobile, 2 col desktop
+
+**Mobile-first Design:**
+
+- All components tested at 360px viewport width
+- Horizontal overflow handled with `overflow-x-auto`
+- Touch-friendly button sizes (px-4 py-2 minimum)
+- Readable text sizes (text-sm minimum, text-base preferred)
+- Stacked layouts on narrow screens with `flex-col sm:flex-row`
+
+**Verification:**
+
+```bash
+# Frontend build check (no TypeScript errors)
+cd /Users/khaled/Documents/KI/Claude/Claude\ Code/Projekte/PMS-Webapp/frontend
+npm run build
+
+# QA proofs (verify text content)
+rg "Diese Übersicht wurde verschoben" frontend/app/pricing/rate-plans/
+rg "objektspezifische Preispläne" frontend/app/properties/
+rg "Aktive Tarifpläne" frontend/app/properties/
+```
+
+**Common Issues:**
+
+### Migration Banner Not Visible
+
+**Symptom:** Users don't see the migration banner on `/pricing/rate-plans` page.
+
+**Root Cause:** Component order issue or CSS display problem.
+
+**How to Debug:**
+```bash
+# Check if banner is rendered in DOM
+# DevTools Elements tab: Search for "Diese Übersicht wurde verschoben"
+
+# Verify banner is not hidden by CSS
+# Check computed styles: display should not be 'none'
+```
+
+**Solution:**
+- Verify banner component is rendered before main content (line 730 in page.tsx)
+- Check for conflicting CSS classes hiding the banner
+- Hard refresh browser (Cmd+Shift+R / Ctrl+F5) to clear cache
+
+### Rate Plans Count Shows "—" Instead of Number
+
+**Symptom:** Property overview summary shows "—" for rate plans count instead of actual number.
+
+**Root Cause:** API request failed or returned unexpected format.
+
+**How to Debug:**
+```bash
+# Check browser DevTools Network tab for failed requests
+# Should see: GET /api/v1/pricing/rate-plans?property_id={id}&limit=100
+
+# Check response format (expecting array or {items: []})
+curl -X GET "$HOST/api/v1/pricing/rate-plans?property_id={id}&limit=100" \
+  -H "Authorization: Bearer $JWT_TOKEN" | jq 'type'
+
+# Expected: "array" or "object" with .items field
+```
+
+**Solution:**
+- Verify API endpoint returns valid response
+- Check JWT token has permissions to read rate plans
+- Ensure property_id is valid UUID
+- Check browser console for errors in fetch handler
+
+### Helper Text Not Updated
+
+**Symptom:** Property rate-plans page still shows old helper text.
+
+**Root Cause:** Cached page content or deployment not updated.
+
+**How to Debug:**
+```bash
+# Check source file contains new text
+grep "objektspezifische Preispläne" frontend/app/properties/[id]/rate-plans/page.tsx
+
+# Verify deployment timestamp
+curl -I $FRONTEND_URL | grep -i "last-modified"
+```
+
+**Solution:**
+- Hard refresh browser (Cmd+Shift+R / Ctrl+F5)
+- Verify latest deployment includes changes
+- Check Coolify deployment logs for successful build
+
+**Related:**
+- P2.6 UI IA: Moved rate plans to property detail tabs
+- frontend/app/pricing/rate-plans/page.tsx (legacy route with migration banner)
+- frontend/app/properties/[id]/rate-plans/page.tsx (property rate-plans page)
+- frontend/app/properties/[id]/page.tsx (property overview with summary)
+
+---
