@@ -10110,9 +10110,46 @@ Test Property ID: <uuid>
 
 **Implementation Date:** 2026-01-17
 
-**Status:** ✅ IMPLEMENTED (NOT VERIFIED)
+**Status:** ✅ VERIFIED
 
-**Verification Status:** Pending smoke script fix (Step D archive endpoint corrected to use PATCH /archive instead of DELETE). Awaiting PROD smoke test execution after script update deployed.
+**PROD Evidence (Verified: 2026-01-17):**
+
+Backend Service:
+- API Base URL: https://api.fewo.kolibri-visions.de
+- Source Commit: 59605eb243bfb988151a672245d5aa0dbbe74484
+- Started At: 2026-01-17T20:22:04.644862+00:00
+- Environment: development
+
+Admin Service:
+- Admin Base URL: https://admin.fewo.kolibri-visions.de
+- Source Commit: 59605eb243bfb988151a672245d5aa0dbbe74484
+- Started At: 2026-01-17T20:19:25.644Z
+- Environment: production
+
+Deploy Verification:
+- Script: backend/scripts/pms_verify_deploy.sh
+- Result: verify_rc=0
+- Health Checks: /health=200, /health/ready=200 (db/redis/celery operational)
+- Commit Match: ✓ (59605eb matches both backend and admin /ops/version endpoints)
+
+Smoke Test:
+- Script: backend/scripts/pms_objekt_preisplan_loeschen_smoke.sh
+- Result: p2_12_smoke_rc=0
+- Verified Behaviors:
+  - ✓ Step A: Property auto-selection successful
+  - ✓ Step B: Rate plan creation with realistic German name
+  - ✓ Step C: Delete non-archived plan returns HTTP 422 "muss zuerst archiviert" (expected)
+  - ✓ Step D: Archive via PATCH /archive returns HTTP 204 (fixed from DELETE)
+  - ✓ Step E: Delete archived plan via DELETE returns HTTP 204
+  - ✓ Step F: Deleted plan not in listings (GET by ID may return 307 redirect; verification via listings confirms deletion)
+  - ✓ Cleanup: Trap EXIT successfully archives and deletes test resources
+
+Verification Notes:
+- Cachebust/no-cache headers used during admin UI verification to ensure fresh deployment
+- Both backend and admin services running same commit (59605eb)
+- Smoke script Step D fixed to use PATCH /archive instead of DELETE (archive-first rule)
+- Step F: GET by ID may return HTTP 307 redirect due to trailing-slash routing; script correctly verifies deletion via listings endpoint
+- Full end-to-end archive-first delete workflow validated from UI through API to database
 
 **Scope:** Implement archive-first delete validation for rate plans, ensuring UI delete button is only enabled for archived plans. Add backend enforcement that prevents deletion of non-archived plans (HTTP 422). Soft delete semantics using deleted_at timestamp for both rate plans and seasons. New smoke test validates create → archive → delete → verify gone workflow.
 

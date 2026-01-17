@@ -33453,6 +33453,43 @@ grep -A5 "Step D" backend/scripts/pms_objekt_preisplan_loeschen_smoke.sh
 - Step E: Delete endpoint returns 204, sets `deleted_at` timestamp
 - If Step D calls DELETE by mistake, it will fail with 422 because plan is not yet archived
 
+#### Smoke Script Step F: GET by ID Returns 307 Redirect
+
+**Symptom**: Step F verification gets HTTP 307 when calling GET /api/v1/pricing/rate-plans/{id}.
+
+**Root Cause**:
+- Trailing-slash redirect handling in API routing
+- FastAPI redirects requests without trailing slash to version with trailing slash
+- This is a routing edge case, not a test failure
+
+**Diagnosis**:
+```bash
+# GET by ID may return 307 redirect
+curl -i "https://api.fewo.kolibri-visions.de/api/v1/pricing/rate-plans/$PLAN_ID" \
+  -H "Authorization: Bearer $JWT_TOKEN"
+
+# Expected: HTTP 307 Temporary Redirect
+# Location: /api/v1/pricing/rate-plans/{id}/
+
+# Use listings endpoint to verify deletion instead
+curl "https://api.fewo.kolibri-visions.de/api/v1/pricing/rate-plans/" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -G -d "property_id=$PROPERTY_ID"
+
+# Expected: Deleted plan not in response (deleted_at excludes it)
+```
+
+**Expected Behavior**:
+- This is a routing edge case, not a test failure
+- Script correctly uses listings endpoint to confirm deletion
+- 307 is treated as warning, deletion confirmed via listings
+- No action needed: Smoke script handles this correctly
+
+**Resolution**:
+- No fix required
+- Smoke script already verifies deletion via listings endpoint
+- 307 redirect is expected behavior and does not indicate test failure
+
 #### Seasons Not Deleted
 
 **Symptom**: Rate plan deleted but seasons remain in database without deleted_at timestamp.
