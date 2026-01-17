@@ -8850,3 +8850,54 @@ echo "rc=$?"
 ```
 
 ---
+
+# P2.6 UI IA — Objekt-Preispläne unter Objekt-Detail (Mobile-First)
+
+**Implementation Date:** 2026-01-17
+
+**Scope:** UI restructuring to improve information architecture - moved property rate plans from left navigation into property detail page as a tab.
+
+**Features Implemented:**
+
+1. **Object Detail Tabs** (`frontend/app/objects/[propertyId]/layout.tsx`):
+   - Tab navigation: "Überblick | Objekt-Preispläne"
+   - Clean 2-tab design with mobile-first approach
+   - Horizontal scroll support for narrow screens
+
+2. **Property Rate Plans Tab** (`frontend/app/objects/[propertyId]/rate-plans/page.tsx`):
+   - Reuses existing rate plans UI logic
+   - Property context from route params (no dropdown)
+   - Query filters to property-scoped rate plans
+   - All CRUD operations maintained (create, edit, archive, delete)
+   - Archive toggle ("Archivierte anzeigen") preserved
+   - Season editor and template application features intact
+
+3. **Navigation Updates**:
+   - Removed "Objekt-Preispläne" from left navigation
+   - Renamed "Saisons (Agentur)" → "Saisonzeiten" (route unchanged)
+   - Old route `/pricing/rate-plans` kept for backward compatibility (not linked)
+
+4. **Mobile-First Design** (360px width):
+   - Tab bar with overflow-x-auto for narrow screens
+   - Actions stack vertically on mobile
+   - Tables with horizontal scroll containers
+   - Responsive layouts throughout
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- IMPLEMENTED status requires: UI changes complete, routing working, mobile-responsive
+- VERIFIED status requires: PROD deployment, manual UI testing on mobile (360px) and desktop
+- Improves UX by placing property-specific pricing settings in property context
+- Backward compatible: old URLs still work
+
+**Files Changed:**
+- Frontend:
+  - `frontend/app/objects/[propertyId]/layout.tsx` (NEW/MODIFIED) - Tab navigation
+  - `frontend/app/objects/[propertyId]/rate-plans/page.tsx` (NEW) - Property rate plans tab
+  - Navigation config file (MODIFIED) - Removed entry, renamed label
+- Documentation:
+  - `backend/docs/ops/runbook.md` (ADD-ONLY) - Location guidance
+  - `backend/docs/project_status.md` (ADD-ONLY) - This entry
+
+---

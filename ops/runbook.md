@@ -31947,3 +31947,20 @@ docker logs pms-backend --tail 50
 
 ---
 ---
+
+## Objekt-Preispläne Location (P2.6 UI IA)
+
+**Change (2026-01-17)**: Objekt-Preispläne wurden aus der linken Navigation entfernt und in die Objekt-Detailseite verschoben.
+
+**Location**:
+- Navigate to: Objekte → Click on property → Tabs: "Überblick | Objekt-Preispläne"
+- The "Objekt-Preispläne" tab shows property-scoped rate plans
+- Property context is from route (no dropdown needed)
+
+**Navigation**:
+- Left nav: "Saisons (Agentur)" renamed to "Saisonzeiten" (same functionality)
+- Old route `/pricing/rate-plans` still accessible but not linked in nav
+
+**Mobile**: Tab navigation responsive at 360px width.
+
+---
