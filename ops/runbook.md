@@ -31683,6 +31683,7 @@ curl -X POST "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/apply-season-templat
 - **Per-Night Calculation**: Loops through each night from check_in to check_out-1, queries rate_plan_seasons for applicable season
 - **Seasonal Pricing**: Each night gets rate from matching season (if any) or falls back to base_nightly_cents
 - **Breakdown Response**: Returns `nights_breakdown` array with date, nightly_cents, season_label, season_id for each night
+  - **Important**: The breakdown is per-night (one entry per night), not aggregated by season. A 10-night stay spanning two seasons will have 10 entries in nights_breakdown.
 - **Fees & Taxes**: Applies pricing_fees and pricing_taxes from database (property-specific or agency-wide)
 - **Backward Compatibility**: Maintains existing `nightly_cents` field (set to first night's rate)
 
