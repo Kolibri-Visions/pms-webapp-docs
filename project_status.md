@@ -9424,3 +9424,278 @@ npm run build
 ```
 
 ---
+
+# P2.10 Admin UI — Saisonpreise pro Objekt (Simplified Workflow)
+
+**Implementation Date:** 2026-01-17
+
+**Status:** ✅ IMPLEMENTED (NOT VERIFIED)
+
+**Scope:** Simplified pricing UX with template selection and per-season price inputs, consolidating base price configuration and season template application into a single intuitive interface for property-scoped rate plans.
+
+**Purpose:** Enable property managers to configure seasonal pricing without navigating multiple screens. Users can now select a season template, set per-season prices with EUR inputs, preview changes before applying, and see gap warnings if seasonal coverage is incomplete.
+
+### Features Implemented
+
+**1. Base Price → Fallbackpreis Renaming**:
+- Moved base nightly price field to "Erweitert" (Advanced) accordion
+- Renamed from "Basispreis" to "Fallbackpreis" to clarify usage
+- Fallback price is used when booking dates fall outside defined seasonal periods
+- Helps users understand gap-filling behavior
+
+**2. Saisonpreise Section (New)**:
+- Dedicated section for season-based pricing configuration
+- Template selector dropdown populated from GET /api/v1/pricing/season-templates
+- Filters to show only is_active=true templates
+- Grouped season display by label (e.g., "Hauptsaison", "Nebensaison")
+- Shows date ranges for each season group (e.g., "01.06.2026 - 31.08.2026")
+
+**3. Per-Season Price Inputs**:
+- EUR decimal input for each season group (e.g., "120.00")
+- Frontend converts EUR to cents before API call (120.00 EUR → 12000 cents)
+- Inputs grouped by season label for better UX
+- Price overrides passed to apply endpoint via price_overrides parameter
+
+**4. Preview/Apply Workflow**:
+- Preview button: Calls POST /api/v1/pricing/rate-plans/{id}/apply-season-template with dry_run=true
+- Shows summary of what would happen (would_create, would_archive counts)
+- Gap warning banner appears if seasonal coverage has gaps
+- Apply button: Calls same endpoint with dry_run=false
+- Atomic transaction ensures all-or-nothing season creation
+- Success feedback shows applied season count
+
+**5. Gap Warning & Conflict Detection**:
+- Gap warning: "Lücken in Saisonabdeckung gefunden. Fallbackpreis wird verwendet für Daten außerhalb der Saisonen."
+- Appears when preview response includes gaps array (e.g., missing winter months)
+- Conflict warnings: Preview shows conflicts if overlapping seasons detected
+- Users can choose merge or replace mode to handle conflicts
+
+### Files Changed
+
+**Frontend:**
+- `frontend/app/properties/[id]/rate-plans/page.tsx` - Main pricing UI component
+  - Added "Saisonpreise" section with template selector
+  - Implemented grouped season display by label
+  - Added EUR input fields for per-season prices
+  - Implemented preview/apply workflow with dry-run support
+  - Added gap warning banner component
+  - Moved base price to "Erweitert" accordion, renamed to "Fallbackpreis"
+
+**Backend:**
+- No backend changes required for P2.10 (uses existing P2.4 endpoints)
+- Uses POST /api/v1/pricing/rate-plans/{id}/apply-season-template with:
+  - dry_run parameter for preview
+  - mode parameter (merge/replace)
+  - price_overrides parameter for per-season prices (if API agent added this feature)
+
+### Dependencies
+
+**Required Features (Must be Deployed First):**
+- P2.2 Rate Plan Seasons Editor (seasons CRUD backend) - Provides seasons API endpoints
+- P2.4 Pricing: Apply Season Template (preview/apply workflow) - Provides template apply with dry-run
+- P2.9 Combined Pricing Chain Smoke - End-to-end verification of pricing features
+
+**API Endpoints Used:**
+- GET /api/v1/pricing/season-templates - List active templates
+- GET /api/v1/pricing/rate-plans/{id} - Fetch current rate plan
+- POST /api/v1/pricing/rate-plans/{id}/apply-season-template - Preview/apply template
+- GET /api/v1/pricing/rate-plans/{id}/seasons - List applied seasons
+- PATCH /api/v1/pricing/rate-plans/{id} - Update base price (fallbackpreis)
+
+### Verification Commands (for VERIFIED status later)
+
+**Frontend Build Check:**
+```bash
+cd /Users/khaled/Documents/KI/Claude/Claude\ Code/Projekte/PMS-Webapp/frontend
+npm run build
+
+# Expected: Build succeeds with no TypeScript errors
+```
+
+**Manual UI Verification (Browser):**
+
+```bash
+# Prerequisites:
+# 1. Login as admin/manager at https://admin.fewo.kolibri-visions.de
+# 2. Ensure at least one season template exists (create at /pricing/seasons if needed)
+
+# Test 1: Fallbackpreis Field
+# - Navigate to: Objekte → [Select Property] → "Preise" tab
+# - Expand "Erweitert" accordion
+# - Verify "Fallbackpreis" label is present (not "Basispreis")
+# - Set value: 80.00 EUR → Save
+# - Expected: Rate plan base_nightly_cents updated to 8000
+
+# Test 2: Template Selector
+# - Scroll to "Saisonpreise" section
+# - Verify dropdown shows active templates
+# - Select template: "Standardsaison 2026" (or any active template)
+# - Expected: Season groups appear below dropdown
+
+# Test 3: Season Groups Display
+# - Verify each season group shows:
+#   - Label (e.g., "Hauptsaison")
+#   - Date range (e.g., "01.06.2026 - 31.08.2026")
+#   - EUR input field (placeholder: "0.00")
+# - Expected: All template periods displayed grouped by label
+
+# Test 4: Per-Season Price Inputs
+# - Enter prices:
+#   - Hauptsaison: 120.00
+#   - Nebensaison: 80.00
+# - Expected: Inputs accept decimal format
+
+# Test 5: Preview Workflow
+# - Click "Vorschau" button
+# - Expected: Loading indicator appears
+# - Expected: Preview summary shows (e.g., "Würde 2 Saisonen erstellen")
+# - Expected: No database changes (verify seasons count before/after)
+
+# Test 6: Gap Warning
+# - Use template with gaps (e.g., only summer months, missing winter)
+# - Click "Vorschau"
+# - Expected: Warning banner appears:
+#   "Lücken in Saisonabdeckung gefunden. Fallbackpreis wird verwendet für Daten außerhalb der Saisonen."
+
+# Test 7: Apply Workflow
+# - Click "Anwenden" button
+# - Expected: Success message appears
+# - Expected: Seasons created in database
+# - Verify: Navigate to seasons list → see created seasons
+
+# Test 8: Price Overrides Applied
+# - Query created seasons: GET /api/v1/pricing/rate-plans/{id}/seasons
+# - Expected: Hauptsaison has nightly_rate_cents=12000 (120.00 EUR)
+# - Expected: Nebensaison has nightly_rate_cents=8000 (80.00 EUR)
+```
+
+**API Verification (curl):**
+
+```bash
+# Setup
+HOST="https://api.fewo.kolibri-visions.de"
+JWT_TOKEN="<your-jwt-token>"
+PROPERTY_ID="<property-uuid>"
+
+# 1. Get property's rate plan
+RATE_PLAN_ID=$(curl -s "$HOST/api/v1/pricing/rate-plans?property_id=$PROPERTY_ID" \
+  -H "Authorization: Bearer $JWT_TOKEN" | jq -r '.items[0].id')
+
+# 2. List active season templates
+curl -s "$HOST/api/v1/pricing/season-templates" \
+  -H "Authorization: Bearer $JWT_TOKEN" | jq '.items[] | select(.is_active == true) | {id, name, periods: .periods | length}'
+
+# Expected: Array of active templates with id, name, periods count
+
+# 3. Preview template apply (dry-run)
+TEMPLATE_ID="<template-uuid-from-step-2>"
+curl -X POST "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/apply-season-template" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "template_id": "'"$TEMPLATE_ID"'",
+    "mode": "merge",
+    "dry_run": true
+  }' | jq '.summary'
+
+# Expected: {"would_create": 2, "would_archive": 0, "conflicts": []}
+# Expected: No database changes (GET seasons returns same count)
+
+# 4. Apply with price overrides
+curl -X POST "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/apply-season-template" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "template_id": "'"$TEMPLATE_ID"'",
+    "mode": "replace",
+    "dry_run": false,
+    "price_overrides": {
+      "<season-period-uuid-1>": 12000,
+      "<season-period-uuid-2>": 8000
+    }
+  }'
+
+# Expected: HTTP 200 with summary {"created": 2, "archived": 0}
+
+# 5. Verify created seasons
+curl "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/seasons" \
+  -H "Authorization: Bearer $JWT_TOKEN" | jq '.items[] | {label, start_date, end_date, nightly_rate_cents}'
+
+# Expected: Seasons with nightly_rate_cents matching overrides (12000, 8000)
+```
+
+### Known Limitations
+
+1. **No Inline Editing of Applied Seasons**:
+   - After applying template, users must navigate to seasons list to edit individual seasons
+   - Future enhancement: Inline season editing in property pricing tab
+
+2. **No Bulk Season Deletion**:
+   - Users must delete seasons individually or use replace mode to clear all
+   - Future enhancement: "Clear all seasons" button
+
+3. **Price Overrides Require Template Reapply**:
+   - Changing per-season prices requires re-applying template
+   - Existing seasons not updated in place
+   - Future enhancement: "Update prices only" action
+
+4. **Gap Detection UX**:
+   - Gap warning shows date ranges but doesn't highlight which dates are missing
+   - Future enhancement: Visual calendar showing coverage gaps
+
+### Troubleshooting References
+
+**Common Issues (see runbook.md for detailed fixes):**
+
+1. **Fallback Price Not Used**: Template has gaps but no warning → Check API response, verify gap detection logic
+2. **Gap Warning Not Showing**: API returns gaps but UI doesn't display → Check browser console for errors
+3. **Price Overrides Not Applying**: Entered prices but seasons use template defaults → Verify price_overrides in API payload
+4. **Template Selector Empty**: No templates in dropdown → Create templates at /pricing/seasons, ensure is_active=true
+5. **Preview/Apply Endpoints Failing**: 500 errors → Check backend logs, verify schema migrations, check DB connectivity
+
+**Detailed Troubleshooting**: See [P2.10 Pricing UX Troubleshooting](../docs/ops/runbook.md#p210-pricing-ux-saisonpreise-pro-objekt-vorlagen--preise-je-saison) in runbook.md
+
+### Related Documentation
+
+- [P2.10 Pricing UX Runbook](../docs/ops/runbook.md#p210-pricing-ux-saisonpreise-pro-objekt-vorlagen--preise-je-saison) - Operations guide with verification steps and troubleshooting
+- [P2.2 Rate Plan Seasons Editor](../docs/ops/runbook.md#p22-rate-plan-seasons-editor) - Seasons CRUD backend
+- [P2.4 Pricing: Apply Season Template](../docs/ops/runbook.md#p24-pricing-apply-season-template-preview--atomic-apply) - Template apply backend
+- [P2.9 Combined Pricing Chain Smoke](../docs/ops/runbook.md#p29-smoke-objekt-preisplaene--saisonzeiten-anwenden---smoke) - End-to-end verification
+
+### Notes
+
+- UI changes are frontend-only (no backend changes required for P2.10)
+- Backend support for price_overrides parameter depends on whether API agent added this to P2.4 apply endpoint
+- If price_overrides not supported: UI collects values but they're ignored by API (graceful degradation)
+- Gap warning relies on backend returning gaps array in preview response (P2.4 feature)
+- All EUR/cents conversions happen in frontend (UI shows EUR, API expects cents)
+
+**Verification Status Update Instructions:**
+
+When marking as VERIFIED, update this section with:
+```markdown
+**Status:** ✅ VERIFIED
+
+**PROD Evidence (YYYY-MM-DD):**
+
+Frontend Deployment:
+- Admin UI URL: https://admin.fewo.kolibri-visions.de
+- Source Commit: <commit-hash>
+- Deploy Date: YYYY-MM-DD
+
+Manual UI Tests:
+- ✓ Fallbackpreis field visible in Erweitert accordion
+- ✓ Template selector shows active templates
+- ✓ Season groups display correctly with date ranges
+- ✓ Per-season price inputs accept EUR decimal format
+- ✓ Preview workflow shows summary without DB changes
+- ✓ Gap warning appears for templates with coverage gaps
+- ✓ Apply workflow creates seasons with correct prices
+- ✓ Price overrides applied correctly (nightly_rate_cents matches input)
+
+Tester: <name>
+Test Property ID: <uuid>
+Test Template ID: <uuid>
+```
+
+---

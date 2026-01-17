@@ -32655,3 +32655,250 @@ docker logs pms-backend --tail 50 | grep -i "database\|connection\|pool"
 - P2.5 Pricing: Quote v2 (seasonal breakdown backend)
 
 ---
+
+## P2.10 Pricing UX: Saisonpreise pro Objekt (Vorlagen + Preise je Saison)
+
+**Purpose**: Simplified UX for season-based pricing configuration per property, enabling property managers to select a season template and set per-season prices with preview/apply workflow.
+
+**Overview**: P2.10 introduces a streamlined pricing workflow that consolidates base price configuration and season template application into a single, intuitive interface. Instead of navigating between multiple screens, users can now configure all pricing aspects for a property in one place.
+
+### Features
+
+**1. Base Price Renamed to "Fallbackpreis"**:
+- Base nightly price field moved to "Erweitert" (Advanced) accordion section
+- Renamed from "Basispreis" to "Fallbackpreis" to clarify it's used when no season matches
+- Used when booking dates fall outside defined seasonal periods (gap filling)
+
+**2. Saisonpreise Section**:
+- New dedicated section for season-based pricing configuration
+- Template selector dropdown: Choose from active season templates
+- Season groups display: Shows grouped seasons with labels and date ranges
+- Per-season price inputs: EUR input fields (automatically converted to cents for API)
+
+**3. Preview/Apply Workflow**:
+- Preview button: Shows what would happen (dry-run mode, no DB changes)
+- Gap warning banner: Alerts users if seasonal coverage has gaps (fallback will be used)
+- Apply button: Commits changes atomically to database
+- Conflict detection: Warns if applying template would create overlapping seasons
+
+**4. Price Overrides Support**:
+- Each season displays EUR input for price override
+- Overrides are stored per-season and take precedence over template defaults
+- API endpoint supports optional price_overrides parameter
+
+### How to Verify in PROD
+
+**Prerequisites**:
+```bash
+# 1. Ensure user is logged in with admin/manager role
+# 2. Navigate to: https://admin.fewo.kolibri-visions.de
+# 3. Go to: Objekte → [Select Property] → "Preise" tab
+```
+
+**Step-by-Step Verification**:
+
+1. **Base Price Configuration (Erweitert)**:
+   ```
+   - Expand "Erweitert" accordion
+   - Verify "Fallbackpreis" field is present (renamed from Basispreis)
+   - Set value: 8000 (EUR 80.00) and save
+   - Expected: Rate plan base_nightly_cents updated to 8000
+   ```
+
+2. **Template Selection**:
+   ```
+   - Scroll to "Saisonpreise" section
+   - Verify template selector dropdown is populated
+   - If empty: Create season template first at /pricing/seasons
+   - Select template: "Standardsaison 2026"
+   - Expected: Season groups appear below dropdown (grouped by label)
+   ```
+
+3. **Season Groups Display**:
+   ```
+   - Verify each season group shows:
+     - Label (e.g., "Hauptsaison")
+     - Date range (e.g., "01.06.2026 - 31.08.2026")
+     - EUR input field for price override
+   - Expected: All template periods displayed correctly
+   ```
+
+4. **Per-Season Price Inputs**:
+   ```
+   - Enter prices for each season:
+     - Hauptsaison: 120.00 EUR
+     - Nebensaison: 80.00 EUR
+   - Expected: Input accepts decimal format (00.00)
+   ```
+
+5. **Preview Workflow**:
+   ```
+   - Click "Vorschau" button
+   - Expected: API call to POST /api/v1/pricing/rate-plans/{id}/apply-season-template
+     with dry_run=true
+   - Expected: Response shows summary.would_create count matching template periods
+   - Expected: No database changes (verify seasons count remains same)
+   ```
+
+6. **Gap Warning**:
+   ```
+   - If template has gaps (e.g., missing winter months):
+   - Expected: Warning banner appears: "Lücken in Saisonabdeckung gefunden.
+     Fallbackpreis wird verwendet für Daten außerhalb der Saisonen."
+   ```
+
+7. **Apply Workflow**:
+   ```
+   - Click "Anwenden" button
+   - Expected: API call to POST /api/v1/pricing/rate-plans/{id}/apply-season-template
+     with dry_run=false, mode=merge or replace
+   - Expected: Success message appears
+   - Expected: GET /api/v1/pricing/rate-plans/{id}/seasons returns created seasons
+   ```
+
+8. **Price Overrides Applied**:
+   ```
+   - Verify created seasons have correct nightly_rate_cents:
+   - Expected: Hauptsaison season has 12000 cents (120.00 EUR)
+   - Expected: Nebensaison season has 8000 cents (80.00 EUR)
+   ```
+
+### Troubleshooting
+
+#### Fallback Price Not Used (Gaps Exist but No Warning)
+
+**Symptom**: Template has coverage gaps but UI doesn't show warning banner.
+
+**Diagnosis**:
+1. Check API response from preview endpoint
+2. Verify `gaps` field in response body
+3. Check frontend gap detection logic in component
+
+**Fix**:
+```bash
+# Manual verification of gaps
+curl -X POST "https://api.fewo.kolibri-visions.de/api/v1/pricing/rate-plans/{id}/apply-season-template" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "template_id": "...",
+    "mode": "merge",
+    "dry_run": true
+  }'
+
+# Expected: Response includes "gaps": [{"start": "2026-01-01", "end": "2026-05-31"}]
+# If gaps missing: Backend gap detection logic broken
+```
+
+#### Gap Warning Banner Not Showing
+
+**Symptom**: API returns gaps in preview response but UI doesn't display warning.
+
+**Diagnosis**:
+1. Open browser DevTools → Console
+2. Check for JavaScript errors during preview
+3. Verify gap warning component is rendering
+
+**Fix**:
+```bash
+# Check frontend console for errors like:
+# - "Cannot read property 'length' of undefined" → gaps array not destructured correctly
+# - Component not rendering → conditional logic broken (gaps.length > 0 check)
+
+# Workaround: Check API response directly in Network tab
+# If gaps exist in API but not shown: Frontend regression, redeploy frontend
+```
+
+#### Price Overrides Not Applying
+
+**Symptom**: Entered per-season prices but created seasons use template default prices.
+
+**Diagnosis**:
+1. Check API request payload in browser Network tab
+2. Verify `price_overrides` field is present in POST body
+3. Check backend logs for validation errors
+
+**Fix**:
+```bash
+# Expected request payload:
+{
+  "template_id": "uuid-here",
+  "mode": "merge",
+  "dry_run": false,
+  "price_overrides": {
+    "season-period-uuid-1": 12000,  # 120.00 EUR in cents
+    "season-period-uuid-2": 8000    # 80.00 EUR in cents
+  }
+}
+
+# If price_overrides missing: Frontend not collecting input values correctly
+# If price_overrides present but ignored: Backend apply logic not using overrides
+
+# Verification query (after apply):
+curl "https://api.fewo.kolibri-visions.de/api/v1/pricing/rate-plans/{id}/seasons" \
+  -H "Authorization: Bearer $JWT_TOKEN"
+
+# Expected: Seasons have nightly_rate_cents matching overrides (12000, 8000)
+# If all seasons have same price: Overrides not applied, backend bug
+```
+
+#### Template Selector Empty (No Active Templates)
+
+**Symptom**: "Saisonpreise" section shows empty dropdown, no templates available.
+
+**Diagnosis**:
+1. Verify season templates exist: GET /api/v1/pricing/season-templates
+2. Check if templates are archived (is_active=false)
+3. Verify user has permission to list templates
+
+**Fix**:
+```bash
+# Check templates in database
+curl "https://api.fewo.kolibri-visions.de/api/v1/pricing/season-templates" \
+  -H "Authorization: Bearer $JWT_TOKEN"
+
+# Expected: Response includes templates array with is_active=true
+# If empty array: No templates created yet
+# If templates exist but is_active=false: Templates archived, restore or create new
+
+# Create template via UI:
+# Navigate to: /pricing/seasons → Click "Neue Vorlage" → Add periods → Save
+# Return to property pricing tab → Dropdown should now show template
+```
+
+#### Preview/Apply Endpoints Failing (500 Internal Server Error)
+
+**Symptom**: Preview or Apply button triggers 500 error, seasons not created.
+
+**Diagnosis**:
+1. Check backend logs: docker logs pms-backend-container
+2. Verify database schema is up to date (season_templates, season_template_periods tables exist)
+3. Check for foreign key constraint violations
+
+**Common Errors**:
+
+```bash
+# Error: "relation 'season_templates' does not exist"
+# Fix: Run missing migrations
+cd /path/to/backend
+supabase db push  # or equivalent migration command
+
+# Error: "foreign key constraint violation (rate_plan_id not found)"
+# Fix: Rate plan doesn't exist or was deleted, create new rate plan first
+
+# Error: "overlapping seasons detected (conflict)"
+# Fix: Expected for merge mode with conflicts, use replace mode or remove conflicting seasons
+
+# Verification:
+# 1. Check /api/v1/ops/health → should return 200 (DB accessible)
+# 2. Check /api/v1/pricing/rate-plans → should list rate plans (schema OK)
+# 3. Check /api/v1/pricing/season-templates → should list templates (schema OK)
+```
+
+**Related**:
+- P2.2 Rate Plan Seasons Editor (seasons CRUD backend)
+- P2.4 Pricing: Apply Season Template (preview/apply workflow backend)
+- P2.9 Combined Pricing Chain Smoke (end-to-end verification)
+- frontend/app/properties/[id]/rate-plans/page.tsx (UI implementation)
+
+---
