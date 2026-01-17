@@ -8859,12 +8859,12 @@ echo "rc=$?"
 
 **Features Implemented:**
 
-1. **Object Detail Tabs** (`frontend/app/objects/[propertyId]/layout.tsx`):
+1. **Object Detail Tabs** (`frontend/app/properties/[id]/layout.tsx`):
    - Tab navigation: "Überblick | Objekt-Preispläne"
    - Clean 2-tab design with mobile-first approach
    - Horizontal scroll support for narrow screens
 
-2. **Property Rate Plans Tab** (`frontend/app/objects/[propertyId]/rate-plans/page.tsx`):
+2. **Property Rate Plans Tab** (`frontend/app/properties/[id]/rate-plans/page.tsx`):
    - Reuses existing rate plans UI logic
    - Property context from route params (no dropdown)
    - Query filters to property-scoped rate plans
@@ -8883,19 +8883,35 @@ echo "rc=$?"
    - Tables with horizontal scroll containers
    - Responsive layouts throughout
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
+
+**PROD Evidence (Verified: 2026-01-17):**
+- **Admin URL:** https://admin.fewo.kolibri-visions.de
+- **Service:** pms-admin
+- **Source Commit:** 8b2535b4447a42afe3d82f61024cd9d3e742205f
+- **Started At:** 2026-01-17T01:40:34.463Z
+- **Implementation Commits:**
+  - bf94813 "ui: move object rate plans into property detail + rename seasons nav"
+  - 8b2535b "hotfix(ui): fix admin build NightBreakdown date field (night_date)" (TypeScript build fix)
+- **Manual UI Verification (2026-01-17):**
+  - ✅ Left nav: "Tarifpläne" entry removed (no longer in navigation)
+  - ✅ Left nav: "Saisons (Agentur)" renamed to "Saisonzeiten"
+  - ✅ Property detail tabs: "Überblick | Objekt-Preispläne" tab navigation visible
+  - ✅ Object rate plans live under /properties/{id}/rate-plans (mobile-first tabs usable, horizontal scroll on 360px)
+  - ✅ Old /pricing/rate-plans route remains accessible (backward compatibility confirmed)
+  - ✅ CRUD operations working: create, edit, archive, delete rate plans
+  - ✅ Season editor and template application functional
 
 **Notes:**
-- IMPLEMENTED status requires: UI changes complete, routing working, mobile-responsive
-- VERIFIED status requires: PROD deployment, manual UI testing on mobile (360px) and desktop
 - Improves UX by placing property-specific pricing settings in property context
 - Backward compatible: old URLs still work
+- Mobile-responsive verified on 360px width
 
 **Files Changed:**
 - Frontend:
-  - `frontend/app/objects/[propertyId]/layout.tsx` (NEW/MODIFIED) - Tab navigation
-  - `frontend/app/objects/[propertyId]/rate-plans/page.tsx` (NEW) - Property rate plans tab
-  - Navigation config file (MODIFIED) - Removed entry, renamed label
+  - `frontend/app/properties/[id]/layout.tsx` (NEW) - Tab navigation
+  - `frontend/app/properties/[id]/rate-plans/page.tsx` (NEW) - Property rate plans tab
+  - `frontend/app/components/AdminShell.tsx` (MODIFIED) - Removed "Tarifpläne" entry, renamed "Saisons (Agentur)" to "Saisonzeiten"
 - Documentation:
   - `backend/docs/ops/runbook.md` (ADD-ONLY) - Location guidance
   - `backend/docs/project_status.md` (ADD-ONLY) - This entry

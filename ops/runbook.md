@@ -31954,14 +31954,18 @@ docker logs pms-backend --tail 50
 
 **Location**:
 - Navigate to: Objekte → Click on property → Tabs: "Überblick | Objekt-Preispläne"
-- The "Objekt-Preispläne" tab shows property-scoped rate plans
+- The "Objekt-Preispläne" tab shows property-scoped rate plans (filtered to current property)
 - Property context is from route (no dropdown needed)
+- Route pattern: `/properties/{property_id}/rate-plans`
 
 **Navigation**:
-- Left nav: "Saisons (Agentur)" renamed to "Saisonzeiten" (same functionality)
-- Old route `/pricing/rate-plans` still accessible but not linked in nav
+- Left nav: "Tarifpläne" entry removed (no longer in navigation)
+- Left nav: "Saisons (Agentur)" renamed to "Saisonzeiten" (same functionality, agency-wide seasons)
+- Old route `/pricing/rate-plans` still accessible but not linked in nav (backward compatibility)
 
-**Mobile**: Tab navigation responsive at 360px width.
+**Mobile**: Tab navigation responsive at 360px width with horizontal scroll.
+
+**Status**: ✅ VERIFIED in PROD (2026-01-17, commit 8b2535b)
 
 ---
 
