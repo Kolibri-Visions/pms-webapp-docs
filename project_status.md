@@ -10180,6 +10180,13 @@ Test Property ID: <uuid>
 - Build verified with `npm run build` (no TypeScript errors)
 - Not yet marked VERIFIED (requires manual PROD UI testing)
 
+**Bugfix (2026-01-18):**
+- Fixed archive button handler: Changed from `DELETE /api/v1/pricing/rate-plans/{id}` to `PATCH /api/v1/pricing/rate-plans/{id}/archive`
+- Symptom: Clicking "Archivieren" sent DELETE → 422 error ("muss zuerst archiviert werden")
+- Root cause: `handleArchive` incorrectly called `apiClient.delete()` instead of `apiClient.patch()`
+- Fix: Line 160 changed to `apiClient.patch(\`/api/v1/pricing/rate-plans/${plan.id}/archive\`, {}, accessToken)`
+- Status: ✅ IMPLEMENTED (awaiting PROD verification)
+
 ---
 
 # P2.12 Admin UI + API — Delete Rate Plans Parity

@@ -32627,6 +32627,37 @@ grep -A 2 "useEffect.*propertyId.*showArchived" frontend/app/properties/[id]/rat
 - Check browser console for errors during state update
 - Hard refresh browser to clear cached component state
 
+### Archivieren Button Sends DELETE Instead of PATCH (422)
+
+**Symptom:** Clicking "Archivieren" button triggers DELETE request and returns HTTP 422 with error "Plan muss zuerst archiviert werden, bevor er gelöscht werden kann."
+
+**Root Cause:** UI wiring bug - archive button handler incorrectly calls `apiClient.delete()` instead of `apiClient.patch()` to `/archive` endpoint.
+
+**How to Debug:**
+```bash
+# Check browser DevTools Network tab when clicking Archivieren
+# Wrong: DELETE /api/v1/pricing/rate-plans/{id} → 422
+# Correct: PATCH /api/v1/pricing/rate-plans/{id}/archive → 204
+
+# Verify frontend code
+grep -A 3 "handleArchive.*async" frontend/app/properties/[id]/rate-plans/page.tsx
+# Should call: apiClient.patch(`.../${plan.id}/archive`, {}, accessToken)
+# Not: apiClient.delete(`.../${plan.id}`, accessToken)
+```
+
+**Expected Behavior:**
+- Archive button sends: `PATCH /api/v1/pricing/rate-plans/{id}/archive` with empty body `{}`
+- Expected response: HTTP 204 No Content
+- Plan archived_at set, active=false, is_default=false
+- List refreshes; plan disappears from default view (unless toggle ON)
+
+**Solution:**
+- Fix `handleArchive` function in `frontend/app/properties/[id]/rate-plans/page.tsx`
+- Change line 160 from `apiClient.delete()` to `apiClient.patch()`
+- Use endpoint: `/api/v1/pricing/rate-plans/${plan.id}/archive`
+- Pass empty body: `{}`
+- Redeploy frontend
+
 ---
 
 ## P2.9 Smoke: Objekt-Preisplaene & Saisonzeiten anwenden - Smoke
