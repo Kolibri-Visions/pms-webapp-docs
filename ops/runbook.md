@@ -34818,3 +34818,40 @@ Content-Type: application/json
 - Check logs: should show `SELECT id, name FROM rate_plans WHERE ... active = true`
 
 ---
+
+### Restore-Konflikt Smoke Test schlägt fehl (STEP B 409)
+
+**Symptom:** Smoke script `pms_preisplan_restore_conflict_smoke.sh` fails at STEP B with message "Active plan creation returned 409" or "409 conflict but no active plan found on retry".
+
+**Root Cause:** Script attempts to create an active plan if none exists, but one already exists (race condition or API filtering issue). The 409 handling logic re-queries to find the existing plan.
+
+**Expected Behavior (After Fix):**
+- STEP B checks for active plan via GET /api/v1/pricing/rate-plans?property_id={id}
+- If not found, creates one with active=true
+- If creation returns 409, logs warning and re-queries
+- If re-query finds active plan, continues test normally
+- Only fails if 409 + re-query returns empty (rare edge case)
+
+**How to Debug:**
+```bash
+# Check if property has active plans
+PROPERTY_ID="..."
+curl -sS "https://api.fewo.kolibri-visions.de/api/v1/pricing/rate-plans?property_id=${PROPERTY_ID}" \
+  -H "Authorization: Bearer $JWT_TOKEN" | jq '.[] | select(.active == true and .archived_at == null)'
+
+# If multiple active plans found: data corruption (violates constraint)
+# If zero active plans: API filtering issue or wrong property_id
+
+# Manually create inactive test plan (bypasses conflict)
+curl -X POST "https://api.fewo.kolibri-visions.de/api/v1/pricing/rate-plans" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"property_id":"'$PROPERTY_ID'","name":"Test Inactive","active":false,"is_default":false,"currency":"EUR","base_nightly_cents":10000}'
+```
+
+**Solution:**
+- If property has no active plans: Create one manually (active=true, is_default=false) before running smoke
+- If property has multiple active plans: Fix data corruption (archive extras, keep only one active)
+- If smoke script logic needs update: Check lines 200-231 in pms_preisplan_restore_conflict_smoke.sh
+
+---

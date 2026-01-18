@@ -10310,6 +10310,13 @@ Improved error handling and UX when restoring archived rate plans while an activ
 
 - **Status**: ✅ IMPLEMENTED (awaiting PROD verification with smoke script rc=0)
 
+
+**Smoke Script Fix (2026-01-18):**
+- Updated `pms_preisplan_restore_conflict_smoke.sh` to handle 409 gracefully during active plan creation (STEP B)
+- If active plan creation returns 409 conflict, script now re-queries to find existing active plan instead of failing
+- Second plan creation already uses `active=false` to avoid one-active-plan-per-property conflict
+- Cleanup ignores 404 errors (safe for PROD testing)
+- Script validates 409 response contains German keywords: "Wiederherstellen nicht möglich", "aktiver Tarifplan", "archivieren...zuerst"
 ---
 
 # P2.12 Admin UI + API — Delete Rate Plans Parity
