@@ -10826,3 +10826,14 @@ Test Property ID: <uuid>
 **Result:** ✅ P2.13 Rate Plan Delete Semantics fix fully operational in PROD
 
 ---
+
+**Backend Bugfix (2026-01-18) - One-Active-Plan Validation:**
+- **Root Cause**: Create rate plan validation (pricing.py:254-269) was too strict - checked for ANY non-archived plan instead of only ACTIVE plans
+- **Symptom**: Smoke script failed at STEP C with 409 when creating INACTIVE plan (`active=false`) because an ACTIVE plan existed
+- **Fix**: Updated validation to only enforce one-active-plan-per-property constraint when creating an ACTIVE plan (`input.active == True`)
+  - Wrapped validation in `if input.active:` check (line 256)
+  - Added `AND active = true` to SQL WHERE clause (line 260)
+  - Now allows creating INACTIVE plans even when ACTIVE plans exist (correct behavior)
+- **Side Note**: Added TODO comment at update endpoint (line 450-451) for future improvement - similar validation needed when updating a plan to `active=true`
+- **Impact**: Smoke script `pms_preisplan_restore_conflict_smoke.sh` STEP C should now pass (creates inactive plan without conflict)
+
