@@ -10301,7 +10301,7 @@ Test Property ID: <uuid>
 
 **Implementation Date:** 2026-01-17
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
 
 **Scope:** Enforce pricing system invariants at DB and API level to prevent human errors (multiple active plans, season overlaps, missing pricing).
 
@@ -10378,8 +10378,6 @@ Test Property ID: <uuid>
 
 **Detailed Troubleshooting**: See [P2.13 Pricing Invariants](../docs/ops/runbook.md#p213-pricing-invariants-hardening) in runbook.md
 
-**Verification Status:** Not verified in PROD yet (pending deployment and smoke test execution)
-
 **Recent Fixes:**
 
 **Quote Gap 500 Bug (Fixed: 2026-01-18)**
@@ -10398,63 +10396,72 @@ Test Property ID: <uuid>
 - **Tests**: Added regression tests test_quote_gap_no_fallback_no_base_season_plan_returns_422, test_quote_base_price_only_plan_returns_200
 - **Verification**: Run `./backend/scripts/pms_quote_keine_saison_smoke.sh` → expect STEP D returns 422 (not 200)
 
-**Awaiting PROD Verification:**
-- P2.13 remains **IMPLEMENTED** (not VERIFIED) until all 4 smoke tests pass in PROD with rc=0
-- Bugfix commit must be deployed and verified via pms_verify_deploy.sh
-- All smoke scripts must complete successfully (especially pms_quote_keine_saison_smoke.sh)
-
 ---
 
-**Verification Checklist (for PROD deployment):**
+**PROD Verification Evidence:**
 
-To mark P2.13 as ✅ VERIFIED, complete all steps:
+**Verification Date:** 2026-01-18
 
-1. **Deploy Verification:**
-   ```bash
-   export API_BASE_URL="https://api.fewo.kolibri-visions.de"
-   ./backend/scripts/pms_verify_deploy.sh
-   # Expected: verify_rc=0, commit hash matches latest main
-   ```
+**Environment:**
+- API Base: https://api.fewo.kolibri-visions.de
+- Agency ID: ffd0123a-10b6-40cd-8ad5-66eee9757ab7
+- Property ID: 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
 
-2. **Database Migration Applied:**
-   ```bash
-   # Verify constraints exist
-   psql $DATABASE_URL -c "SELECT conname FROM pg_constraint WHERE conname IN ('idx_rate_plans_one_active_per_property', 'rate_plan_seasons_no_overlap_excl');"
-   # Expected: 2 rows (both constraints exist)
-   ```
+**Deploy Verification:**
+- Script: `./backend/scripts/pms_verify_deploy.sh` → rc=0
+- Endpoint: GET /api/v1/ops/version
+  - source_commit: 68e4e6dadf427f869cd2af5139d8a1723ab5a6bd
+  - started_at: 2026-01-18T04:03:04.730616+00:00
 
-3. **Smoke Tests Pass (all 4 must return rc=0):**
-   ```bash
-   export HOST="https://api.fewo.kolibri-visions.de"
-   export MANAGER_JWT_TOKEN="<<<manager/admin JWT>>>"
-   export AGENCY_ID="<<<agency UUID>>>"
+**Smoke Tests (All Passed):**
+1. ✅ `pms_preisplan_doppel_aktiv_smoke.sh` → rc=0
+   - STEP B: First active plan created (201)
+   - STEP C: Second active plan rejected (409 Conflict)
+   - STEP C: German error message verified ("bereits...aktiv...preisplan")
+   - STEP E: First plan archived
+   - STEP F: Second plan created after archiving (201)
 
-   ./backend/scripts/pms_preisplan_doppel_aktiv_smoke.sh && echo "✅ Test 1: rc=$?"
-   ./backend/scripts/pms_saison_overlap_smoke.sh && echo "✅ Test 2: rc=$?"
-   ./backend/scripts/pms_quote_keine_saison_smoke.sh && echo "✅ Test 3: rc=$?"
-   ./backend/scripts/pms_template_merge_konflikt_smoke.sh && echo "✅ Test 4: rc=$?"
-   ```
+2. ✅ `pms_saison_overlap_smoke.sh` → rc=0
+   - STEP C: Saison 1 "Hauptsaison" created (2026-06-01 to 2026-08-31)
+   - STEP D: Overlapping Saison 2 rejected (422 Unprocessable Entity)
+   - STEP D: German error message with season name ("Überschneidung...Hauptsaison")
+   - STEP E: Non-overlapping Saison 3 created (2026-09-01 to 2026-09-30)
 
-4. **API Behavior Verification:**
-   - 409 Conflict on duplicate active plan creation
-   - 422 on season overlap with German error message
-   - 422 on quote gap pricing without fallback (not 404)
-   - 422 on template merge conflicts with conflict details
+3. ✅ `pms_quote_keine_saison_smoke.sh` → rc=0
+   - STEP D: Quote gap without fallback rejected (422, not 200)
+   - STEP D: German error message verified ("Keine Saison greift")
+   - STEP E: Quote with fallback succeeded (200)
+   - STEP F: Base-price-only plan still works (200, backward compatible)
+   - Known warning in STEP G.2: "Überschneidung...Hauptsaison" (expected, non-blocking)
 
-5. **Cleanup Verification:**
-   - All smoke tests show "✓ Deleted" or "✓ Already gone (HTTP 404)" in cleanup
-   - No "MANUAL CLEANUP REQUIRED" warnings for normal cleanup
-   - No orphaned active plans left behind (check with GET /api/v1/pricing/rate-plans?property_id=)
+4. ✅ `pms_template_merge_konflikt_smoke.sh` → rc=0
+   - STEP D: Template merge conflict rejected (422)
+   - STEP D: German error message with conflict count ("Überschneidung(en) erkannt")
+   - STEP E: Template replace mode succeeded (201)
+   - Known warnings: Cleanup 404s for already-deleted resources (expected, non-blocking)
 
-**Once all 5 checklist items pass, update Status to:**
-```markdown
-**Status:** ✅ VERIFIED
+**Database Constraints Verified:**
+- Partial unique index: `idx_rate_plans_one_active_per_property` (active in PROD)
+- Exclusion constraint: `rate_plan_seasons_no_overlap_excl` (active in PROD)
+- btree_gist extension: Enabled
 
-**PROD Evidence (Verified: YYYY-MM-DD):**
-- Deploy: verify_rc=0, commit <hash>
-- Smoke Tests: All 4 passed (rc=0)
-- DB Constraints: Confirmed active in PROD
-- Manual QA: Tested duplicate plan 409, season overlap 422, quote gap 422
-```
+**API Behavior Verified:**
+- ✅ 409 Conflict on duplicate active plan creation with German error message
+- ✅ 422 on season overlap with conflicting season details
+- ✅ 422 on quote gap without fallback (not 404, not 200, not 500)
+- ✅ 422 on template merge conflicts with overlap count
+- ✅ All error messages in German with specific details (dates, labels, resource names)
+
+**Cleanup Verified:**
+- All smoke tests completed cleanup successfully
+- No "MANUAL CLEANUP REQUIRED" warnings
+- No orphaned active plans left behind
+
+**Regression Tests Verified:**
+- All 7 tests in `test_pricing_quote_regression.py` pass
+- Quote 500 NameError bug fixed (message variable initialized)
+- Quote gap invariant enforced (base_nightly_cents gated by has_seasons)
+
+**Result:** ✅ P2.13 Pricing Invariants Hardening fully operational in PROD
 
 ---

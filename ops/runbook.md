@@ -34151,6 +34151,39 @@ export AGENCY_ID="<<<agency UUID>>>"
 - **Season-based plan + gap + fallback set** → HTTP 200 using fallback_price_cents for gap nights
 - **Base-price-only plan (no seasons)** → HTTP 200 using base_nightly_cents for all nights (backward compatible)
 
+### PROD Verification (Verified: 2026-01-18)
+
+**Status:** ✅ P2.13 Pricing Invariants Hardening VERIFIED in PROD
+
+**Environment:**
+- API Base: https://api.fewo.kolibri-visions.de
+- Agency ID: ffd0123a-10b6-40cd-8ad5-66eee9757ab7
+- Property ID: 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
+- Deploy: source_commit=68e4e6dadf427f869cd2af5139d8a1723ab5a6bd (2026-01-18T04:03:04+00:00)
+
+**Smoke Tests (All Passed, rc=0):**
+1. ✅ pms_preisplan_doppel_aktiv_smoke.sh - Duplicate active plan 409 enforcement
+2. ✅ pms_saison_overlap_smoke.sh - Season overlap 422 enforcement
+3. ✅ pms_quote_keine_saison_smoke.sh - Quote gap 422 enforcement (not 200, not 500)
+4. ✅ pms_template_merge_konflikt_smoke.sh - Template merge conflict 422 enforcement
+
+**DB Constraints Verified:**
+- Partial unique index: `idx_rate_plans_one_active_per_property` (active)
+- Exclusion constraint: `rate_plan_seasons_no_overlap_excl` (active)
+- btree_gist extension: Enabled
+
+**API Behavior Verified:**
+- ✅ 409 Conflict on duplicate active plan with German error
+- ✅ 422 on season overlap with conflicting season name/dates
+- ✅ 422 on quote gap without fallback (enforces season-based vs base-price-only distinction)
+- ✅ 422 on template merge conflicts with overlap count
+- ✅ All error messages in German with actionable details
+
+**Regression Tests:**
+- All 7 tests in `test_pricing_quote_regression.py` pass
+- Quote 500 NameError fixed (message variable initialized)
+- Quote gap invariant enforced (base_nightly_cents gated by has_seasons)
+
 ---
 
 ### Template Apply Validation Errors
