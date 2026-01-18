@@ -10390,6 +10390,14 @@ Test Property ID: <uuid>
 - **Tests**: Added regression tests in backend/tests/integration/test_pricing_quote_regression.py
 - **Verification**: Run `./backend/scripts/pms_quote_keine_saison_smoke.sh` → expect rc=0
 
+**Quote Gap Invariant Violation (Fixed: 2026-01-18)**
+- **Issue**: Quote returned HTTP 200 for gap dates using base_nightly_cents as hidden fallback, even when fallback_price_cents was NULL
+- **Root Cause**: base_nightly_cents checked before fallback_price_cents in fallback priority; no distinction between season-based vs base-price-only plans
+- **Fix**: Added has_seasons detection; reordered fallback priority; gated base_nightly_cents usage
+- **Location**: backend/app/api/routes/pricing.py lines 1453-1509
+- **Tests**: Added regression tests test_quote_gap_no_fallback_no_base_season_plan_returns_422, test_quote_base_price_only_plan_returns_200
+- **Verification**: Run `./backend/scripts/pms_quote_keine_saison_smoke.sh` → expect STEP D returns 422 (not 200)
+
 **Awaiting PROD Verification:**
 - P2.13 remains **IMPLEMENTED** (not VERIFIED) until all 4 smoke tests pass in PROD with rc=0
 - Bugfix commit must be deployed and verified via pms_verify_deploy.sh

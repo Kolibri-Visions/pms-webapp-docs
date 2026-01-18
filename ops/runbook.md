@@ -34108,6 +34108,49 @@ export AGENCY_ID="<<<agency UUID>>>"
 - Gap + fallback set → HTTP 200 with quote using fallback price
 - Covered by season → HTTP 200 with quote using season price
 
+### Quote Returns 200 Despite Missing Season & No Fallback
+
+**Symptom:** Quote endpoint returns HTTP 200 with valid quote when requesting dates that have season gaps, even though `fallback_price_cents` is NULL. The nightly_cents values in nights_breakdown show base_nightly_cents (e.g., 10000) for gap nights.
+
+**Root Cause:** Prior to fix, `base_nightly_cents` was used as a hidden fallback for gap nights in season-based rate plans. The fallback priority was:
+1. Season price
+2. base_nightly_cents (hidden fallback)
+3. fallback_price_cents
+4. Error
+
+This violated the P2.13 invariant that season-based plans must use explicit fallback_price_cents for gap nights.
+
+**Fixed In:** This bug was fixed by:
+1. Adding has_seasons detection to distinguish season-based vs base-price-only plans
+2. Reordering fallback priority: fallback_price_cents before base_nightly_cents
+3. Gating base_nightly_cents usage: only allowed when rate plan has NO seasons
+
+**How to Verify Fix:**
+```bash
+# 1. Deploy verification
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# 2. Run quote gap smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="<<<manager/admin JWT>>>"
+export AGENCY_ID="<<<agency UUID>>>"
+./backend/scripts/pms_quote_keine_saison_smoke.sh
+
+# Expected: rc=0, STEP D returns 422 (not 200)
+```
+
+**Regression Tests:**
+- Location: `backend/tests/integration/test_pricing_quote_regression.py`
+- Primary test: `test_quote_gap_no_fallback_no_base_season_plan_returns_422`
+- Backward compat: `test_quote_base_price_only_plan_returns_200`
+- Validates: Season-based plans require explicit fallback; base-price-only plans still work
+
+**Expected Behavior After Fix:**
+- **Season-based plan + gap + NULL fallback** → HTTP 422 "Keine Saison greift..." (even if base_nightly_cents is set)
+- **Season-based plan + gap + fallback set** → HTTP 200 using fallback_price_cents for gap nights
+- **Base-price-only plan (no seasons)** → HTTP 200 using base_nightly_cents for all nights (backward compatible)
+
 ---
 
 ### Template Apply Validation Errors
