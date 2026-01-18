@@ -10106,6 +10106,82 @@ Test Property ID: <uuid>
 
 ---
 
+## P2.11.1 Rate Plans UI: Default Hide Archived + Status Badges
+
+**Implementation Date:** 2026-01-18
+
+**Status:** ✅ IMPLEMENTED (not yet VERIFIED in PROD)
+
+**Scope:** UX improvements for Objekt-Preispläne rate plans list: default-hide archived behavior, toggle to show archived, and clear status badges.
+
+**Purpose:** Reduce clutter after archive/delete operations by hiding archived plans from default view, providing explicit toggle control, and displaying clear status badges (Aktiv/Entwurf/Archiviert) instead of just checkboxes.
+
+**Features Implemented:**
+
+1. **Default Filter Behavior**:
+   - Default view shows **only non-archived plans** (archived_at IS NULL)
+   - Deleted plans never appear (API already filters deleted_at IS NULL)
+   - Empty state: "Keine Tarifpläne vorhanden"
+
+2. **Toggle "Archivierte anzeigen"**:
+   - Checkbox control in header (top-right corner)
+   - Default state: unchecked (showArchived = false)
+   - When checked: API includes `include_archived=true` parameter
+   - Triggers immediate re-fetch via useEffect dependency
+
+3. **Status Badges** (Desktop Table + Mobile Cards):
+   - **"Aktiv"** (green bg-green-100): active=true AND archived_at IS NULL
+   - **"Entwurf / Inaktiv"** (gray bg-gray-100): active=false AND archived_at IS NULL
+   - **"Archiviert"** (gray bg-gray-200): archived_at IS NOT NULL
+   - Defensive check: isArchivedButActive prevents "Aktiv" badge for archived plans
+
+4. **Automatic Refresh After Actions**:
+   - Archive, Delete, Activate operations call `fetchRatePlans()` after success
+   - No manual reload needed; changes appear immediately
+   - Archived plans disappear from default view (unless toggle is ON)
+
+**Code Locations:**
+
+- State: `frontend/app/properties/[id]/rate-plans/page.tsx:78`
+- Toggle UI: Lines 636-647
+- API call: Line 123 → `include_archived=${showArchived}`
+- Desktop badges: Lines 702-708 (defensive check + badge logic)
+- Mobile badges: Lines 776-782 (same logic)
+- Re-fetch triggers: Lines 163 (archive), 190 (delete), 224 (activate)
+
+**DB Constraint Invariant:**
+- Migration `20260118110000_rate_plans_delete_semantics_archive_invariants.sql` enforces:
+  - `rate_plans_archived_not_active`: Archived plans cannot have active=true
+  - `rate_plans_archived_not_default`: Archived plans cannot have is_default=true
+- UI defensive check ensures badges never contradict constraints
+
+**Files Changed:**
+- `frontend/app/properties/[id]/rate-plans/page.tsx` - Rate plans list UI
+  - Replaced "Aktiv" column (checkbox only) with "Status" column (badges)
+  - Added status badge logic with defensive isArchivedButActive check
+  - Updated mobile cards to show status badge instead of checkbox label
+
+**Acceptance Criteria:**
+- ✓ Default list view shows no archived plans (verified via showArchived=false)
+- ✓ Toggling "Archivierte anzeigen" includes archived plans (verified via include_archived param)
+- ✓ Archiving a plan makes it disappear from default list (verified via re-fetch)
+- ✓ Status badges correct and never contradictory (verified via defensive check)
+- ✓ After delete, plan removed from list (verified via re-fetch + API deleted_at filter)
+
+**Dependencies:**
+- P2.13 Delete Semantics Fix (deleted_at column, API filters)
+- P2.11 Objekt-Preispläne (archive functionality, rate plans table)
+
+**Detailed Runbook**: See [Rate Plans UI: Default Hide Archived](../docs/ops/runbook.md#rate-plans-ui-default-hide-archived--status-badges) in runbook.md
+
+**Notes:**
+- Frontend-only changes (no backend API changes)
+- Toggle state preserved in component state (resets on page reload)
+- Build verified with `npm run build` (no TypeScript errors)
+- Not yet marked VERIFIED (requires manual PROD UI testing)
+
+---
+
 # P2.12 Admin UI + API — Delete Rate Plans Parity
 
 **Implementation Date:** 2026-01-17

@@ -32501,6 +32501,134 @@ curl -I $FRONTEND_URL | grep -i "last-modified"
 
 ---
 
+## Rate Plans UI: Default Hide Archived + Status Badges
+
+**Overview:** Admin UI improvements for Objekt-Preispläne rate plans list with default-hide archived behavior, toggle to show archived, and clear status badges.
+
+**Purpose:** Improve UX after archive/delete operations by making archived plans disappear from default view, providing explicit toggle to show them, and displaying clear status badges to distinguish Aktiv/Entwurf/Archiviert states.
+
+**UI Behavior:**
+
+1. **Default Filter** (`/properties/[id]/rate-plans`):
+   - Default view shows **only non-archived plans** (archived_at IS NULL)
+   - API already filters deleted plans (deleted_at IS NULL), so they never appear
+   - Empty state: "Keine Tarifpläne vorhanden"
+
+2. **Toggle Control**:
+   - Checkbox labeled "Archivierte anzeigen" (off by default)
+   - Located in header area, top-right corner
+   - When enabled: API call includes `include_archived=true` parameter
+   - Immediately re-fetches list when toggled
+
+3. **Status Badges** (Desktop Table + Mobile Cards):
+   - **"Aktiv"** (green bg): `active=true AND archived_at IS NULL`
+   - **"Entwurf / Inaktiv"** (gray bg): `active=false AND archived_at IS NULL`
+   - **"Archiviert"** (gray bg): `archived_at IS NOT NULL`
+   - Defensive check: If `archived_at != null`, **never** show "Aktiv" badge (enforces DB constraint invariant)
+
+4. **After Actions**:
+   - After Archive/Delete/Activate operations, list automatically re-fetches via `fetchRatePlans()`
+   - No manual reload needed; changes appear immediately
+   - Archived plans disappear from default view; appear when toggle is enabled
+
+**Code Locations:**
+
+- State: `frontend/app/properties/[id]/rate-plans/page.tsx:78` → `const [showArchived, setShowArchived] = useState(false);`
+- Toggle UI: Lines 636-647 → Checkbox "Archivierte anzeigen"
+- API call: Line 123 → `include_archived=${showArchived}`
+- Desktop badges: Lines 702-708 → Status badge logic with defensive check
+- Mobile badges: Lines 776-782 → Same status badge logic
+- Re-fetch: Lines 163, 190, 224 → After archive/delete/activate
+
+**DB Constraint Invariant:**
+- Migration `20260118110000_rate_plans_delete_semantics_archive_invariants.sql` enforces:
+  - `rate_plans_archived_not_active`: Archived plans cannot have active=true
+  - `rate_plans_archived_not_default`: Archived plans cannot have is_default=true
+- UI defensive check ensures badges reflect these invariants even if data inconsistency exists
+
+**Status Badge Colors:**
+```typescript
+// Desktop & Mobile (same logic)
+const isArchivedButActive = plan.archived_at && plan.active;
+const statusBadge = plan.archived_at
+  ? { text: "Archiviert", color: "bg-gray-200 text-gray-700" }
+  : (plan.active && !isArchivedButActive)
+  ? { text: "Aktiv", color: "bg-green-100 text-green-800" }
+  : { text: "Entwurf / Inaktiv", color: "bg-gray-100 text-gray-600" };
+```
+
+**Verification:**
+
+```bash
+# UI build check
+cd /Users/khaled/Documents/KI/Claude/Claude\ Code/Projekte/PMS-Webapp/frontend
+npm run build
+
+# QA proofs
+rg "Archivierte anzeigen" frontend/app/properties/
+rg "isArchivedButActive" frontend/app/properties/
+rg "include_archived" frontend/app/properties/
+```
+
+**Common Issues:**
+
+### Archived Plans Still Visible After Archive
+
+**Symptom:** After clicking "Archivieren", plan still appears in list (default view).
+
+**Root Cause:** Toggle "Archivierte anzeigen" is enabled (checked). Default view should have toggle OFF.
+
+**How to Debug:**
+- Check toggle state in UI (should be unchecked by default)
+- Verify API call URL includes `include_archived=false` (or omits parameter)
+- Check browser DevTools Network tab for GET request
+
+**Solution:**
+- Uncheck "Archivierte anzeigen" toggle to hide archived plans
+- Verify component state: `showArchived` should be `false` by default (line 78)
+- If toggle is stuck, hard refresh browser (Cmd+Shift+R / Ctrl+F5)
+
+### Status Badge Shows "Aktiv" for Archived Plan
+
+**Symptom:** Plan with archived_at != null displays "Aktiv" badge (should show "Archiviert").
+
+**Root Cause:** Data inconsistency (archived_at set but active=true) or defensive check not working.
+
+**How to Debug:**
+```bash
+# Check plan data in database
+psql $DATABASE_URL -c "SELECT id, name, archived_at, active FROM rate_plans WHERE id = '{plan_id}';"
+
+# Expected for archived plan: archived_at NOT NULL, active = false
+# If active = true: DB constraint violation (should be blocked by constraint)
+```
+
+**Solution:**
+- If DB shows `active=true` for archived plan: Migration constraint not applied
+- Run migration: `20260118110000_rate_plans_delete_semantics_archive_invariants.sql`
+- Backfill bad data: `UPDATE rate_plans SET active = false WHERE archived_at IS NOT NULL;`
+- Verify constraint exists: `\d+ rate_plans` → should show `rate_plans_archived_not_active`
+
+### Toggle Not Working (No Re-fetch)
+
+**Symptom:** Clicking "Archivierte anzeigen" checkbox does not update list.
+
+**Root Cause:** useEffect dependency not triggering on `showArchived` change.
+
+**How to Debug:**
+```bash
+# Verify useEffect dependencies include showArchived
+grep -A 2 "useEffect.*propertyId.*showArchived" frontend/app/properties/[id]/rate-plans/page.tsx
+# Line 109-113: Should see }, [authLoading, propertyId, showArchived]);
+```
+
+**Solution:**
+- Verify useEffect on line 109 has `showArchived` in dependency array
+- Check browser console for errors during state update
+- Hard refresh browser to clear cached component state
+
+---
+
 ## P2.9 Smoke: Objekt-Preisplaene & Saisonzeiten anwenden - Smoke
 
 **Purpose**: Combined end-to-end smoke test for the complete pricing chain including property-scoped rate plans, season templates, preview/apply workflows (merge/replace modes), conflict detection, and quote calculation with seasonal breakdown.
