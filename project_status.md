@@ -10283,6 +10283,33 @@ sed -n '34p' frontend/app/properties/[id]/layout.tsx  # Verify tab label
 - Property page cleanup reduces visual clutter and duplicate navigation
 - Not yet marked VERIFIED (requires PROD deployment + manual UI testing)
 
+
+**Enhancement (2026-01-18) - Restore Conflict UX Improvement:**
+
+Improved error handling and UX when restoring archived rate plans while an active plan exists for the same property.
+
+- **Backend**:   - Added active plan check to restore endpoint (`backend/app/api/routes/pricing.py:826-849`)
+  - Returns 409 Conflict with clear German message including active plan name:
+    `"Wiederherstellen nicht möglich: Für dieses Objekt ist bereits ein aktiver Tarifplan vorhanden ('{name}'). Bitte archivieren Sie den aktiven Tarifplan zuerst."`
+  - Even though restore sets `active=false`, the check prevents confusion from having multiple non-archived plans with one active
+
+- **Frontend**:
+  - Updated `handleRestore` error handling to display backend's German message (`frontend/app/properties/[id]/rate-plans/page.tsx:183-191`)
+  - Added `hasActivePlan()` helper function to check if any non-archived plan is active (line 156-159)
+  - Proactively disables "Wiederherstellen" button on archived plans when active plan exists (desktop: 757-760, mobile: 850-855)
+  - Shows tooltip: "Für dieses Objekt ist bereits ein aktiver Tarifplan vorhanden. Bitte archivieren Sie den aktiven Plan zuerst."
+
+- **Testing**:
+  - New smoke script: `backend/scripts/pms_preisplan_restore_conflict_smoke.sh`
+  - Verifies 409 response with German keywords: "Wiederherstellen nicht möglich", "aktiver Tarifplan", "archivieren...zuerst"
+  - Auto-cleanup via trap EXIT (respects archive-first delete rule)
+
+- **Documentation**:
+  - Runbook: Added "Wiederherstellen-Konflikt (Aktiver Plan existiert)" subsection with staff guidance
+  - Scripts README: Added restore conflict smoke test entry with usage/troubleshooting
+
+- **Status**: ✅ IMPLEMENTED (awaiting PROD verification with smoke script rc=0)
+
 ---
 
 # P2.12 Admin UI + API — Delete Rate Plans Parity

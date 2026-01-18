@@ -34726,3 +34726,95 @@ sed -n '34p' frontend/app/properties/[id]/layout.tsx
 - Check Coolify deployment logs for frontend build success
 
 ---
+
+### Wiederherstellen-Konflikt (Aktiver Plan existiert)
+
+**Symptom:** Clicking "Wiederherstellen" on an archived rate plan returns 409 Conflict when another active plan exists for the same property.
+
+**Root Cause:** Backend enforces UX guard: only one active plan should exist per property at a time. Even though restore sets active=false, having multiple non-archived plans with one active creates confusion for staff.
+
+**Expected Behavior:**
+- Backend returns **409 Conflict** with German message including active plan name
+- Frontend displays the error message in a toast (not generic "Database error")
+- UI proactively disables "Wiederherstellen" button when active plan exists in current list
+
+**Example Error Response:**
+
+```json
+{
+  "detail": "Wiederherstellen nicht möglich: Für dieses Objekt ist bereits ein aktiver Tarifplan vorhanden ('Sommer 2026 Hauptsaison'). Bitte archivieren Sie den aktiven Tarifplan zuerst."
+}
+```
+
+**How to Test (Manual):**
+1. Navigate to property detail page → Preiseinstellungen tab
+2. Ensure one rate plan is active (green "Aktiv" badge)
+3. Create a second plan and archive it immediately
+4. Enable "Archivierte anzeigen" toggle
+5. Click "Wiederherstellen" on archived plan
+6. Expect: German error toast with active plan name + "archivieren...zuerst" instruction
+
+**How to Test (Automated):**
+```bash
+export HOST="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="..."
+export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"  # optional
+export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"  # optional
+./backend/scripts/pms_preisplan_restore_conflict_smoke.sh
+
+# Expected output:
+# ✅ STEP E.1 PASSED: Restore returned 409 Conflict
+# ✅ STEP E.2 PASSED: Error message German + actionable + keywords present
+```
+
+**Staff Guidance:**
+1. Identify which plan is currently active (green "Aktiv" badge)
+2. Click "Bearbeiten" on the active plan
+3. Uncheck "Aktiv" checkbox → Save (plan becomes "Entwurf / Inaktiv")
+4. Retry "Wiederherstellen" on archived plan → should succeed
+5. If needed, activate the restored plan via Edit modal
+
+**API Endpoint:**
+
+```bash
+# Attempt restore with active plan existing
+curl -X PATCH https://api.fewo.kolibri-visions.de/api/v1/pricing/rate-plans/{archived_plan_id}/restore \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "x-agency-id: $AGENCY_ID"
+
+# Expected response (409):
+HTTP/1.1 409 Conflict
+Content-Type: application/json
+
+{
+  "detail": "Wiederherstellen nicht möglich: Für dieses Objekt ist bereits ein aktiver Tarifplan vorhanden ('Plan Name'). Bitte archivieren Sie den aktiven Tarifplan zuerst."
+}
+```
+
+**Code Locations:**
+- Backend check: `backend/app/api/routes/pricing.py:826-849` (active plan query + 409 response)
+- Frontend error handling: `frontend/app/properties/[id]/rate-plans/page.tsx:183-191` (uses backend detail message)
+- Frontend UI guard: `frontend/app/properties/[id]/rate-plans/page.tsx:156-159` (hasActivePlan helper)
+- Desktop button disable: Lines 757-760 (disabled + tooltip when hasActivePlan)
+- Mobile button disable: Lines 850-855 (same logic for mobile)
+
+**Troubleshooting:**
+
+*UI shows generic error instead of German message:*
+- Check browser DevTools Network tab for restore request
+- Verify response has `detail` field with German text
+- If detail missing, backend may not be deployed with latest code
+- Frontend extracts `error.statusText` (populated from `detail` field)
+
+*Restore button not disabled even when active plan exists:*
+- Hard refresh browser (Cmd+Shift+R / Ctrl+F5) to clear component cache
+- Verify `hasActivePlan()` function exists in page.tsx:156-159
+- Check ratePlans state contains active plan with `active=true, archived_at=null`
+- Ensure "Archivierte anzeigen" toggle is OFF (active plans only visible when not archived)
+
+*Restore succeeds even with active plan (no 409):*
+- Backend not deployed with latest code
+- Verify backend route at pricing.py:826-849 includes active plan check
+- Check logs: should show `SELECT id, name FROM rate_plans WHERE ... active = true`
+
+---
