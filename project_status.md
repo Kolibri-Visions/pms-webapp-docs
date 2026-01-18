@@ -10483,3 +10483,133 @@ Test Property ID: <uuid>
 **Result:** ✅ P2.13 Pricing Invariants Hardening fully operational in PROD
 
 ---
+
+## P2.13 Rate Plan Delete Semantics Fix
+
+**Implementation Date:** 2026-01-18
+
+**Status:** ✅ VERIFIED
+
+**Scope:** Fix DELETE /api/v1/pricing/rate-plans/{id} semantics to properly soft-delete rate plans (sets deleted_at timestamp) instead of returning 204 but leaving resource accessible.
+
+**Problem (Pre-Fix):**
+- DELETE endpoint returned HTTP 204 No Content
+- Resource still accessible via GET-by-id (returned 200, not 404)
+- Resource still appeared in LIST endpoint results
+- "Deleted" plans were not actually removed from API responses
+
+**Features Implemented:**
+
+1. **Database Migration** (`supabase/migrations/20260118110000_rate_plans_delete_semantics_archive_invariants.sql`):
+   - Added `deleted_at` column to rate_plans table (TIMESTAMPTZ NULL)
+   - Created partial index `idx_rate_plans_deleted` on deleted_at (WHERE deleted_at IS NOT NULL)
+   - Added CHECK constraint `rate_plans_archived_not_active` (archived plans cannot be active)
+   - Added CHECK constraint `rate_plans_archived_not_default` (archived plans cannot be default)
+   - Added CHECK constraint `rate_plans_deleted_must_be_archived` (enforces archive-before-delete)
+   - Backfilled inconsistent data (archived plans with active=true or is_default=true)
+   - Idempotent: Uses IF NOT EXISTS patterns for PROD drift safety
+
+2. **DELETE Endpoint Fix** (`backend/app/api/routes/pricing.py` line ~852):
+   - DELETE now executes: `UPDATE rate_plans SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL`
+   - Returns 204 No Content (unchanged)
+   - Sets deleted_at timestamp instead of hard delete
+
+3. **Query Filter Updates** (10+ locations in `pricing.py` and `rate_plan_resolver.py`):
+   - All GET/LIST/Quote queries now include: `AND deleted_at IS NULL`
+   - Deleted plans are never returned by any read endpoint
+   - Quote resolution skips deleted plans
+   - Rate plan resolver excludes deleted plans from fallback logic
+
+4. **Archive Invariants Enforcement**:
+   - DB constraint enforces: archived plans must have active=false
+   - DB constraint enforces: archived plans must have is_default=false
+   - DB constraint enforces: deleted plans must be archived first
+   - Attempting to DELETE non-archived plan returns 422: "Cannot delete rate plan: must be archived first"
+
+5. **Smoke Script** (`backend/scripts/pms_preisplan_delete_semantics_smoke.sh`):
+   - STEP A: Auto-select property
+   - STEP B: Create test rate plan "Preisplan Löschen nach Archiv {timestamp} - Smoke"
+   - STEP C: Archive the rate plan (sets archived_at, active=false, is_default=false)
+   - STEP D: DELETE the rate plan (sets deleted_at=NOW())
+   - STEP E: Verify GET-by-id returns 404 (deleted plan filtered out)
+   - STEP F: Verify LIST excludes deleted plan (deleted_at IS NOT NULL filtered out)
+   - PROD-safe: Creates timestamped plan, no cleanup needed (deleted plans invisible)
+
+**Expected Behavior (Post-Fix):**
+- DELETE returns 204 No Content (same as before)
+- GET-by-id returns 404 Not Found (changed from 200)
+- LIST does NOT include deleted plan (changed from included)
+- Deleted plans have deleted_at IS NOT NULL in database
+- All endpoints respect deleted_at filter
+
+**Backward Compatibility:**
+- DELETE endpoint HTTP status unchanged (204)
+- Migration is idempotent (IF NOT EXISTS checks)
+- No breaking changes to API contracts
+- Existing clients see same 204 response, resource simply disappears from subsequent queries
+
+**Dependencies:**
+- P2.13 Pricing Invariants Hardening (archive functionality, rate_plans table structure)
+- PostgreSQL database with rate_plans table
+
+**Common Issues:**
+
+1. **DELETE returns 422 "must be archived first"**: Plan not archived → PATCH /api/v1/pricing/rate-plans/{id}/archive first
+2. **GET-by-id still returns 200 after DELETE**: Old backend version without deleted_at filter → Deploy commit 7d1ae1d or later
+3. **LIST still shows deleted plan**: Same root cause as #2 → Deploy DELETE semantics fix
+
+**Detailed Troubleshooting**: See [Rate Plan DELETE Semantics](../docs/ops/runbook.md#rate-plan-delete-semantics-soft-delete) in runbook.md
+
+---
+
+**PROD Verification Evidence:**
+
+**Verification Date:** 2026-01-18
+
+**Environment:**
+- API Base: https://api.fewo.kolibri-visions.de
+- Agency ID: ffd0123a-10b6-40cd-8ad5-66eee9757ab7
+- Property ID: 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
+
+**Deploy Verification:**
+- Script: `./backend/scripts/pms_verify_deploy.sh` → rc=0
+- Endpoint: GET /api/v1/ops/version
+  - source_commit: 7d1ae1d0c20a6cf9ee558e543dc715e8d2186446
+  - started_at: 2026-01-18T10:07:05.356059+00:00
+
+**Smoke Test:**
+✅ `pms_preisplan_delete_semantics_smoke.sh` → rc=0
+- STEP A: Property auto-selected (23dd8fda-59ae-4b2f-8489-7a90f5d46c66)
+- STEP B: Rate plan created (HTTP 201, id=...)
+- STEP C: Rate plan archived (HTTP 204)
+- STEP D: DELETE returned 204 No Content ✅
+- STEP E: GET-by-id returned 404 (deleted plan filtered out) ✅
+- STEP F: LIST excludes deleted plan (deleted_at IS NOT NULL) ✅
+
+**Database Constraints Verified:**
+- Column added: `rate_plans.deleted_at` (TIMESTAMPTZ NULL)
+- Index created: `idx_rate_plans_deleted` (partial index on deleted_at)
+- CHECK constraint: `rate_plans_archived_not_active` (active in PROD)
+- CHECK constraint: `rate_plans_archived_not_default` (active in PROD)
+- CHECK constraint: `rate_plans_deleted_must_be_archived` (active in PROD)
+
+**API Behavior Verified:**
+- ✅ DELETE sets deleted_at=NOW() (not hard delete)
+- ✅ GET-by-id returns 404 for deleted plans (not 200)
+- ✅ LIST excludes deleted plans (filtered by deleted_at IS NULL)
+- ✅ Quote endpoint skips deleted plans in resolution
+- ✅ Archive-before-delete enforced (422 if not archived)
+
+**Cleanup Verified:**
+- Smoke test completed successfully (rc=0)
+- No manual cleanup required (deleted plans are soft-deleted, invisible to API)
+- PROD DB verified: deleted plan has deleted_at IS NOT NULL
+
+**PROD Drift Captured:**
+- **Issue**: PROD DB was missing `deleted_at` column before migration (manually added via Supabase SQL Editor)
+- **Migration Fix**: Migration uses `IF NOT EXISTS` check → idempotent, safe for PROD redeploy
+- **Verification**: Migration runs successfully on both fresh and already-patched PROD instances
+
+**Result:** ✅ P2.13 Rate Plan Delete Semantics fix fully operational in PROD
+
+---

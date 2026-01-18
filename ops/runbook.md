@@ -34192,6 +34192,85 @@ export AGENCY_ID="<<<agency UUID>>>"
 
 ---
 
+### Rate Plan DELETE Semantics (Soft Delete)
+
+**Overview:** DELETE /api/v1/pricing/rate-plans/{id} implements soft delete using `deleted_at` column. Deleted plans are never returned by GET/LIST endpoints.
+
+**Delete Flow:**
+1. Rate plan must be archived first (422 if not archived)
+2. DELETE sets `deleted_at = NOW()` and `updated_at = NOW()`
+3. All GET/LIST/Quote endpoints filter by `deleted_at IS NULL`
+4. Resource disappears from API immediately after DELETE
+
+**Archive-Before-Delete Rule:**
+- DB constraint: `rate_plans_deleted_must_be_archived` enforces `deleted_at IS NULL OR archived_at IS NOT NULL`
+- Attempting to DELETE non-archived plan returns 422: "Cannot delete rate plan: must be archived first"
+
+**Verification Commands:**
+
+```bash
+# Test delete semantics flow
+export HOST="https://api.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="<<<manager/admin JWT>>>"
+export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"  # Optional
+export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"  # Optional
+
+# Run delete semantics smoke script
+./backend/scripts/pms_preisplan_delete_semantics_smoke.sh
+echo "rc=$?"
+
+# Expected: All steps pass, rc=0
+# STEP D: DELETE returns 204
+# STEP E: GET-by-id returns 404 (deleted plan filtered out)
+# STEP F: LIST excludes deleted plan
+```
+
+**Common Issues:**
+
+**Symptom:** DELETE returns 422 "Cannot delete rate plan: must be archived first"
+
+**Root Cause:** Rate plan has `archived_at IS NULL`. Delete requires archive first.
+
+**Solution:**
+```bash
+# Archive before delete
+curl -X PATCH "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/archive" \
+  -H "Authorization: Bearer $MANAGER_JWT_TOKEN"
+
+# Then delete
+curl -X DELETE "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID" \
+  -H "Authorization: Bearer $MANAGER_JWT_TOKEN"
+# Expected: 204 No Content
+```
+
+**Symptom:** After DELETE, GET-by-id still returns 200 (pre-P2.13 bug)
+
+**Root Cause:** Running against old backend version without deleted_at column or filter.
+
+**How to Debug:**
+```bash
+# Check if backend has deleted_at filter
+psql $DATABASE_URL -c "\d rate_plans" | grep deleted_at
+# Should show: deleted_at | timestamptz
+
+# Check if plan is actually deleted
+psql $DATABASE_URL -c "SELECT id, deleted_at, archived_at FROM rate_plans WHERE id = '$RATE_PLAN_ID';"
+# Should show non-NULL deleted_at after DELETE
+```
+
+**Solution:**
+- Deploy backend commit 7d1ae1d or later (includes migration + endpoint fix)
+- Run migration `20260118110000_rate_plans_delete_semantics_archive_invariants.sql`
+- Verify smoke script passes (all 6 steps)
+
+**Migration Notes:**
+- Migration adds `deleted_at` column if missing (idempotent)
+- Adds CHECK constraints for archive invariants
+- Backfills inconsistent data (archived plans with active=true)
+- PROD-safe: Uses IF NOT EXISTS patterns
+
+---
+
 ### Template Apply Validation Errors
 
 **Symptom:** Apply-season-template endpoint returns HTTP 422 with validation errors like "field required: template_id" or "field required: body".
