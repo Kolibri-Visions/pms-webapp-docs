@@ -10189,6 +10189,102 @@ Test Property ID: <uuid>
 
 ---
 
+## P2.11.2 Rate Plans UI: Context-Sensitive Actions + Property Page Cleanup
+
+**Implementation Date:** 2026-01-18
+
+**Status:** ✅ IMPLEMENTED
+
+**Scope:** Enhanced rate plans UI with context-sensitive actions based on archive status, restore functionality to unarchive plans, and improved property detail page UX by eliminating duplicate navigation elements.
+
+**Features Implemented:**
+
+1. **Context-Sensitive Actions for Rate Plans**:
+   - **Non-archived plans** (archived_at IS NULL):
+     - "Bearbeiten" (Edit) button → opens edit modal
+     - "Archivieren" (Archive) button → archives plan via PATCH /archive
+     - "Löschen" (Delete) button **DISABLED** with tooltip "Zum Löschen zuerst archivieren"
+   - **Archived plans** (archived_at IS NOT NULL):
+     - "Wiederherstellen" (Restore) button → unarchives plan via PATCH /restore
+     - "Löschen" (Delete) button **ENABLED** → deletes plan via DELETE (sets deleted_at)
+     - NO edit/archive actions (archived plans are read-only until restored)
+   - Desktop table and mobile card views both implement conditional rendering
+
+2. **Restore Endpoint** (`PATCH /api/v1/pricing/rate-plans/{id}/restore`):
+   - Sets `archived_at = NULL`, `active = false` (safe default), `updated_at = NOW()`
+   - Requires plan to be archived (404 if not archived or already deleted)
+   - Returns 204 No Content on success
+   - Respects one-active-plan-per-property invariant (would return 409 if violated, but restore defaults to inactive)
+   - After restore, plan is inactive (Entwurf); user can activate via Edit modal if desired
+
+3. **Property Detail Page UX Cleanup**:
+   - **Tab Rename**: Top navigation tab "Objekt-Preispläne" → "Preiseinstellungen" (frontend/app/properties/[id]/layout.tsx:34)
+   - **Removed Duplicate Block**: Eliminated redundant "Preiseinstellungen" summary card from property overview page
+     - Removed: "Aktive Tarifpläne" count display
+     - Removed: "Objekt-Preispläne öffnen →" button (redundant with tab navigation)
+     - Cleaned up: Unused `ratePlansCount` state and associated useEffect
+   - Rationale: Tab navigation is primary access path; summary block cluttered overview and duplicated tab functionality
+
+**Code Changes:**
+
+- Backend:
+  - `backend/app/api/routes/pricing.py:794-843` → New restore endpoint
+- Frontend:
+  - `frontend/app/properties/[id]/rate-plans/page.tsx:175-190` → handleRestore function
+  - `frontend/app/properties/[id]/rate-plans/page.tsx:745-787` → Desktop conditional actions
+  - `frontend/app/properties/[id]/rate-plans/page.tsx:835-880` → Mobile conditional actions
+  - `frontend/app/properties/[id]/layout.tsx:34` → Tab label change
+  - `frontend/app/properties/[id]/page.tsx` → Removed lines 262-281 (summary block), cleaned up state
+- Documentation:
+  - `backend/docs/ops/runbook.md` → "Rate Plans UI: Context-Sensitive Actions + Property Page Cleanup" section
+  - `backend/docs/project_status.md` → This entry
+
+**Restore Logic:**
+
+```typescript
+// frontend/app/properties/[id]/rate-plans/page.tsx:175-190
+const handleRestore = async (plan: RatePlan) => {
+  try {
+    await apiClient.patch(`/api/v1/pricing/rate-plans/${plan.id}/restore`, {}, accessToken);
+    showToast(`${plan.name} erfolgreich wiederhergestellt`, "success");
+    fetchRatePlans();  // Re-fetch to update UI
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409) {
+      showToast("Wiederherstellen nicht möglich: Es existiert bereits ein aktiver Preisplan...", "error");
+    }
+    // ... handle other errors
+  }
+};
+```
+
+**Verification Commands:**
+
+```bash
+# Build check
+cd frontend && npm run build
+
+# QA proofs
+rg "handleRestore" frontend/app/properties/
+rg "Wiederherstellen" frontend/app/properties/
+rg "Preiseinstellungen" frontend/app/properties/
+sed -n '34p' frontend/app/properties/[id]/layout.tsx  # Verify tab label
+```
+
+**Dependencies:**
+- P2.13 Delete Semantics (deleted_at, archived_at columns)
+- P2.11.1 Default Hide Archived UI (showArchived state, toggle)
+- Archive invariants migration (rate_plans_archived_not_active/default constraints)
+
+**Detailed Runbook**: See [Rate Plans UI: Context-Sensitive Actions](../docs/ops/runbook.md#rate-plans-ui-context-sensitive-actions--property-page-cleanup) in runbook.md
+
+**Notes:**
+- Frontend + backend changes (restore endpoint + UI actions)
+- Restore always sets active=false to avoid constraint violations
+- Property page cleanup reduces visual clutter and duplicate navigation
+- Not yet marked VERIFIED (requires PROD deployment + manual UI testing)
+
+---
+
 # P2.12 Admin UI + API — Delete Rate Plans Parity
 
 **Implementation Date:** 2026-01-17

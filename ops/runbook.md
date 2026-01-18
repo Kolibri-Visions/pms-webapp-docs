@@ -34551,3 +34551,178 @@ WHERE id IN (SELECT season_to_archive FROM overlaps);
 - Dirty data environments: Migration logs warnings, constraints added as NOT VALID, manual cleanup required before validation
 
 ---
+
+## Rate Plans UI: Context-Sensitive Actions + Property Page Cleanup
+
+**Overview:** Enhanced rate plans UI with context-sensitive actions based on archive status, restore functionality, and improved property detail page UX.
+
+**Purpose:** Provide appropriate actions for archived vs non-archived rate plans, enable unarchiving via "Wiederherstellen" button, and eliminate duplicate navigation/summary blocks on property detail page.
+
+**UI Behavior:**
+
+1. **Context-Sensitive Actions** (`/properties/[id]/rate-plans`):
+   - **Non-archived plans** (archived_at IS NULL):
+     - Show "Bearbeiten" (Edit) button → Opens edit modal
+     - Show "Archivieren" (Archive) button → Archives plan via PATCH /archive
+     - Show "Löschen" (Delete) button **DISABLED** with tooltip "Zum Löschen zuerst archivieren"
+   - **Archived plans** (archived_at IS NOT NULL):
+     - Show "Wiederherstellen" (Restore) button → Unarchives plan via PATCH /restore
+     - Show "Löschen" (Delete) button → Deletes plan via DELETE (sets deleted_at)
+     - NO edit/archive actions (archived plans are read-only until restored)
+
+2. **Restore Behavior**:
+   - Endpoint: `PATCH /api/v1/pricing/rate-plans/{id}/restore`
+   - Sets: `archived_at = NULL`, `active = false` (safe default), `updated_at = NOW()`
+   - Respects one-active-plan-per-property invariant:
+     - If restoring would create multiple active plans for same property → 409 Conflict
+     - User must manually deactivate other plans before restoring to active state
+     - After restore, plan is inactive (Entwurf) by default; user can activate via Edit modal
+
+3. **Property Detail Page Cleanup** (`/properties/[id]`):
+   - **Tab Rename**: Top navigation tab "Objekt-Preispläne" renamed to "Preiseinstellungen"
+   - **Removed Duplicate Block**: Eliminated redundant "Preiseinstellungen" summary card (with "Aktive Tarifpläne 0" count and "Objekt-Preispläne öffnen" button)
+   - Rationale: Tab navigation is primary access path; summary block was redundant and cluttered the overview page
+
+**Code Locations:**
+
+- Restore endpoint: `backend/app/api/routes/pricing.py:794-843`
+- Restore handler (UI): `frontend/app/properties/[id]/rate-plans/page.tsx:175-190`
+- Desktop actions (conditional): Lines 745-787
+- Mobile actions (conditional): Lines 835-880
+- Tab rename: `frontend/app/properties/[id]/layout.tsx:34` → "Preiseinstellungen"
+- Removed block: `frontend/app/properties/[id]/page.tsx` (removed lines 262-281, cleaned up state/effects)
+
+**API Endpoint:**
+
+```http
+PATCH /api/v1/pricing/rate-plans/{rate_plan_id}/restore
+Authorization: Bearer {jwt_token}
+x-agency-id: {agency_id}  # optional if JWT has agency_id claim
+
+# Request Body: (empty)
+{}
+
+# Response: 204 No Content
+# Side effects: archived_at = NULL, active = false, updated_at = NOW()
+```
+
+**Restore Logic:**
+
+```typescript
+// frontend/app/properties/[id]/rate-plans/page.tsx:175-190
+const handleRestore = async (plan: RatePlan) => {
+  if (!accessToken) return;
+  try {
+    await apiClient.patch(`/api/v1/pricing/rate-plans/${plan.id}/restore`, {}, accessToken);
+    showToast(`${plan.name} erfolgreich wiederhergestellt`, "success");
+    fetchRatePlans();  // Re-fetch to update UI
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409) {
+      showToast("Wiederherstellen nicht möglich: Es existiert bereits ein aktiver Preisplan...", "error");
+    } else {
+      const message = error instanceof ApiError ? error.statusText : "Failed to restore rate plan";
+      showToast(message, "error");
+    }
+  }
+};
+```
+
+**Verification:**
+
+```bash
+# UI build check
+cd /Users/khaled/Documents/KI/Claude/Claude\ Code/Projekte/PMS-Webapp/frontend
+npm run build
+
+# QA proofs
+rg "handleRestore" frontend/app/properties/
+rg "Wiederherstellen" frontend/app/properties/
+rg "Preiseinstellungen" frontend/app/properties/
+sed -n '34p' frontend/app/properties/[id]/layout.tsx  # Tab label
+```
+
+**Common Issues:**
+
+### Restore Returns 409 Conflict
+
+**Symptom:** Clicking "Wiederherstellen" shows error "Es existiert bereits ein aktiver Preisplan...".
+
+**Root Cause:** Property already has another active plan. Restoring would violate one-active-plan-per-property invariant.
+
+**How to Debug:**
+```bash
+# Check active plans for property
+psql $DATABASE_URL -c "SELECT id, name, active, archived_at FROM rate_plans WHERE property_id = '{property_id}' AND deleted_at IS NULL;"
+
+# Expected: At most ONE plan with active=true AND archived_at IS NULL
+# If 2+ active: Manually deactivate one before restoring
+```
+
+**Solution:**
+- Open currently active plan in Edit modal
+- Uncheck "Aktiv" checkbox → save as inactive (Entwurf)
+- Retry "Wiederherstellen" on archived plan
+- After restore, plan is inactive by default; activate via Edit if needed
+
+### Restore Returns 404 Not Found
+
+**Symptom:** Clicking "Wiederherstellen" shows 404 error.
+
+**Root Cause:** Plan is not archived (archived_at IS NULL) or is deleted (deleted_at IS NOT NULL).
+
+**How to Debug:**
+```bash
+# Check plan status
+psql $DATABASE_URL -c "SELECT id, name, archived_at, deleted_at FROM rate_plans WHERE id = '{plan_id}';"
+
+# Restore requires: archived_at IS NOT NULL AND deleted_at IS NULL
+```
+
+**Solution:**
+- Verify plan is archived (status badge shows "Archiviert")
+- If deleted: Cannot restore deleted plans (hard delete from UI, soft delete in DB)
+- If not archived: Use "Bearbeiten" instead (plan is already in editable state)
+
+### Delete Button Still Enabled for Non-Archived Plans
+
+**Symptom:** Delete button is clickable for non-archived plans (should be disabled).
+
+**Root Cause:** Conditional rendering logic not working or frontend code not deployed.
+
+**How to Debug:**
+```bash
+# Verify conditional actions logic
+grep -A 10 "plan.archived_at.*Wiederherstellen" frontend/app/properties/[id]/rate-plans/page.tsx
+
+# Should see:
+# {plan.archived_at ? (
+#   // Archived: Wiederherstellen + Löschen
+# ) : (
+#   // Non-archived: Bearbeiten + Archivieren + Löschen (disabled)
+# )}
+```
+
+**Solution:**
+- Verify frontend deployed with latest code (commit: "ui: archived rate plans actions + pricing tab cleanup")
+- Hard refresh browser (Cmd+Shift+R / Ctrl+F5) to clear cached JS
+- Check browser console for React render errors
+
+### Property Detail Tab Still Shows "Objekt-Preispläne"
+
+**Symptom:** Property detail page top tab shows "Objekt-Preispläne" instead of "Preiseinstellungen".
+
+**Root Cause:** Frontend not deployed or browser cache.
+
+**How to Debug:**
+```bash
+# Verify tab label in code
+sed -n '34p' frontend/app/properties/[id]/layout.tsx
+# Expected: label: "Preiseinstellungen",
+```
+
+**Solution:**
+- Verify frontend deployed with latest code
+- Hard refresh browser to clear cached layout component
+- Check Coolify deployment logs for frontend build success
+
+---
