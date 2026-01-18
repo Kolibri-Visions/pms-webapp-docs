@@ -34184,6 +34184,12 @@ export AGENCY_ID="<<<agency UUID>>>"
 - Quote 500 NameError fixed (message variable initialized)
 - Quote gap invariant enforced (base_nightly_cents gated by has_seasons)
 
+**Known Warnings (Non-Blocking):**
+- Quote smoke STEP G.2: `total_price_cents` vs `total_cents` field name mismatch (smoke script validation logic, not backend failure)
+- Template preview: Structure warnings in logs (does not affect replace mode success or constraint enforcement)
+- Season overlap during cleanup: Expected 422 (demonstrates constraint remains active)
+- Planned cleanup in P2.14+ (smoke script improvements, not backend changes)
+
 ---
 
 ### Template Apply Validation Errors
