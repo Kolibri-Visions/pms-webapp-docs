@@ -34075,6 +34075,41 @@ print(f\"Agency ID: {plan.get('agency_id')}\")
 - Only then validates gap pricing (422 if no coverage and no fallback)
 - This is correct HTTP semantics: auth/validation errors before business logic errors
 
+### Quote Returns 500 (NameError: message Not Defined)
+
+**Symptom:** Quote endpoint returns HTTP 500 Internal Server Error with traceback showing `NameError: name 'message' is not defined` in calculate_quote function (pricing.py line ~1629).
+
+**Root Cause:** The `message` variable was referenced in QuoteResponse construction but was only defined in the "no rate plan found" code path. Successful quote calculations crashed when trying to build the response because `message` was never initialized.
+
+**Fixed In:** This bug was fixed by initializing `message: str | None = None` at the start of calculate_quote function.
+
+**How to Verify Fix:**
+```bash
+# 1. Deploy verification
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# 2. Run quote gap smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="<<<manager/admin JWT>>>"
+export AGENCY_ID="<<<agency UUID>>>"
+./backend/scripts/pms_quote_keine_saison_smoke.sh
+
+# Expected: rc=0 (all tests pass, no 500 errors)
+```
+
+**Regression Test:**
+- Location: `backend/tests/integration/test_pricing_quote_regression.py`
+- Test: `test_quote_gap_no_fallback_returns_422`
+- Validates: No NameError occurs, proper 422 returned for gap pricing
+
+**Expected Behavior After Fix:**
+- Gap + no fallback → HTTP 422 with "Keine Saison greift" message (not 500)
+- Gap + fallback set → HTTP 200 with quote using fallback price
+- Covered by season → HTTP 200 with quote using season price
+
+---
+
 ### Template Apply Validation Errors
 
 **Symptom:** Apply-season-template endpoint returns HTTP 422 with validation errors like "field required: template_id" or "field required: body".

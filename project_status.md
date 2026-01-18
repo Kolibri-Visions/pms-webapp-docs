@@ -10380,6 +10380,23 @@ Test Property ID: <uuid>
 
 **Verification Status:** Not verified in PROD yet (pending deployment and smoke test execution)
 
+**Recent Fixes:**
+
+**Quote Gap 500 Bug (Fixed: 2026-01-18)**
+- **Issue**: Quote endpoint returned HTTP 500 (NameError: message not defined) when calculating quotes
+- **Root Cause**: `message` variable was referenced in response construction but never initialized
+- **Fix**: Added `message: str | None = None` initialization at start of calculate_quote function
+- **Location**: backend/app/api/routes/pricing.py line 1357
+- **Tests**: Added regression tests in backend/tests/integration/test_pricing_quote_regression.py
+- **Verification**: Run `./backend/scripts/pms_quote_keine_saison_smoke.sh` → expect rc=0
+
+**Awaiting PROD Verification:**
+- P2.13 remains **IMPLEMENTED** (not VERIFIED) until all 4 smoke tests pass in PROD with rc=0
+- Bugfix commit must be deployed and verified via pms_verify_deploy.sh
+- All smoke scripts must complete successfully (especially pms_quote_keine_saison_smoke.sh)
+
+---
+
 **Verification Checklist (for PROD deployment):**
 
 To mark P2.13 as ✅ VERIFIED, complete all steps:
