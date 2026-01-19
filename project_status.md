@@ -11120,7 +11120,63 @@ This rollback does NOT affect the Season Templates feature (P2.1), which remains
    - Returns empty array if template has no periods
    - Returns 404 if template not found or doesn't belong to agency
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
+
+**PROD Evidence (Verified: 2026-01-19):**
+
+**Deployment Information:**
+- API Base URL: https://api.fewo.kolibri-visions.de
+- Admin Base URL: https://admin.fewo.kolibri-visions.de
+- Commit: eabacc45654884fe460956bda7a054bb3b35c2a6
+
+**Backend Service Version:**
+```json
+{
+  "service": "pms-backend",
+  "source_commit": "eabacc45654884fe460956bda7a054bb3b35c2a6",
+  "environment": "development",
+  "api_version": "0.1.0",
+  "started_at": "2026-01-19T13:28:05.567856+00:00"
+}
+```
+
+**Admin Service Version:**
+```json
+{
+  "service": "pms-admin",
+  "source_commit": "eabacc45654884fe460956bda7a054bb3b35c2a6",
+  "started_at": "2026-01-19T13:25:53.161Z",
+  "environment": "production"
+}
+```
+
+**Deploy Verification:**
+- Script: `backend/scripts/pms_verify_deploy.sh`
+- Result: `rc=0` (SUCCESS)
+- Health checks: `/health` = 200, `/health/ready` = 200
+- Services: Database, Redis, Celery all UP
+- Commit match: Both backend and admin services deployed with commit `eabacc4`
+
+**Smoke Test Verification:**
+- Script: `backend/scripts/pms_objekt_saisonvorlage_import_gap_smoke.sh`
+- Result: `rc=0` (ALL TESTS PASSED)
+- Key verifications:
+  - ✅ Preflight: `/health` and `/health/ready` endpoints OK
+  - ✅ Test 1: Active rate plan exists for property
+  - ✅ Test 2: Season templates list retrieved
+  - ✅ Test 3: GET `/season-templates/{id}/periods` returns 200 (no more 405)
+  - ✅ Test 4: Template period imported as season successfully
+  - ✅ Test 5: Season verified in rate plan
+  - ✅ Cleanup: Test seasons archived successfully
+
+**Manual UI Verification:**
+- ✅ Property → Preiseinstellungen tab displays year-by-year season schedule
+- ✅ Import modal loads with template selection and period previews
+- ✅ Templates without periods show warning: "Vorlage enthält keine Zeiträume"
+- ✅ Import workflow succeeds with idempotent duplicate detection
+- ✅ Category chips display correct colors (Hauptsaison=red, Mittelsaison=orange, Nebensaison=blue)
+- ✅ Gap detection banner shows missing date ranges when applicable
+- ✅ Mobile-responsive layout confirmed
 
 **Notes:**
 - NO new "Vorlagen (Agentur)" tab on property page (that was P2.14, removed)
