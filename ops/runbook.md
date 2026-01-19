@@ -35129,4 +35129,194 @@ psql $DATABASE_URL -c "
 
 **Note:** The concept of agency-wide templates exists only as "Season Templates" (date-range templates with labels), not as standalone rate plan templates. Property pricing is managed via property-scoped rate plans with seasonal overrides.
 
+
+## P2.15 Property Pricing — Season Schedule + Import + Gap Detection
+
+**Overview:** Property-level season schedule view with year-by-year display, import from "Saisonvorlagen (Agentur)", gap detection, and category grouping.
+
+**Purpose:** Provide property managers with clear season coverage visualization, quick template import, and warnings for pricing gaps in upcoming 24 months.
+
+**Architecture:**
+- **Frontend**: Year-by-year season schedule view with category grouping (Hauptsaison/Mittelsaison/Nebensaison/Sonstiges)
+- **Import Source**: Existing "Saisonvorlagen (Agentur)" (season templates from P2.1)
+- **Gap Detection**: Frontend algorithm checks next 730 days for coverage gaps
+- **Idempotency**: Import skips duplicates based on matching date_from/date_to
+- **UI Location**: Property detail page → "Preiseinstellungen" tab
+
+**UI Routes:**
+- `/properties/[id]/rate-plans` - Property pricing season schedule view (manager/admin)
+
+**API Endpoints Used:**
+
+Seasons:
+- `GET /api/v1/pricing/rate-plans/{id}/seasons` - List property seasons
+- `POST /api/v1/pricing/rate-plans/{id}/seasons` - Create season from template period
+- `PATCH /api/v1/pricing/rate-plans/{id}/seasons/{season_id}` - Update season
+- `DELETE /api/v1/pricing/rate-plans/{id}/seasons/{season_id}` - Archive season
+
+Season Templates (import source):
+- `GET /api/v1/pricing/season-templates` - List agency season templates
+- `GET /api/v1/pricing/season-templates/{id}/periods` - Get template periods
+
+Rate Plans:
+- `GET /api/v1/pricing/rate-plans?property_id=` - Get property rate plan
+
+**Frontend Features:**
+1. **Year-by-Year Schedule**: Groups seasons by year (date_from year) with category chips
+2. **Category Grouping**: Hauptsaison (red), Mittelsaison (orange), Nebensaison (blue), Sonstiges (gray)
+3. **Gap Detection**: Warning banner shows missing date ranges in next 730 days
+4. **Import Modal**: 
+   - Select season template from agency library
+   - Quick import buttons: "Dieses Jahr", "Nächstes Jahr", "2 Jahre voraus"
+   - Shows template periods preview
+5. **Idempotent Import**: Skips seasons with same date_from/date_to to prevent duplicates
+
+**Categorization Heuristic:**
+```typescript
+const categorizeLabel = (label: string): "haupt" | "mittel" | "neben" | "sonstiges" => {
+  const lower = label.toLowerCase();
+  if (lower.includes("haupt")) return "haupt";
+  if (lower.includes("mittel")) return "mittel";
+  if (lower.includes("neben")) return "neben";
+  return "sonstiges";
+};
+```
+
+**Gap Detection Algorithm:**
+```typescript
+// Check next 730 days from today for coverage gaps
+const horizon = 730; // days
+const today = new Date();
+const endDate = addDays(today, horizon);
+
+// Sort seasons by date_from, identify gaps between consecutive seasons
+// Return array of {start, end} gaps with > 1 day duration
+```
+
+**Verification Commands:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# [HOST-SERVER-TERMINAL] Optional: Verify deploy after Coolify redeploy
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# [HOST-SERVER-TERMINAL] Run season import smoke test
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<manager/admin JWT>>>"
+export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+# Optional:
+# export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
+# export SEASON_TEMPLATE_ID="..."
+./backend/scripts/pms_objekt_saisonvorlage_import_gap_smoke.sh
+echo "rc=$?"
+
+# Expected output: All 5 tests pass, rc=0
+```
+
+**Common Issues:**
+
+### Season Import Creates Duplicates
+
+**Symptom:** Importing same template multiple times creates duplicate seasons with identical date_from/date_to.
+
+**Root Cause:** Frontend import logic not checking for existing seasons before creating new ones.
+
+**How to Debug:**
+```bash
+# Check for duplicate date ranges in property seasons
+export RATE_PLAN_ID="..."
+curl -X GET "$API_BASE_URL/api/v1/pricing/rate-plans/$RATE_PLAN_ID/seasons" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "x-agency-id: $AGENCY_ID" | jq '.[] | {date_from, date_to}' | sort | uniq -d
+```
+
+**Solution:**
+- Frontend skips import if season with same date_from AND date_to already exists
+- Check frontend/app/properties/[id]/rate-plans/page.tsx line ~400-410: `existingSeasons.find()` logic
+- Archive duplicate seasons manually if needed
+
+### Gap Detection Shows False Positives
+
+**Symptom:** Warning banner shows gaps that are actually covered by overlapping seasons.
+
+**Root Cause:** Gap detection algorithm doesn't account for overlapping date ranges.
+
+**How to Debug:**
+```bash
+# Verify gap algorithm in frontend
+# Should merge overlapping/adjacent seasons before detecting gaps
+# Check frontend/app/properties/[id]/rate-plans/page.tsx line ~250-300
+```
+
+**Solution:**
+- Ensure gap detection sorts seasons and merges overlapping ranges
+- Algorithm should: sort by date_from, merge if prev.date_to >= current.date_from
+- Then detect gaps between merged ranges
+
+### Season Template Import Returns 400
+
+**Symptom:** POST /api/v1/pricing/rate-plans/{id}/seasons returns 400 "Invalid date range" or "Overlaps with existing season".
+
+**Root Cause:** Backend validation rejects overlapping seasons or invalid date ranges.
+
+**How to Debug:**
+```bash
+# Check existing seasons for overlaps
+curl -X GET "$API_BASE_URL/api/v1/pricing/rate-plans/$RATE_PLAN_ID/seasons" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "x-agency-id: $AGENCY_ID" | jq '.[] | {id, label, date_from, date_to, active}' | grep -v '"active": false'
+
+# Verify new season dates don't overlap with active seasons
+```
+
+**Solution:**
+- Archive overlapping seasons before import (DELETE endpoint archives, doesn't delete)
+- Or adjust template period dates to avoid overlap
+- Check backend validation in app/services/pricing_service.py for overlap logic
+
+### Category Chips Show Wrong Colors
+
+**Symptom:** Season labeled "Hauptsaison" shows wrong category color (not red).
+
+**Root Cause:** Label doesn't contain lowercase "haupt" keyword for heuristic match.
+
+**How to Debug:**
+```bash
+# Check season label case-insensitive match
+echo "Hauptsaison" | grep -i "haupt" && echo "✅ Match" || echo "❌ No match"
+```
+
+**Solution:**
+- Heuristic uses lowercase match: `label.toLowerCase().includes("haupt")`
+- Verify label contains keyword: "haupt", "mittel", or "neben"
+- Update season label to match category keyword if needed
+
+### Quick Import Buttons Create Wrong Years
+
+**Symptom:** "Nächstes Jahr" button imports seasons for wrong year.
+
+**Root Cause:** Frontend date calculation doesn't account for template period year placeholders or relative date offsets.
+
+**How to Debug:**
+```bash
+# Check template periods for year placeholders
+curl -X GET "$API_BASE_URL/api/v1/pricing/season-templates/$TEMPLATE_ID/periods" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "x-agency-id: $AGENCY_ID" | jq '.[] | {date_from, date_to}'
+
+# Verify frontend adds correct year offset
+# Check frontend/app/properties/[id]/rate-plans/page.tsx import logic
+```
+
+**Solution:**
+- Template periods are date-range strings (e.g., "2025-06-01" to "2025-08-31")
+- Quick import adjusts year: replaces year in date_from/date_to with target year
+- For "Nächstes Jahr", target year = current year + 1
+- Verify import logic correctly replaces year in date strings
+
+---
 ---

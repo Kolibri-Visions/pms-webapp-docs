@@ -11050,3 +11050,121 @@ Agency-wide templates remain available only as **Season Templates** (date-range 
 This rollback does NOT affect the Season Templates feature (P2.1), which remains the canonical way to manage agency-wide reusable date-range templates.
 
 ---
+
+# P2.15 Property Pricing — Season Schedule + Import + Gap Detection
+
+**Implementation Date:** 2026-01-19
+
+**Scope:** Property-level season schedule view with year-by-year display, import from "Saisonvorlagen (Agentur)" (existing season templates), gap detection warnings, and category grouping.
+
+**Features Implemented:**
+
+1. **Frontend UI Rewrite** (`frontend/app/properties/[id]/rate-plans/page.tsx`):
+   - Year-by-year season schedule display grouped by date_from year
+   - Category chips with color coding:
+     - Hauptsaison (red): labels containing "haupt"
+     - Mittelsaison (orange): labels containing "mittel"
+     - Nebensaison (blue): labels containing "neben"
+     - Sonstiges (gray): default category
+   - Gap detection banner: warns when next 730 days have uncovered date ranges
+   - Import modal with template selection and quick import buttons:
+     - "Dieses Jahr" (current year)
+     - "Nächstes Jahr" (current year + 1)
+     - "2 Jahre voraus" (current year through current year + 2)
+   - Idempotent import: skips creating seasons with duplicate date_from/date_to
+   - Edit/archive actions for each season
+   - Mobile-responsive layout with collapsible year sections
+
+2. **Import Workflow**:
+   - User selects season template from "Saisonvorlagen (Agentur)" dropdown (existing P2.1 templates)
+   - Template periods displayed in modal preview
+   - Quick import buttons adjust template period years to target year(s)
+   - Creates seasons via POST /api/v1/pricing/rate-plans/{id}/seasons
+   - Shows success toast with count of imported seasons
+   - Refreshes season list to display new imports
+
+3. **Gap Detection Algorithm**:
+   - Checks next 730 days from today for coverage gaps
+   - Sorts active seasons by date_from, merges overlapping ranges
+   - Identifies gaps > 1 day between consecutive seasons
+   - Warning banner displays gap date ranges in red
+   - Algorithm runs on page load and after season changes
+
+4. **Categorization Heuristic**:
+   - Case-insensitive label matching: `label.toLowerCase().includes("haupt"|"mittel"|"neben")`
+   - Fallback to "sonstiges" if no match
+   - Category determines chip background color and display order
+
+5. **Smoke Script** (`backend/scripts/pms_objekt_saisonvorlage_import_gap_smoke.sh`):
+   - Preflight: Health check
+   - Test 1: Ensure active rate plan exists for property (GET /pricing/rate-plans)
+   - Test 2: List season templates (GET /pricing/season-templates)
+   - Test 3: Fetch template periods (GET /season-templates/{id}/periods)
+   - Test 4: Import period as season (POST /rate-plans/{id}/seasons)
+   - Test 5: Verify season creation (GET /rate-plans/{id}/seasons)
+   - Cleanup: Archive imported seasons (DELETE /seasons/{id})
+   - Exit codes: rc=0 success, rc=1+ failures
+   - Auto-picks property and template if not specified
+
+6. **Documentation** (add-only):
+   - backend/docs/ops/runbook.md: "P2.15 Property Pricing — Season Schedule + Import + Gap Detection" section with architecture, endpoints, verification, common issues
+   - backend/scripts/README.md: Smoke script entry with usage, env vars, troubleshooting
+   - backend/docs/project_status.md: This P2.15 entry
+   - DOCS SAFE MODE: All additions verified with grep proofs
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- NO new "Vorlagen (Agentur)" tab on property page (that was P2.14, removed)
+- Uses ONLY existing "Saisonvorlagen (Agentur)" from P2.1 Season Templates
+- No backend changes (uses existing seasons API + season-templates API)
+- No database changes (uses existing rate_plans, seasons, season_templates tables)
+- Pure frontend enhancement + smoke script + docs
+- Gap detection is frontend-only (no backend API changes)
+- Import is idempotent: checks for existing seasons before creating
+
+**Dependencies:**
+- P2.1 Season Templates (agency-level templates under /pricing/seasons)
+- Existing pricing/seasons API endpoints
+- date-fns library for date calculations
+
+**Verification Commands:**
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify deploy (optional)
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# Run smoke test
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<manager/admin JWT>>>"
+export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+./backend/scripts/pms_objekt_saisonvorlage_import_gap_smoke.sh
+echo "rc=$?"
+
+# Manual UI verification
+# 1. Login as manager/admin
+# 2. Navigate to Properties → [Property] → Preiseinstellungen tab
+# 3. Verify year-by-year season schedule displays
+# 4. Click "Import aus Vorlage" button
+# 5. Select season template, verify periods preview
+# 6. Click "Dieses Jahr" quick import
+# 7. Verify seasons imported with correct year
+# 8. Check gap detection banner appears if coverage gaps exist
+# 9. Verify category chips show correct colors
+```
+
+**UI/UX Features:**
+- Year sections collapsible (accordion)
+- Season cards show: label, date range, nightly price, category chip, edit/archive buttons
+- Empty state: "Keine Saisonzeiten für [Jahr]"
+- Loading states for fetch/import operations
+- Error toasts for API failures
+- Success toasts for import completion
+- Gap warning banner: "Fehlende Preisabdeckung: [Gap 1], [Gap 2], ..."
+- Mobile-responsive: stacked layout on small screens
+
+---
