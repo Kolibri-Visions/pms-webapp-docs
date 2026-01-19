@@ -35539,5 +35539,43 @@ Objekt-Preiseinstellungen
 **Root Cause:** Intentional design - archived seasons are read-only
 **Solution:** To restore/edit archived season, implement restore endpoint (currently not available). Workaround: Create new season with same dates.
 
+### Vorlage aktualisieren (Lücken nachziehen)
+
+**UI Location:** `/properties/[id]/rate-plans` (Preiseinstellungen tab → Import modal)
+
+**Purpose:** After editing season templates (add/edit/delete periods), use "Aktualisieren (Lücken schließen)" to apply missing ranges to properties without overwriting existing seasons.
+
+**How It Works:**
+1. Click "Aus Saisonvorlage importieren" in header
+2. Select template from dropdown
+3. Click "Aktualisieren (Lücken schließen)" button (green, below template selector)
+4. Backend projects template periods into current year + next 2 years
+5. Finds uncovered sub-ranges (gaps between existing seasons and template coverage)
+6. Creates seasons only for missing sub-ranges (no overwrites)
+7. Partial fills labeled with "(Ergänzung)" suffix
+8. Success toast: "X Saison(en) ergänzt"
+
+**Safety:**
+- Non-destructive: Only adds missing ranges, never overwrites existing seasons
+- Idempotent: Safe to run multiple times (duplicate detection by date_from + date_to)
+- Partial fills: If template period overlaps existing season, only uncovered sub-range created
+
+**Use Case:**
+- Template updated: added "Ostersaison" period to "Haupt+Nebensaison" template
+- Property X already has seasons from old template (missing Ostersaison)
+- Click "Aktualisieren (Lücken schließen)" → Ostersaison ranges added to Property X
+- Existing Hauptsaison/Nebensaison seasons unchanged
+
+**Troubleshooting:**
+
+**Symptom:** "Aktualisieren (Lücken schließen)" creates no seasons (toast shows "0 Saison(en) ergänzt")
+**Root Cause:** No uncovered ranges found (existing seasons already cover all template periods)
+**Solution:** Check if property seasons already match template periods. If gaps still visible, template may not cover those date ranges - add period to template first.
+
+**Symptom:** Partial fills created with "(Ergänzung)" label instead of full template period
+**Root Cause:** Template period overlaps with existing season - only uncovered sub-range created
+**Solution:** Expected behavior (non-destructive). To replace with full period: archive existing overlapping season first, then refresh from template.
+
+
 ---
 ---

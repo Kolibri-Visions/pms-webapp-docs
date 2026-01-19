@@ -11289,6 +11289,9 @@ echo "rc=$?"
    - Gap warning shows hint text: "Nutzen Sie oben 'Aus Saisonvorlage importieren' oder 'Saisonzeit anlegen', um die Lücken zu schließen"
    - Info callout uses theme-compatible colors: `bg-bo-muted border border-bo-border text-bo-text` (no faded blue)
    - Gap warning uses subtle red: `bg-red-50 dark:bg-red-950/30 border-2 border-red-600` (no heavy red fill)
+   - Category badge contrast improved: dark:bg-{color}-900/50 dark:text-{color}-100 font-semibold (was /30 opacity with -200 text)
+   - Gap warning toned down: bg-red-50/50 (was solid red), thinner border, collapsible details toggle ("X weitere Lücken anzeigen")
+   - Template refresh: "Aktualisieren (Lücken schließen)" button adds missing ranges after template edits (non-destructive, no overwrites)
 
 7. **Documentation** (add-only):
    - backend/docs/ops/runbook.md: "P2.15 UI-Layout: Jahres-Outline Ansicht" subsection with visual structure diagram, gap detection behavior, import workflow, troubleshooting
