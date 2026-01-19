@@ -11311,6 +11311,63 @@ echo "rc=$?"
 - **Contrast polish**: Theme-compatible colors for info callout and gap warning (no cheap faded text)
 - VERIFIED status requires: PROD deployment + deploy verify rc=0 + manual UI verification + user acceptance
 
+**Extended Features (P2.16 Enhancement):**
+
+1. **Linked Seasons & Template Synchronization**:
+   - Seasons imported from templates maintain source metadata:
+     - `source_template_period_id`: Links to original template period
+     - `source_year`: Year applied (2025, 2026, etc.)
+     - `source_is_overridden`: Protection flag for manual edits
+   - Sync endpoint: `POST /api/v1/pricing/rate-plans/{id}/seasons/sync-from-template`
+     - Preview mode (`dry_run=true`): Shows changes without applying
+     - Apply mode (`dry_run=false`): Creates missing + updates non-overridden seasons
+     - Override protection: Skips seasons with `source_is_overridden=true`
+   - Gap closure: Automatically adds periods created in template after initial import
+
+2. **Restore & Purge Endpoints**:
+   - `POST /api/v1/pricing/rate-plans/{id}/seasons/{season_id}/restore` - Unarchive season
+   - `DELETE /api/v1/pricing/rate-plans/{id}/seasons/{season_id}/purge` - Permanent delete (requires archived state)
+   - UI shows "Wiederherstellen"/"Endgültig löschen" instead of "Archivieren" for archived seasons
+
+3. **UI/UX Polish**:
+   - Gap warning readability: "YYYY-MM-DD bis YYYY-MM-DD" format, German month names, improved layout
+   - Category badge contrast: Darker borders, theme-compatible colors (no cheap faded text)
+   - Archived seasons UX: Restore/Delete actions replace Archive action when viewing archived items
+   - Sync button: "Aus Vorlage aktualisieren (Lücken schließen)" to close gaps after template edits
+
+**Backend Changes:**
+- Database schema: Added `source_template_period_id`, `source_year`, `source_is_overridden` to pricing_seasons table
+- Pricing seasons router: Added `sync_from_template`, `restore`, `purge` endpoints
+- Override detection: PATCH/PUT operations set `source_is_overridden=true` when linked season is modified
+- Sync logic: Diff algorithm compares current seasons with template periods, respects override flag
+
+**Frontend Changes:**
+- Season sync modal: Shows preview diff (create/update/skip_overridden actions) before applying
+- Archived season list: Conditional actions (restore/purge vs archive) based on is_archived flag
+- Gap warning: Formatted date ranges with German locale (dd. MMM bis dd. MMM YYYY)
+- Category badges: Improved contrast (border-2, darker border colors)
+
+**Verification Checklist:**
+
+Post-deployment verification (required for VERIFIED status):
+1. Deploy verify: `./backend/scripts/pms_verify_deploy.sh` rc=0 + commit hash matches deployment
+2. Smoke test: `./backend/scripts/pms_p216_season_sync_restore_smoke.sh` rc=0 (all 7 tests pass)
+3. Manual UI checks:
+   - Gap warning readability: Date format is "DD. MMM bis DD. MMM YYYY" (German month names)
+   - Category badge contrast: Borders visible in both light/dark themes
+   - Archived seasons: Show "Wiederherstellen"/"Endgültig löschen" instead of "Archivieren"
+   - Sync modal: Preview shows create/update/skip_overridden actions before applying
+   - Override protection: Manual edits to linked seasons prevent sync overwrites
+4. User acceptance: Property managers confirm gap closure workflow + override protection works as expected
+
+**Status:** ✅ IMPLEMENTED (NOT VERIFIED until post-deployment verification complete)
+
+**Notes:**
+- Backward compatible: Existing seasons without source metadata continue to work (not synced)
+- Override flag prevents accidental data loss during template updates
+- Purge endpoint enforces archived state to prevent accidental permanent deletion
+- Sync algorithm is idempotent: safe to run multiple times, no duplicate seasons created
+
 **Dependencies:**
 - P2.15 Property Pricing — Season Schedule + Import + Gap Detection
 - date-fns library for date formatting

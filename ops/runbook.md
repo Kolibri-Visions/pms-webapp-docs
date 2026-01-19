@@ -35217,6 +35217,97 @@ echo "rc=$?"
 # Expected output: All 5 tests pass, rc=0
 ```
 
+
+
+### Verknüpfte Saisonzeiten + Synchronisierung
+
+**Linked Seasons from Templates:**
+
+When seasons are imported from season templates (Saisonvorlagen), they maintain a link to their source:
+- `source_template_period_id`: UUID of the original template period
+- `source_year`: Year the template was applied to (e.g., 2025, 2026)
+- `source_is_overridden`: Boolean flag indicating manual edits
+
+**Override Behavior:**
+
+Seasons with `source_is_overridden=true` are protected from automatic updates:
+- Set to `true` when a user manually edits date ranges, prices, or other season fields
+- Prevents sync operations from overwriting user customizations
+- User retains full control over manually adjusted seasons
+
+**Sync from Template Endpoint:**
+
+`POST /api/v1/pricing/rate-plans/{id}/seasons/sync-from-template`
+
+This endpoint synchronizes property seasons with their source template:
+- **Preview mode** (`dry_run=true`): Shows what would be created/updated without making changes
+- **Apply mode** (`dry_run=false`): Creates missing seasons and updates non-overridden linked seasons
+- **Idempotent**: Safe to run multiple times; skips overridden seasons
+- **Gap closure**: Automatically adds new periods created in template since last import
+
+**Request Body:**
+```json
+{
+  "template_id": "550e8400-e29b-41d4-a716-446655440000",
+  "target_year": 2026,
+  "dry_run": true  // Preview mode
+}
+```
+
+**Response (Preview):**
+```json
+{
+  "changes": [
+    {
+      "action": "create",
+      "period_id": "...",
+      "label": "Hauptsaison",
+      "date_from": "2026-06-01",
+      "date_to": "2026-08-31"
+    },
+    {
+      "action": "update",
+      "season_id": "...",
+      "period_id": "...",
+      "label": "Nebensaison",
+      "current_dates": {"from": "2026-01-01", "to": "2026-03-31"},
+      "new_dates": {"from": "2026-01-01", "to": "2026-04-15"}
+    },
+    {
+      "action": "skip_overridden",
+      "season_id": "...",
+      "label": "Mittelsaison (manuell bearbeitet)",
+      "reason": "User has manually edited this season"
+    }
+  ]
+}
+```
+
+**Restore/Purge Endpoints:**
+
+Archived seasons can be restored or permanently deleted:
+
+- `POST /api/v1/pricing/rate-plans/{id}/seasons/{season_id}/restore` - Unarchive a season (sets is_archived=false)
+- `DELETE /api/v1/pricing/rate-plans/{id}/seasons/{season_id}/purge` - Permanently delete (requires is_archived=true)
+
+**Troubleshooting:**
+
+**Issue:** Template was edited (periods added/changed), but gaps don't close automatically
+
+**Solution:** Run sync-from-template endpoint with `dry_run=false` to apply updates. Gaps occur when template periods are created/modified after initial import; sync closes these gaps by creating missing seasons.
+
+**Issue:** Sync overwrites my manual price adjustments
+
+**Expected Behavior:** This should NOT happen. Seasons with `source_is_overridden=true` are skipped during sync operations. If this occurs, check:
+1. Verify season has `source_is_overridden=true` in database
+2. Check sync response for `skip_overridden` actions
+3. If overridden flag is missing, manually edit the season again to re-set the flag
+
+**Issue:** Cannot purge active season (404 or validation error)
+
+**Solution:** Archive the season first using `DELETE /api/v1/pricing/rate-plans/{id}/seasons/{season_id}` (soft delete), then call the purge endpoint. The purge endpoint requires `is_archived=true`.
+
+
 **Common Issues:**
 
 ### Preflight Health Check Returns 404
