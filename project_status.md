@@ -10837,3 +10837,70 @@ Test Property ID: <uuid>
 - **Side Note**: Added TODO comment at update endpoint (line 450-451) for future improvement - similar validation needed when updating a plan to `active=true`
 - **Impact**: Smoke script `pms_preisplan_restore_conflict_smoke.sh` STEP C should now pass (creates inactive plan without conflict)
 
+
+**One-Active-Plan Constraint Fix (2026-01-18):**
+
+Root Cause:
+- Database unique index `idx_rate_plans_one_active_per_property` (created in migration `20260117214810_harden_rate_plans_invariants.sql`) was too strict
+- Index WHERE clause: `archived_at IS NULL AND property_id IS NOT NULL`
+- Missing critical condition: `AND active IS TRUE`
+- Result: Constraint applied to ALL non-archived plans, not just ACTIVE ones
+
+Symptom:
+- Creating INACTIVE plan (`active=false`) when ACTIVE plan exists → HTTP 500
+- Backend logs: `asyncpg.exceptions.UniqueViolationError: duplicate key value violates unique constraint "idx_rate_plans_one_active_per_property"`
+- Smoke script `pms_preisplan_restore_conflict_smoke.sh` STEP C fails with 500
+
+Fix:
+- **DB Migration** (`20260118150000_fix_rate_plans_one_active_partial_index.sql`):
+  - Drops existing incorrect index
+  - Recreates as partial unique index: `WHERE active IS TRUE AND deleted_at IS NULL AND archived_at IS NULL AND property_id IS NOT NULL`
+  - Backfills data: ensures archived/deleted plans have `active=false`
+- **Backend** (`backend/app/api/routes/pricing.py`):
+  - Added `import asyncpg` for exception handling
+  - Wrapped INSERT (create endpoint line 297-338) and UPDATE (update endpoint line 517-555) in try/except
+  - Catches `asyncpg.UniqueViolationError` for `idx_rate_plans_one_active_per_property`
+  - Queries for existing active plan name
+  - Returns HTTP 409 Conflict with German message instead of 500:
+    - Create: "Für dieses Objekt ist bereits ein aktiver Preisplan vorhanden ('{name}'). Sie können zusätzliche Preispläne nur als ENTWURF (inaktiv) anlegen oder den aktiven Plan zuerst archivieren."
+    - Update: "Für dieses Objekt ist bereits ein aktiver Preisplan vorhanden ('{name}'). Bitte archivieren Sie den aktiven Plan zuerst, bevor Sie einen anderen aktivieren."
+- **Tests** (`backend/tests/integration/test_rate_plan_one_active_constraint.py`):
+  - test_create_inactive_plan_when_active_exists → 201 OK
+  - test_create_active_plan_when_active_exists_returns_409 → 409 with German message
+  - test_update_plan_to_active_when_active_exists_returns_409 → 409 with German message
+  - test_archived_plans_do_not_conflict → 201 OK (archived plans excluded from constraint)
+- **Docs** (DOCS SAFE MODE):
+  - Runbook: Added "500 Creating Inactive Plan (Wrong Partial Index)" section with debug/solution
+  - Project Status: This entry
+
+Expected Behavior After Fix:
+- Creating INACTIVE plan when ACTIVE exists → **HTTP 201 OK** (allowed)
+- Creating ACTIVE plan when ACTIVE exists → **HTTP 409 Conflict** (blocked, German message)
+- Updating plan to active=true when ACTIVE exists → **HTTP 409 Conflict** (blocked, German message)
+- Archived plans do not count toward constraint (can create new ACTIVE after archiving previous)
+- No more HTTP 500 for this scenario (defense-in-depth)
+
+Status: ✅ IMPLEMENTED (awaiting PROD verification after Coolify redeploy + migration apply)
+
+Verification Commands (PROD):
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify commit deployed (should show fix commit)
+git log --oneline -1
+
+# Check migration applied
+psql $DATABASE_URL -c "SELECT version FROM supabase_migrations.schema_migrations WHERE version = '20260118150000';"
+# Expected: 20260118150000
+
+# Run smoke script (should now pass STEP C)
+export HOST="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<manager/admin JWT>>>"
+bash backend/scripts/pms_preisplan_restore_conflict_smoke.sh
+echo "rc=$?"
+# Expected: rc=0, all steps pass (especially STEP C: HTTP 201)
+```
+
+---

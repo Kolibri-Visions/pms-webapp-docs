@@ -34855,3 +34855,64 @@ curl -X POST "https://api.fewo.kolibri-visions.de/api/v1/pricing/rate-plans" \
 - If smoke script logic needs update: Check lines 200-231 in pms_preisplan_restore_conflict_smoke.sh
 
 ---
+
+### 500 Creating Inactive Plan (Wrong Partial Index)
+
+**Symptom:** POST /api/v1/pricing/rate-plans with `active=false` returns HTTP 500 with generic error:
+```json
+{"detail":{"error":"internal_server_error","message":"Database error occurred","path":null}}
+```
+
+Backend logs show:
+```
+asyncpg.exceptions.UniqueViolationError: duplicate key value violates unique constraint "idx_rate_plans_one_active_per_property"
+Key (property_id)=(23dd8fda-59ae-4b2f-8489-7a90f5d46c66) already exists.
+```
+
+**Root Cause:** Database unique index `idx_rate_plans_one_active_per_property` is incorrectly defined (missing `AND active IS TRUE` in WHERE clause). This causes the constraint to apply to ALL non-archived plans instead of only ACTIVE plans.
+
+**Introduced In:** Migration `20260117214810_harden_rate_plans_invariants.sql` created index with WHERE clause:
+```sql
+WHERE archived_at IS NULL AND property_id IS NOT NULL
+```
+Should have been:
+```sql
+WHERE active IS TRUE AND deleted_at IS NULL AND archived_at IS NULL AND property_id IS NOT NULL
+```
+
+**Fixed In:** Migration `20260118150000_fix_rate_plans_one_active_partial_index.sql` recreates index with correct partial WHERE clause.
+
+**How to Debug:**
+```bash
+# Check if migration 20260118150000 has been applied
+psql $DATABASE_URL -c "SELECT * FROM supabase_migrations.schema_migrations WHERE version = '20260118150000';"
+
+# If not applied, check index definition
+psql $DATABASE_URL -c "SELECT pg_get_indexdef(indexrelid) FROM pg_index JOIN pg_class ON pg_index.indexrelid = pg_class.oid WHERE relname = 'idx_rate_plans_one_active_per_property';"
+
+# Expected (CORRECT):
+# CREATE UNIQUE INDEX idx_rate_plans_one_active_per_property ON public.rate_plans USING btree (property_id) WHERE ((active IS TRUE) AND (deleted_at IS NULL) AND (archived_at IS NULL) AND (property_id IS NOT NULL))
+
+# If missing "active IS TRUE", index is wrong
+```
+
+**Solution:**
+```bash
+# Apply migration 20260118150000
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+# Wait for Coolify to redeploy (auto-runs migrations)
+
+# Or manually apply migration
+psql $DATABASE_URL -f supabase/migrations/20260118150000_fix_rate_plans_one_active_partial_index.sql
+```
+
+**Expected Behavior After Fix:**
+- Creating INACTIVE plan (`active=false`) when ACTIVE plan exists → **HTTP 201 OK** (allowed)
+- Creating ACTIVE plan (`active=true`) when ACTIVE plan exists → **HTTP 409 Conflict** (blocked with German message)
+- Smoke script `pms_preisplan_restore_conflict_smoke.sh` STEP C passes
+
+**Defense-in-Depth:**
+Backend (commit 86c059f+) includes try/except for `asyncpg.UniqueViolationError` that returns 409 with German message instead of 500, even if index definition is wrong. However, the index MUST be fixed for correct constraint semantics.
+
+---
