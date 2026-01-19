@@ -11112,16 +11112,25 @@ This rollback does NOT affect the Season Templates feature (P2.1), which remains
    - backend/docs/project_status.md: This P2.15 entry
    - DOCS SAFE MODE: All additions verified with grep proofs
 
+7. **API Fix** (2026-01-19, commit "fix(p2.15): add GET season-template periods + unblock import smoke/ui"):
+   - Added GET /api/v1/pricing/season-templates/{template_id}/periods endpoint
+   - Returns list of periods sorted by sort_order and date_from
+   - Required to unblock smoke script Test 3 and UI import modal preview
+   - Uses same auth/agency scoping as other pricing endpoints
+   - Returns empty array if template has no periods
+   - Returns 404 if template not found or doesn't belong to agency
+
 **Status:** ✅ IMPLEMENTED
 
 **Notes:**
 - NO new "Vorlagen (Agentur)" tab on property page (that was P2.14, removed)
 - Uses ONLY existing "Saisonvorlagen (Agentur)" from P2.1 Season Templates
-- No backend changes (uses existing seasons API + season-templates API)
+- **API Fix Required:** GET /season-templates/{id}/periods endpoint was added to support import preview (initially returned 405)
 - No database changes (uses existing rate_plans, seasons, season_templates tables)
-- Pure frontend enhancement + smoke script + docs
+- Frontend enhancement + smoke script + docs + minimal API endpoint addition
 - Gap detection is frontend-only (no backend API changes)
 - Import is idempotent: checks for existing seasons before creating
+- **VERIFIED status**: Requires PROD deployment + pms_verify_deploy.sh rc=0 + smoke rc=0
 
 **Dependencies:**
 - P2.1 Season Templates (agency-level templates under /pricing/seasons)

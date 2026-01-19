@@ -35264,6 +35264,80 @@ AGENCY_ID="..." \
 ```
 
 
+
+### HTTP 405 on GET /season-templates/{id}/periods
+
+**Symptom:** Script Test 3 fails with "GET /periods returned HTTP 405 Method Not Allowed". UI import modal fails to load template periods.
+
+**Root Cause:** GET endpoint for listing template periods was not implemented in API. Only POST/PATCH/DELETE existed for period management.
+
+**How to Debug:**
+```bash
+# Test the periods endpoint directly
+export TEMPLATE_ID="..."
+curl -X GET "https://api.fewo.kolibri-visions.de/api/v1/pricing/season-templates/$TEMPLATE_ID/periods" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "x-agency-id: $AGENCY_ID"
+
+# Expected before fix: HTTP 405 Method Not Allowed
+# Expected after fix: HTTP 200 with JSON array of periods
+```
+
+**Solution:**
+- Fixed in commit with message "fix(p2.15): add GET season-template periods + unblock import smoke/ui"
+- Added GET /api/v1/pricing/season-templates/{template_id}/periods endpoint
+- Returns list of SeasonTemplatePeriodResponse sorted by sort_order and date_from
+- Uses same auth/agency scoping as other pricing endpoints
+- Returns empty array if template has no periods
+- Returns 404 if template not found or doesn't belong to agency
+
+**API Endpoint Details:**
+```
+GET /api/v1/pricing/season-templates/{template_id}/periods
+Authorization: Bearer <JWT>
+x-agency-id: <agency_uuid>
+
+Response 200:
+[
+  {
+    "id": "uuid",
+    "template_id": "uuid",
+    "label": "Hauptsaison",
+    "date_from": "2025-06-01",
+    "date_to": "2025-08-31",
+    "sort_order": 1,
+    "active": true,
+    "created_at": "...",
+    "updated_at": "..."
+  }
+]
+
+Response 404: Template not found or doesn't belong to agency
+Response 403: User lacks manager/admin role
+```
+
+**Smoke Script Fallback:**
+The P2.15 smoke script includes defense-in-depth fallback:
+1. Primary: GET /season-templates/{id}/periods (direct endpoint)
+2. Fallback (if 405): GET /season-templates/{id} (template detail with nested periods)
+
+**Verification:**
+```bash
+# Test periods endpoint
+export TEMPLATE_ID="..."
+curl -sS "https://api.fewo.kolibri-visions.de/api/v1/pricing/season-templates/$TEMPLATE_ID/periods" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "x-agency-id: $AGENCY_ID" | jq '.'
+
+# Expected: Array of periods with labels, date ranges, sort order
+
+# Verify UI import preview works
+# 1. Navigate to Property → Preiseinstellungen
+# 2. Click "Import aus Vorlage"
+# 3. Modal should show templates with period counts
+# 4. Select template → periods should be visible in preview
+```
+
 ### Season Import Creates Duplicates
 
 **Symptom:** Importing same template multiple times creates duplicate seasons with identical date_from/date_to.
