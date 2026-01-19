@@ -35627,6 +35627,42 @@ Objekt-Preiseinstellungen
 **Solution:** Check JWT validity, verify x-agency-id header present in request, confirm user role in JWT claims. Frontend shows API error toast with statusText.
 
 **Symptom:** Edit/Archive buttons missing on archived seasons
+
+### P2.16 Smoke Test: No rate plan found
+
+**Symptom:** Script exits with "No rate plan found for property" during Test 1 (Auto-fetch rate plan).
+
+**Root Cause:** Either response parsing issue or no rate plans exist for the selected property.
+
+**Diagnosis:**
+1. Check diagnostics output in script:
+   - URL: Verify endpoint path is correct (`/api/v1/pricing/rate-plans?property_id=...`)
+   - HTTP code: Should be 200 (if 404/401/403, different issue)
+   - Response preview: First 200 chars of API response
+   - Parsed count: Number of rate plans detected (should be >= 1)
+
+2. Response shape validation:
+   - Script supports both shapes: plain array `[{...}]` and envelope `{items:[...], total:N}`
+   - If parsed count = 0 but response is non-empty, shape may be unexpected
+
+**Solution:**
+```bash
+# Manual verification
+curl -H "Authorization: Bearer $JWT_TOKEN" \
+     -H "x-agency-id: $AGENCY_ID" \
+     "$API_BASE_URL/api/v1/pricing/rate-plans?property_id=$PROPERTY_ID"
+
+# Expected responses:
+# Shape 1 (array): [{"id":"...", "property_id":"...", ...}]
+# Shape 2 (envelope): {"items":[{"id":"...", ...}], "total":1}
+
+# If response is 200 but empty/different shape:
+# - Backend may have filtering bug (property_id mismatch)
+# - Check backend logs for SQL errors
+# - Verify property has at least one active rate plan via DB or UI
+```
+
+**Verification:** Re-run script with diagnostics enabled. Check URL, HTTP code, and response preview. If response is valid but parsing fails, update script or report API shape incompatibility.
 **Root Cause:** Intentional design - archived seasons are read-only
 **Solution:** To restore/edit archived season, implement restore endpoint (currently not available). Workaround: Create new season with same dates.
 

@@ -11334,6 +11334,7 @@ echo "rc=$?"
    - Category badge contrast: Darker borders, theme-compatible colors (no cheap faded text)
    - Archived seasons UX: Restore/Delete actions replace Archive action when viewing archived items
    - Sync button: "Aus Vorlage aktualisieren (Lücken schließen)" to close gaps after template edits
+   - **Smoke script hardening**: P2.16 smoke script (`pms_p216_season_sync_restore_smoke.sh`) now supports both API response shapes for rate-plans endpoint: plain arrays and `{items:[]}` envelopes. Auto-detection via jq type checking ensures compatibility with future API changes.
 
 **Backend Changes:**
 - Database schema: Added `source_template_period_id`, `source_year`, `source_is_overridden` to pricing_seasons table
