@@ -10997,6 +10997,8 @@ PROD Evidence (2026-01-19):
   - STEP E: restore returned 409 with German actionable message:
     "Wiederherstellen nicht möglich: Für dieses Objekt ist bereits ein aktiver Tarifplan vorhanden ('Standardpreis 20260117-215412 - Smoke'). Bitte archivieren Sie den aktiven Tarifplan zuerst."
 
+
+**Hinweis**: Der eigentliche Fix für "Draft Rate Plans alongside Active" wurde mit Commit **e55815a6a90071233b0a89aa13644c3df4afbc48** ausgerollt ("fix(pricing): allow draft rate plans alongside active + repair unique index"). Die Re-Verification lief in einer Deploy-Instanz mit docs-only Commit 4930cd9 (und c4c89a3), bestätigt aber unverändert das Verhalten des ursprünglichen Fixes. Der /ops/version source_commit 4930cd9 spiegelt die laufende Deploy-Instanz wider, nicht den funktionalen Fix-Commit.
 Verification Commands (PROD):
 ```bash
 # HOST-SERVER-TERMINAL
