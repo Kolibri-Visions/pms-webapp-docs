@@ -35219,6 +35219,51 @@ echo "rc=$?"
 
 **Common Issues:**
 
+### Preflight Health Check Returns 404
+
+**Symptom:** Script fails immediately with "Health check failed (HTTP 404)" during preflight stage.
+
+**Root Cause:** Script was checking health at wrong endpoint path (e.g., `/api/v1/ops/health` instead of `/health`).
+
+**How to Debug:**
+```bash
+# Check which URL the script tried
+# Script output shows: "URL checked: <url>"
+
+# Manually verify health endpoints exist at root level
+curl -sS https://api.fewo.kolibri-visions.de/health
+curl -sS https://api.fewo.kolibri-visions.de/health/ready
+# Both should return HTTP 200
+```
+
+**Solution:**
+- Fixed in commit with message "fix(smoke): P2.15 preflight uses root /health + robust api base url"
+- Script now uses ROOT_BASE for health checks (`/health`, `/health/ready`)
+- Script now uses API_V1_BASE for API endpoints (`/api/v1/...`)
+- Supports both API_BASE_URL formats:
+  - `https://api.example.com` (host-only, recommended)
+  - `https://api.example.com/api/v1` (full API path, also supported)
+
+**Verification:**
+```bash
+# Test with host-only format
+API_BASE_URL=https://api.fewo.kolibri-visions.de \
+JWT_TOKEN="..." \
+AGENCY_ID="..." \
+./backend/scripts/pms_objekt_saisonvorlage_import_gap_smoke.sh
+
+# Test with full API path format
+API_BASE_URL=https://api.fewo.kolibri-visions.de/api/v1 \
+JWT_TOKEN="..." \
+AGENCY_ID="..." \
+./backend/scripts/pms_objekt_saisonvorlage_import_gap_smoke.sh
+
+# Both should pass preflight with:
+# ✅ Preflight PASSED: /health OK (HTTP 200)
+# ✅ Preflight PASSED: /health/ready OK (HTTP 200)
+```
+
+
 ### Season Import Creates Duplicates
 
 **Symptom:** Importing same template multiple times creates duplicate seasons with identical date_from/date_to.
