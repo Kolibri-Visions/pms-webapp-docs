@@ -11297,7 +11297,7 @@ echo "rc=$?"
    - backend/docs/ops/runbook.md: "P2.15 UI-Layout: Jahres-Outline Ansicht" subsection with visual structure diagram, gap detection behavior, import workflow, troubleshooting
    - backend/docs/project_status.md: This P2.16 entry
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
 
 **Notes:**
 - Frontend-only changes (no backend/API modifications - uses existing pricing endpoints)
@@ -11363,7 +11363,17 @@ Post-deployment verification (required for VERIFIED status):
    - Override protection: Manual edits to linked seasons prevent sync overwrites
 4. User acceptance: Property managers confirm gap closure workflow + override protection works as expected
 
-**Status:** ✅ IMPLEMENTED (NOT VERIFIED until post-deployment verification complete)
+**Status:** ✅ VERIFIED
+
+**PROD Evidence (Verified: 2026-01-19):**
+- **Backend deploy:** /api/v1/ops/version
+  - source_commit: `851dc779af6abcfacab4e830dabf0c683bb51aeb`
+  - started_at: `2026-01-19T20:10:04.446289+00:00`
+  - verify_rc: 0 (commit match)
+- **Smoke test:** pms_p216_season_sync_restore_smoke.sh
+  - Test window: 2028-12-10 to 2028-12-15 (auto-computed, non-overlapping)
+  - Result: ✅ All 7 tests passed (sync preview, create, edit, archive, restore, archive, purge)
+  - rc: 0
 
 **Notes:**
 - Backward compatible: Existing seasons without source metadata continue to work (not synced)
