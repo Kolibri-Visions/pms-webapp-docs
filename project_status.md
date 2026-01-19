@@ -11233,3 +11233,100 @@ echo "rc=$?"
 - Mobile-responsive: stacked layout on small screens
 
 ---
+
+# P2.16 (UI Polish) Pricing — Preiseinstellungen Jahresansicht + Gap-Warnungen
+
+**Implementation Date:** 2026-01-19
+
+**Scope:** UI/UX refinement of property pricing season schedule (P2.15) with hierarchical outline view, prominent gap warnings, and per-year gap indicators.
+
+**Features Implemented:**
+
+1. **Hierarchical Outline View** (`frontend/app/properties/[id]/rate-plans/page.tsx`):
+   - Year-by-year sections (2026, 2027, ...) with year headers
+   - Category groups nested under each year:
+     - Hauptsaison (red badge)
+     - Mittelsaison (orange badge)
+     - Nebensaison (blue badge)
+     - Sonstiges (gray badge, only if label doesn't match)
+   - Season rows as bulleted items under categories
+   - Format: "von DD.MM bis DD.MM — €XX.XX/Nacht"
+   - Actions: Bearbeiten, Archivieren buttons inline
+   - Outline style with left border and indentation
+
+2. **Prominent Gap Warning Banner**:
+   - CANNOT BE MISSED: Red border, red background, large 3xl warning icon
+   - Shows all gap date ranges in next 730 days
+   - CTAs: "Aus Vorlage importieren", "Saisonzeit anlegen"
+   - Scrollable if many gaps
+   - Displayed at top of page before year sections
+   - **Archived seasons excluded** from coverage calculation
+
+3. **Per-Year Gap Indicators**:
+   - Small badge on year header if that year has gaps
+   - Text: "Lücken vorhanden" in yellow/orange
+   - `getYearGaps()` function checks if specific year has coverage gaps
+   - Gap overlaps year boundaries intentionally shown for visibility
+
+4. **Import Workflow** (unchanged from P2.15):
+   - Import modal with season template selection
+   - Period preview: "X Saisonzeit(en)" or "Vorlage enthält keine Zeiträume"
+   - Quick import buttons: "Dieses Jahr", "Nächstes Jahr", "2 Jahre voraus"
+   - Idempotent duplicate detection (same date_from + date_to)
+   - Success toast: "X Saison(en) importiert, Y übersprungen (Duplikate)"
+
+5. **Documentation** (add-only):
+   - backend/docs/ops/runbook.md: "P2.15 UI-Layout: Jahres-Outline Ansicht" subsection with visual structure diagram, gap detection behavior, import workflow, troubleshooting
+   - backend/docs/project_status.md: This P2.16 entry
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- Frontend-only changes (no backend/API modifications)
+- Builds on P2.15 Season Schedule + Import foundation
+- Gap detection algorithm unchanged (730-day horizon, archived excluded)
+- Import workflow unchanged (idempotent, uses existing API)
+- Category heuristic unchanged (case-insensitive label matching)
+- Date format changed from year sections to "von DD.MM bis DD.MM" for German readability
+- VERIFIED status requires: PROD deployment + manual UI verification + user acceptance
+
+**Dependencies:**
+- P2.15 Property Pricing — Season Schedule + Import + Gap Detection
+- date-fns library for date formatting
+
+**UI Visual Structure:**
+```
+Objekt-Preiseinstellungen
+├── PROMINENT Gap Warning (if applicable)
+│   └── Red border, large 3xl warning icon, cannot be missed
+│       - Lists all gap date ranges
+│       - CTAs: "Aus Vorlage importieren", "Saisonzeit anlegen"
+└── Year Sections (2026, 2027, ...)
+    ├── Year Header with gap indicator badge (if year affected)
+    └── Category Groups (outline style with left border)
+        ├── Hauptsaison (red badge)
+        ├── Mittelsaison (orange badge)
+        ├── Nebensaison (blue badge)
+        └── Sonstiges (gray badge, only if label doesn't match)
+            └── Season Rows (bullets)
+                - "von DD.MM bis DD.MM — €XX.XX/Nacht"
+                - Actions: Bearbeiten, Archivieren
+```
+
+**Key UI Messages:**
+- Info callout: "ℹ️ Vorlagen sind Startpunkte: Saisonvorlagen helfen beim Erstellen von Preiszeiten. Nach dem Import können Sie die Saisonzeiten für jedes Objekt individuell anpassen."
+- Gap warning: "Achtung: Saisonzeiten haben Lücken in den nächsten 2 Jahren!"
+- Import modal: "Duplikate (gleiche Zeiträume) werden automatisch übersprungen."
+
+**Verification (Manual UI):**
+1. Login as manager/admin
+2. Navigate to Properties → [Property] → Preiseinstellungen tab
+3. Verify hierarchical outline layout (Year → Category → Season rows)
+4. Verify prominent red gap warning banner appears (if gaps exist)
+5. Verify per-year gap indicator badges on year headers
+6. Verify season format: "von DD.MM bis DD.MM — €XX.XX/Nacht"
+7. Verify category color badges (red/orange/blue/gray)
+8. Verify import workflow unchanged (modal, preview, quick import buttons)
+9. Verify mobile-responsive layout
+
+---

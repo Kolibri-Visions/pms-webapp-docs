@@ -35437,5 +35437,67 @@ curl -X GET "$API_BASE_URL/api/v1/pricing/season-templates/$TEMPLATE_ID/periods"
 - For "Nächstes Jahr", target year = current year + 1
 - Verify import logic correctly replaces year in date strings
 
+### P2.15 UI-Layout: Jahres-Outline Ansicht (Objekt → Preiseinstellungen)
+
+**UI Location:** `/properties/[id]/rate-plans` (Preiseinstellungen tab)
+
+**Visual Structure (Hierarchical Outline):**
+```
+Objekt-Preiseinstellungen
+├── PROMINENT Gap Warning (if applicable)
+│   └── Red border, large 3xl warning icon, cannot be missed
+│       - Lists all gap date ranges
+│       - CTAs: "Aus Vorlage importieren", "Saisonzeit anlegen"
+└── Year Sections (2026, 2027, ...)
+    ├── Year Header with gap indicator badge (if year affected)
+    └── Category Groups (outline style with left border)
+        ├── Hauptsaison (red badge)
+        ├── Mittelsaison (orange badge)
+        ├── Nebensaison (blue badge)
+        └── Sonstiges (gray badge, only if label doesn't match)
+            └── Season Rows (bullets)
+                - "von DD.MM bis DD.MM — €XX.XX/Nacht"
+                - Actions: Bearbeiten, Archivieren
+```
+
+**Gap Detection Behavior:**
+- Checks next 730 days from today
+- **Archived seasons excluded** from coverage calculation
+- Global warning banner: Shows all gaps (scrollable if many)
+- Per-year indicator: Small badge on year header if that year has gaps
+
+**Import Workflow:**
+1. Click "Aus Saisonvorlage importieren" button (header OR gap warning CTA)
+2. Modal opens with list of agency season templates
+3. Select one or more templates (checkbox selection)
+4. Periods preview shows: "X Saisonzeit(en)" or "Vorlage enthält keine Zeiträume"
+5. Quick import buttons: "Dieses Jahr", "Nächstes Jahr", "2 Jahre voraus" (placeholder, not yet functional)
+6. Click "Importieren" to create seasons
+7. Idempotent: Skips duplicates (same date_from + date_to)
+8. Success toast: "X Saison(en) importiert, Y übersprungen (Duplikate)"
+
+**Key UI Messages:**
+- Info callout: "ℹ️ Vorlagen sind Startpunkte: Saisonvorlagen helfen beim Erstellen von Preiszeiten. Nach dem Import können Sie die Saisonzeiten für jedes Objekt individuell anpassen."
+- Gap warning: "Achtung: Saisonzeiten haben Lücken in den nächsten 2 Jahren!"
+- Import modal: "Duplikate (gleiche Zeiträume) werden automatisch übersprungen."
+
+**Troubleshooting:**
+
+**Symptom:** Gap warning shows false gaps (seasons are present)
+**Root Cause:** Archived seasons are counted as coverage
+**Solution:** Gap detection filters `!s.archived_at` - archived seasons should NOT count. Check frontend filter at line 108.
+
+**Symptom:** Year gap indicator shows "Lücken vorhanden" but year has full coverage
+**Root Cause:** Gap overlaps year boundaries (gap starts before year but ends in year)
+**Solution:** `getYearGaps()` function checks if gap overlaps year range - this is intentional for visibility.
+
+**Symptom:** Import creates duplicates despite "idempotent" claim
+**Root Cause:** Duplicate detection checks `date_from` and `date_to` only, not label
+**Solution:** This is intentional. Same dates with different labels are allowed (e.g., manual adjustments after import).
+
+**Symptom:** Category colors don't match expectations
+**Root Cause:** Label doesn't contain keyword "haupt"/"mittel"/"neben"
+**Solution:** Categorization is case-insensitive label matching. Update season label to include keyword for correct categorization.
+
 ---
 ---
