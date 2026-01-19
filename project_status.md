@@ -10904,3 +10904,94 @@ echo "rc=$?"
 ```
 
 ---
+
+**Draft Rate Plans Fix (2026-01-18) - COMPREHENSIVE:**
+
+Context:
+- Smoke script `pms_preisplan_restore_conflict_smoke.sh` failing at STEP C with HTTP 409
+- Attempting to create INACTIVE plan (`active=false`) while ACTIVE plan exists
+- API returns: "Für dieses Objekt ist bereits ein aktiver Preisplan vorhanden (...). Sie können zusätzliche Preispläne nur als ENTWURF (inaktiv) anlegen..."
+- Contradiction: Request IS for a draft (inactive) but still gets blocked
+
+Root Cause:
+- DB unique index `idx_rate_plans_one_active_per_property` (from migration 20260117214810) missing `active IS TRUE` predicate
+- Index WHERE clause: `archived_at IS NULL AND property_id IS NOT NULL`
+- Should be: `active IS TRUE AND deleted_at IS NULL AND archived_at IS NULL AND property_id IS NOT NULL`
+- Result: Constraint applies to ALL non-archived plans, not just ACTIVE ones
+- Backend caught `UniqueViolationError` and returned 409 but couldn't distinguish intent
+
+Fix Components:
+
+1. **Backend** (`backend/app/api/routes/pricing.py`):
+   - **REMOVED** redundant application-level validation (lines 255-270 from commit 86c059f) that checked `if input.active:` before INSERT
+   - **ADDED** explicit logging of `requested_active` and `requested_default` (line 270-275)
+   - **ENHANCED** UniqueViolation error handling (line 321-342):
+     - If `requested_active is True`: Return HTTP 409 with German message (expected conflict)
+     - If `requested_active is False`: Return HTTP 503 with schema drift message (unexpected - DB index is wrong)
+     - Logs error: "DB schema drift detected: UniqueViolation on INACTIVE plan creation"
+     - 503 detail: "Datenbank-Schema veraltet: Unique-Index blockiert Entwurf-Preispläne. Bitte Migration 20260118160000 in Supabase ausführen."
+
+2. **DB Migration** (`supabase/migrations/20260118160000_repair_rate_plans_one_active_index.sql`):
+   - **DRIFT-SAFE** index replacement using DO $$ block
+   - Checks existing index definition with `pg_get_indexdef`
+   - Only replaces if definition is wrong (missing "active IS TRUE")
+   - Steps:
+     1. Check if index exists and get definition
+     2. If definition doesn't contain "active IS TRUE", drop and recreate
+     3. Create correct partial unique index: `WHERE active IS TRUE AND deleted_at IS NULL AND archived_at IS NULL`
+     4. Defensive cleanup: SET active=false WHERE archived_at IS NOT NULL OR deleted_at IS NOT NULL
+   - Idempotent: Safe to run multiple times
+
+3. **Smoke Script** (`backend/scripts/pms_preisplan_restore_conflict_smoke.sh`):
+   - **ADDED** JSON payload logging before POST (line 260-262)
+   - **ADDED** verification of created plan's `active` field (line 274-279)
+   - **ENHANCED** 409 error diagnostics (line 281-299): Box-drawn diagnosis with actionable steps
+   - **ADDED** 503 error handling (line 300-318): Schema drift detection with migration instructions
+
+4. **Tests** (`backend/tests/integration/test_rate_plan_one_active_constraint.py`):
+   - Unchanged from previous commit 313755c - already comprehensive:
+     - test_create_inactive_plan_when_active_exists → 201 OK
+     - test_create_active_plan_when_active_exists_returns_409
+     - test_update_plan_to_active_when_active_exists_returns_409
+     - test_archived_plans_do_not_conflict
+
+5. **Docs** (DOCS SAFE MODE):
+   - Runbook: Added "Draft Rate Plans Blocked Alongside Active Plans (409/503)" section (line 34920+)
+   - Project Status: This entry
+
+Expected Behavior After Fix:
+| Scenario | Before Fix | After Fix |
+|----------|-----------|-----------|
+| Create INACTIVE when ACTIVE exists | ❌ 409/500 | ✅ 201 OK |
+| Create ACTIVE when ACTIVE exists | ❌ 500 or unclear 409 | ✅ 409 Conflict (German) |
+| Update to active=true when ACTIVE exists | ❌ 500 or unclear 409 | ✅ 409 Conflict (German) |
+| Create ACTIVE after archiving previous | ✅ 201 OK | ✅ 201 OK |
+
+Status: ✅ IMPLEMENTED (awaiting PROD verification after migration 20260118160000 applied)
+
+Verification Commands (PROD):
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify commit deployed
+git log --oneline -1
+# Expected: commit with "fix(pricing): allow draft rate plans alongside active"
+
+# Check migration applied
+psql $DATABASE_URL -c "SELECT version FROM supabase_migrations.schema_migrations WHERE version = '20260118160000';"
+# Expected: 20260118160000
+
+# Verify index definition
+psql $DATABASE_URL -c "SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_rate_plans_one_active_per_property';" | grep -q "active IS TRUE" && echo "✅ Fixed" || echo "❌ Still wrong"
+
+# Run smoke script (STEP C should pass with HTTP 201)
+export HOST="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<manager/admin JWT>>>"
+bash backend/scripts/pms_preisplan_restore_conflict_smoke.sh
+echo "rc=$?"
+# Expected: rc=0, all steps pass, STEP C shows "active=False"
+```
+
+---

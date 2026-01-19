@@ -34916,3 +34916,96 @@ psql $DATABASE_URL -f supabase/migrations/20260118150000_fix_rate_plans_one_acti
 Backend (commit 86c059f+) includes try/except for `asyncpg.UniqueViolationError` that returns 409 with German message instead of 500, even if index definition is wrong. However, the index MUST be fixed for correct constraint semantics.
 
 ---
+
+### Draft Rate Plans Blocked Alongside Active Plans (409/503)
+
+**Symptom:** POST /api/v1/pricing/rate-plans with `active=false` (INACTIVE/draft plan) returns:
+- **HTTP 409 Conflict** with message mentioning "Sie können zusätzliche Preispläne nur als ENTWURF (inaktiv) anlegen", OR
+- **HTTP 503 Service Unavailable** with message "Datenbank-Schema veraltet: Unique-Index blockiert Entwurf-Preispläne"
+
+**Root Cause:** Database unique index `idx_rate_plans_one_active_per_property` is missing the `active IS TRUE` predicate in its WHERE clause, causing it to block ALL non-archived plans (not just active ones).
+
+**Introduced In:** Migration `20260117214810_harden_rate_plans_invariants.sql` line 39-41:
+```sql
+CREATE UNIQUE INDEX IF NOT EXISTS idx_rate_plans_one_active_per_property
+    ON rate_plans(property_id)
+    WHERE archived_at IS NULL AND property_id IS NOT NULL;  -- Missing: AND active IS TRUE
+```
+
+**Fixed In:** Migration `20260118160000_repair_rate_plans_one_active_index.sql` (drift-safe replacement)
+
+**HTTP 409 vs 503:**
+- **409:** Backend detected the conflict but couldn't determine if it's expected (active->active) or drift (inactive->conflict). Likely means migration hasn't been applied yet.
+- **503:** Backend detected INACTIVE plan creation blocked by DB constraint → definitive schema drift. Apply migration immediately.
+
+**How to Debug:**
+```bash
+# 1. Check if migration 20260118160000 has been applied
+psql $DATABASE_URL -c "
+  SELECT version, inserted_at
+  FROM supabase_migrations.schema_migrations
+  WHERE version = '20260118160000';
+"
+# Expected: 1 row if applied, 0 rows if not
+
+# 2. Check current index definition
+psql $DATABASE_URL -c "
+  SELECT indexname, indexdef
+  FROM pg_indexes
+  WHERE schemaname = 'public'
+    AND tablename = 'rate_plans'
+    AND indexname = 'idx_rate_plans_one_active_per_property';
+"
+# Expected (CORRECT): indexdef contains "WHERE ((active IS TRUE) AND (deleted_at IS NULL) AND (archived_at IS NULL)..."
+# Expected (WRONG): indexdef contains "WHERE ((archived_at IS NULL) AND (property_id IS NOT NULL))" (missing active predicate)
+
+# 3. Test creating INACTIVE plan manually
+curl -X POST "$HOST/api/v1/pricing/rate-plans" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "property_id": "'$PROPERTY_ID'",
+    "name": "Test Draft Plan",
+    "currency": "EUR",
+    "base_nightly_cents": 10000,
+    "active": false,
+    "is_default": false
+  }'
+# Expected (CORRECT): HTTP 201 with response containing "active": false
+# Expected (WRONG): HTTP 409 or 503 with error message
+```
+
+**Solution:**
+```bash
+# Option A: Wait for Coolify redeploy (auto-applies migrations)
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+# Wait for Coolify to detect changes and redeploy
+
+# Option B: Manually apply migration (faster)
+psql $DATABASE_URL -f supabase/migrations/20260118160000_repair_rate_plans_one_active_index.sql
+
+# Verify migration applied successfully
+psql $DATABASE_URL -c "
+  SELECT indexdef
+  FROM pg_indexes
+  WHERE indexname = 'idx_rate_plans_one_active_per_property';
+" | grep -q "active IS TRUE" && echo "✅ Index fixed" || echo "❌ Index still wrong"
+```
+
+**Expected Behavior After Fix:**
+- Creating INACTIVE plan (`active=false`) when ACTIVE plan exists → **HTTP 201 OK** ✅
+- Creating ACTIVE plan (`active=true`) when ACTIVE plan exists → **HTTP 409 Conflict** with German message ✅
+- Smoke script `pms_preisplan_restore_conflict_smoke.sh` STEP C passes ✅
+
+**Verification:**
+```bash
+# Run smoke script to verify fix
+export HOST="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<manager/admin JWT>>>"
+bash backend/scripts/pms_preisplan_restore_conflict_smoke.sh
+echo "rc=$?"
+# Expected: rc=0, all steps pass (especially STEP C with HTTP 201)
+```
+
+---
