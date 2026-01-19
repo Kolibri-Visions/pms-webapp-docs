@@ -11275,20 +11275,38 @@ echo "rc=$?"
    - Idempotent duplicate detection (same date_from + date_to)
    - Success toast: "X Saison(en) importiert, Y übersprungen (Duplikate)"
 
-5. **Documentation** (add-only):
+5. **Season CRUD Enabled** (create/edit/archive):
+   - **Create**: "Saisonzeit anlegen" button in header opens modal with form fields (label, date_from, date_to, nightly_cents, min_stay_nights)
+   - **Edit**: "Bearbeiten" button on season row opens same modal prefilled with existing values
+   - **Archive**: "Archivieren" button on season row opens confirm dialog, then deletes season
+   - All operations use existing pricing API endpoints: POST/PATCH/DELETE `/api/v1/pricing/rate-plans/{id}/seasons`
+   - Success toasts: "Saisonzeit erstellt", "Saisonzeit aktualisiert", "Saisonzeit archiviert"
+   - Archived seasons shown with badge when "Archivierte anzeigen" toggled
+   - No more stub toasts ("Bearbeiten folgt in Zukunft", "Direkte Erstellung folgt in Zukunft")
+
+6. **CTA Cleanup + Contrast Polish**:
+   - Single import CTA in header only (removed duplicate button from gap warning panel)
+   - Gap warning shows hint text: "Nutzen Sie oben 'Aus Saisonvorlage importieren' oder 'Saisonzeit anlegen', um die Lücken zu schließen"
+   - Info callout uses theme-compatible colors: `bg-bo-muted border border-bo-border text-bo-text` (no faded blue)
+   - Gap warning uses subtle red: `bg-red-50 dark:bg-red-950/30 border-2 border-red-600` (no heavy red fill)
+
+7. **Documentation** (add-only):
    - backend/docs/ops/runbook.md: "P2.15 UI-Layout: Jahres-Outline Ansicht" subsection with visual structure diagram, gap detection behavior, import workflow, troubleshooting
    - backend/docs/project_status.md: This P2.16 entry
 
 **Status:** ✅ IMPLEMENTED
 
 **Notes:**
-- Frontend-only changes (no backend/API modifications)
+- Frontend-only changes (no backend/API modifications - uses existing pricing endpoints)
 - Builds on P2.15 Season Schedule + Import foundation
 - Gap detection algorithm unchanged (730-day horizon, archived excluded)
 - Import workflow unchanged (idempotent, uses existing API)
 - Category heuristic unchanged (case-insensitive label matching)
 - Date format changed from year sections to "von DD.MM bis DD.MM" for German readability
-- VERIFIED status requires: PROD deployment + manual UI verification + user acceptance
+- **Season CRUD enabled**: Create/Edit/Archive seasons directly in UI (no more stub toasts)
+- **CTA cleanup**: Single import button (removed duplicate from gap warning)
+- **Contrast polish**: Theme-compatible colors for info callout and gap warning (no cheap faded text)
+- VERIFIED status requires: PROD deployment + deploy verify rc=0 + manual UI verification + user acceptance
 
 **Dependencies:**
 - P2.15 Property Pricing — Season Schedule + Import + Gap Detection
@@ -11326,7 +11344,30 @@ Objekt-Preiseinstellungen
 5. Verify per-year gap indicator badges on year headers
 6. Verify season format: "von DD.MM bis DD.MM — €XX.XX/Nacht"
 7. Verify category color badges (red/orange/blue/gray)
-8. Verify import workflow unchanged (modal, preview, quick import buttons)
-9. Verify mobile-responsive layout
+8. Verify single import CTA in header only (no duplicate button in gap warning)
+9. Verify gap warning shows hint text (not button): "Nutzen Sie oben 'Aus Saisonvorlage importieren' oder 'Saisonzeit anlegen'"
+10. Verify import workflow (modal, preview, quick import buttons)
+11. **Verify CRUD operations**:
+    - Click "Saisonzeit anlegen" → modal opens → fill form → create succeeds → toast "Saisonzeit erstellt" → season appears in list
+    - Click "Bearbeiten" on season row → modal opens prefilled → edit values → update succeeds → toast "Saisonzeit aktualisiert"
+    - Click "Archivieren" on season row → confirm dialog opens → confirm → delete succeeds → toast "Saisonzeit archiviert" → season removed from list
+    - Toggle "Archivierte anzeigen" → archived seasons appear with "Archiviert" badge (no edit/archive buttons)
+12. Verify theme-compatible contrast (info callout: no faded blue, gap warning: no heavy red fill)
+13. Verify mobile-responsive layout
+14. Verify no stub toasts appear ("Bearbeiten folgt in Zukunft", "Direkte Erstellung folgt in Zukunft")
+
+**How to Verify (Commands):**
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify deploy (optional)
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+echo "rc=$?"
+
+# Manual UI verification required (no automated smoke script for CRUD yet)
+```
 
 ---

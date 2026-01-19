@@ -35499,5 +35499,45 @@ Objekt-Preiseinstellungen
 **Root Cause:** Label doesn't contain keyword "haupt"/"mittel"/"neben"
 **Solution:** Categorization is case-insensitive label matching. Update season label to include keyword for correct categorization.
 
+### Saisonzeit anlegen/bearbeiten/archivieren (Objekt)
+
+**UI Location:** `/properties/[id]/rate-plans` (Preiseinstellungen tab)
+
+**CRUD Operations:**
+
+1. **Saisonzeit anlegen** (Create):
+   - Header button: "Saisonzeit anlegen"
+   - Modal with form fields: Bezeichnung (optional), Von (required), Bis (required), Preis pro Nacht in EUR (required), Mindestaufenthalt (optional)
+   - POST `/api/v1/pricing/rate-plans/{rate_plan_id}/seasons`
+   - Payload: `{label, date_from, date_to, nightly_cents, min_stay_nights, active}`
+   - Success: Toast "Saisonzeit erstellt" + refresh list
+
+2. **Bearbeiten** (Edit):
+   - Click "Bearbeiten" button on season row
+   - Same modal as create, prefilled with existing values
+   - PATCH `/api/v1/pricing/rate-plans/{rate_plan_id}/seasons/{season_id}`
+   - Success: Toast "Saisonzeit aktualisiert" + refresh list
+
+3. **Archivieren** (Archive):
+   - Click "Archivieren" button on season row
+   - Confirm dialog: "Saisonzeit archivieren?"
+   - DELETE `/api/v1/pricing/rate-plans/{rate_plan_id}/seasons/{season_id}`
+   - Success: Toast "Saisonzeit archiviert" + refresh list
+   - Archived seasons: shown with "Archiviert" badge when "Archivierte anzeigen" toggled
+
+**Import CTA:**
+- Single import button: "Aus Saisonvorlage importieren" (header only, no duplicate in gap warning)
+- Gap warning panel shows hint text: "Nutzen Sie oben 'Aus Saisonvorlage importieren' oder 'Saisonzeit anlegen', um die Lücken zu schließen."
+
+**Troubleshooting:**
+
+**Symptom:** Season create/edit/archive fails with API error
+**Root Cause:** JWT token expired, x-agency-id header missing, or user lacks manager/admin role
+**Solution:** Check JWT validity, verify x-agency-id header present in request, confirm user role in JWT claims. Frontend shows API error toast with statusText.
+
+**Symptom:** Edit/Archive buttons missing on archived seasons
+**Root Cause:** Intentional design - archived seasons are read-only
+**Solution:** To restore/edit archived season, implement restore endpoint (currently not available). Workaround: Create new season with same dates.
+
 ---
 ---
