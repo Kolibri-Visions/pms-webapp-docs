@@ -35120,3 +35120,150 @@ psql $DATABASE_URL -c "
 ```
 
 ---
+
+## P2.14 Rate Plan Templates (Vorlagen Agentur)
+
+**Overview:** Agency-scoped rate plan templates for creating property-specific rate plans via "Übernehmen" (copy) action.
+
+**Purpose:** Separate agency-level pricing templates from property-scoped rate plans, enabling staff to maintain reusable pricing blueprints.
+
+**Architecture:**
+- **Database**: `rate_plan_templates` table (agency_id FK, no property_id)
+- **UI**: Property detail layout → Tab 3 "Vorlagen (Agentur)" at `/properties/[id]/templates`
+- **Copy Action**: "Übernehmen" button creates draft (active=false) rate plan from template
+- **CRUD**: Full create/read/update/archive/restore/delete lifecycle
+- **Archive-Before-Delete**: Templates must be archived before deletion (422 if not archived)
+
+**API Endpoints:**
+- `GET /api/v1/pricing/rate-plan-templates?active=&include_archived=` - List templates
+- `POST /api/v1/pricing/rate-plan-templates` - Create template
+- `GET /api/v1/pricing/rate-plan-templates/{id}` - Get one template
+- `PATCH /api/v1/pricing/rate-plan-templates/{id}` - Update template
+- `PATCH /api/v1/pricing/rate-plan-templates/{id}/archive` - Archive
+- `PATCH /api/v1/pricing/rate-plan-templates/{id}/restore` - Restore
+- `DELETE /api/v1/pricing/rate-plan-templates/{id}` - Soft delete (requires archived)
+
+**Database Tables:**
+- `rate_plan_templates` - Agency-scoped templates (agency_id, name, description, currency, base_nightly_cents, active, archived_at, deleted_at)
+- No property_id FK (templates are NOT property-specific)
+- No seasons (templates are simple pricing blueprints with base price only)
+
+**Migration:** `20260119000000_add_rate_plan_templates.sql`
+
+**Verification Commands:**
+```bash
+# Verify migration applied
+psql $DATABASE_URL -c "SELECT COUNT(*) FROM rate_plan_templates;"
+# Expected: 0 or more (table exists)
+
+# Verify RLS policy
+psql $DATABASE_URL -c "
+  SELECT policyname FROM pg_policies
+  WHERE schemaname = 'public' AND tablename = 'rate_plan_templates';
+"
+# Expected: rate_plan_templates_agency_isolation
+
+# Run smoke test
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<manager/admin JWT>>>"
+export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+./backend/scripts/pms_rate_plan_vorlagen_smoke.sh
+# Expected: rc=0, all 7 tests pass
+```
+
+**Common Issues:**
+
+### Templates Not Visible in UI
+
+**Symptom:** Templates tab shows "Keine Vorlagen vorhanden" but templates exist in DB.
+
+**Root Cause:** Frontend filtering by `active=false` or not including archived templates.
+
+**How to Debug:**
+```bash
+# Check if templates exist
+psql $DATABASE_URL -c "
+  SELECT id, name, active, archived_at
+  FROM rate_plan_templates
+  WHERE agency_id = '<agency_id>'
+  AND deleted_at IS NULL;
+"
+
+# Check frontend network tab (DevTools)
+# Should see: GET /api/v1/pricing/rate-plan-templates?limit=100
+# Response should include templates
+```
+
+**Solution:**
+- Verify templates have `active=true` and `archived_at IS NULL`
+- Check RLS policy allows user's agency to access templates
+- Refresh browser cache (Cmd+Shift+R / Ctrl+F5)
+
+### Copy Template Fails (404 Property Not Found)
+
+**Symptom:** "Übernehmen" button fails with 404 when trying to copy template to property.
+
+**Root Cause:** Property ID missing or property doesn't belong to agency.
+
+**How to Debug:**
+```bash
+# Check property exists and belongs to agency
+psql $DATABASE_URL -c "
+  SELECT id, name, agency_id
+  FROM properties
+  WHERE id = '<property_id>';
+"
+
+# Check frontend passes correct property_id
+# DevTools Network tab: POST /api/v1/pricing/rate-plans
+# Payload should include: property_id, name, base_nightly_cents from template
+```
+
+**Solution:**
+- Verify property belongs to same agency as template
+- Check JWT contains correct agency_id claim
+- Verify frontend passes property ID from URL params
+
+### Delete Template Fails (422 Not Archived)
+
+**Symptom:** DELETE /api/v1/pricing/rate-plan-templates/{id} returns 422 "Vorlage muss zuerst archiviert werden".
+
+**Root Cause:** Archive-before-delete validation enforced (same as rate plans).
+
+**How to Debug:**
+```bash
+# Check template archive status
+psql $DATABASE_URL -c "
+  SELECT id, name, archived_at
+  FROM rate_plan_templates
+  WHERE id = '<template_id>';
+"
+
+# If archived_at IS NULL → must archive first
+```
+
+**Solution:**
+- Archive template via PATCH /api/v1/pricing/rate-plan-templates/{id}/archive
+- Then delete via DELETE /api/v1/pricing/rate-plan-templates/{id}
+- Smoke script Test 7 validates this workflow
+
+### Update Archived Template Fails (422)
+
+**Symptom:** PATCH /api/v1/pricing/rate-plan-templates/{id} returns 422 when template is archived.
+
+**Root Cause:** Backend blocks editing archived templates (UX guard).
+
+**How to Debug:**
+```bash
+# Check if template is archived
+psql $DATABASE_URL -c "
+  SELECT archived_at FROM rate_plan_templates WHERE id = '<template_id>';
+"
+```
+
+**Solution:**
+- Restore template via PATCH /api/v1/pricing/rate-plan-templates/{id}/restore
+- Then update via PATCH /api/v1/pricing/rate-plan-templates/{id}
+- Or edit a non-archived copy instead
+
+---
