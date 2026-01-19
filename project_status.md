@@ -11026,108 +11026,27 @@ echo "rc=$?"
 
 ---
 
-# P2.14 Pricing — Rate Plan Templates (Vorlagen Agentur)
+# P2.14 Pricing — Rate Plan Templates (Vorlagen Agentur) — REMOVED
 
-**Implementation Date:** 2026-01-19
+**Implementation Date:** 2026-01-19  
+**Removal Date:** 2026-01-19 (same day)
 
-**Scope:** Agency-scoped rate plan templates for creating property-specific rate plans via "Übernehmen" (copy) action.
+**Status:** ❌ REMOVED (Rollback of commit cd2138c)
 
-**Features Implemented:**
+**Reason for Removal:**  
+Feature conflicted with existing "Saisonvorlagen (Agentur)" system under `/pricing/seasons` (P2.1 Season Templates). Having two different "agency template" concepts created confusion. User decision: Keep only Season Templates.
 
-1. **Database Migration** (`20260119000000_add_rate_plan_templates.sql`):
-   - Created `rate_plan_templates` table: id, agency_id, name, description, currency, base_nightly_cents, active, archived_at, deleted_at, timestamps
-   - No property_id FK (templates are agency-scoped, NOT property-scoped)
-   - Indexes: agency_id, (agency_id, active, archived_at, deleted_at)
-   - RLS policy: `rate_plan_templates_agency_isolation` (agency scoping via JWT claims)
-   - Archive-before-delete semantics (same as rate_plans)
+**What Was Removed:**
+- Frontend: Property page tab "Vorlagen (Agentur)" and templates page
+- Backend: Rate plan templates API endpoints and schemas
+- Database: Migration file `20260119000000_add_rate_plan_templates.sql` (not applied in PROD)
+- Smoke script: `pms_rate_plan_vorlagen_smoke.sh`
+- Documentation: References in README.md, runbook.md
 
-2. **Backend Pydantic Schemas** (`backend/app/schemas/pricing.py`):
-   - `RatePlanTemplateCreate`: Create template (name, description, currency, base_nightly_cents, active)
-   - `RatePlanTemplateUpdate`: Update template (all fields optional)
-   - `RatePlanTemplateResponse`: Template response
+**Design Decision:**  
+Agency-wide templates remain available only as **Season Templates** (date-range templates with labels) under `/pricing/seasons`. Property pricing is managed via property-scoped rate plans with seasonal overrides applied from these season templates.
 
-3. **Backend API Routes** (`backend/app/api/routes/pricing.py`):
-   - GET /api/v1/pricing/rate-plan-templates: List templates (filter by active, include_archived)
-   - GET /api/v1/pricing/rate-plan-templates/{id}: Get single template
-   - POST /api/v1/pricing/rate-plan-templates: Create template
-   - PATCH /api/v1/pricing/rate-plan-templates/{id}: Update template
-   - PATCH /api/v1/pricing/rate-plan-templates/{id}/archive: Archive template
-   - PATCH /api/v1/pricing/rate-plan-templates/{id}/restore: Restore template
-   - DELETE /api/v1/pricing/rate-plan-templates/{id}: Soft delete (requires archived)
-   - RBAC: All endpoints require manager/admin role
-
-4. **Frontend UI** (`frontend/app/properties/[id]/templates/page.tsx`):
-   - Added Tab 3 "Vorlagen (Agentur)" to property detail layout
-   - Templates list with CRUD actions (create, edit, archive, restore, delete)
-   - "Übernehmen" (copy) button: Creates draft (active=false) rate plan from template
-   - Copy action redirects to /properties/[id]/rate-plans to show new draft plan
-   - Archive-before-delete UI flow with confirmation dialogs
-   - German language throughout
-
-5. **Property Layout Update** (`frontend/app/properties/[id]/layout.tsx`):
-   - Added third tab "Vorlagen (Agentur)" linking to /properties/[id]/templates
-   - Mobile-responsive tab navigation
-
-6. **Smoke Script** (`backend/scripts/pms_rate_plan_vorlagen_smoke.sh`):
-   - Test 1: Create template (POST /api/v1/pricing/rate-plan-templates)
-   - Test 2: List templates (GET /api/v1/pricing/rate-plan-templates)
-   - Test 3: Update template (PATCH /api/v1/pricing/rate-plan-templates/{id})
-   - Test 4: Copy template to property (POST /api/v1/pricing/rate-plans with active=false)
-   - Test 5: Archive template (PATCH .../archive)
-   - Test 6: Restore template (PATCH .../restore)
-   - Test 7: Archive-before-delete validation (DELETE fails with 422, then succeeds after archive)
-   - Exit codes: rc=0 success, rc=1+ failures
-
-7. **Documentation**:
-   - backend/scripts/README.md: Complete smoke script documentation (DOCS SAFE MODE: sed append after line 10555)
-   - backend/docs/ops/runbook.md: "P2.14 Rate Plan Templates" section with architecture, endpoints, verification, common issues (DOCS SAFE MODE: cat append to EOF)
-   - backend/docs/project_status.md: P2.14 entry (this section)
-
-**Status:** ✅ IMPLEMENTED
-
-**Notes:**
-- Templates are simple pricing blueprints (no seasons, just base price + metadata)
-- Templates vs Rate Plans separation: Templates have no property_id, Rate Plans have property_id
-- Copy workflow: "Übernehmen" creates draft rate plan (active=false) from template, staff can then configure seasons + activate
-- Archive-before-delete semantics enforced (same as rate plans)
-- RBAC: Manager/admin only for all template operations
-- Tenant isolation: Templates scoped by agency_id via RLS policies
-
-**Dependencies:**
-- Migration 20260119000000 (rate_plan_templates table + RLS policies)
-- Pricing schemas (RatePlanTemplateCreate, Update, Response)
-- Properties domain (templates copied to property-specific rate plans)
-- Rate plans domain (copy action creates rate_plans row)
-
-**Verification Commands \(for VERIFIED status later\):**
-```bash
-# HOST-SERVER-TERMINAL
-cd /data/repos/pms-webapp
-git fetch origin main && git reset --hard origin/main
-
-# Check migration applied
-psql $DATABASE_URL -c "SELECT version FROM supabase_migrations.schema_migrations WHERE version = '20260119000000';"
-# Expected: 20260119000000
-
-# Verify table exists
-psql $DATABASE_URL -c "SELECT COUNT(*) FROM rate_plan_templates;"
-# Expected: 0 or more (table exists)
-
-# Run smoke test
-export API_BASE_URL="https://api.fewo.kolibri-visions.de"
-export JWT_TOKEN="<<<manager/admin JWT>>>"
-export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
-./backend/scripts/pms_rate_plan_vorlagen_smoke.sh
-echo "rc=$?"
-# Expected: rc=0, all 7 tests pass
-
-# Manual UI verification
-# 1. Login as manager/admin
-# 2. Navigate to /properties/<id>/templates (Tab 3)
-# 3. Create new template (+ Neue Vorlage)
-# 4. Click "Übernehmen" to copy template to property
-# 5. Verify redirected to /properties/<id>/rate-plans showing new draft plan
-# 6. Verify draft plan has active=false and correct base price from template
-```
+**Note:**  
+This rollback does NOT affect the Season Templates feature (P2.1), which remains the canonical way to manage agency-wide reusable date-range templates.
 
 ---
