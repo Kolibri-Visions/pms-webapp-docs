@@ -10967,7 +10967,24 @@ Expected Behavior After Fix:
 | Update to active=true when ACTIVE exists | ❌ 500 or unclear 409 | ✅ 409 Conflict (German) |
 | Create ACTIVE after archiving previous | ✅ 201 OK | ✅ 201 OK |
 
-Status: ✅ IMPLEMENTED (awaiting PROD verification after migration 20260118160000 applied)
+Status: ✅ VERIFIED
+
+PROD Evidence (2026-01-19):
+- Verification Date: 2026-01-19
+- API Base URL: https://api.fewo.kolibri-visions.de
+- Source Commit: e55815a6a90071233b0a89aa13644c3df4afbc48
+- started_at: 2026-01-19T08:28:04.878782+00:00
+- Deploy verify: backend/scripts/pms_verify_deploy.sh rc=0 (all checks passed)
+- Smoke: backend/scripts/pms_preisplan_restore_conflict_smoke.sh rc=0
+  - STEP C PASSED: Zweiter Plan (INAKTIV) erstellt (active=False)
+  - STEP E: Returned 409 Conflict with German actionable message as expected
+- DB Index Verification (Supabase SQL):
+  ```sql
+  CREATE UNIQUE INDEX idx_rate_plans_one_active_per_property
+    ON public.rate_plans (property_id)
+    WHERE ((deleted_at IS NULL) AND (archived_at IS NULL) AND (active IS TRUE))
+  ```
+  Predicate correctly includes "active IS TRUE" and excludes archived/deleted rows.
 
 Verification Commands (PROD):
 ```bash

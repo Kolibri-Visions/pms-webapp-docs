@@ -35009,3 +35009,114 @@ echo "rc=$?"
 ```
 
 ---
+
+### Index Creation Fails: Duplicate Active Plans per Property
+
+**Symptom:** Migration `20260118160000_repair_rate_plans_one_active_index.sql` fails with error:
+```
+ERROR:  could not create unique index "idx_rate_plans_one_active_per_property"
+DETAIL:  Key (property_id)=(...) is duplicated.
+```
+
+**Root Cause:** Database contains multiple ACTIVE plans for the same property_id. This violates the uniqueness constraint that the migration attempts to create. Likely caused by data corruption or race conditions before the constraint was in place.
+
+**How to Debug:**
+```bash
+# Find properties with duplicate ACTIVE plans
+psql $DATABASE_URL -c "
+  SELECT property_id, COUNT(*) as active_plan_count,
+         STRING_AGG(id::TEXT || ' (' || name || ')', ', ') as plan_details
+  FROM public.rate_plans
+  WHERE deleted_at IS NULL
+    AND archived_at IS NULL
+    AND active IS TRUE
+    AND property_id IS NOT NULL
+  GROUP BY property_id
+  HAVING COUNT(*) > 1;
+"
+# Output shows property_id with count > 1 and list of conflicting plan IDs/names
+
+# Inspect specific property's plans
+psql $DATABASE_URL -c "
+  SELECT id, name, active, is_default, archived_at, deleted_at, created_at
+  FROM public.rate_plans
+  WHERE property_id = '<property_id_from_above>'
+    AND deleted_at IS NULL
+    AND archived_at IS NULL
+  ORDER BY created_at DESC;
+"
+```
+
+**Remediation (Safe Approach):**
+
+1. **Identify which plan should remain active:**
+   - Newest plan (highest created_at)? OR
+   - Plan currently set as default (is_default=true)? OR
+   - Plan with most recent bookings?
+
+2. **Archive or deactivate extra active plans:**
+   ```bash
+   # Option A: Archive older plans (preserves history)
+   psql $DATABASE_URL -c "
+     UPDATE public.rate_plans
+     SET archived_at = NOW(), active = FALSE, updated_at = NOW()
+     WHERE property_id = '<property_id>'
+       AND id != '<plan_id_to_keep>'
+       AND deleted_at IS NULL
+       AND archived_at IS NULL
+       AND active IS TRUE;
+   "
+   
+   # Option B: Deactivate (keeps plans non-archived but inactive)
+   psql $DATABASE_URL -c "
+     UPDATE public.rate_plans
+     SET active = FALSE, updated_at = NOW()
+     WHERE property_id = '<property_id>'
+       AND id != '<plan_id_to_keep>'
+       AND deleted_at IS NULL
+       AND archived_at IS NULL
+       AND active IS TRUE;
+   "
+   ```
+
+3. **Verify no duplicates remain:**
+   ```bash
+   psql $DATABASE_URL -c "
+     SELECT property_id, COUNT(*) as active_plan_count
+     FROM public.rate_plans
+     WHERE deleted_at IS NULL
+       AND archived_at IS NULL
+       AND active IS TRUE
+       AND property_id IS NOT NULL
+     GROUP BY property_id
+     HAVING COUNT(*) > 1;
+   "
+   # Expected: 0 rows
+   ```
+
+4. **Retry migration:**
+   ```bash
+   psql $DATABASE_URL -f supabase/migrations/20260118160000_repair_rate_plans_one_active_index.sql
+   # Should succeed now
+   ```
+
+**Prevention:**
+- Migration 20260118160000 creates the partial unique index to prevent future duplicates
+- Backend error handling (commit e55815a+) returns HTTP 409 if attempting to create second active plan
+
+**Verification After Fix:**
+```bash
+# Verify index exists with correct predicate
+psql $DATABASE_URL -c "
+  SELECT indexdef
+  FROM pg_indexes
+  WHERE schemaname = 'public'
+    AND tablename = 'rate_plans'
+    AND indexname = 'idx_rate_plans_one_active_per_property';
+" | grep -q "active IS TRUE" && echo "✅ Index created successfully" || echo "❌ Index missing or wrong"
+
+# Test constraint works
+# Try creating second active plan for a property - should fail with 409
+```
+
+---
