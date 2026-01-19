@@ -10986,6 +10986,17 @@ PROD Evidence (2026-01-19):
   ```
   Predicate correctly includes "active IS TRUE" and excludes archived/deleted rows.
 
+### Re-Verification (2026-01-19, docs-only redeploy; commit match)
+- **API Base**: https://api.fewo.kolibri-visions.de
+- **Backend /api/v1/ops/version**:
+  - source_commit: 4930cd90bc0fb2f2431445f5b8e9b824a5e3e708
+  - started_at: 2026-01-19T09:24:05.427332+00:00
+- **Smoke**: `backend/scripts/pms_preisplan_restore_conflict_smoke.sh` → rc=0
+  - PROPERTY_ID: 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
+  - STEP C: created inactive plan (active=false), id=3dcdfbf8-1076-42c2-9074-2c63c79fa30a
+  - STEP E: restore returned 409 with German actionable message:
+    "Wiederherstellen nicht möglich: Für dieses Objekt ist bereits ein aktiver Tarifplan vorhanden ('Standardpreis 20260117-215412 - Smoke'). Bitte archivieren Sie den aktiven Tarifplan zuerst."
+
 Verification Commands (PROD):
 ```bash
 # HOST-SERVER-TERMINAL
