@@ -35658,6 +35658,9 @@ curl -H "Authorization: Bearer $JWT_TOKEN" \
 
 # If response is 200 but empty/different shape:
 # - Backend may have filtering bug (property_id mismatch)
+
+**Test 2 fails with 422 overlap:** Script auto-computes non-overlapping dates from existing seasons. If this still fails, check that rate plan doesn't have dense season coverage spanning years.
+
 # - Check backend logs for SQL errors
 # - Verify property has at least one active rate plan via DB or UI
 ```
