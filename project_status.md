@@ -11515,3 +11515,77 @@ echo "rc=$?"
 ```
 
 ---
+
+
+---
+
+**P2.16.1 Follow-up: Sync Apply Overlap Hardening**
+
+**Implementation Date:** 2026-01-20
+
+**Scope:** Prevent sync-from-template apply mode from returning 500 on overlaps.
+
+**Problem:**
+Sync apply returned HTTP 500 with asyncpg.exceptions.ExclusionViolationError when:
+- Legacy season spans 2026-12-01 to 2027-12-31 (no template linkage)
+- Template has 2027 period 2027-01-01 to 2027-09-30
+- Apply tried to INSERT 2027 period before shrinking legacy season
+- Result: DB constraint violation (overlap)
+
+**Solution:**
+
+1. **Safe Execution Order (backend/app/api/routes/pricing.py):**
+   - Phase 1: Relink-Updates (shrink legacy seasons + set template_period_id)
+   - Phase 2: Linked-Updates (update existing linked seasons)
+   - Phase 3: Creates (insert new seasons)
+   - Prevents INSERTs from colliding with un-shrunk legacy seasons
+
+2. **Savepoint Wrapping:**
+   - Each UPDATE/INSERT wrapped in `async with db.transaction():`
+   - Catches asyncpg.exceptions.ExclusionViolationError per operation
+   - Adds to conflicts[] list instead of raising 500
+   - Import: `import asyncpg.exceptions`
+
+3. **Response Structure (always 200 in apply mode):**
+   - counts: {create, update, relink, conflict}
+   - lists: {created[], updated[], relinked[], conflicts[]}
+   - Conflict payload: label, date_from, date_to, reason, hint (German)
+
+4. **UI Improvements (frontend/app/properties/[id]/rate-plans/page.tsx):**
+   - Preview box styling: white bg, blue border, dark text (readable)
+   - Dark mode: dark bg, blue border, light text
+   - Apply error handling: show conflicts[] if present, no generic "Database error"
+   - Keep modal open on conflict/error for user review
+
+5. **Logging:**
+   - Each conflict logged at WARN level with rate_plan_id, label, date range
+
+**Files Changed:**
+- backend/app/api/routes/pricing.py (+80 lines: safe execution, savepoint wrapping, conflict handling)
+- frontend/app/properties/[id]/rate-plans/page.tsx (+20 lines: styling, error handling)
+- backend/scripts/pms_p2161_sync_apply_overlap_smoke.sh (NEW +150 lines)
+
+**Documentation (DOCS SAFE MODE - add-only):**
+- backend/docs/ops/runbook.md: "Saisonvorlagen Sync: Overlap/ExclusionViolation vermeiden"
+- backend/scripts/README.md: "Sync Apply Overlap Hardening Smoke Test"
+- backend/docs/project_status.md: This entry
+
+**Verification:**
+Smoke script: `backend/scripts/pms_p2161_sync_apply_overlap_smoke.sh`
+- Tests legacy season 2026-12-01 to 2027-12-31 vs 2027 template periods
+- EXPECT: Apply returns 200 (not 500), legacy shrunk or conflict reported
+- Exit code 0 = all tests passed
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- VERIFIED status requires: PROD deployment + smoke script rc=0 + manual UI verification
+- Commit must be deployed and /api/v1/ops/version commit hash verified
+- This is a critical bugfix (500 → 200 for overlaps)
+
+**Dependencies:**
+- P2.16.1 (year-scoped templates + legacy relink base implementation)
+- asyncpg exception handling
+- Frontend toast/modal state management
+
+---

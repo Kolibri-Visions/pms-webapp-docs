@@ -35775,3 +35775,80 @@ curl -H "Authorization: Bearer $JWT_TOKEN" \
 
 ---
 ---
+
+---
+
+### Saisonvorlagen Sync: Overlap/ExclusionViolation vermeiden
+
+**Problem:**
+Sync-from-template im apply-Modus kann mit HTTP 500 fehlschlagen:
+`asyncpg.exceptions.ExclusionViolationError: conflicting key value violates exclusion constraint "rate_plan_seasons_no_overlap_excl"`
+
+**Root Cause:**
+Sync versucht neue Saisonzeiten anzulegen, bevor Legacy-Saisonzeiten (ohne Vorlagen-Verknüpfung)
+verkürzt/verknüpft wurden. Resultat: Neue INSERT kollidiert mit noch-langer Legacy-Saison.
+
+**Lösung (ab P2.16.1 follow-up):**
+Apply-Modus führt Datenbankoperationen in sicherer Reihenfolge aus:
+
+1. **Phase 1: Relink-Updates** (Legacy-Saisonzeiten verkürzen + template_period_id setzen)
+   - Verkürzt date_to, sodass keine Überschneidung mehr besteht
+   - Setzt template_period_id für Verknüpfung
+
+2. **Phase 2: Linked-Updates** (bestehende verknüpfte Saisonzeiten aktualisieren)
+   - Aktualisiert date_from/date_to für bereits verknüpfte Saisonzeiten
+
+3. **Phase 3: Creates** (neue Saisonzeiten anlegen)
+   - Legt neue Saisonzeiten an (aus Vorlagen-Perioden ohne Match)
+
+**Savepoint-Wrapping:**
+Jede einzelne UPDATE/INSERT-Operation läuft in eigener Transaktion (savepoint).
+Bei ExclusionViolation wird Operation in conflicts[] Liste aufgenommen (kein 500-Fehler).
+
+**Response-Struktur:**
+```json
+{
+  "status": "success",
+  "counts": {
+    "create": 2,
+    "update": 1,
+    "relink": 1,
+    "conflict": 0
+  },
+  "created": [...],
+  "updated": [...],
+  "relinked": [...],
+  "conflicts": [
+    {
+      "label": "Hauptsaison 2027",
+      "date_from": "2027-01-01",
+      "date_to": "2027-09-30",
+      "reason": "Überschneidung mit bestehender Saisonzeit",
+      "hint": "Überschneidung verhindert automatische Anlage – bitte Saisonzeiten manuell anpassen oder archivieren."
+    }
+  ]
+}
+```
+
+**UI-Verhalten:**
+- Conflicts werden in orangefarbener Box angezeigt (wie bisher)
+- Kein generischer "Database error occurred" mehr
+- Modal bleibt offen, damit Staff Konflikte sehen kann
+
+**Troubleshooting:**
+
+**Symptom:** "conflicts" Liste enthält Einträge nach apply
+
+**Root Cause:** Trotz Phase-1-Shrink konnte Saison nicht verkürzt werden (anderes Overlap).
+
+**Lösung:**
+1. Betroffene Saison manuell in UI bearbeiten (Zeitraum anpassen)
+2. Oder: Saison archivieren
+3. Sync erneut ausführen
+
+**Verification:**
+- Smoke script: `backend/scripts/pms_p2161_sync_apply_overlap_smoke.sh`
+- Testet: Legacy-Saison 2026-12-01 bis 2027-12-31, Vorlage mit 2027-Perioden
+- Erwartung: Apply gibt 200 zurück (kein 500), Legacy wird verkürzt oder als conflict gemeldet
+
+---
