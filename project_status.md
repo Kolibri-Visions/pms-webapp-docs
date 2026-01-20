@@ -11297,6 +11297,16 @@ echo "rc=$?"
    - backend/docs/ops/runbook.md: "P2.15 UI-Layout: Jahres-Outline Ansicht" subsection with visual structure diagram, gap detection behavior, import workflow, troubleshooting
    - backend/docs/project_status.md: This P2.16 entry
 
+8. **Empty-State Rate Plan Creation**:
+   - When property has no rate plan: "Tarifplan anlegen" button in empty state
+   - Modal with fields: Name (prefilled), Basispreis pro Nacht (EUR), Aktiv (checkbox)
+   - POST /api/v1/pricing/rate-plans with property_id from URL
+   - EUR input converted to cents for API (user enters 150.00 → 15000 cents)
+   - Success: refetch data, normal seasons view appears, toast confirmation
+   - Error handling: 409 (duplicate active), 422 (validation), generic errors with German messages
+   - Removes need for terminal/SQL access to create initial rate plan
+
+
 **Status:** ✅ VERIFIED
 
 **Notes:**
@@ -11351,6 +11361,16 @@ echo "rc=$?"
 - Category badges: Improved contrast (border-2, darker border colors)
 
 **Verification Checklist:**
+
+
+Manual UI Verification (Empty State):
+1. Open property without rate plan: `/properties/[id]/rate-plans`
+2. Verify "Tarifplan anlegen" button visible (primary CTA)
+3. Click → modal opens with prefilled name
+4. Enter base price (e.g., 120.50 EUR)
+5. Submit → rate plan created
+6. Verify: Normal seasons view loads, "Aus Saisonvorlage importieren" + "Saisonzeit anlegen" buttons visible
+7. Verify: Can now create seasons and import from templates
 
 Post-deployment verification (required for VERIFIED status):
 1. Deploy verify: `./backend/scripts/pms_verify_deploy.sh` rc=0 + commit hash matches deployment

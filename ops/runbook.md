@@ -35669,6 +35669,31 @@ curl -H "Authorization: Bearer $JWT_TOKEN" \
 **Root Cause:** Intentional design - archived seasons are read-only
 **Solution:** To restore/edit archived season, implement restore endpoint (currently not available). Workaround: Create new season with same dates.
 
+
+### Tarifplan anlegen (Backoffice)
+
+**UI Location:** `/properties/[id]/rate-plans` (when no rate plan exists)
+
+**Workflow:**
+1. Navigate to Objekt → Preiseinstellungen
+2. If "Kein Tarifplan vorhanden" shown, click "Tarifplan anlegen"
+3. Modal opens with fields:
+   - Name (prefilled: "Standardpreis <Jahr>")
+   - Basispreis pro Nacht (EUR, z.B. 150.00)
+   - Aktiv (default checked)
+4. Click "Tarifplan erstellen"
+5. Success: Toast "Tarifplan erstellt", page shows normal seasons view
+6. Now can create seasons or import from templates
+
+**API:** POST /api/v1/pricing/rate-plans
+- Payload: {property_id, name, base_nightly_cents, currency, active}
+- EUR input converted to cents (150.00 EUR → 15000 cents)
+
+**Troubleshooting:**
+- **409 "Ein aktiver Tarifplan existiert bereits":** Property already has active rate plan. Deactivate existing first or contact admin.
+- **422 validation error:** Check base price is positive number (> 0).
+- **401/403:** JWT expired or user lacks permissions (need manager/admin role).
+
 ### Vorlage aktualisieren (Lücken nachziehen)
 
 **UI Location:** `/properties/[id]/rate-plans` (Preiseinstellungen tab → Import modal)
