@@ -36160,3 +36160,183 @@ If you see `NameError: name 'X' is not defined` where X is a Pydantic decorator 
 **Hotfix Commit:** (hash provided after push)
 
 ---
+
+
+---
+
+## Pricing → Saisonvorlagen Sync (422 Debug)
+
+**Symptom:**
+- POST to `/api/v1/pricing/rate-plans/{id}/sync-from-template` returns 422 "Request validation failed"
+- Error message: `Field required [type=missing, input=...]` or similar validation error
+- UI shows sync button but fails when clicked
+
+**Root Cause:**
+Backend validation expects specific required fields in request body. Missing or incorrectly formatted fields trigger 422 validation errors.
+
+**Required Fields (SeasonSyncRequest schema):**
+```python
+# backend/app/schemas/pricing.py
+class SeasonSyncRequest(BaseModel):
+    years: list[int]          # REQUIRED: Array of year integers [2025, 2026]
+    mode: str                 # REQUIRED: "replace" or other mode
+    strategy: str = "default" # OPTIONAL: Default is "default"
+```
+
+**How to Capture DevTools Payload:**
+
+1. **Open Browser DevTools:**
+   - Chrome/Safari: F12 or Cmd+Option+I
+   - Navigate to "Network" tab
+   - Filter by "Fetch/XHR"
+
+2. **Trigger Sync Operation:**
+   - Click "Synchronisieren" button in UI
+   - Watch Network tab for POST request to `sync-from-template`
+
+3. **Inspect Request:**
+   - Click on the request in Network tab
+   - Go to "Payload" or "Request" tab
+   - Copy the JSON payload sent to backend
+
+4. **Common Issues:**
+   - `years` sent as strings instead of integers: `["2025"]` → should be `[2025]`
+   - `years` field missing entirely
+   - Incorrect field names (camelCase vs snake_case)
+
+**Curl Reproduction Example:**
+
+```bash
+# Set variables
+HOST="https://your-backend.com"
+JWT_TOKEN="your-jwt-token"
+RATE_PLAN_ID="123"
+
+# Test sync request (adjust payload as needed)
+curl -X POST "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/sync-from-template" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "years": [2025, 2026],
+    "mode": "replace",
+    "strategy": "default"
+  }'
+
+# Expected: 200 OK with SeasonSyncResponse
+# If 422: Check error details for missing/invalid fields
+```
+
+**Troubleshooting Steps for 422 Errors:**
+
+1. **Verify Request Payload Format:**
+   ```bash
+   # Check if years is an array of integers
+   echo '{"years": [2025, 2026], "mode": "replace"}' | jq '.years | type'
+   # Should output: "array"
+
+   echo '{"years": [2025, 2026], "mode": "replace"}' | jq '.years[0] | type'
+   # Should output: "number"
+   ```
+
+2. **Check Backend Schema Definition:**
+   ```bash
+   # View current schema in backend
+   rg -A 10 "class SeasonSyncRequest" backend/app/schemas/pricing.py
+
+   # Verify required fields (no default value means required)
+   # Look for: years: list[int] (no = sign → required)
+   ```
+
+3. **Test with Minimal Valid Payload:**
+   ```bash
+   # Minimal request (only required fields)
+   curl -X POST "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/sync-from-template" \
+     -H "Authorization: Bearer $JWT_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"years": [2025], "mode": "replace"}'
+   ```
+
+4. **Check UI Payload Construction:**
+   ```bash
+   # Frontend code location (if applicable)
+   # Look for where sync request is built
+   rg -n "sync-from-template" frontend/
+
+   # Verify years array is constructed as integers, not strings
+   # Wrong: years: selectedYears.map(y => y.toString())
+   # Right: years: selectedYears.map(y => parseInt(y, 10))
+   ```
+
+5. **Backend Logs Review:**
+   ```bash
+   # Check backend logs for validation error details
+   docker logs pms-backend --tail 100 | grep -A 5 "422"
+
+   # Or in production logs
+   tail -100 /var/log/pms-backend/error.log | grep "validation"
+   ```
+
+**Common Fixes:**
+
+1. **UI sends strings instead of integers:**
+   ```typescript
+   // BEFORE (broken):
+   const payload = {
+     years: selectedYears.map(String), // ["2025", "2026"]
+     mode: "replace"
+   };
+
+   // AFTER (fixed):
+   const payload = {
+     years: selectedYears.map(Number), // [2025, 2026]
+     mode: "replace"
+   };
+   ```
+
+2. **Missing required field:**
+   ```json
+   // BEFORE (broken - missing years):
+   {
+     "mode": "replace"
+   }
+
+   // AFTER (fixed):
+   {
+     "years": [2025],
+     "mode": "replace"
+   }
+   ```
+
+3. **Incorrect mode value:**
+   ```json
+   // Check backend for accepted mode values
+   # rg "mode.*replace|mode.*Literal" backend/app/schemas/pricing.py
+
+   // Use accepted values only
+   ```
+
+**Verification After Fix:**
+
+```bash
+# [LOCAL-DEV] Test sync endpoint with valid payload
+cd backend
+python3 -c "
+from app.schemas.pricing import SeasonSyncRequest
+req = SeasonSyncRequest(years=[2025, 2026], mode='replace', strategy='default')
+print('✓ Schema validation passed:', req.model_dump())
+"
+
+# Expected output: ✓ Schema validation passed: {'years': [2025, 2026], 'mode': 'replace', 'strategy': 'default'}
+```
+
+**Related Sections:**
+- See "P2.16.3: Sync Label+Overlap Matching + Request Robustness" in project_status.md
+- See "Saisonvorlagen: Synchronisieren ersetzt bestehende Zeiträume" section above
+
+**Prevention:**
+- Add frontend TypeScript types matching backend schema
+- Add E2E test for sync operation
+- Monitor 422 errors in production metrics
+- Document payload format in API documentation
+
+---

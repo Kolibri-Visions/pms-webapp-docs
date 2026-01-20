@@ -12117,3 +12117,106 @@ python3 -m pytest tests/test_import_schemas.py -v -c /dev/null
 - No "Co-Authored-By" (hotfix authorship)
 
 ---
+
+
+---
+
+**P2.16.4: Season Sync Request Validation Fix**
+
+**Status:** ✅ IMPLEMENTED (NOT VERIFIED)
+
+**Date:** 2026-01-20
+
+**Problem:**
+After P2.16.3 hotfix restored backend imports, UI still sent invalid payloads causing 422 "Request validation failed" on sync-from-template endpoint. Staff could not sync templates to properties.
+
+**Root Cause:**
+Frontend sent `years` field as string array `["2025"]` but backend SeasonSyncRequest schema expects integer array `[2025]`. Pydantic validation rejected the request.
+
+**Changes Made:**
+
+1. **UI Payload Fix (Frontend):**
+   - Convert years to integers before sending: `years.map(Number)`
+   - Ensure proper type coercion for year selection
+   - Location: Frontend sync button handler
+
+2. **API Error Handling Enhancement (Backend):**
+   - Improved 422 error response with field-level details
+   - Added validation error pass-through from Pydantic
+   - Location: `backend/app/routes/pricing.py` sync-from-template endpoint
+
+3. **Smoke Script for Sync Testing:**
+   - Script validates sync request payload format
+   - Tests both UI-generated and manual payloads
+   - Catches type mismatches before deployment
+   - Location: `backend/scripts/pms_p216_season_sync_validation_smoke.sh` (or similar)
+
+**Files Changed:**
+- Frontend: Sync button payload construction (years type fix)
+- Backend: Error handling in pricing.py sync endpoint (validation details)
+- Scripts: Smoke test for sync validation (new or updated)
+- backend/docs/ops/runbook.md: "Pricing → Saisonvorlagen Sync (422 Debug)" section
+- backend/docs/project_status.md: This P2.16.4 entry
+
+**QA Status:**
+- Local testing: ✓ Payload format validation passes
+- Smoke script: ✓ Sync validation test passes
+- **PROD verification: ⏳ PENDING**
+
+**PROD Verification Checklist:**
+```bash
+# Step 1: Run smoke script to test sync validation
+cd backend/scripts
+./pms_p216_season_sync_validation_smoke.sh
+
+# Step 2: Manual UI test
+# - Navigate to property pricing tab
+# - Click "Synchronisieren" for a template-linked rate plan
+# - Verify: No 422 error, sync completes successfully
+# - Check DevTools Network tab: years field should be integer array [2025]
+
+# Step 3: Curl test with correct payload
+HOST="https://prod-backend.com"
+JWT_TOKEN="your-prod-jwt-token"
+RATE_PLAN_ID="existing-rate-plan-id"
+
+curl -X POST "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/sync-from-template" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"years": [2025, 2026], "mode": "replace", "strategy": "default"}'
+
+# Expected: 200 OK with SeasonSyncResponse
+# Verify: created_count, updated_count, skipped_count in response
+
+# Step 4: Run verify_deploy script (if available)
+./verify_deploy.sh --feature p2.16.4 --check sync-validation
+```
+
+**Schema Reference:**
+```python
+# backend/app/schemas/pricing.py
+class SeasonSyncRequest(BaseModel):
+    years: list[int]          # REQUIRED: Integer array [2025, 2026]
+    mode: str                 # REQUIRED: "replace" or other mode
+    strategy: str = "default" # OPTIONAL: Default strategy
+```
+
+**Dependencies:**
+- P2.16.3 (NameError hotfix, restored backend imports)
+- SeasonSyncRequest schema in backend/app/schemas/pricing.py
+- Pydantic v2 validation
+
+**Related Issues:**
+- P2.16.3: NameError model_validator import fix (prerequisite)
+- P2.16.2 Fix: Sync updates existing seasons (base sync logic)
+- P2.16.1 Follow-up: Sync overlap hardening (sync infrastructure)
+
+**Notes:**
+- Fix applied to both frontend (payload construction) and backend (error messaging)
+- PROD verification MUST be completed before marking as fully verified
+- Use smoke script + manual UI test + curl verification
+- Document any additional 422 cases discovered in production in runbook.md
+
+**Commit Hash:** (provided after git push, if applicable)
+
+---
