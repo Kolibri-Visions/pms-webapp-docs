@@ -36444,3 +36444,33 @@ curl "$HOST/api/v1/pricing/season-templates/$TEMPLATE_ID" | python3 -m json.tool
 - Missing Content-Type: application/json header
 - Wrong field names (start_date vs date_from)
 - Invalid JWT token (expired or insufficient permissions)
+
+---
+
+### Smoke Test: Preview Returns create=0 (No-Op Scenario)
+
+**Symptom:** Smoke script fails with "Expected at least 1 season to create, got 0" even though preview returns HTTP 200
+
+**Cause:** Auto-selected rate plan already has seasons linked to the template periods for the requested years, so sync preview returns zero changes needed (valid no-op)
+
+**Fix (as of P2.16.x):**
+Smoke script now creates a dedicated test rate plan for each run, ensuring deterministic behavior (new rate plan = zero seasons = create > 0).
+
+**Manual Verification:**
+```bash
+# Check if rate plan already has seasons
+curl "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/seasons" | python3 -m json.tool
+
+# If seasons exist for the template periods in the requested years:
+# - Preview will show create=0 (no-op, valid)
+# - Apply will show update=0 or relink=0 (also valid)
+# This is CORRECT behavior, not an error
+```
+
+**Archived_at Drift (503 Error):**
+
+If period creation fails with HTTP 503 or "null value in column violates not-null constraint":
+1. Supabase migration drift: `archived_at` column added but not in local schema
+2. Fix: Apply migrations as supabase_admin or pull latest schema
+3. Verify: `\d pricing_season_template_periods` should show `archived_at` column
+```

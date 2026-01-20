@@ -12294,3 +12294,31 @@ class SeasonSyncRequest(BaseModel):
 - backend/docs/project_status.md (this entry)
 
 **Verification:** Pending PROD smoke script rc=0 with periods created successfully
+
+---
+
+# P2.16.8: Smoke Script Isolation + UI Readability
+
+**Status:** ✅ IMPLEMENTED (NOT VERIFIED)
+
+**Date:** 2026-01-20
+
+**Problem:**
+1. Smoke script failed in PROD with "Expected at least 1 season to create, got 0" because auto-selected rate plans already had seasons (valid no-op scenario)
+2. Season sync UI info box had unreadable pastel-on-pastel contrast
+
+**Solution:**
+- Smoke script: Implemented isolation strategy - creates dedicated test rate plan for each run
+- Smoke script: Ensures deterministic behavior (new rate plan = zero seasons = create > 0)
+- Smoke script: Added cleanup to archive test rate plan after execution
+- UI: Fixed info box styling with accessible contrast (white bg, blue border, dark text)
+- Docs: Added troubleshooting for no-op scenarios and archived_at drift
+
+**Files Changed:**
+- backend/scripts/pms_season_template_sync_apply_smoke.sh (isolation strategy + cleanup)
+- frontend/app/pricing/seasons/page.tsx (accessible info box styling)
+- backend/docs/ops/runbook.md (no-op + archived_at troubleshooting)
+- backend/scripts/README.md (updated smoke description)
+- backend/docs/project_status.md (this entry)
+
+**Verification:** Pending PROD smoke script rc=0 with deterministic create > 0
