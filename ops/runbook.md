@@ -36340,3 +36340,26 @@ print('✓ Schema validation passed:', req.model_dump())
 - Document payload format in API documentation
 
 ---
+
+### 400 "Template has no active periods"
+
+**Symptom:** Sync returns 400 with "Template has no active periods"
+
+**Cause:** Template periods were created without active=true, or backend defaults to inactive.
+
+**Fix:** Ensure periods are active when created:
+```json
+{
+  "label": "Hauptsaison",
+  "date_from": "07-01",
+  "date_to": "08-31",
+  "active": true  // Explicitly set active
+}
+```
+
+**Verification:**
+```bash
+# Check template periods are active
+curl "$HOST/api/v1/pricing/season-templates/$TEMPLATE_ID" | \
+  python3 -c "import sys, json; t = json.load(sys.stdin); print(f\"Active periods: {len([p for p in t.get('periods', []) if p.get('active', False)])}\")"
+```

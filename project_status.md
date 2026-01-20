@@ -12220,3 +12220,27 @@ class SeasonSyncRequest(BaseModel):
 **Commit Hash:** (provided after git push, if applicable)
 
 ---
+
+# P2.16.5: Template Periods Active Default Fix
+
+**Status:** ✅ IMPLEMENTED (NOT VERIFIED)
+
+**Date:** 2026-01-20
+
+**Problem:** Smoke test failed with 400 "Template has no active periods" even after creating periods via API. Backend defaulted periods to inactive or filter was incorrect.
+
+**Solution:**
+- Database already has active=True default (confirmed in migration)
+- Updated smoke script to explicitly set active=true in payloads
+- Added sanity check after period creation
+- Added regression test
+- Fixed test fixtures to use correct table names and field names
+
+**Files Changed:**
+- backend/scripts/pms_season_template_sync_apply_smoke.sh (explicit active=true + sanity check)
+- backend/tests/integration/conftest.py (test fixtures with correct table/column names)
+- backend/tests/integration/test_season_sync_validation_api.py (regression test)
+- backend/docs/ops/runbook.md (troubleshooting entry)
+- backend/docs/project_status.md (this entry)
+
+**Verification:** Pending PROD smoke script rc=0
