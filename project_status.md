@@ -11733,3 +11733,152 @@ Smoke script: `backend/scripts/pms_p2162_template_overlap_smoke.sh`
    - [ ] Apply succeeds with success toast (green)
 
 ---
+
+
+**P2.16.2 Fix: Sync Updates Existing Seasons (Critical)**
+
+**Implementation Date:** 2026-01-20
+
+**Scope:** Fix sync logic to UPDATE existing seasons instead of treating them as conflicts.
+
+**Critical Bug Fixed:**
+
+Before fix, "Vorlage synchronisieren" treated existing seasons as conflicts and skipped updates:
+- Seasons appeared in BOTH "Reparierte Saisonzeiten" AND "Konflikte" lists
+- Net effect: Sync did NOT update existing seasons to template windows
+- User confusion: "Why is it listed as repaired but also as conflict?"
+
+**Solution:**
+
+1. **Two Explicit Modes (backend/app/api/routes/pricing.py):**
+
+   Request parameter: `mode` ("missing_only" | "sync")
+
+   **missing_only:**
+   - Only CREATE missing seasons
+   - Existing seasons treated as conflicts (skip)
+
+   **sync:**
+   - UPDATE/RELINK existing seasons to template windows
+   - CREATE missing seasons
+   - Soft conflicts for unresolvable overlaps
+
+2. **Matching Logic with 3-Priority Search:**
+
+   Helper function: `find_matching_season(template_period, existing_seasons, template_id)`
+
+   Priority order:
+   1. Direct link: `source_template_period_id == template_period.id`
+   2. Template + label: `source_template_id == template_id` AND normalize(label) match AND year consistent
+   3. Legacy relink: `date_from == period.date_from` AND normalize(label) match AND year consistent
+
+   Label normalization: `normalize_label(label)` (lowercase, strip, collapse spaces)
+
+3. **Update Ordering (Avoid Overlap Violations):**
+
+   Before executing UPDATEs, sort by operation type:
+   - Shrinks first (desired range ⊂ existing range)
+   - Equal-size updates
+   - Expansions last (desired range ⊃ existing range)
+
+   Prevents DB exclusion constraint violations during multi-season updates.
+
+4. **Overlap Check with Exclusions:**
+
+   Before EACH UPDATE/CREATE:
+   - Check for overlaps with OTHER active seasons
+   - Exclude self: `id != $2` (for updates)
+   - Exclude archived: `archived_at IS NULL`
+   - If overlap found: add to conflicts list, SKIP operation (don't raise)
+   - Continue processing other operations
+
+5. **No Duplicates Between Lists:**
+
+   Use `processed_season_ids` tracking set:
+   - If season matched → added to to_update/relinked → tracked
+   - Overlap checks only consider unmatched seasons
+   - Result: Each season in EXACTLY ONE list (updated/relinked/created/conflicts)
+
+6. **Response Structure:**
+
+   ```json
+   {
+     "counts": {
+       "create": 1,
+       "update": 2,
+       "relink": 1,
+       "conflict": 0,
+       "skip": 0
+     },
+     "created": [...],
+     "updated": [...],
+     "relinked": [{..., "was_date_to": "2026-12-31"}],
+     "conflicts": [...],
+     "template_conflicts": [...]
+   }
+   ```
+
+7. **Frontend Improvements (frontend/app/properties/[id]/rate-plans/page.tsx):**
+
+   **Preview Box Styling (Readability Fix):**
+   - OLD: Dark bg `bg-blue-950/30` (unreadable)
+   - NEW: Light bg `bg-blue-50 text-slate-900 border-blue-300`
+   - Headers: `text-slate-900 font-semibold`
+   - Lists: `text-slate-800`
+   - Conflicts: `bg-amber-50 border-amber-300 text-slate-900`
+
+   **Two Sync Buttons:**
+   - "Nur fehlende importieren" → mode=missing_only
+   - "Vorlage synchronisieren" → mode=sync
+
+   **Toast Logic:**
+   - Success (no conflicts): Green "Synchronisierung erfolgreich"
+   - Partial (conflicts exist): Yellow "Teilweise erfolgreich: X Konflikt(e)"
+   - Error: Red with detail message
+   - Modal stays open when conflicts exist
+
+8. **Smoke Test (backend/scripts/pms_p2162_sync_updates_existing_smoke.sh):**
+
+   Tests (8 total):
+   - Tests 1-2: Create template with 3 periods (year 2029)
+   - Test 4: Initial sync (missing_only) → creates 3 seasons
+   - Test 5: Mutate template (extend Mittelsaison date_to)
+   - **Test 6: Second sync (sync mode) → EXPECT update >= 1** (CRITICAL)
+   - **Test 7: Verify season date_to changed** (PROOF OF UPDATE)
+   - Test 8: Verify linkage set (source_template_period_id)
+   - Cleanup
+   - EXIT rc=0 if all pass
+
+**Files Changed:**
+
+- backend/app/api/routes/pricing.py (+250 lines: matching logic, update ordering, overlap checks, no-duplicate tracking)
+- frontend/app/properties/[id]/rate-plans/page.tsx (+85 lines: styling fix, mode buttons, toast logic)
+- backend/scripts/pms_p2162_sync_updates_existing_smoke.sh (NEW +120 lines)
+
+**Documentation (DOCS SAFE MODE - add-only):**
+
+- backend/docs/ops/runbook.md: "Saisonvorlagen: Synchronisieren ersetzt bestehende Zeiträume" section
+- backend/scripts/README.md: "Sync Updates Existing Seasons Smoke Test" section
+- backend/docs/project_status.md: This entry
+
+**Verification:**
+
+Smoke script: `backend/scripts/pms_p2162_sync_updates_existing_smoke.sh`
+- Tests sync mode UPDATES existing seasons (not just creates)
+- EXIT rc=0 = Sync correctly updates existing seasons
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- VERIFIED status requires: PROD deployment + smoke rc=0 + manual UI verification
+- This is a CRITICAL fix for P2.16.2 base implementation
+- Replaces confusing "appears in both lists" behavior with clear update semantics
+- Integration with P2.16.1 follow-up (3-phase execution) and P2.16.2 base (template overlap guard)
+
+**Dependencies:**
+- P2.16.2 base (template overlap guard)
+- P2.16.1 follow-up (sync infrastructure)
+- Season templates domain
+- Frontend sync modal UI
+
+---

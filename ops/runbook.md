@@ -35918,3 +35918,88 @@ Vor dem Import prüft das System, ob die Vorlage interne Überlappungen hat:
 - EXIT rc=0 = alle Tests bestanden
 
 ---
+
+
+### Saisonvorlagen: Synchronisieren ersetzt bestehende Zeiträume (P2.16.2 Fix)
+
+**Problem:**
+Vor P2.16.2 Fix wurden bestehende Saisonzeiten als Konflikte behandelt und übersprungen, statt aktualisiert zu werden. Perioden erschienen sowohl unter "Reparierte Saisonzeiten" als auch "Konflikte".
+
+**Lösung (ab P2.16.2 Fix):**
+"Vorlage synchronisieren" aktualisiert/verknüpft bestehende Saisonzeiten mit Vorlagen-Zeiträumen.
+
+**Zwei Modi:**
+
+1. **"Nur fehlende importieren"** (missing_only):
+   - Legt NUR fehlende Saisonzeiten an
+   - Bestehende Saisonzeiten werden NICHT aktualisiert
+   - Überschneidungen mit bestehenden → Konflikt-Liste
+
+2. **"Vorlage synchronisieren"** (sync):
+   - Aktualisiert bestehende Saisonzeiten (Zeiträume anpassen, Verknüpfung setzen)
+   - Legt fehlende Saisonzeiten an
+   - Archiviert/ignoriert veraltete Zeiträume
+   - Nur unauflösbare Überschneidungen → Konflikt-Liste
+
+**Matching-Logik (Priorität):**
+
+Für jeden Vorlagen-Zeitraum wird eine passende bestehende Saisonzeit gesucht:
+
+1. **Priorität 1:** `source_template_period_id == template_period.id` (direkte Verknüpfung)
+2. **Priorität 2:** `source_template_id == template.id` UND Label-Match (normalisiert) UND Jahr-konsistent
+3. **Priorität 3:** `date_from == period.date_from` UND Label-Match UND Jahr-konsistent
+
+**Label-Normalisierung:**
+Vergleich erfolgt case-insensitive, ohne führende/folgende Leerzeichen, kollabierte Leerzeichen.
+Beispiele: "Hauptsaison" == "hauptsaison" == " Haupt Saison "
+
+**Update-Reihenfolge (Overlap-Safety):**
+
+Updates werden sortiert ausgeführt um DB-Constraint-Verletzungen zu vermeiden:
+1. Shrinks (gewünschter Zeitraum ist Teilmenge von bestehendem)
+2. Gleiche Größe
+3. Expansions (gewünschter Zeitraum ist Obermenge)
+
+**Overlap-Check:**
+
+Vor jedem UPDATE/CREATE:
+- Prüfung gegen ANDERE aktive Saisonzeiten (id != self, archived_at IS NULL)
+- Bei Überschneidung: Eintrag in Konflikt-Liste, Operation übersprungen (kein Fehler)
+- Andere Operationen werden fortgesetzt
+
+**UI-Verhalten:**
+
+Nach Sync:
+- **Erfolg (keine Konflikte):** Grüner Toast "Synchronisierung erfolgreich"
+- **Teilerfolg (Konflikte vorhanden):** Gelber Toast "Teilweise erfolgreich: X Konflikt(e)"
+- **Fehler (500, 422):** Roter Toast mit Fehlerdetails
+- Modal bleibt bei Konflikten offen, damit Staff Details sehen kann
+
+**Anzeige:**
+- "Aktualisierte Saisonzeiten" (updated)
+- "Reparierte Saisonzeiten" (relinked, mit "war bis ...")
+- "Neue Saisonzeiten" (created)
+- "Konflikte" (conflicts)
+
+Keine Duplikate zwischen Listen.
+
+**Troubleshooting:**
+
+**Symptom:** Saisonzeiten erscheinen sowohl in "Reparierte" als auch "Konflikte"
+
+**Root Cause:** Vor P2.16.2 Fix: Matching-Logik fehlte.
+
+**Lösung:** Update auf P2.16.2 Fix deployen.
+
+**Symptom:** "Vorlage synchronisieren" aktualisiert bestehende Saisonzeiten nicht
+
+**Root Cause:** mode=missing_only statt mode=sync.
+
+**Lösung:** Korrekte Schaltfläche verwenden ("Vorlage synchronisieren" nicht "Nur fehlende importieren").
+
+**Verification:**
+- Smoke script: `backend/scripts/pms_p2162_sync_updates_existing_smoke.sh`
+- Testet: Initial sync → Template mutation → Re-sync updates existing season
+- EXIT rc=0 = Sync aktualisiert bestehende Zeiträume korrekt
+
+---
