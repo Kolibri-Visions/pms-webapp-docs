@@ -35852,3 +35852,69 @@ Bei ExclusionViolation wird Operation in conflicts[] Liste aufgenommen (kein 500
 - Erwartung: Apply gibt 200 zurück (kein 500), Legacy wird verkürzt oder als conflict gemeldet
 
 ---
+
+### Saisonvorlagen: Zeitraum-Überlappungen vermeiden
+
+**Problem:**
+Saisonvorlagen-Zeiträume können sich überschneiden (z.B. "Hauptsaison" 01.01-30.06 und "Nebensaison" 01.05-30.09), was beim Import zu vielen Konflikten führt.
+
+**Lösung (ab P2.16.2):**
+Überlappende Zeiträume werden auf Vorlagen-Ebene verhindert.
+
+**Validierung:**
+
+1. **CREATE Zeitraum:**
+   - Vor INSERT: Prüfung gegen alle bestehenden Zeiträume der Vorlage
+   - Bei Überlappung: HTTP 422 mit Fehlertext:
+     ```
+     Überlappung mit bestehendem Zeitraum: {label} [{date_from} bis {date_to}].
+     Saisonvorlagen-Zeiträume dürfen sich nicht überschneiden.
+     ```
+
+2. **UPDATE Zeitraum:**
+   - Vor UPDATE: Prüfung gegen alle ANDEREN Zeiträume der Vorlage (id != self)
+   - Bei Überlappung: HTTP 422 (gleicher Fehlertext)
+
+**Sync-Import Preflight:**
+
+Vor dem Import prüft das System, ob die Vorlage interne Überlappungen hat:
+
+- **Preview-Modus:** Zeigt `template_conflicts[]` in der Antwort
+- **Apply-Modus:** Bei `template_conflicts` → HTTP 422, Import blockiert
+
+**UI-Verhalten:**
+
+- Import-Dialog zeigt roten Warnbereich: "Vorlage enthält überlappende Zeiträume"
+- Liste der überlappenden Perioden mit Labels und Daten
+- Button "Vorlage bearbeiten" → Navigation zur Vorlagen-Bearbeitung
+- Import-Button deaktiviert, solange template_conflicts vorhanden
+
+**Troubleshooting:**
+
+**Symptom:** "Überlappung mit bestehendem Zeitraum" beim Anlegen/Bearbeiten von Vorlagen-Zeiträumen
+
+**Root Cause:** Zeiträume in der Vorlage überschneiden sich.
+
+**Lösung:**
+1. Vorhandene Zeiträume der Vorlage prüfen: GET /api/v1/pricing/season-templates/{id}/periods
+2. Überlappende Zeiträume identifizieren (date_from < other.date_to AND date_to > other.date_from)
+3. Zeitraum-Grenzen anpassen:
+   - Option A: Periode verkürzen (z.B. 01.01-30.04 statt 01.01-30.06)
+   - Option B: Periode verschieben (z.B. 01.07-30.09 statt 01.05-30.09)
+   - Option C: Periode archivieren (DELETE /api/v1/pricing/season-templates/{id}/periods/{period_id})
+
+**Symptom:** Import-Dialog zeigt "Vorlage enthält überlappende Zeiträume", Import-Button deaktiviert
+
+**Root Cause:** Vorlage hat interne Überlappungen (bereits existierende Daten vor P2.16.2).
+
+**Lösung:**
+1. Auf "Vorlage bearbeiten" klicken (Navigation zu /season-templates/{id})
+2. Überlappende Zeiträume identifizieren und korrigieren (siehe oben)
+3. Zurück zur Objekt-Seite → Import erneut versuchen
+
+**Verification:**
+- Smoke script: `backend/scripts/pms_p2162_template_overlap_smoke.sh`
+- Testet: CREATE overlap → 422, UPDATE overlap → 422
+- EXIT rc=0 = alle Tests bestanden
+
+---

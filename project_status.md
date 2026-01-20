@@ -11589,3 +11589,147 @@ Smoke script: `backend/scripts/pms_p2161_sync_apply_overlap_smoke.sh`
 - Frontend toast/modal state management
 
 ---
+
+**P2.16.2: Season Template Overlap Guard + Clean Sync UX**
+
+**Implementation Date:** 2026-01-20
+
+**Scope:** Prevent template period overlaps at source and improve sync UX for template conflicts.
+
+**Problem:**
+After P2.16.1 follow-up fixed 500 errors, templates could still have overlapping periods which caused many object conflicts during sync. Staff had no validation preventing template-level overlaps, leading to poor import experience.
+
+**Solution:**
+
+1. **Template Period Overlap Validation (backend/app/api/routes/pricing.py):**
+
+   **CREATE Period:**
+   - Before INSERT: Check for overlaps with existing periods in same template
+   - SQL query validates: `(date_from <= new_from AND date_to > new_from) OR ...`
+   - HTTP 422 response: "Überlappung mit bestehendem Zeitraum: {label} [{dates}]. Saisonvorlagen-Zeiträume dürfen sich nicht überschneiden."
+
+   **UPDATE Period:**
+   - Before UPDATE: Check for overlaps with OTHER periods (id != self)
+   - Self-exclusion prevents false positives when adjusting same period
+   - HTTP 422 with same error message
+
+2. **Sync Preflight - Template Conflicts Detection:**
+
+   In sync_seasons_from_template endpoint:
+   - Before processing: Check template for internal overlaps
+   - Build template_conflicts[] list with TemplateConflict objects
+   - Each conflict includes: period_a, period_b details + template info
+   - **Apply mode:** If template_conflicts exist → raise HTTP 422, block import
+   - **Preview mode:** Return template_conflicts[] in response for display
+
+3. **Schema Updates (backend/app/schemas/pricing.py):**
+
+   ```python
+   class TemplateConflictPeriod(BaseModel):
+       id: UUID
+       label: str
+       date_from: date
+       date_to: date
+
+   class TemplateConflict(BaseModel):
+       template_id: UUID
+       template_name: str
+       period_a: TemplateConflictPeriod
+       period_b: TemplateConflictPeriod
+       reason: str = "Überlappende Zeiträume innerhalb der Vorlage"
+
+   class SeasonSyncResponse(BaseModel):
+       # ... existing ...
+       template_conflicts: list[TemplateConflict] = []
+   ```
+
+4. **UI Improvements (frontend/app/properties/[id]/rate-plans/page.tsx):**
+
+   **Template Conflicts Section:**
+   - RED-themed section ABOVE object conflicts (highest priority)
+   - Border: `border-2 border-red-500`, Background: `bg-red-50 dark:bg-red-900/20`
+   - Lists all overlapping period pairs with labels and dates
+   - CTA button: "Vorlage bearbeiten" → navigates to template edit page
+
+   **Import Button Disabled:**
+   - When template_conflicts exist: button disabled, text "Import blockiert (Vorlage korrigieren)"
+   - Prevents apply attempts that would fail with 422
+
+   **Toast Variant:**
+   - Template conflicts: WARNING toast (not error red)
+   - Message: "Vorlage enthält {count} überlappende Zeiträume"
+   - Modal stays open for user to review conflicts
+
+5. **Smoke Test (backend/scripts/pms_p2162_template_overlap_smoke.sh):**
+
+   Tests (5 total):
+   - Test 1-2: Create template + first period
+   - Test 3: CREATE overlapping period → EXPECT 422
+   - Test 4: CREATE non-overlapping period → EXPECT 200
+   - Test 5: UPDATE to create overlap → EXPECT 422
+   - Cleanup: Delete template
+   - EXIT rc=0 if all pass
+
+**Files Changed:**
+
+- backend/app/api/routes/pricing.py (+120 lines: CREATE/UPDATE validation + sync preflight)
+- backend/app/schemas/pricing.py (+25 lines: TemplateConflict models)
+- frontend/app/properties/[id]/rate-plans/page.tsx (+80 lines: template conflicts UI + disabled button)
+- backend/scripts/pms_p2162_template_overlap_smoke.sh (NEW +100 lines)
+
+**Documentation (DOCS SAFE MODE - add-only):**
+
+- backend/docs/ops/runbook.md: "Saisonvorlagen: Zeitraum-Überlappungen vermeiden" section
+- backend/scripts/README.md: "Template Overlap Guard Smoke Test" section
+- backend/docs/project_status.md: This entry
+
+**Verification:**
+
+Smoke script: `backend/scripts/pms_p2162_template_overlap_smoke.sh`
+- Tests CREATE/UPDATE overlap validation (422 responses)
+- EXIT rc=0 = all validation working
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- VERIFIED status requires: PROD deployment + smoke rc=0 + manual UI verification
+- Prevents template-level overlaps at source (proactive validation)
+- Existing templates with overlaps: detected during sync preflight, staff can fix via UI
+- Integration with P2.16.1 follow-up: template_conflicts separate from object conflicts
+
+**Dependencies:**
+- P2.16.1 follow-up (sync infrastructure)
+- Season templates domain (CRUD operations)
+- Frontend router for template edit navigation
+
+**Manual UI Verification Checklist:**
+
+1. **Template Period CREATE Validation:**
+   - [ ] Navigate to /season-templates/[id]
+   - [ ] Add first period: 2027-01-01 to 2027-06-30
+   - [ ] Try to add overlapping period: 2027-05-01 to 2027-09-30
+   - [ ] EXPECT: 422 error with German message in toast
+   - [ ] Add non-overlapping period: 2027-07-01 to 2027-12-31 → Success
+
+2. **Template Period UPDATE Validation:**
+   - [ ] Edit first period: change date_to to 2027-08-31 (creates overlap)
+   - [ ] EXPECT: 422 error with German message
+   - [ ] Edit back to 2027-06-30 → Success
+
+3. **Sync Preflight (Template Conflicts):**
+   - [ ] Manually create template with overlapping periods (use DB or API before validation)
+   - [ ] Navigate to property rate plans: /properties/[id]/rate-plans
+   - [ ] Click "Aus Saisonvorlage importieren", select conflicting template
+   - [ ] Click "Vorschau"
+   - [ ] EXPECT: Red-themed "Vorlage enthält überlappende Zeiträume" section appears
+   - [ ] Verify: Overlapping periods listed with labels and dates
+   - [ ] Verify: Import button disabled with text "Import blockiert"
+   - [ ] Click "Vorlage bearbeiten" → navigates to template edit page
+
+4. **Clean Template (No Conflicts):**
+   - [ ] Use template WITHOUT overlaps
+   - [ ] Sync preview shows normal counts, no template_conflicts section
+   - [ ] Import button enabled
+   - [ ] Apply succeeds with success toast (green)
+
+---
