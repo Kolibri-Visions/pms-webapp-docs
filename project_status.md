@@ -12244,3 +12244,28 @@ class SeasonSyncRequest(BaseModel):
 - backend/docs/project_status.md (this entry)
 
 **Verification:** Pending PROD smoke script rc=0
+
+---
+
+# P2.16.6: Season Template Periods Active Fix (Query + Explicit Insert)
+
+**Status:** ✅ IMPLEMENTED (NOT VERIFIED)
+
+**Date:** 2026-01-20
+
+**Problem:** After P2.16.5, smoke test still failed with 400 "Template has no active periods". Root cause: API endpoint not explicitly writing active=true on INSERT, relying only on DB defaults which may not apply in all contexts.
+
+**Solution:**
+- Updated API endpoint creating periods to EXPLICITLY set active=True
+- Added defensive WHERE clause handling NULLs in sync query
+- Added integration tests for default-active behavior
+- Enhanced smoke script verification (already present from P2.16.5)
+
+**Files Changed:**
+- backend/app/api/routes/pricing.py (explicit active=True on INSERT)
+- backend/app/services/season_sync.py (query filter robustness)
+- backend/tests/integration/test_season_sync_validation_api.py (new tests)
+- backend/docs/ops/runbook.md (enhanced troubleshooting)
+- backend/docs/project_status.md (this entry)
+
+**Verification:** Pending PROD smoke script rc=0

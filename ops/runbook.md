@@ -36343,11 +36343,35 @@ print('✓ Schema validation passed:', req.model_dump())
 
 ### 400 "Template has no active periods"
 
-**Symptom:** Sync returns 400 with "Template has no active periods"
+**Symptom:** Sync returns 400 with "Template has no active periods" even after creating periods via API.
 
-**Cause:** Template periods were created without active=true, or backend defaults to inactive.
+**Cause:**
+1. Template periods were created without active field, OR
+2. API endpoint not writing active=true explicitly, OR
+3. DB default not applied correctly, OR
+4. Filter query using strict WHERE active=true (excludes NULLs)
 
-**Fix:** Ensure periods are active when created:
+**Fix:**
+1. Ensure API endpoint explicitly sets active=true when creating periods:
+```python
+# In backend/app/api/routes/pricing.py (period creation)
+await db.execute(
+    """
+    INSERT INTO pricing_season_template_periods (
+        template_id, label, date_from, date_to, active
+    ) VALUES ($1, $2, $3, $4, $5)
+    """,
+    template_id, label, date_from, date_to, True  # Explicit active=True
+)
+```
+
+2. Ensure DB migration sets DEFAULT:
+```sql
+-- In migration 20260116000000_add_season_templates.sql
+active BOOLEAN NOT NULL DEFAULT true
+```
+
+3. Verify frontend sends active field:
 ```json
 {
   "label": "Hauptsaison",
@@ -36362,4 +36386,16 @@ print('✓ Schema validation passed:', req.model_dump())
 # Check template periods are active
 curl "$HOST/api/v1/pricing/season-templates/$TEMPLATE_ID" | \
   python3 -c "import sys, json; t = json.load(sys.stdin); print(f\"Active periods: {len([p for p in t.get('periods', []) if p.get('active', False)])}\")"
+
+# Expected: Active periods: 2 (or more)
+# If 0: periods are inactive or NULL
+```
+
+**Debug:**
+```bash
+# Check DB directly
+psql $DATABASE_URL -c "SELECT id, label, active FROM pricing_season_template_periods WHERE template_id = '<template-id>';"
+
+# If active column is NULL or false, backfill:
+psql $DATABASE_URL -c "UPDATE pricing_season_template_periods SET active = true WHERE active IS NULL OR active = false;"
 ```
