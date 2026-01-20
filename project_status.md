@@ -11882,3 +11882,167 @@ Smoke script: `backend/scripts/pms_p2162_sync_updates_existing_smoke.sh`
 - Frontend sync modal UI
 
 ---
+
+
+**P2.16.3: Sync Label+Overlap Matching + Request Robustness**
+
+**Implementation Date:** 2026-01-20
+
+**Scope:** Fix sync to match seasons by label+overlap (not just exact date_from), handle request validation robustly.
+
+**Critical Bugs Fixed:**
+
+1. **Matching Too Strict:**
+   - "Nebensaison" 01.11-31.12 didn't match template "Nebensaison" 01.12-31.12
+   - Treated as CREATE → overlap conflict → skipped
+   - Old dates remained unchanged
+
+2. **HTTP 422 Validation Errors:**
+   - Apply call failed with "Request validation failed"
+   - Frontend sending payload with different field names than preview
+   - Generic FastAPI validation errors unhelpful to users
+
+**Solution:**
+
+1. **Priority 4 Matching: Label + Overlap (backend/app/api/routes/pricing.py):**
+
+   Added 4th matching priority in find_matching_season:
+
+   **Algorithm:**
+   - Filter candidates: same year + normalized label match
+   - Calculate overlap days between existing and template ranges
+   - Sort by overlap_days descending
+   - If best has overlap > 0 OR is only candidate → Match
+   - If multiple with same overlap → ambiguous (no match, will conflict)
+
+   **Example:**
+   - Existing: "Nebensaison" 11-01 to 12-31 (61 days)
+   - Template: "Nebensaison" 12-01 to 12-31 (31 days)
+   - Overlap: 12-01 to 12-31 (31 days)
+   - Best candidate: This season (only one with label match)
+   - **Result: MATCH** → UPDATE date_from from 11-01 to 12-01
+
+2. **Request Model Compatibility (backend/app/schemas/pricing.py:459+):**
+
+   SeasonSyncRequest now accepts both conventions:
+   ```python
+   template_id: Optional[UUID] = None
+   templateId: Optional[UUID] = Field(None, alias='templateId')
+   template_ids: Optional[List[UUID]] = None
+   templateIds: Optional[List[UUID]] = Field(None, alias='templateIds')
+
+   @model_validator(mode='after')
+   def validate_template_selection(self):
+       # Normalize camelCase to snake_case
+       if self.templateId and not self.template_id:
+           self.template_id = self.templateId
+       # Validate at least one template
+       if not self.template_id and not self.template_ids:
+           raise ValueError("Bitte mindestens eine Saisonvorlage auswählen.")
+   ```
+
+3. **Friendly Error Messages (backend/app/api/routes/pricing.py):**
+
+   ValidationError handling:
+   ```python
+   try:
+       sync_request = SeasonSyncRequest(**request_body)
+   except ValidationError as e:
+       raise HTTPException(
+           status_code=400,
+           detail="Ungültige Anfrage: " + e.errors()[0]['msg']
+       )
+   ```
+
+   Returns HTTP 400 with German message instead of generic 422.
+
+4. **was_date_from Tracking (backend/app/schemas/pricing.py):**
+
+   SeasonRelinked model now includes:
+   ```python
+   was_date_from: date  # Original date_from before update
+   was_date_to: date    # Original date_to before update
+   ```
+
+   UI can show: "war 01.11 bis 31.12" when dates changed.
+
+5. **Enhanced Shrink Detection (backend/app/api/routes/pricing.py):**
+
+   Update ordering now detects shrinks on BOTH sides:
+   ```python
+   if new_from > old_from or new_to < old_to:
+       shrinks.append(update_op)  # Shrink if EITHER side moves inward
+   ```
+
+   Prevents overlap violations when date_from shifts forward.
+
+6. **Frontend Payload Consistency (frontend/app/properties/[id]/rate-plans/page.tsx):**
+
+   Preview and apply now use identical payload structure:
+   - Field names: snake_case (`template_id`, not `templateId`)
+   - Keys: template_id, years, mode
+
+   Error extraction improved:
+   ```tsx
+   if (error.response?.data?.detail) {
+       errorMsg = error.response.data.detail;  // Backend detail
+   } else if (error.response?.data?.errors) {
+       errorMsg = error.response.data.errors.map(e => e.msg).join(', ');
+   }
+   ```
+
+7. **Frontend Display Enhancement:**
+
+   Relinked seasons now show was_date_from:
+   ```tsx
+   {r.label}: {formatDateDisplay(r.date_from)} bis {formatDateDisplay(r.date_to)}
+   {(r.was_date_from !== r.date_from || r.was_date_to !== r.date_to) && (
+       <span>(war {formatDateDisplay(r.was_date_from)} bis {formatDateDisplay(r.was_date_to)})</span>
+   )}
+   ```
+
+8. **Smoke Test (backend/scripts/pms_p2163_sync_updates_date_from_smoke.sh):**
+
+   Tests (7 total):
+   - Tests 1-2: Create template with "Nebensaison" 12-01 to 12-31
+   - Test 4: Create legacy "Nebensaison" 11-01 to 12-31 (NO linkage, different date_from)
+   - **Test 5: Sync → EXPECT update/relink, NO conflict** (CRITICAL)
+   - **Test 6: Verify date_from changed 11-01 → 12-01** (PROOF)
+   - Test 7: Verify linkage set
+   - Cleanup
+   - EXIT rc=0 if all pass
+
+**Files Changed:**
+
+- backend/app/api/routes/pricing.py (+80 lines: Priority 4 matching, shrink detection, error handling)
+- backend/app/schemas/pricing.py (+15 lines: camelCase aliases, was_date_from, validation)
+- frontend/app/properties/[id]/rate-plans/page.tsx (+25 lines: payload fix, error display, was_date_from)
+- backend/scripts/pms_p2163_sync_updates_date_from_smoke.sh (NEW +140 lines)
+
+**Documentation (DOCS SAFE MODE - add-only):**
+
+- backend/docs/ops/runbook.md: "Sync ersetzt auch geänderte Startdaten (P2.16.3 Label+Overlap)" section
+- backend/scripts/README.md: "Sync Label+Overlap Matching Smoke Test (P2.16.3)" section
+- backend/docs/project_status.md: This entry
+
+**Verification:**
+
+Smoke script: `backend/scripts/pms_p2163_sync_updates_date_from_smoke.sh`
+- Tests Priority 4 matching (label+overlap with different date_from)
+- EXIT rc=0 = Matching works correctly
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- VERIFIED status requires: PROD deployment + smoke rc=0 + manual UI verification
+- Fixes critical matching bug preventing date_from updates
+- Makes sync more intelligent (overlap-based matching)
+- Improves error messages (no more generic 422)
+- Backward compatible (accepts both snake_case and camelCase)
+
+**Dependencies:**
+- P2.16.2 Fix (sync updates existing seasons base logic)
+- P2.16.2 base (template overlap guard)
+- P2.16.1 follow-up (3-phase execution)
+
+---

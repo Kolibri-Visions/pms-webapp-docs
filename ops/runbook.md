@@ -36003,3 +36003,95 @@ Keine Duplikate zwischen Listen.
 - EXIT rc=0 = Sync aktualisiert bestehende Zeiträume korrekt
 
 ---
+
+
+### Saisonvorlagen: Sync ersetzt auch geänderte Startdaten (P2.16.3 Label+Overlap)
+
+**Problem:**
+Nach P2.16.2 Fix wurden Saisonzeiten nur aktualisiert, wenn date_from exakt übereinstimmte.
+Beispiel: Bestehend "Nebensaison" 01.11-31.12, Vorlage will 01.12-31.12 → wurde als NEUES
+Anlegen behandelt → Overlap-Konflikt → übersprungen → alte Zeiträume blieben.
+
+**Lösung (ab P2.16.3):**
+Matching nutzt Label + Overlap statt nur exakte Datumsübereinstimmung.
+
+**Erweiterte Matching-Prioritäten:**
+
+Für jeden Vorlagen-Zeitraum wird die beste passende bestehende Saisonzeit gesucht:
+
+1. **Priorität 1:** Direkte Verknüpfung (`source_template_period_id == template_period.id`)
+2. **Priorität 2:** Template + Label (`source_template_id` + Label-Match + Jahr)
+3. **Priorität 3:** Legacy Relink (date_from + Label + Jahr)
+4. **Priorität 4 (NEU):** Label + Overlap
+   - Label-Match (normalisiert, case-insensitive)
+   - Gleiches Jahr
+   - Berechnung Overlap-Tage mit Vorlagen-Zeitraum
+   - Wahl: Kandidat mit meisten Overlap-Tagen
+   - Falls kein Overlap aber nur ein Kandidat im Jahr mit passendem Label → auch Match (Shift-Fall)
+
+**Beispiel-Szenario (Prod-Bug gefixt):**
+
+Vorlage:
+- "Nebensaison": 01.12-31.12
+
+Bestehendes Objekt:
+- "Nebensaison": 01.11-31.12 (ohne Verknüpfung)
+
+**Vor P2.16.3:**
+- Matching-Versuch:
+  - Priorität 1: Keine direkte Verknüpfung ❌
+  - Priorität 2: Keine Template-Verknüpfung ❌
+  - Priorität 3: date_from unterschiedlich (01.11 != 01.12) ❌
+- Resultat: Behandlung als NEUES Anlegen
+- Overlap mit bestehendem → Konflikt
+- Skip → Alte Zeiträume bleiben
+
+**Ab P2.16.3:**
+- Matching-Versuch:
+  - Priorität 1-3: Wie oben ❌
+  - **Priorität 4:** Label "Nebensaison" == "Nebensaison" ✅, Jahr 2027 == 2027 ✅,
+    Overlap 01.12-31.12 ✅ (31 Tage)
+  - Kandidaten: 1 (nur diese Nebensaison)
+  - **Match gefunden** ✅
+- Resultat: UPDATE
+- date_from: 01.11 → 01.12 (verkürzt)
+- date_to: 31.12 (unverändert)
+- Verknüpfung gesetzt: source_template_period_id
+
+**UI-Anzeige:**
+
+In "Reparierte Saisonzeiten":
+```
+• Nebensaison: 01.12 bis 31.12 (war 01.11 bis 31.12)
+```
+
+**Request-Kompatibilität:**
+
+Endpoint akzeptiert nun sowohl snake_case als auch camelCase:
+- `template_id` oder `templateId`
+- `template_ids` oder `templateIds`
+
+Bei Validierungsfehlern wird HTTP 400 (nicht 422) mit verständlicher deutscher Nachricht zurückgegeben.
+
+**Troubleshooting:**
+
+**Symptom:** "Request validation failed" beim Sync-Aufruf
+
+**Root Cause:** Vor P2.16.3: Payload-Feld-Namen inkonsistent oder fehlend.
+
+**Lösung:** Backend akzeptiert nun beide Konventionen. Frontend aktualisieren falls noch camelCase verwendet.
+
+**Symptom:** Saisonzeit mit ähnlichem Label + Overlap wird trotzdem als Konflikt behandelt
+
+**Root Cause:** Mehrere Kandidaten mit gleichem Overlap-Wert (mehrdeutig).
+
+**Lösung:**
+1. Nur einen Kandidaten behalten (andere archivieren)
+2. Oder: Unterschiedliche Labels vergeben zur Eindeutigkeit
+
+**Verification:**
+- Smoke script: `backend/scripts/pms_p2163_sync_updates_date_from_smoke.sh`
+- Testet: Legacy "Nebensaison" 01.11-31.12 wird gematched mit Template 01.12-31.12
+- EXIT rc=0 = Matching funktioniert korrekt
+
+---
