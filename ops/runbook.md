@@ -23815,6 +23815,47 @@ curl -X GET "$HOST/api/v1/pricing/fees?property_id=<uuid>&active=false" \
 - New periods from request are inserted with fresh IDs
 - Previous period IDs are not preserved across updates
 
+
+### Saisonvorlagen (Jahreslogik)
+
+**Konzept:** Saisonvorlagen mit Jahreszahl im Namen (z.B. "2026 - Hauptsaison") sind jahresgebunden.
+
+**Validierung:**
+- Vorlagenname beginnt mit 4-stelligem Jahr (2000-2099): `^(20\d{2})(\b|\s|[-_])`
+- Alle Perioden müssen innerhalb dieses Jahres liegen
+- Bei Verstoß: HTTP 422 "Diese Saisonvorlage ist für {year}. Zeitraum muss innerhalb {year} liegen."
+
+**Beispiele:**
+- ✅ "2026 - Hauptsaison" → Perioden nur in 2026 erlaubt
+- ✅ "2026-Preise" → Perioden nur in 2026 erlaubt
+- ✅ "Standard" → Keine Einschränkung (kein Jahr erkannt)
+- ❌ "2026 - Hauptsaison" mit Periode bis 2027-03-31 → Validierungsfehler
+
+**Vorlage geändert - Objekt zeigt alte Zeiträume:**
+
+**Symptom:** Saisonvorlage wurde korrigiert (z.B. Periode verkürzt auf 2026), aber Objekt-Saisonzeiten reichen noch bis 2027.
+
+**Ursache:** Saisonzeiten wurden früher importiert, bevor Vorlage korrigiert wurde.
+
+**Lösung:** "Vorlage synchronisieren" im Objekt-Preiseinstellungen
+- Repariert automatisch: Legacy-Saisonzeiten werden gekürzt/angepasst
+- Verknüpft: Linkage zur Vorlage wird hergestellt (source_template_id, source_template_period_id)
+- Sicher: Kein Duplikat, keine 422-Fehler
+
+**Workflow:**
+1. Objekt → Preiseinstellungen → "Aus Saisonvorlage importieren"
+2. Vorlage auswählen
+3. Klick "Vorlage synchronisieren" (nicht "Nur fehlende importieren")
+4. Vorschau prüfen:
+   - "Reparierte Saisonzeiten" zeigt gekürzte/angepasste Zeiten
+   - "Konflikte" zeigt Überlappungen (werden übersprungen)
+5. Bestätigen → Reparatur erfolgt
+
+**Konflikte:**
+- **Was:** UPDATE würde Überlappung mit ANDERER Saison erzeugen
+- **Folge:** Betroffene Saison wird übersprungen (soft fail, kein 422)
+- **Lösung:** Überlappende Saison manuell anpassen oder archivieren, dann erneut synchronisieren
+
 **Bugfix (2026-01-16):** Prior version attempted to update periods by ID, causing "Period not found" errors when adding new periods. Replace-all strategy eliminates this issue.
 
 **Apply Modes:**

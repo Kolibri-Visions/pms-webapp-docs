@@ -11360,6 +11360,57 @@ echo "rc=$?"
 - Gap warning: Formatted date ranges with German locale (dd. MMM bis dd. MMM YYYY)
 - Category badges: Improved contrast (border-2, darker border colors)
 
+
+**P2.16.1 Bugfix: Year-Scoped Templates + Resync Repairs Legacy Seasons**
+
+**Implementation Date:** 2026-01-20
+
+**Scope:** Prevent year-spanning template periods + automatic repair of legacy seasons via sync.
+
+**Problem:**
+- Templates like "2026 - Hauptsaison" could have periods extending into 2027
+- Sync/import would fail with 422 overlap when trying to correct imported seasons
+- Staff had no UI path to repair legacy seasons (required terminal/SQL)
+
+**Solution:**
+
+1. **Year-Scoped Validation:**
+   - Helper: `parse_template_year(name)` extracts year from template name (regex: `^(20\d{2})(\b|\s|[-_])`)
+   - Validation in CREATE/UPDATE period endpoints: if year detected, enforce date_from.year == year AND date_to.year == year
+   - Error: HTTP 422 "Diese Saisonvorlage ist für {year}. Zeitraum muss innerhalb {year} liegen."
+
+2. **Sync UPDATE + Legacy Relink:**
+   - Primary matching: existing (source_template_period_id + source_year)
+   - FALLBACK: Legacy relink for unlinked seasons matching:
+     - exact date_from match
+     - label similarity (exact or startswith)
+     - year consistency (date_from.year == requested year)
+   - UPDATE logic: shrinks/expands date_to, sets linkage fields (source_template_id, source_template_period_id, source_year, source_synced_at)
+   - Overlap check: if UPDATE would overlap other season → mark as conflict (soft fail), don't block entire sync
+   - Response: relinked[], counts.relink
+
+3. **Frontend Repair Flow:**
+   - Sync preview shows: "Reparierte Saisonzeiten" with before/after date_to
+   - Conflicts shown with clear message + solution hint
+   - Success toast mentions repair count
+   - Helper text: "Synchronisieren aktualisiert bereits importierte Saisonzeiten (auch wenn sich Zeiträume geändert haben)"
+
+**Files Changed:**
+- backend/app/services/season_template_utils.py (NEW: parse_template_year helper)
+- backend/app/api/routes/pricing.py (validation in CREATE/UPDATE period, legacy relink in sync)
+- backend/app/schemas/pricing.py (SeasonRelinked, counts.relink, response.relinked)
+- frontend/app/properties/[id]/rate-plans/page.tsx (sync preview UI for relink + conflicts)
+- backend/docs/ops/runbook.md (jahreslogik + resync workflow)
+- backend/scripts/README.md (year-scoped resync smoke test)
+
+**Status:** ✅ IMPLEMENTED
+
+**Verification Required:**
+- Deploy verify rc=0
+- Year-scoped validation: create "2026 - Test" template, try period to 2027 → EXPECT 422
+- Resync repair: create legacy season to 2027, sync from corrected template → EXPECT shrink to 2026
+- Smoke test: (if implemented) pms_p216_year_scoped_resync_smoke.sh rc=0
+
 **Verification Checklist:**
 
 
