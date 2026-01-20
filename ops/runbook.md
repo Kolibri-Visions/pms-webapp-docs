@@ -36399,3 +36399,48 @@ psql $DATABASE_URL -c "SELECT id, label, active FROM pricing_season_template_per
 # If active column is NULL or false, backfill:
 psql $DATABASE_URL -c "UPDATE pricing_season_template_periods SET active = true WHERE active IS NULL OR active = false;"
 ```
+
+---
+
+### Smoke Test: "Template has no active periods" (Period Creation Failed)
+
+**Symptom:** Smoke script fails with "Template has no active periods" even though it claims "Added 2 periods to template"
+
+**Root Cause:** Period creation requests are failing silently (4xx/5xx) but script doesn't check HTTP status
+
+**Debug:**
+```bash
+# Check if periods exist for a template
+TEMPLATE_ID="<uuid>"
+curl "$HOST/api/v1/pricing/season-templates/$TEMPLATE_ID/periods" | python3 -m json.tool
+
+# Expected: Array with 2+ period objects
+# If empty []: Period creation failed
+
+# Check template details
+curl "$HOST/api/v1/pricing/season-templates/$TEMPLATE_ID" | python3 -m json.tool
+
+# Look for "periods": [] vs "periods": [{...}, {...}]
+```
+
+**Fix:**
+1. Verify ADMIN_JWT_TOKEN has correct permissions (manager/admin role)
+2. Check period creation payload matches Pydantic schema exactly
+3. Ensure endpoint URL is correct: POST /api/v1/pricing/season-templates/{id}/periods
+4. Check response status code (should be 200/201, not 4xx)
+
+**Required Payload Fields:**
+```json
+{
+  "label": "Hauptsaison",
+  "date_from": "07-01",
+  "date_to": "08-31",
+  "active": true
+}
+```
+
+**Common Issues:**
+- Wrong endpoint URL (e.g. /templates vs /season-templates)
+- Missing Content-Type: application/json header
+- Wrong field names (start_date vs date_from)
+- Invalid JWT token (expired or insufficient permissions)

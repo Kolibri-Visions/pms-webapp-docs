@@ -12269,3 +12269,28 @@ class SeasonSyncRequest(BaseModel):
 - backend/docs/project_status.md (this entry)
 
 **Verification:** Pending PROD smoke script rc=0
+
+---
+
+# P2.16.7: Season Template Smoke Script Period Creation Fix
+
+**Status:** ✅ IMPLEMENTED (NOT VERIFIED)
+
+**Date:** 2026-01-20
+
+**Problem:** Smoke script reported "Added 2 periods" but PROD showed periods=[] afterwards. Period creation was failing silently without checking HTTP response status.
+
+**Solution:**
+- Added HTTP status checking for each period creation request
+- Added verification step: GET /periods endpoint after creation
+- Added detailed diagnostics on failure (template details, periods list, creation responses)
+- Ensured correct Content-Type headers for JSON requests
+- Made script fail fast with actionable error messages
+
+**Files Changed:**
+- backend/scripts/pms_season_template_sync_apply_smoke.sh (error handling + diagnostics)
+- backend/docs/ops/runbook.md (troubleshooting section)
+- backend/scripts/README.md (ADMIN_JWT_TOKEN clarification)
+- backend/docs/project_status.md (this entry)
+
+**Verification:** Pending PROD smoke script rc=0 with periods created successfully
