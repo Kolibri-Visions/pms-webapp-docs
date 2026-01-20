@@ -12046,3 +12046,74 @@ Smoke script: `backend/scripts/pms_p2163_sync_updates_date_from_smoke.sh`
 - P2.16.1 follow-up (3-phase execution)
 
 ---
+
+---
+
+# P0 Hotfix: Import model_validator (PROD Restart Loop Fix)
+
+**Implementation Date:** 2026-01-20
+
+**Scope:** P0 hotfix to resolve PROD backend restart loop caused by missing Pydantic import.
+
+**Problem:**
+- PROD backend in restart loop after P2.16.3 deployment
+- Container logs showed: `NameError: name 'model_validator' is not defined`
+- Location: `backend/app/schemas/pricing.py` line 466, class SeasonSyncRequest
+- Root cause: P2.16.3 added `@model_validator(mode='after')` decorator but forgot to import it
+- Impact: Complete PROD outage, backend can't start
+
+**Solution:**
+
+1. **Import Fix (backend/app/schemas/pricing.py:24):**
+   ```python
+   # BEFORE (broken):
+   from pydantic import BaseModel, Field
+   
+   # AFTER (fixed):
+   from pydantic import BaseModel, Field, model_validator
+   ```
+
+2. **Regression Test (backend/tests/test_import_schemas.py, NEW +42 lines):**
+   - Test 1: Import pricing schemas module without errors
+   - Test 2: Instantiate SeasonSyncRequest (triggers validator, catches missing imports)
+   - Prevents similar issues in future deployments
+   - Run in CI before PROD deploy
+
+3. **Documentation (backend/docs/ops/runbook.md, +59 lines):**
+   - New section: "PROD Restart Loop: NameError model_validator Not Defined"
+   - Symptom, root cause, resolution, verification
+   - Prevention guidance (regression test)
+   - Similar issues troubleshooting
+
+**Files Changed:**
+- backend/app/schemas/pricing.py (+1 import: model_validator)
+- backend/tests/test_import_schemas.py (NEW +42 lines: regression tests)
+- backend/docs/ops/runbook.md (ADD: +59 lines troubleshooting section)
+- backend/docs/project_status.md (ADD: this entry)
+
+**QA Proofs:**
+```bash
+# Import verification
+rg -n "from pydantic import.*model_validator" backend/app/schemas/pricing.py
+# Output: 24:from pydantic import BaseModel, Field, model_validator
+
+# Regression test passed
+python3 -m pytest tests/test_import_schemas.py -v -c /dev/null
+# Output: 2 passed
+```
+
+**Status:** ✅ HOTFIX APPLIED
+
+**Commit Hash:** (provided after git push)
+
+**Dependencies:**
+- Pydantic v2 (model_validator decorator)
+- P2.16.3 (introduced the decorator usage)
+
+**Notes:**
+- P0 severity: PROD outage
+- Immediate fix required, no preview/approval needed
+- Single-file import fix + regression test
+- No "Co-Authored-By" (hotfix authorship)
+
+---

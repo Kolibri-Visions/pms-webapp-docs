@@ -36095,3 +36095,68 @@ Bei Validierungsfehlern wird HTTP 400 (nicht 422) mit verständlicher deutscher 
 - EXIT rc=0 = Matching funktioniert korrekt
 
 ---
+
+---
+
+## PROD Restart Loop: NameError "model_validator" Not Defined
+
+**Overview:** Backend container crashes on startup with Python NameError related to missing Pydantic imports.
+
+**Symptom:** Container restart loop in PROD. Logs show:
+```
+NameError: name 'model_validator' is not defined
+  File "/app/app/schemas/pricing.py", line 466, in SeasonSyncRequest
+    @model_validator(mode='after')
+```
+
+**Root Cause:** Schema module uses `@model_validator` decorator but Pydantic import statement is missing `model_validator`.
+
+**How It Happened:** 
+- P2.16.3 commit added `@model_validator(mode='after')` decorator to `SeasonSyncRequest` class
+- Forgot to update pydantic import: `from pydantic import BaseModel, Field` → missing `model_validator`
+- Python can't find the decorator when loading the module → NameError at import time
+- FastAPI can't start → container crashes → restart loop
+
+**Resolution (Hotfix Applied 2026-01-20):**
+
+Import fix in `backend/app/schemas/pricing.py`:
+```python
+# BEFORE (broken):
+from pydantic import BaseModel, Field
+
+# AFTER (fixed):
+from pydantic import BaseModel, Field, model_validator
+```
+
+**Verification Commands:**
+
+```bash
+# [LOCAL-DEV] Check import is present
+rg -n "from pydantic import.*model_validator" backend/app/schemas/pricing.py
+
+# Expected output:
+# 24:from pydantic import BaseModel, Field, model_validator
+
+# [LOCAL-DEV] Run regression test
+cd backend
+python3 -m pytest tests/test_import_schemas.py -v -c /dev/null
+
+# Expected: 2 passed
+```
+
+**Prevention:**
+- Regression test added: `backend/tests/test_import_schemas.py`
+- Test imports `app.schemas.pricing` and instantiates `SeasonSyncRequest`
+- Fails fast if decorator imports are missing
+- Run in CI before deploy
+
+**Similar Issues:**
+If you see `NameError: name 'X' is not defined` where X is a Pydantic decorator or validator:
+1. Check import statement in schema file
+2. Add missing import: `field_validator`, `model_validator`, `validator`, etc.
+3. Run regression test to verify
+4. Add test case if missing
+
+**Hotfix Commit:** (hash provided after push)
+
+---
