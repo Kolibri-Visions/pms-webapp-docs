@@ -36945,3 +36945,34 @@ curl -v --location \
 # - Response body is valid JSON (pipe to jq)
 ```
 
+#### 307 Redirect Due to Trailing Slash (P2.16.14 v3)
+
+**Symptom:** JSON parse error occurs even with v2 hardening, debug bundle shows HTTP 307 redirect or unexpected HTML response.
+
+**Root Cause:** API endpoint returns 307 Temporary Redirect when URL has trailing slash inconsistency. Without curl's `-L` flag, the redirect response (HTML) is captured instead of following to the actual JSON endpoint.
+
+**How to Diagnose:**
+1. Check debug bundle for HTTP status 307
+2. Look for `Location:` header in response headers
+3. Verify if request URL has trailing slash issue (e.g., `/seasons/` vs `/seasons`)
+
+**Solution:**
+- **v3 script enhancement**: Adds explicit 307/redirect diagnostics and verifies curl uses `--location` flag
+- **Verification**: curl `-L` (or `--location`) flag automatically follows redirects to final destination
+- **Prevention**: Ensure all API calls use consistent URL patterns (with or without trailing slash as API expects)
+
+**Manual Test for Redirects:**
+```bash
+# Test WITHOUT following redirects (will show 307 if present)
+curl -v \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  "https://api.example.com/api/v1/pricing/seasons/"
+
+# Test WITH following redirects (should get JSON)
+curl -v -L \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  "https://api.example.com/api/v1/pricing/seasons/"
+```
+
+**Note:** The `http_get_json()` helper already uses `--location` by default, but this diagnostic helps identify redirect issues in manual testing or legacy scripts.
+

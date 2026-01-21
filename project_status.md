@@ -12726,3 +12726,34 @@ After v1 HTTP capture hardening, smoke script still failed in PROD with `JSON pa
 
 **Status:** ✅ IMPLEMENTED (NOT VERIFIED - requires PROD smoke run with rc=0)
 
+---
+
+**P2.16.14 v3 Hardening — 307 Redirect Diagnostics** (2026-01-21)
+
+**Scope:** Add explicit 307/redirect diagnostics and verification that curl uses `-L` flag to follow redirects.
+
+**Context:** After v2 hardening, potential JSON parse errors can still occur if API endpoints return 307 Temporary Redirect due to trailing slash inconsistencies. Without curl's `--location` flag, the redirect response (HTML) is captured instead of the actual JSON endpoint.
+
+**Changes Implemented:**
+
+1. **Documentation Updates** (DOCS SAFE MODE):
+   - backend/docs/ops/runbook.md: Appended "307 Redirect Due to Trailing Slash (P2.16.14 v3)" subsection under "Bulk Smoke Script: JSON Parse Error (P2.16.14 v2 Hardening)"
+   - backend/scripts/README.md: Appended "307 Redirect Handling (P2.16.14 v3)" section documenting why `-L` is required and how it prevents redirect-related JSON parse errors
+   - backend/docs/project_status.md: This v3 entry
+
+2. **Key Points Documented**:
+   - `http_get_json()` helper already uses `curl --location` by default
+   - Manual testing should always use `curl -L` to follow redirects
+   - 307/308/301/302 redirects return HTML instead of JSON without `-L` flag
+   - Debug bundles will show HTTP 307 status and `Location:` header if redirect occurs
+
+**Diagnostic Workflow:**
+- Check debug bundle for HTTP status 307
+- Verify `Location:` header in response headers
+- Confirm URL has trailing slash inconsistency
+- Ensure curl uses `--location` flag
+
+**Status:** ✅ IMPLEMENTED (NOT VERIFIED - requires PROD smoke run with rc=0)
+
+**Note:** v3 hardening adds diagnostics and documentation only; no code changes to smoke script (already uses `--location`). This remains IMPLEMENTED status until PROD verification passes.
+
