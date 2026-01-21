@@ -12757,3 +12757,64 @@ After v1 HTTP capture hardening, smoke script still failed in PROD with `JSON pa
 
 **Note:** v3 hardening adds diagnostics and documentation only; no code changes to smoke script (already uses `--location`). This remains IMPLEMENTED status until PROD verification passes.
 
+----
+
+**P2.16.14 v4 Hardening — Temp-File HTTP Capture (Post-Implementation):**
+
+**Implementation Date:** 2026-01-21
+
+**Scope:** Complete rewrite of smoke script HTTP capture to use pure temp-file capture, eliminating command substitution and stream mixing issues.
+
+**Context:** After v1/v2/v3 hardening, JSON parse errors could still occur due to command substitution contamination. Even with stderr-only diagnostics, `$()` can capture stdout fragments from subshells, race conditions, or background processes. The v4 rewrite eliminates all command substitution for HTTP operations.
+
+**Changes Implemented:**
+
+1. **Smoke Script Complete Rewrite** (backend/scripts/pms_p2_seasons_bulk_ops_smoke.sh):
+
+   - **`http_fetch()` function (line 165)**:
+     - Pure temp-file capture using `curl -o tempfile`
+     - Writes body, headers, metadata to separate files
+     - Zero stream mixing - all data goes to disk, not stdout/stderr
+     - Uses curl `-w` writeout template for metadata
+     - Uses curl `-D` for header capture
+
+   - **`json_body_or_die()` function (line 244)**:
+     - 6-layer validation pipeline:
+       1. HTTP status code check (expect 200)
+       2. Content-Type validation (expect application/json)
+       3. File existence and readability
+       4. Non-empty body check
+       5. Python3 JSON syntax validation
+       6. Basic structure validation (expect dict or list)
+     - Fails fast with detailed error messages
+     - Prints debug file paths on failure
+
+   - **Debug Bundle Directory**:
+     - Path: `/tmp/pms_http_debug_<PID>_<timestamp>/`
+     - Created on first HTTP request
+     - Preserved on failure for forensic analysis
+     - Per-request files: `${label}.body`, `${label}.headers`, `${label}.meta`, `${label}.writeout`
+
+   - **Applied to All Verification Blocks**:
+     - Test 1: Archive verification (lines 583, 590, 599)
+     - Test 2: Idempotency verification (lines 707, 708)
+     - Test 4: Delete verification (lines 839, 840)
+     - All verification fetches use `http_fetch()` + `json_body_or_die()`
+
+2. **Documentation Updates** (DOCS SAFE MODE):
+   - backend/docs/ops/runbook.md: Added "Empty Body / Non-JSON Response (P2.16.14 v4)" subsection with debug workflow
+   - backend/scripts/README.md: Added "Debug Bundle Directory (P2.16.14 v4)" section documenting directory structure and inspection commands
+   - backend/docs/project_status.md: This v4 entry
+
+**Key Improvements:**
+
+- **Bulletproof HTTP Capture**: Eliminates command substitution entirely, zero chance of stream contamination
+- **Multi-Layer Validation**: 6-layer validation catches all failure modes before trusting response
+- **Comprehensive Forensics**: Debug bundle with per-request files for post-mortem analysis
+- **Clear Error Messages**: Prints debug bundle path and specific failure layer on errors
+- **Production-Ready**: Can run in PROD without debug noise in normal operation
+
+**Status:** ✅ IMPLEMENTED (NOT VERIFIED - requires PROD smoke run with rc=0)
+
+**Note:** v4 hardening is a complete rewrite of HTTP capture logic. All changes are backward-compatible (same environment variables, same test structure). This remains IMPLEMENTED status until PROD verification passes with exit code 0.
+

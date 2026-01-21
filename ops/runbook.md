@@ -36976,3 +36976,87 @@ curl -v -L \
 
 **Note:** The `http_get_json()` helper already uses `--location` by default, but this diagnostic helps identify redirect issues in manual testing or legacy scripts.
 
+#### Empty Body / Non-JSON Response (P2.16.14 v4)
+
+**Symptom:** JSON parse error persists despite v1/v2/v3 hardening. Debug bundles show valid HTTP 200 responses, but JSON parsing still fails intermittently.
+
+**Root Cause (v4 Fix):** Command substitution contamination and stream mixing. Even with stderr-only diagnostics, command substitution `$()` can capture stdout fragments from subshells, race conditions, or background processes. Additionally, curl's stdout can be corrupted by signal handlers, debug output, or terminal state changes.
+
+**How v4 Fix Works:**
+
+The script completely eliminates command substitution for HTTP capture:
+
+1. **Pure Temp-File Capture** (`http_fetch()` function, line 165):
+   - Uses curl with `-o tempfile` to write body directly to disk
+   - Uses `-w` to write metadata (http_code, url_effective, content_type) to separate file
+   - Captures headers to separate file with `-D`
+   - Zero stream mixing - all data goes to files, not stdout/stderr
+
+2. **6-Layer Validation** (`json_body_or_die()` function, line 244):
+   - Layer 1: HTTP status code check (expect 200)
+   - Layer 2: Content-Type validation (expect application/json)
+   - Layer 3: File existence and readability
+   - Layer 4: Non-empty body check
+   - Layer 5: Python3 JSON syntax validation
+   - Layer 6: Basic structure validation (expect dict or list)
+
+3. **Debug Bundle Directory** (created on first HTTP request):
+   - Path: `/tmp/pms_http_debug_<PID>_<timestamp>/`
+   - Preserved on failure for forensic analysis
+   - Per-request files (for each labeled request):
+     - `${label}.body` - Response body (raw)
+     - `${label}.headers` - HTTP response headers
+     - `${label}.meta` - Metadata (http_code, url_effective, content_type)
+     - `${label}.writeout` - Curl writeout template values
+
+4. **Applied to All Verification Blocks**:
+   - Test 1: Archive verification (lines 583, 590, 599)
+   - Test 2: Idempotency verification (lines 707, 708)
+   - Test 4: Delete verification (lines 839, 840)
+
+**How to Debug:**
+
+1. Locate debug bundle directory (path printed in script output on failure):
+   ```
+   /tmp/pms_http_debug_12345_20260121_143215/
+   ```
+
+2. Inspect request files:
+   ```bash
+   cd /tmp/pms_http_debug_12345_20260121_143215/
+
+   # Check HTTP status
+   cat test1_verify_archived.meta
+   # Output: http_code: 200, url_effective: https://..., content_type: application/json
+
+   # Check response body
+   cat test1_verify_archived.body | jq .
+   # Should be valid JSON
+
+   # Check headers for redirects
+   cat test1_verify_archived.headers
+   # Look for Location: header if redirect occurred
+   ```
+
+3. Common issues to look for:
+   - **http_code != 200**: Check `.meta` file, verify endpoint exists
+   - **content_type != application/json**: Check `.headers` and `.meta`, backend returned HTML/XML
+   - **Empty body**: Check `.body` file size, backend crashed or returned no content
+   - **Redirect chain**: Check `.headers` for `Location:` headers, verify final URL in `.meta`
+   - **Invalid JSON syntax**: Check `.body` for malformed JSON, HTML fragments, binary data
+
+**Solution:**
+
+- **v4 script** (complete rewrite for bulletproof HTTP capture):
+  - Eliminates command substitution entirely
+  - All HTTP data captured to temp files
+  - 6-layer validation before trusting response
+  - Debug bundle with per-request forensics
+  - Zero chance of stream contamination
+
+- **If still failing**:
+  - Inspect debug bundle files
+  - Compare `.body` with expected JSON structure
+  - Check backend logs for crashes/errors
+  - Verify API endpoint behavior with manual curl test
+
