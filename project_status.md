@@ -12899,3 +12899,10 @@ File-based parsing avoids all these issues:
   - ✅ Test 4 PASSED: Bulk deleted 3 archived seasons
   - ✅ Cleanup PASSED: Deleted all test data
 
+
+**Enhancement (2026-01-21): PROD-Safe 409 Fallback in Quote-Gap Smoke Script:**
+- `pms_quote_keine_saison_smoke.sh` now automatically creates temporary "Smoke Property" if rate plan creation fails with HTTP 409 (active plan exists)
+- Prevents need for manual cleanup or property selection in PROD
+- Cleanup via trap EXIT deletes both rate plan and smoke property (if created) even on failure
+- Smoke property naming: "Quote Gap Objekt YYYYMMDD-HHMMSS - Smoke"
+- See [runbook troubleshooting section](../docs/ops/runbook.md#automatic-fallback-pms_quote_keine_saison_smokesh) for details

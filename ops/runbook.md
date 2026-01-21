@@ -37143,3 +37143,22 @@ if count_present_ids "$DEBUG_DIR/test1_verify_archived.body" "${SEASON_IDS[@]}";
     log_info "All expected IDs found"
 fi
 ```
+
+**Automatic Fallback (pms_quote_keine_saison_smoke.sh):**
+The `pms_quote_keine_saison_smoke.sh` script implements automatic 409 handling:
+- If rate plan creation fails with HTTP 409, script automatically creates temporary "Smoke Property"
+- Test runs against smoke property (customer's active plan untouched)
+- Cleanup deletes both rate plan and smoke property (even on failure via trap EXIT)
+- No manual intervention required in PROD
+- Property name: "Quote Gap Objekt YYYYMMDD-HHMMSS - Smoke"
+
+**Expected Behavior:**
+```
+⚠️  STEP B: HTTP 409 - Aktiver Preisplan existiert bereits für Property <uuid>
+ℹ️  Fallback: Erstelle temporäre Smoke-Property...
+✅ Smoke Property erstellt: <new-uuid>
+ℹ️  PROPERTY_ID gewechselt zu Smoke Property: <new-uuid>
+ℹ️  Wiederhole Preisplan-Erstellung mit Smoke Property...
+✅ STEP B PASSED: Preisplan erstellt mit Smoke Property (id=<plan-uuid>)
+```
+
