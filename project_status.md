@@ -12397,3 +12397,34 @@ class SeasonSyncRequest(BaseModel):
 - backend/docs/project_status.md (this entry)
 
 **Verification:** Pending PROD smoke + UI manual verification
+
+---
+
+# P2.16.11: Objekt-Preiseinstellungen Import-Year Fix + Gap-Hinweis Fix + Header Polish
+
+**Status:** ✅ IMPLEMENTED (NOT VERIFIED)
+
+**Date:** 2026-01-21
+
+**Problem:**
+- Import modal: Selecting template "2026" imports BOTH 2026 AND 2027 instead of only 2026
+- Gap warning: Shows "2025" artifacts, displays gaps when year fully covered, off-by-one errors
+- Header layout: Not mobile-first, looks unsteady ("unruhig") on small screens
+
+**Solution:**
+- Import modal: Added explicit selectedYears state, derives years from template name pattern (^\d{4}$) or period dates, uses UTC parsing
+- Gap detection: Fixed UTC parsing throughout, correct year boundaries (01-01 to 12-31), proper gap calculation with day arithmetic
+- Header layout: Mobile-first responsive design (flex-col → md:flex-row), full-width buttons on mobile
+
+**Files Changed:**
+- frontend/app/properties/[id]/rate-plans/page.tsx
+  * Lines 155, 197-225: selectedYears state + year derivation logic
+  * Lines 605-606, 654-655: API calls use selectedYears
+  * Lines 1309-1316: UI displays selected years
+  * Lines 285-387: computeSeasonGapsByYear with UTC parsing + correct boundaries
+  * Lines 1088-1117: Mobile-first header layout
+- backend/docs/ops/runbook.md (import year + gap troubleshooting)
+- backend/scripts/README.md (cleanup note)
+- backend/docs/project_status.md (this entry)
+
+**Verification:** Pending PROD deployment + UI manual check (select template 2026 → verify Jahre: 2026 → import only 2026; gap banner correct for covered years)

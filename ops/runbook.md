@@ -36519,3 +36519,47 @@ curl -X PATCH "$HOST/api/v1/pricing/rate-plans/{smoke_plan_id}/archive" \
 - Script logs show "Cleanup: Archived existing smoke plan..."
 - Only plans with "SMOKE" in name are archived
 - Real customer plans untouched
+
+---
+
+### Import Modal Imports Wrong Year(s)
+
+**Symptom:** When selecting template "2026", import creates seasons for both 2026 AND 2027 (or other unwanted years)
+
+**Cause:** Frontend was auto-deriving years from currentYear instead of respecting template selection
+
+**Fix:** Upgrade to P2.16.11 which uses explicit selectedYears based on template name pattern or period dates
+
+**What to check:**
+- Browser DevTools → Network tab → inspect sync-from-template request payload
+- Should see `"years": [2026]` when template "2026" selected
+- UI shows "Jahre: 2026" in import modal
+- Template name patterns: if template.name matches `^\d{4}$` → uses that year exactly
+
+**Verification:**
+```bash
+# Check network request payload in browser DevTools:
+# POST /api/v1/pricing/rate-plans/{id}/seasons/sync-from-template
+# Body should have: {"template_id": "...", "years": [2026], "mode": "preview"}
+```
+
+---
+
+### Gap Banner Shows Wrong Years / Off-By-One Errors
+
+**Symptom:** Gap warning shows "2025" when no 2025 seasons exist, or shows gaps when year is fully covered (Jan 1 - Dec 31)
+
+**Cause:** Date parsing used local timezone instead of UTC, causing date shifts and boundary errors
+
+**Fix:** Upgrade to P2.16.11 which uses UTC parsing throughout gap detection
+
+**What to check:**
+- Gap detection uses UTC: `new Date(dateStr + "T00:00:00Z")`
+- Year boundaries: `${year}-01-01T00:00:00Z` to `${year}-12-31T00:00:00Z`
+- Only analyzes years present in active seasons
+- If year fully covered (no gaps) → banner hidden
+
+**Verification:**
+- Create seasons covering Jan 1 - Dec 31 for a year
+- Gap banner should disappear completely
+- No "2025" artifacts in gap dates
