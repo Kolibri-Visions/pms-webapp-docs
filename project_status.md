@@ -12638,14 +12638,9 @@ After initial list/dict parsing fix, smoke script still failed with `JSON parse 
 - On failure, prints URL, http_code, body snippet, and saves debug file to `/tmp/pms_bulk_ops_last_response.json`
 - Prevents JSON parser from seeing headers, HTML, or empty responses
 
-**Status:** ✅ IMPLEMENTED (NOT VERIFIED - requires PROD smoke run with rc=0)
-**Note:** P2.16.13 and P2.16.14 remain marked as IMPLEMENTED (NOT VERIFIED) until automated PROD verification passes (smoke script rc=0).
+**Status:** ✅ VERIFIED
 
-**Status:** ✅ IMPLEMENTED
-
-**Important**: NOT marked as VERIFIED until automated PROD verification passes:
-- `pms_verify_deploy.sh` confirms commit deployed
-- `pms_p2_seasons_bulk_ops_smoke.sh` exits with rc=0 (all 4 tests pass)
+**Note:** P2.16.13 remains marked as IMPLEMENTED (NOT VERIFIED) until automated PROD verification passes (smoke script rc=0).
 
 **Dependencies**:
 - P2.16.13 (bulk operations + smoke script)
@@ -12724,7 +12719,7 @@ After v1 HTTP capture hardening, smoke script still failed in PROD with `JSON pa
 - Parsing incomplete/malformed JSON responses
 - Missing diagnostic context for PROD failures (debug bundle provides full forensics)
 
-**Status:** ✅ IMPLEMENTED (NOT VERIFIED - requires PROD smoke run with rc=0)
+**Status:** ✅ VERIFIED
 
 ---
 
@@ -12753,9 +12748,9 @@ After v1 HTTP capture hardening, smoke script still failed in PROD with `JSON pa
 - Confirm URL has trailing slash inconsistency
 - Ensure curl uses `--location` flag
 
-**Status:** ✅ IMPLEMENTED (NOT VERIFIED - requires PROD smoke run with rc=0)
+**Status:** ✅ VERIFIED
 
-**Note:** v3 hardening adds diagnostics and documentation only; no code changes to smoke script (already uses `--location`). This remains IMPLEMENTED status until PROD verification passes.
+**Note:** v3 hardening adds diagnostics and documentation only; no code changes to smoke script (already uses `--location`).
 
 ----
 
@@ -12814,9 +12809,9 @@ After v1 HTTP capture hardening, smoke script still failed in PROD with `JSON pa
 - **Clear Error Messages**: Prints debug bundle path and specific failure layer on errors
 - **Production-Ready**: Can run in PROD without debug noise in normal operation
 
-**Status:** ✅ IMPLEMENTED (NOT VERIFIED - requires PROD smoke run with rc=0)
+**Status:** ✅ VERIFIED
 
-**Note:** v4 hardening is a complete rewrite of HTTP capture logic. All changes are backward-compatible (same environment variables, same test structure). This remains IMPLEMENTED status until PROD verification passes with exit code 0.
+**Note:** v4 hardening is a complete rewrite of HTTP capture logic. All changes are backward-compatible (same environment variables, same test structure).
 
 
 ----
@@ -12877,6 +12872,23 @@ File-based parsing avoids all these issues:
 - Works with any valid JSON regardless of content
 - No size limits (beyond disk space)
 
-**Status:** ✅ IMPLEMENTED (NOT VERIFIED - requires PROD smoke run with rc=0)
+**Status:** ✅ VERIFIED
 
-**Note:** v5 hardening completes the JSON corruption elimination begun in v1-v4. HTTP capture uses temp files (v4), verification parsing uses those files directly (v5). No JSON passes through shell variables at any stage. This remains IMPLEMENTED status until PROD verification passes with exit code 0.
+**Note:** v5 hardening completes the JSON corruption elimination begun in v1-v4. HTTP capture uses temp files (v4), verification parsing uses those files directly (v5). No JSON passes through shell variables at any stage.
+
+---
+
+**PROD Verification Evidence** (2026-01-21):
+
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Deployed Commit**: 07702fd7528c33a1efd6e7f9063f7f5cf4cc1d4c
+- **Deployment Timestamp**: 2026-01-21T21:29:06.658392+00:00
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh` → rc=0
+- **Smoke Test**: `backend/scripts/pms_p2_seasons_bulk_ops_smoke.sh` → rc=0
+- **Test Results**:
+  - ✅ Test 1 PASSED: Bulk archived 3 seasons, verified via listing (show_archived=true)
+  - ✅ Test 2 PASSED: Idempotency (skipped 3 already-archived seasons)
+  - ✅ Test 3 PASSED: Delete safety (HTTP 409 on active seasons)
+  - ✅ Test 4 PASSED: Bulk deleted 3 archived seasons
+  - ✅ Cleanup PASSED: Deleted all test data
+
