@@ -12366,3 +12366,34 @@ class SeasonSyncRequest(BaseModel):
 - backend/docs/project_status.md (this entry)
 
 **Verification:** ✅ VERIFIED (see PROD Evidence above)
+
+---
+
+# P2.16.10: Objekt-Preiseinstellungen UI Polish + Smoke 409 Fix
+
+**Status:** ✅ IMPLEMENTED (NOT VERIFIED)
+
+**Date:** 2026-01-21
+
+**Problem:**
+- Archived filter shows BOTH active+archived instead of toggling
+- Gap warning shows even with no seasons, analyzes arbitrary years
+- Season cards lack Importiert/Benutzerdefiniert badges
+- Header missing property name
+- Smoke script blocked by 409 when previous run left active smoke plan
+
+**Solution:**
+- Fixed archived filter: default=active only, toggle shows archived only
+- Fixed gap detection: year-scoped to existing seasons, hidden when no seasons
+- Added badges: Importiert/Benutzerdefiniert/Überschrieben
+- Added property name to header
+- Smoke script: auto-archives existing smoke plans before creating new test plan
+
+**Files Changed:**
+- frontend/app/[pricing-page-path] (4 UI fixes)
+- backend/scripts/pms_season_template_sync_apply_smoke.sh (preflight cleanup)
+- backend/docs/ops/runbook.md (409 troubleshooting)
+- backend/scripts/README.md (preflight docs)
+- backend/docs/project_status.md (this entry)
+
+**Verification:** Pending PROD smoke + UI manual verification

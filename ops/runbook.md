@@ -36491,3 +36491,31 @@ If period creation fails with HTTP 503 or "null value in column violates not-nul
 curl "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/seasons" | \
   python3 -c "import sys, json; seasons = json.load(sys.stdin); print(f'Linked: {sum(1 for s in seasons if s.get(\"source_template_period_id\"))} / {len(seasons)}')"
 ```
+
+---
+
+### Season Template Smoke Blocked by 409 Active Smoke Plan
+
+**Symptom:** Smoke script fails with HTTP 409 "An active rate plan already exists for this property"
+
+**Cause:** Previous smoke run left test rate plan active (cleanup failed or manual termination)
+
+**Automatic Fix:** Script now auto-detects and archives smoke plans (names containing "SMOKE") before creating new test plan
+
+**Manual Fallback:**
+```bash
+# Find smoke plans
+curl "$HOST/api/v1/pricing/rate-plans?property_id=$PROPERTY_ID" | \
+  python3 -c "import sys,json; [print(p['id'], p['name']) for p in json.load(sys.stdin) if 'SMOKE' in p.get('name','').upper()]"
+
+# Archive manually
+curl -X PATCH "$HOST/api/v1/pricing/rate-plans/{smoke_plan_id}/archive" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+**What to check:**
+- Script logs show "Cleanup: Archived existing smoke plan..."
+- Only plans with "SMOKE" in name are archived
+- Real customer plans untouched
