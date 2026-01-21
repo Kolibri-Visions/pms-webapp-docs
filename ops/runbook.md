@@ -36646,6 +36646,65 @@ curl -X GET "${HOST}/api/v1/pricing/rate-plans/<plan_id>/seasons?show_archived=t
 
 **Fixed In:** P2.16.14 parsing fix commit
 
+
+### Bulk Smoke Script: JSON Parse Error
+
+**Symptom:** Smoke script `pms_p2_seasons_bulk_ops_smoke.sh` fails with:
+```
+JSON parse error: Expecting value: line 1 column 1 (char 0)
+```
+
+**Root Cause:** Script attempted to JSON-parse a non-JSON response. This occurs when:
+- HTTP request returned non-200 status (401, 403, 404, 500, etc.)
+- Response body is empty
+- Response is HTML error page instead of JSON
+- Response includes HTTP headers (curl -i was used)
+
+**How to Debug:**
+
+The script (as of P2.16.14 robust capture fix) now captures HTTP status and body separately, and only parses JSON if:
+- HTTP status is 200
+- Body is non-empty
+- Body is valid JSON
+
+On failure, the script prints:
+- Exact URL that was fetched
+- HTTP status code
+- Body snippet (first 800 characters)
+- Path to saved debug file (default: `/tmp/pms_bulk_ops_last_response.json`)
+
+**Example Debug Output:**
+```
+ERROR: HTTP request failed with status 403
+URL: https://api.example.com/api/v1/pricing/rate-plans/.../seasons?show_archived=true
+HTTP Status: 403
+Body:
+{"error": "Access denied", "message": "User not authorized for this agency"}
+Full response saved to: /tmp/pms_bulk_ops_last_response.json
+```
+
+**Solution:**
+1. Check HTTP status code:
+   - 401: JWT token expired or invalid (refresh token)
+   - 403: User not authorized for agency (check agency_id in JWT)
+   - 404: Resource not found (rate plan deleted or wrong ID)
+   - 500: Server error (check backend logs)
+2. Check debug file at `/tmp/pms_bulk_ops_last_response.json` for full response
+3. Verify JWT token has correct claims:
+   ```bash
+   echo $JWT_TOKEN | cut -d'.' -f2 | base64 -d | jq
+   # Check: role, agency_id, sub, exp
+   ```
+4. Test endpoint manually:
+   ```bash
+   curl -X GET "${HOST}/api/v1/pricing/rate-plans/<plan_id>/seasons?show_archived=true" \
+     -H "Authorization: Bearer ${JWT_TOKEN}" \
+     -H "x-agency-id: ${AGENCY_ID}" -v
+   ```
+
+**Fixed In:** P2.16.14 robust JSON capture commit
+
+---
 ---
 
 ### Smoke Test: "Template has no active periods" (Period Creation Failed)

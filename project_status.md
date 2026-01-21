@@ -12629,6 +12629,16 @@ After initial deployment, smoke script failed with `AttributeError: 'list' objec
 - Prints compact diagnostics on failure (target IDs + found/missing)
 - Requires rerun in PROD to mark P2.16.13/14 as VERIFIED
 
+
+**Parsing Hardening (Post-Implementation)**:
+
+After initial list/dict parsing fix, smoke script still failed with `JSON parse error: Expecting value: line 1 column 1` when API returned non-JSON responses (non-200 status, empty body, HTML error pages). Added robust HTTP capture helper that:
+- Separates HTTP status code and body capture using `curl -o tempfile -w "%{http_code}"`
+- Only attempts JSON parsing if HTTP 200 AND non-empty body
+- On failure, prints URL, http_code, body snippet, and saves debug file to `/tmp/pms_bulk_ops_last_response.json`
+- Prevents JSON parser from seeing headers, HTML, or empty responses
+
+**Status:** ✅ IMPLEMENTED (NOT VERIFIED - requires PROD smoke run with rc=0)
 **Note:** P2.16.13 and P2.16.14 remain marked as IMPLEMENTED (NOT VERIFIED) until automated PROD verification passes (smoke script rc=0).
 
 **Status:** ✅ IMPLEMENTED
