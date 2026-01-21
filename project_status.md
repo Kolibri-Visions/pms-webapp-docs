@@ -12681,3 +12681,48 @@ echo "rc=$?"
 ---
 
 
+
+**JSON Validation Hardening v2 (Post-Implementation)**:
+
+After v1 HTTP capture hardening, smoke script still failed in PROD with `JSON parse error: Expecting value: line 1 column 1`. Root cause: Log lines from `log_error()` were mixing into captured JSON variables via command substitution. Even though `safe_fetch_json()` validated HTTP status and body, diagnostics printed to stdout were captured by `VERIFY_BODY=$(safe_fetch_json ...)`.
+
+**v2 Fix** (commit `fix(p2.16.14): bulk ops smoke json fetch hardening v2`):
+
+1. **New `http_get_json()` Helper** (backend/scripts/pms_p2_seasons_bulk_ops_smoke.sh):
+   - Replaced `safe_fetch_json()` with comprehensive validation helper
+   - Follows HTTP redirects automatically (`curl --location`)
+   - Captures to temp files: HTTP status, content-type, headers, body
+   - **Validates JSON with Python3 try/except** BEFORE returning to caller
+   - **Separates output streams**:
+     - stdout: ONLY validated JSON (safe for command substitution capture)
+     - stderr: All diagnostics using `>&2` (not captured by $())
+   - Creates timestamped debug bundle on failure: `/tmp/pms_bulk_ops_debug_<timestamp>.txt`
+
+2. **Debug Bundle** includes:
+   - Timestamp (UTC)
+   - Full URL
+   - HTTP status code
+   - Content-Type header
+   - All response headers
+   - Complete response body (or JSON validation error)
+   - Saved for post-mortem analysis
+
+3. **Updated All Verification Blocks**:
+   - Test 1: Archive verification (line ~583)
+   - Test 2: Idempotency verification (line ~706)
+   - Test 4: Delete verification (line ~843)
+   - All use `http_get_json()` with stderr-only diagnostics
+
+4. **Documentation** (DOCS SAFE MODE):
+   - backend/scripts/README.md: Appended "JSON Validation Hardening (P2.16.14 v2)" section documenting helper features and debug bundle format
+   - backend/docs/ops/runbook.md: Appended "Bulk Smoke Script: JSON Parse Error (P2.16.14 v2 Hardening)" troubleshooting section with debug workflow
+   - backend/docs/project_status.md: This v2 entry
+
+**Prevents**:
+- JSON parse errors when API returns HTML error pages
+- Log lines mixing into captured JSON variables
+- Parsing incomplete/malformed JSON responses
+- Missing diagnostic context for PROD failures (debug bundle provides full forensics)
+
+**Status:** ✅ IMPLEMENTED (NOT VERIFIED - requires PROD smoke run with rc=0)
+

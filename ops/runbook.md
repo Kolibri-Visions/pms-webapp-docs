@@ -36868,3 +36868,80 @@ curl -X PATCH "$HOST/api/v1/pricing/rate-plans/{smoke_plan_id}/archive" \
 - Create seasons covering Jan 1 - Dec 31 for a year
 - Gap banner should disappear completely
 - No "2025" artifacts in gap dates
+
+---
+
+### Bulk Smoke Script: JSON Parse Error (P2.16.14 v2 Hardening)
+
+**Symptom:** Smoke script `pms_p2_seasons_bulk_ops_smoke.sh` fails with "JSON parse error" even after v1 hardening.
+
+**Root Cause (v2 Fix):** Log lines from `log_error()` mixing into captured JSON variables. The v1 hardening validated HTTP status and body, but diagnostics were printed to stdout and captured by command substitution (`VERIFY_BODY=$(safe_fetch_json ...)`).
+
+**How v2 Fix Works:**
+
+The script now uses `http_get_json()` helper that:
+1. **Follows redirects** automatically (`curl --location`)
+2. **Captures to temp files**: HTTP status, content-type, headers, body
+3. **Validates JSON with Python3** try/except BEFORE returning
+4. **Separates output streams**:
+   - stdout: Only validated JSON (for capture)
+   - stderr: All diagnostics (not captured)
+5. **Creates debug bundle** on failure: `/tmp/pms_bulk_ops_debug_<timestamp>.txt`
+
+**Debug Bundle Contents:**
+```
+=== DEBUG BUNDLE ===
+Timestamp: 2026-01-21 14:32:15 UTC
+
+=== URL ===
+https://api.example.com/api/v1/pricing/rate-plans/.../seasons?show_archived=true
+
+=== HTTP Status ===
+200
+
+=== Content-Type ===
+application/json
+
+=== JSON Validation Error ===
+JSON validation failed: Expecting value: line 1 column 1 (char 0)
+
+=== Response Headers ===
+HTTP/2 200
+content-type: application/json
+...
+
+=== Response Body (Invalid JSON) ===
+<!DOCTYPE html>
+<html>Error: Rate plan not found</html>
+```
+
+**How to Debug:**
+1. Check stderr output for diagnostics (not mixed into variables)
+2. Locate debug bundle: `/tmp/pms_bulk_ops_debug_<timestamp>.txt`
+3. Inspect full response including headers, body, validation error
+4. Common issues:
+   - **Content-Type mismatch**: Headers say `application/json` but body is HTML
+   - **Backend crash**: Returns 200 with error page instead of JSON
+   - **Empty body**: HTTP 200 but content-length: 0
+   - **Redirect loop**: `--location` flag prevents but logs redirects
+
+**Solution:**
+- **v2 script** (commit `fix(p2.16.14): bulk ops smoke json fetch hardening v2`):
+  - All diagnostics to stderr (prevents capture pollution)
+  - Python3 JSON validation before returning
+  - Debug bundle for post-mortem analysis
+- **If still failing**: Check debug bundle, test endpoint manually, verify backend logs
+
+**Manual Endpoint Test:**
+```bash
+curl -v --location \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "x-agency-id: $AGENCY_ID" \
+  "https://api.example.com/api/v1/pricing/rate-plans/$RATE_PLAN_ID/seasons?show_archived=true&limit=100"
+
+# Check:
+# - HTTP status (expect 200)
+# - Content-Type header (expect application/json)
+# - Response body is valid JSON (pipe to jq)
+```
+
