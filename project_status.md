@@ -12550,7 +12550,15 @@ git fetch origin main && git reset --hard origin/main
    - backend/scripts/README.md: Added smoke script documentation
    - backend/docs/project_status.md: This entry
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
+
+**PROD Evidence** (Verified: 2026-01-21):
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Deployed Commit**: 07702fd7528c33a1efd6e7f9063f7f5cf4cc1d4c
+- **Deployment Timestamp**: 2026-01-21T21:29:06.658392+00:00
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh` → rc=0
+- **Smoke Test**: `backend/scripts/pms_p2_seasons_bulk_ops_smoke.sh` → rc=0
+- **Test Results**: All 4 tests passed (bulk archive, idempotency, delete safety, bulk delete)
 
 **Dependencies**:
 - P2.16.12 (multi-year sync modes, toggle switch, dark badges)
@@ -12627,7 +12635,6 @@ After initial deployment, smoke script failed with `AttributeError: 'list' objec
 - Detects response type (list vs dict)
 - Extracts seasons array appropriately
 - Prints compact diagnostics on failure (target IDs + found/missing)
-- Requires rerun in PROD to mark P2.16.13/14 as VERIFIED
 
 
 **Parsing Hardening (Post-Implementation)**:
@@ -12640,7 +12647,7 @@ After initial list/dict parsing fix, smoke script still failed with `JSON parse 
 
 **Status:** ✅ VERIFIED
 
-**Note:** P2.16.13 remains marked as IMPLEMENTED (NOT VERIFIED) until automated PROD verification passes (smoke script rc=0).
+**Note:** P2.16.13 is now ✅ VERIFIED (see P2.16.13 section above; PROD evidence 2026-01-21).
 
 **Dependencies**:
 - P2.16.13 (bulk operations + smoke script)
