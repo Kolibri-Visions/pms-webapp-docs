@@ -12621,6 +12621,16 @@ echo "rc=$?"
    - backend/docs/ops/runbook.md: Added troubleshooting "Bulk Archive Verification Shows 0 Archived"
    - backend/docs/project_status.md: This entry
 
+**Parsing Fix (Post-Implementation)**:
+
+After initial deployment, smoke script failed with `AttributeError: 'list' object has no attribute 'get'` because seasons listing endpoint returns a list, not a dict wrapper. Updated smoke script to handle both response shapes (list and dict) with type-safe parsing. Script now:
+- Detects response type (list vs dict)
+- Extracts seasons array appropriately
+- Prints compact diagnostics on failure (target IDs + found/missing)
+- Requires rerun in PROD to mark P2.16.13/14 as VERIFIED
+
+**Note:** P2.16.13 and P2.16.14 remain marked as IMPLEMENTED (NOT VERIFIED) until automated PROD verification passes (smoke script rc=0).
+
 **Status:** ✅ IMPLEMENTED
 
 **Important**: NOT marked as VERIFIED until automated PROD verification passes:

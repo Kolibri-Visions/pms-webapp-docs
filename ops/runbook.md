@@ -36619,6 +36619,35 @@ curl -X GET "${HOST}/api/v1/pricing/rate-plans/<plan_id>/seasons?show_archived=t
 
 ---
 
+### Smoke Script Crash: AttributeError 'list' object has no attribute 'get'
+
+**Symptom:** Smoke script `pms_p2_seasons_bulk_ops_smoke.sh` crashes in Test 1 with Python error:
+```
+AttributeError: 'list' object has no attribute 'get'
+```
+
+**Root Cause:** Seasons listing endpoint returns a JSON array `[{season}, ...]`, but script expected a dict wrapper `{items: [...]}`.
+
+**How to Debug:**
+```bash
+# Check seasons listing response shape
+curl -X GET "${HOST}/api/v1/pricing/rate-plans/<plan_id>/seasons?show_archived=true&limit=10" \
+  -H "Authorization: Bearer ${JWT_TOKEN}" | python3 -c "import sys, json; data=json.load(sys.stdin); print(type(data).__name__)"
+
+# Output: "list" or "dict"
+```
+
+**Solution:**
+- Smoke script (as of P2.16.14 parsing fix) handles both response shapes:
+  - List: `[{season}, ...]` → uses directly
+  - Dict: `{items: [...]}` → extracts items/data/seasons array
+- Upgrade to latest smoke script version from origin/main
+- No backend changes needed (both response shapes are valid)
+
+**Fixed In:** P2.16.14 parsing fix commit
+
+---
+
 ### Smoke Test: "Template has no active periods" (Period Creation Failed)
 
 **Symptom:** Smoke script fails with "Template has no active periods" even though it claims "Added 2 periods to template"
