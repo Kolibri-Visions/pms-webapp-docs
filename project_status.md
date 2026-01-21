@@ -12587,4 +12587,77 @@ echo "rc=$?"
 # 11. Verify "Überschrieben" badge has wine-red background
 ```
 
+# P2.16.14 — Fix Bulk Seasons Smoke Verification (Archived Listing)
+
+**Implementation Date:** 2026-01-21
+
+**Scope:** Fix smoke script verification for bulk-archive to properly check archived seasons via listing endpoint with show_archived parameter.
+
+**Bug Fixed**: Smoke script Test 1 (bulk-archive) failed with "Expected 3 archived seasons, verified 0" because default listing hides archived seasons.
+
+**Changes Implemented:**
+
+1. **Smoke Script Verification Enhancement** (backend/scripts/pms_p2_seasons_bulk_ops_smoke.sh):
+   - **Response Assertion**: Parse JSON response after bulk-archive and assert count fields:
+     - `requested_count == 3`
+     - `archived_count == 3`
+     - `processed_count >= 3`
+     - Print response snippet (first 300 chars) on failure for debugging
+   - **Listing Verification**: Fetch seasons with archived parameter:
+     - Probes multiple param variations: `show_archived=true`, `include_archived=true`, `archived=true`
+     - Uses first successful response (HTTP 200)
+     - Verifies `archived_at` is not null for archived season IDs
+   - **Test 4 Enhancement**: Verify bulk-delete by confirming deleted seasons are ABSENT from listing
+   - All tests now have robust verification with clear error messages
+
+2. **Backend Endpoint Enhancement** (if needed):
+   - Seasons listing endpoint supports both `show_archived` and `include_archived` query parameters (synonyms)
+   - Default behavior unchanged: returns only active seasons (archived_at IS NULL)
+   - When `show_archived=true` or `include_archived=true`: returns all seasons including archived
+   - Agency scoping remains intact
+
+3. **Documentation** (DOCS SAFE MODE):
+   - backend/scripts/README.md: Added verification logic explanation under P2.16.13 smoke section
+   - backend/docs/ops/runbook.md: Added troubleshooting "Bulk Archive Verification Shows 0 Archived"
+   - backend/docs/project_status.md: This entry
+
+**Status:** ✅ IMPLEMENTED
+
+**Important**: NOT marked as VERIFIED until automated PROD verification passes:
+- `pms_verify_deploy.sh` confirms commit deployed
+- `pms_p2_seasons_bulk_ops_smoke.sh` exits with rc=0 (all 4 tests pass)
+
+**Dependencies**:
+- P2.16.13 (bulk operations + smoke script)
+
+**Verification Commands** (for VERIFIED status later):
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify commit deployed
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+# Expected: Commit matches origin/main
+
+# Run bulk ops smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<manager/admin JWT>>>"
+./backend/scripts/pms_p2_seasons_bulk_ops_smoke.sh
+echo "rc=$?"
+# Expected: rc=0, all 4 tests pass with proper archived verification
+
+# Manual verification
+# 1. Create 3 seasons via UI
+# 2. Bulk archive them
+# 3. Verify they disappear from default listing (active view)
+# 4. Toggle to archived view
+# 5. Verify they appear with archived indicator
+# 6. Bulk delete them
+# 7. Verify they're removed from archived view
+```
+
+---
+
 

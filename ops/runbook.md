@@ -36578,6 +36578,43 @@ curl -X GET "${HOST}/api/v1/pricing/seasons?rate_plan_id=<plan_id>&limit=100" \\
 
 **Solution:**
 - Split request into multiple batches of 200 or fewer
+
+### Bulk Archive Verification Shows 0 Archived (Listing Hides Archived)
+
+**Symptom:** Bulk-archive returns successful response (archived_count=3), but subsequent listing/verification shows 0 archived seasons.
+
+**Root Cause:** Default seasons listing endpoint hides archived seasons (WHERE archived_at IS NULL). Verification requires explicit parameter to include archived seasons.
+
+**How to Debug:**
+```bash
+# Bulk archive seasons
+curl -X POST "${HOST}/api/v1/pricing/seasons/bulk-archive" \
+  -H "Authorization: Bearer ${JWT_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{"season_ids": ["<uuid1>", "<uuid2>", "<uuid3>"]}' | jq
+
+# Verify response shows archived_count=3
+
+# Default listing (hides archived)
+curl -X GET "${HOST}/api/v1/pricing/rate-plans/<plan_id>/seasons?limit=100" \
+  -H "Authorization: Bearer ${JWT_TOKEN}" | jq '.items[] | {id, archived_at}'
+# Result: Archived seasons NOT in list
+
+# Listing WITH archived parameter
+curl -X GET "${HOST}/api/v1/pricing/rate-plans/<plan_id>/seasons?show_archived=true&limit=100" \
+  -H "Authorization: Bearer ${JWT_TOKEN}" | jq '.items[] | {id, archived_at}'
+# Result: Archived seasons APPEAR with archived_at set
+```
+
+**Solution:**
+- Use `show_archived=true` or `include_archived=true` query parameter to fetch archived seasons
+- Verify `archived_at` field is not null for archived seasons
+- Smoke script (pms_p2_seasons_bulk_ops_smoke.sh) implements this correctly as of P2.16.14
+
+**Alternative Params (synonyms):**
+- `?show_archived=true` (preferred)
+- `?include_archived=true` (synonym)
+- `?archived=true` (legacy)
 - Example: For 500 seasons, make 3 requests (200 + 200 + 100)
 
 ---
