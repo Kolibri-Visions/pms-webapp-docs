@@ -36466,6 +36466,122 @@ curl -X POST "$HOST/api/v1/pricing/rate-plans/<plan_id>/seasons/sync-from-templa
 ---
 ---
 
+## Pricing → Seasons Bulk Actions (Archive/Delete)
+
+**Overview:** Bulk operations for archiving and deleting rate plan seasons.
+
+**Purpose:** Efficiently manage large numbers of seasons through batch operations with safety guardrails.
+
+**Architecture:**
+- **Bulk Archive**: Archives multiple active seasons in one request (sets archived_at)
+- **Bulk Delete**: Permanently deletes multiple archived seasons in one request
+- **Safety**: Delete ONLY works for archived seasons; active seasons must be archived first
+- **Limits**: Max 200 season_ids per request
+
+**API Endpoints:**
+
+Staff (manager/admin):
+- `POST /api/v1/pricing/seasons/bulk-archive` - Archive multiple active seasons
+- `POST /api/v1/pricing/seasons/bulk-delete` - Delete multiple archived seasons
+
+**Request Format:**
+```json
+{
+  "season_ids": ["uuid1", "uuid2", "uuid3"]
+}
+```
+
+**Response Format:**
+```json
+{
+  "requested_count": 10,
+  "processed_count": 8,
+  "archived_count": 8,  // For archive operation
+  "deleted_count": 0,   // For delete operation
+  "skipped_ids": ["uuid9", "uuid10"],
+  "errors": []
+}
+```
+
+**Safety Rules:**
+1. **Archive**: Only archives active seasons, skips already-archived
+2. **Delete**: ONLY deletes archived seasons, rejects request if ANY active season included
+3. **Agency Scoping**: All operations respect agency boundaries (via rate_plan → property → agency_id)
+4. **Limits**: Max 200 season_ids per request (422 if exceeded)
+
+**Verification Commands:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Test bulk archive
+export HOST="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<manager/admin JWT>>>"
+
+# Create test seasons (or use existing)
+SEASON_ID_1="..."
+SEASON_ID_2="..."
+
+# Archive multiple seasons
+curl -X POST "${HOST}/api/v1/pricing/seasons/bulk-archive" \\
+  -H "Authorization: Bearer ${JWT_TOKEN}" \\
+  -H "Content-Type: application/json" \\
+  -d "{\"season_ids\": [\"${SEASON_ID_1}\", \"${SEASON_ID_2}\"]}" | jq
+
+# Verify response: archived_count should equal number of active seasons
+
+# Delete archived seasons
+curl -X POST "${HOST}/api/v1/pricing/seasons/bulk-delete" \\
+  -H "Authorization: Bearer ${JWT_TOKEN}" \\
+  -H "Content-Type: application/json" \\
+  -d "{\"season_ids\": [\"${SEASON_ID_1}\", \"${SEASON_ID_2}\"]}" | jq
+
+# Verify response: deleted_count should equal number of archived seasons
+```
+
+**Common Issues:**
+
+### Bulk Delete Returns 409/400 (Active Seasons Included)
+
+**Symptom:** POST /api/v1/pricing/seasons/bulk-delete returns 409 Conflict or 400 Bad Request with error about active seasons.
+
+**Root Cause:** Request includes season IDs that are NOT archived (archived_at IS NULL).
+
+**How to Debug:**
+```bash
+# Check season status
+curl -X GET "${HOST}/api/v1/pricing/seasons?rate_plan_id=<plan_id>&limit=100" \\
+  -H "Authorization: Bearer ${JWT_TOKEN}" | jq '.items[] | {id, label, archived_at}'
+
+# Identify which seasons are active (archived_at: null)
+```
+
+**Solution:**
+- Archive seasons first using bulk-archive or individual PATCH /seasons/{id}/archive
+- Then retry bulk-delete with archived season IDs only
+- UI enforces this by only showing delete action in archived view
+
+### Bulk Operation Returns Skipped IDs
+
+**Symptom:** Bulk-archive response includes skipped_ids array with some season IDs.
+
+**Root Cause:** Those seasons were already archived when bulk-archive was called (idempotent operation).
+
+**Solution:**
+- Expected behavior, not an error
+- Skipped seasons are already in desired state (archived)
+- Check processed_count vs requested_count to see how many were actually modified
+
+### Bulk Operation Exceeds Limit (422)
+
+**Symptom:** Request returns 422 Unprocessable Entity with error about exceeding max season_ids.
+
+**Root Cause:** Request contains more than 200 season IDs.
+
+**Solution:**
+- Split request into multiple batches of 200 or fewer
+- Example: For 500 seasons, make 3 requests (200 + 200 + 100)
+
+---
+
 ### Smoke Test: "Template has no active periods" (Period Creation Failed)
 
 **Symptom:** Smoke script fails with "Template has no active periods" even though it claims "Added 2 periods to template"

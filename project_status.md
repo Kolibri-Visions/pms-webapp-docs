@@ -12494,3 +12494,97 @@ git fetch origin main && git reset --hard origin/main
 # 4. Verify template_mode = "pattern" in response
 ```
 
+
+---
+
+# P2.16.13 — Seasons Bulk Actions + UI Polish
+
+**Implementation Date:** 2026-01-21
+
+**Scope:** Add bulk archive/delete operations for seasons, reposition archived toggle, show year in date ranges, fix "Überschrieben" badge contrast.
+
+**Features Implemented:**
+
+1. **Backend: Bulk Archive/Delete Endpoints**:
+   - POST /api/v1/pricing/seasons/bulk-archive: Archive multiple active seasons
+     - Request: { season_ids: [uuid, ...] }
+     - Response: requested_count, processed_count, archived_count, skipped_ids, errors
+     - Skips already-archived seasons (idempotent)
+   - POST /api/v1/pricing/seasons/bulk-delete: Delete multiple archived seasons
+     - Request: { season_ids: [uuid, ...] }
+     - Response: requested_count, processed_count, deleted_count, errors
+     - Rejects (409/400) if ANY active season included (safety)
+   - Validation: Max 200 season_ids per request (422 if exceeded)
+   - Agency scoping via rate_plan → property → agency_id
+   - backend/app/api/routes/pricing.py: Both endpoints
+   - backend/app/schemas/pricing.py: Request/response schemas
+
+2. **Frontend: Bulk Selection UI**:
+   - Checkbox on each season row for multi-select
+   - Per-year "Select all" checkbox in section headers
+   - Bulk action bar (fixed position) when items selected:
+     - Shows "X ausgewählt"
+     - Active view: "Ausgewählte archivieren"
+     - Archived view: "Ausgewählte endgültig löschen"
+     - "Auswahl aufheben" to clear selection
+   - Delete action shows confirm dialog (in-page modal, not window.confirm)
+   - Selection cleared when switching active/archived view
+   - Disable bulk actions while running, show toast on success/error
+
+3. **Frontend: UI Polish**:
+   - Archived toggle repositioned: Now in right-side action cluster with buttons
+   - Season date ranges now include year: "von 01.12.2026 bis 31.12.2026" (UTC-safe parsing)
+   - "Überschrieben" badge: bg-rose-800 text-white (wine-red for better contrast)
+   - "Importiert" and "Benutzerdefiniert" badges remain bg-slate-900 text-white
+
+4. **QA: Smoke Script**:
+   - backend/scripts/pms_p2_seasons_bulk_ops_smoke.sh
+   - Tests bulk-archive (including idempotency)
+   - Tests bulk-delete safety (rejects active seasons)
+   - Tests bulk-delete (archived seasons)
+   - PROD-safe: Only operates on seasons with " - Smoke" suffix
+   - Uses curl + jq only (no python)
+
+5. **Documentation**:
+   - backend/docs/ops/runbook.md: New section "Pricing → Seasons Bulk Actions (Archive/Delete)"
+   - backend/scripts/README.md: Added smoke script documentation
+   - backend/docs/project_status.md: This entry
+
+**Status:** ✅ IMPLEMENTED
+
+**Dependencies**:
+- P2.16.12 (multi-year sync modes, toggle switch, dark badges)
+- P2.16.11 (year selection, gap detection)
+
+**Verification Commands** (for VERIFIED status later):
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify deploy (optional)
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# Run bulk ops smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<manager/admin JWT>>>"
+# Optional: export PROPERTY_ID="..." or AGENCY_ID="..."
+./backend/scripts/pms_p2_seasons_bulk_ops_smoke.sh
+echo "rc=$?"
+
+# Manual UI verification
+# 1. Login as manager/admin
+# 2. Navigate to property rate plans page
+# 3. Verify checkboxes on season rows
+# 4. Select multiple seasons, verify bulk action bar appears
+# 5. Test bulk archive (active view)
+# 6. Switch to archived view
+# 7. Select archived seasons, verify "Ausgewählte endgültig löschen" button
+# 8. Test bulk delete with confirm dialog
+# 9. Verify toggle position in header action cluster
+# 10. Verify date ranges show year (e.g., "von 01.12.2026 bis 31.12.2026")
+# 11. Verify "Überschrieben" badge has wine-red background
+```
+
+
