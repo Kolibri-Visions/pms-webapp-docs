@@ -12327,7 +12327,7 @@ class SeasonSyncRequest(BaseModel):
 
 # P2.16.9: Season Template Linkage Fix
 
-**Status:** ✅ IMPLEMENTED (NOT VERIFIED)
+**Status:** ✅ VERIFIED
 
 **Date:** 2026-01-21
 
@@ -12340,6 +12340,21 @@ class SeasonSyncRequest(BaseModel):
 - Improved smoke script Test 3 diagnostics
 - Added integration tests for linkage verification
 
+**PROD Evidence:**
+- Verified Date: 2026-01-21
+- Backend /api/v1/ops/version:
+  source_commit=6d4547eb85e9b1cffbca5c5778c88009b9880cc5
+  started_at=2026-01-21T08:23:24.854030+00:00
+- Smoke:
+  script=backend/scripts/pms_season_template_sync_apply_smoke.sh
+  rc=0
+  logfile=/tmp/pms_p2169_season_template_sync_apply_smoke_retry2_20260121T091704Z.log
+  key results:
+    - Preview: to_create=4
+    - Apply: created=4
+    - Linkage: 4 seasons linked to template periods
+    - 422 diagnostics: years missing + empty years verified
+
 **Files Changed:**
 - backend/supabase/migrations/*.sql (if new migration added)
 - backend/app/api/routes/pricing.py (linkage population)
@@ -12350,4 +12365,4 @@ class SeasonSyncRequest(BaseModel):
 - backend/scripts/README.md (Test 3 description)
 - backend/docs/project_status.md (this entry)
 
-**Verification:** Pending PROD smoke script rc=0 + deploy verify
+**Verification:** ✅ VERIFIED (see PROD Evidence above)
