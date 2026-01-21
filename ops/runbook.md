@@ -36474,3 +36474,20 @@ If period creation fails with HTTP 503 or "null value in column violates not-nul
 2. Fix: Apply migrations as supabase_admin or pull latest schema
 3. Verify: `\d pricing_season_template_periods` should show `archived_at` column
 ```
+
+---
+
+### Seasons Created But Linkage Missing (source_template_period_id null)
+
+**Symptom:** Smoke Test 3 fails with "No seasons have source_template_period_id set"
+
+**Cause:** Season sync apply mode didn't populate linkage field
+
+**Fix:** Upgrade to commit with P2.16.9 fix
+
+**Verification:**
+```bash
+# Check season linkage after sync
+curl "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/seasons" | \
+  python3 -c "import sys, json; seasons = json.load(sys.stdin); print(f'Linked: {sum(1 for s in seasons if s.get(\"source_template_period_id\"))} / {len(seasons)}')"
+```

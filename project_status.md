@@ -12322,3 +12322,32 @@ class SeasonSyncRequest(BaseModel):
 - backend/docs/project_status.md (this entry)
 
 **Verification:** Pending PROD smoke script rc=0 with deterministic create > 0
+
+---
+
+# P2.16.9: Season Template Linkage Fix
+
+**Status:** ✅ IMPLEMENTED (NOT VERIFIED)
+
+**Date:** 2026-01-21
+
+**Problem:** Smoke Test 3 failed - seasons created via sync-from-template apply mode had null source_template_period_id (no linkage to template periods). This breaks deterministic re-sync and UI tracking.
+
+**Solution:**
+- Added/verified source_template_period_id column in rate_plan_seasons table (nullable FK)
+- Modified sync-from-template apply to populate linkage field
+- Updated SeasonResponse schema to include source_template_period_id
+- Improved smoke script Test 3 diagnostics
+- Added integration tests for linkage verification
+
+**Files Changed:**
+- backend/supabase/migrations/*.sql (if new migration added)
+- backend/app/api/routes/pricing.py (linkage population)
+- backend/app/schemas/pricing.py (response schema)
+- backend/scripts/pms_season_template_sync_apply_smoke.sh (Test 3 diagnostics)
+- backend/tests/integration/test_season_sync_validation_api.py (linkage tests)
+- backend/docs/ops/runbook.md (troubleshooting)
+- backend/scripts/README.md (Test 3 description)
+- backend/docs/project_status.md (this entry)
+
+**Verification:** Pending PROD smoke script rc=0 + deploy verify
