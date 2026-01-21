@@ -12818,3 +12818,65 @@ After v1 HTTP capture hardening, smoke script still failed in PROD with `JSON pa
 
 **Note:** v4 hardening is a complete rewrite of HTTP capture logic. All changes are backward-compatible (same environment variables, same test structure). This remains IMPLEMENTED status until PROD verification passes with exit code 0.
 
+
+----
+
+**P2.16.14 v5 Hardening — Direct File-Based JSON Parsing (Post-Implementation):**
+
+**Implementation Date:** 2026-01-21
+
+**Scope:** Eliminate shell variable JSON storage in smoke script verification steps, parsing JSON directly from debug bundle body files instead.
+
+**Context:** After v4's bulletproof temp-file HTTP capture, JSON parse errors could still occur in verification steps. While v4 eliminated command substitution for HTTP operations, verification logic still passed JSON through shell variables (`BODY=$(cat file); echo "$BODY" | python3 -c "..."`). Shell variable storage corrupts JSON containing special characters (quotes, newlines, unicode escapes), causing parse errors even when body files contain valid JSON.
+
+**Changes Implemented:**
+
+1. **Smoke Script Verification Rewrite** (backend/scripts/pms_p2_seasons_bulk_ops_smoke.sh):
+
+   - **New Helper Functions**:
+     - `validate_json_response()` - Validates body file is parseable JSON, reads directly from file
+     - `count_archived_seasons()` - Counts archived seasons by reading body file via stdin
+     - `count_present_ids()` - Checks if specific season IDs exist by reading body file via stdin
+   
+   - **Direct File-Based Parsing Pattern**:
+     - OLD (v4): `BODY=$(cat file.body); echo "$BODY" | python3 -c "..."` (corrupts JSON)
+     - NEW (v5): `python3 -c "..." < file.body` (preserves JSON integrity)
+     - All Python JSON operations use stdin redirection from body files
+     - Zero JSON data stored in shell variables
+   
+   - **Applied to All Verification Blocks**:
+     - Test 1: Archive verification - count archived seasons in response
+     - Test 2: Idempotency verification - parse skipped_ids from response
+     - Test 4: Delete verification - count deleted seasons and verify absence
+     - All parsing uses new helpers reading directly from `$DEBUG_DIR/*.body` files
+
+2. **Documentation Updates** (DOCS SAFE MODE):
+   - backend/docs/ops/runbook.md: Added "JSON Parse Error with Valid Body File (P2.16.14 v5)" subsection with file-based parsing debug workflow
+   - backend/scripts/README.md: Added "JSON Parsing (P2.16.14 v5)" section documenting direct file-based parsing and new helper functions
+   - backend/docs/project_status.md: This v5 entry
+
+**Key Improvements:**
+
+- **Eliminates Last JSON Corruption Source**: No JSON ever passes through shell variables
+- **File-Based Parsing Only**: All verification parsing reads body files directly via Python stdin
+- **New Helper Functions**: Encapsulate common verification patterns (count archived, check IDs present)
+- **Handles All JSON Complexity**: Works with quotes, newlines, unicode, large responses (no shell limits)
+- **Debugging Simplified**: Can manually run same commands script uses: `cat $DEBUG_DIR/*.body | python3 -m json.tool`
+
+**Technical Details:**
+
+Shell variables corrupt JSON because:
+- Bash quoting/escaping rules conflict with JSON syntax
+- Variable expansion interprets special characters (`$`, `` ` ``, `\`, `"`)
+- Unicode sequences get mangled during assignment/echo
+- Large JSON hits shell buffer limits
+
+File-based parsing avoids all these issues:
+- Python reads raw bytes from file via stdin
+- No shell interpretation or modification
+- Works with any valid JSON regardless of content
+- No size limits (beyond disk space)
+
+**Status:** ✅ IMPLEMENTED (NOT VERIFIED - requires PROD smoke run with rc=0)
+
+**Note:** v5 hardening completes the JSON corruption elimination begun in v1-v4. HTTP capture uses temp files (v4), verification parsing uses those files directly (v5). No JSON passes through shell variables at any stage. This remains IMPLEMENTED status until PROD verification passes with exit code 0.

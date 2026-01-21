@@ -37060,3 +37060,86 @@ The script completely eliminates command substitution for HTTP capture:
   - Check backend logs for crashes/errors
   - Verify API endpoint behavior with manual curl test
 
+
+#### JSON Parse Error with Valid Body File (P2.16.14 v5)
+
+**Symptom:** Smoke script fails with "JSON parse error" in verification steps, but debug bundle shows valid JSON in body files.
+
+**Root Cause (v5 Fix):** Even with v4's temp-file HTTP capture, JSON parsing still passed through shell variables (`echo "$BODY" | python3 -c "..."`). Shell variable storage corrupts JSON containing special characters (quotes, newlines, unicode, etc).
+
+**How v5 Fix Works:**
+
+The script eliminates shell variable JSON storage entirely:
+
+1. **New Validation Helpers** (parse JSON directly from body files):
+   - `validate_json_response()` - Validates body file is parseable JSON
+   - `count_archived_seasons()` - Counts archived seasons in body file
+   - `count_present_ids()` - Checks if specific IDs exist in body file
+
+2. **Direct File-Based Parsing**:
+   - All Python JSON parsing reads directly from body files
+   - No JSON data ever stored in shell variables
+   - Pattern: `python3 -c "..." < "$DEBUG_DIR/test1_verify_archived.body"`
+   - Eliminates corruption from shell quoting, escaping, expansion
+
+3. **Applied to All Verification Blocks**:
+   - Test 1: Archive verification (parse response, count archived)
+   - Test 2: Idempotency verification (parse response, check skipped_ids)
+   - Test 4: Delete verification (parse response, count deleted)
+
+**How to Debug:**
+
+1. Verify body file contains valid JSON:
+   ```bash
+   # Direct JSON validation (same method as script)
+   cat $DEBUG_DIR/test1_verify_archived.body | python3 -m json.tool
+
+   # Should output formatted JSON without errors
+   ```
+
+2. Check what script is trying to parse:
+   ```bash
+   # Count archived seasons manually
+   python3 -c "import sys, json; data = json.load(sys.stdin); items = data.get('items', data if isinstance(data, list) else []); print(len([s for s in items if s.get('archived_at')]))" < $DEBUG_DIR/test1_verify_archived.body
+
+   # Check for specific IDs
+   python3 -c "import sys, json; data = json.load(sys.stdin); items = data.get('items', data if isinstance(data, list) else []); ids = {s.get('id') for s in items}; print('season-id-123' in ids)" < $DEBUG_DIR/test1_verify_archived.body
+   ```
+
+3. Compare with old method (if mixing v4/v5 code):
+   ```bash
+   # OLD (v4): Variable storage corrupts JSON
+   BODY=$(cat $DEBUG_DIR/test1_verify_archived.body)
+   echo "$BODY" | python3 -m json.tool  # May fail with parse error
+
+   # NEW (v5): Direct file read preserves JSON
+   cat $DEBUG_DIR/test1_verify_archived.body | python3 -m json.tool  # Always works if file is valid
+   ```
+
+**Solution:**
+
+- **v5 script** (final hardening for JSON verification):
+  - All verification parsing reads directly from body files
+  - New helper functions encapsulate file-based parsing
+  - Zero JSON data in shell variables
+  - Prevents corruption from shell quoting/escaping
+
+- **If still failing**:
+  - Check if body file itself is corrupt: `cat $DEBUG_DIR/*.body | python3 -m json.tool`
+  - Verify HTTP response was actually JSON (check Content-Type in `.meta` file)
+  - Ensure no legacy code still using shell variable JSON storage
+
+**Verification Pattern (v5):**
+```bash
+# After http_fetch(), parse directly from body file
+http_fetch "test1_verify_archived" "$URL" "-H 'Authorization: Bearer $JWT_TOKEN'"
+json_body_or_die "$DEBUG_DIR/test1_verify_archived"
+
+# Count archived seasons (reads body file directly, no shell variable)
+ARCHIVED_COUNT=$(count_archived_seasons "$DEBUG_DIR/test1_verify_archived.body")
+
+# Check for specific IDs (reads body file directly)
+if count_present_ids "$DEBUG_DIR/test1_verify_archived.body" "${SEASON_IDS[@]}"; then
+    log_info "All expected IDs found"
+fi
+```
