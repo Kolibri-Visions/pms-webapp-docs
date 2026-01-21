@@ -36400,6 +36400,70 @@ psql $DATABASE_URL -c "SELECT id, label, active FROM pricing_season_template_per
 psql $DATABASE_URL -c "UPDATE pricing_season_template_periods SET active = true WHERE active IS NULL OR active = false;"
 ```
 
+
+## Pricing → Saisonvorlagen Sync (Pattern vs Absolute Multi-Year)
+
+**Overview:** Season template sync supports two modes based on template structure.
+
+**PATTERN MODE (Single-Year Template)**:
+- Template periods span exactly ONE source year (e.g., all periods in 2026)
+- Behavior: Month/day patterns are rebased to each target year
+- Example: Template 2026-12-01..2026-12-31, target years [2026,2027] → creates 2026-12-01..2026-12-31 AND 2027-12-01..2027-12-31
+- Use case: Reusable seasonal patterns (e.g., "Hochsaison" always Dec 1-31)
+
+**ABSOLUTE MULTI-YEAR MODE (Multi-Year Template)**:
+- Template periods span TWO OR MORE source years (e.g., 2026 + 2027)
+- Behavior: NO rebase, periods are synced to their absolute years
+- Example: Template has 2026-12-01..2026-12-31 + 2027-01-01..2027-06-30, target years [2026,2027] → creates exactly those periods, NOT extra 2027-12-01..2027-12-31
+- Use case: Specific multi-year plans (e.g., transition periods across year boundary)
+
+**Mode Detection**:
+- API automatically detects mode by analyzing template_source_years (unique years from all period date_from values)
+- Response includes `template_mode: "pattern" | "absolute"` and `template_source_years: [...]`
+
+**Common Issues**:
+
+### Sync Creates Unexpected Periods in Next Year
+
+**Symptom:** Template with 2026-12-01..2026-12-31 + 2027 periods creates extra 2027-12-01..2027-12-31 when syncing years [2026,2027].
+
+**Root Cause:** Template is multi-year (spans 2+ years), but periods are being rebased as if single-year pattern.
+
+**How to Debug:**
+```bash
+# Check template structure
+curl -X GET "$HOST/api/v1/pricing/season-templates/<template_id>" \
+  -H "Authorization: Bearer $JWT_TOKEN" | jq '.periods[] | {label, date_from, date_to}'
+
+# Check sync preview mode
+curl -X POST "$HOST/api/v1/pricing/rate-plans/<plan_id>/seasons/sync-from-template" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"template_id": "<template_id>", "years": [2026, 2027], "mode": "preview", "strategy": "sync"}' \
+  | jq '{template_mode, template_source_years, totals}'
+```
+
+**Expected Behavior:**
+- If template_source_years = [2026,2027] → template_mode = "absolute" → no cross-year rebase
+- If template_source_years = [2026] → template_mode = "pattern" → periods rebased to all target years
+
+**Solution:**
+- Multi-year templates work correctly in absolute mode (P2.16.12+)
+- For pattern behavior, create separate single-year templates for each year
+- Verify template_source_years in API response matches intent
+
+### Gap Warning Shows Previous/Next Year Dates
+
+**Symptom:** Gap detection shows "31.12.2025" or "01.01.2028" as gaps within 2026 or 2027.
+
+**Root Cause:** Gap computation not clamping to year boundaries (fixed in P2.16.12).
+
+**Solution:**
+- Gaps are now strictly clamped to [01.01.YYYY - 31.12.YYYY] per year
+- Gaps outside year boundaries are filtered out
+- Update to P2.16.12+ to get fix
+
+---
 ---
 
 ### Smoke Test: "Template has no active periods" (Period Creation Failed)

@@ -12428,3 +12428,69 @@ class SeasonSyncRequest(BaseModel):
 - backend/docs/project_status.md (this entry)
 
 **Verification:** Pending PROD deployment + UI manual check (select template 2026 → verify Jahre: 2026 → import only 2026; gap banner correct for covered years)
+
+
+---
+
+# P2.16.12 — Multi-Year Season Template Sync + Gap Clamp + UI Polish
+
+**Implementation Date:** 2026-01-21
+
+**Scope:** Fix multi-year season template sync to NOT rebase periods across years, fix gap warning clamp, improve UI polish.
+
+**Features Implemented:**
+
+1. **Backend: Pattern vs Absolute Multi-Year Sync Modes**:
+   - Mode detection: template_source_years set from all period date_from years
+     - PATTERN mode (1 source year): Existing rebase behavior (shift month/day to each target year)
+     - ABSOLUTE mode (2+ source years): NO rebase, periods stay in their source years
+   - For each target year y in absolute mode, only sync template periods where:
+     - period.date_from.year == y OR
+     - period.date_to.year == y OR
+     - period spans across y
+   - Response includes: template_mode ("pattern" | "absolute"), template_source_years
+   - Preview and apply use identical logic
+
+2. **Frontend: Gap Warning Clamp Fix**:
+   - computeSeasonGapsByYear now clamps gaps strictly to [yearStart..yearEnd]
+   - Filters out gaps that start before yearStart or end after yearEnd
+   - Filters out empty/negative gaps after clamping
+   - NO display of 31.12.(Vorjahr) or 01.01.(Folgejahr) as gaps within a year
+
+3. **Frontend: UI Polish**:
+   - Badge colors: "Importiert" and "Benutzerdefiniert" badges now dark (bg-slate-900 text-white)
+   - Archived toggle: Replaced button with Switch component (label "Archivierte", mobile-friendly)
+   - Template mode info: Modal displays "Modus: Jahresvorlage (Pattern)" or "Modus: Mehrjahresvorlage (Absolute)"
+
+4. **Documentation**:
+   - backend/docs/ops/runbook.md: Added "Pricing → Saisonvorlagen Sync" section explaining pattern vs absolute modes, troubleshooting
+   - backend/docs/project_status.md: This entry
+
+**Status:** ✅ IMPLEMENTED
+
+**Bug Fixed**: Template "TestSaison für Überschneidung mit 2026" with periods 2026-12-01..2026-12-31 + 2027-01-01..2027-06-30 + 2027-07-01..2027-12-31 no longer creates spurious 2027-12-01..2027-12-31 period when syncing years [2026,2027].
+
+**Dependencies**:
+- P2.16.11 (year selection + gap detection)
+- P2.16.10 (UI polish + smoke preflight)
+
+**Verification Commands** (for VERIFIED status later):
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Test multi-year template sync (absolute mode)
+# 1. Create template with periods spanning 2026+2027
+# 2. Sync to rate plan with years [2026,2027]
+# 3. Verify NO extra 2027-12-01..2027-12-31 period created
+# 4. Verify template_mode = "absolute" in response
+# 5. Verify gap warnings show only dates within each year (no 2025/2028 artifacts)
+
+# Test single-year template sync (pattern mode)
+# 1. Create template with periods all in 2026
+# 2. Sync to rate plan with years [2026,2027]
+# 3. Verify periods rebased to BOTH years (pattern behavior)
+# 4. Verify template_mode = "pattern" in response
+```
+
