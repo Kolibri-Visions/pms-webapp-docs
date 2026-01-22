@@ -13565,6 +13565,17 @@ echo "rc=$?"
   - Fixed smoke script header building (use multiple -H flags instead of newline-separated HEADERS variable)
 - **Commit:** fix(p2): amenities tenant auth via x-agency-id + rls align + smoke headers
 
+**Smoke Script Hardening (2026-01-22):**
+- **Issue:** Script used `((TESTS_PASSED++))` which returns exit status 1 when value is 0, causing early exit with `set -e`. Static names "WiFi"/"Pool" hit UNIQUE constraint on reruns (409 Conflict).
+- **Fix:** Made smoke script fully idempotent and set -e safe:
+  - Arithmetic: `TESTS_PASSED=$((TESTS_PASSED + 1))` (set -e safe)
+  - Unique names: "WLAN - Smoke <timestamp>", "Pool - Smoke <timestamp>" (German labels)
+  - Auto-cleanup: Trap ensures created amenities deleted on EXIT (success or failure)
+  - 409 self-healing: Searches by exact name and reuses ID if amenity already exists
+  - Shape-robust: Handles both `[]` and `{"items":[...]}` API responses
+- **Commit:** fix(p2): harden amenities smoke (idempotent "- Smoke" names + set -e safe)
+- **Result:** Smoke script can be run multiple times without manual cleanup, safe for parallel runs, continues through all 10 tests
+
 **Next Steps (Admin UI):**
 - [ ] Create admin UI page for amenities management (/amenities)
   - List amenities with category filter

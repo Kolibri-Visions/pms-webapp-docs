@@ -37991,4 +37991,78 @@ curl_with_auth() {
 **Verification:**
 Re-run smoke script after pulling latest code (commit: fix(p2): amenities tenant auth via x-agency-id + rls align + smoke headers).
 
+### Smoke Script Idempotency
+
+**Overview:** Smoke script is fully idempotent and can be run multiple times without manual cleanup.
+
+**Features:**
+- **Unique names per run**: Uses timestamp suffix (e.g., "WLAN - Smoke 1737548123", "Pool - Smoke 1737548123")
+- **Automatic cleanup**: Trap ensures created amenities are deleted on EXIT (success or failure)
+- **409 self-healing**: If amenity name already exists (edge case), script searches by exact name and reuses the ID
+- **Shape-robust parsing**: Handles both list `[]` and paginated `{"items":[...]}` API responses
+
+**How it works:**
+```bash
+# Each run generates unique names
+TIMESTAMP=$(date +%s)
+WIFI_NAME="WLAN - Smoke ${TIMESTAMP}"
+POOL_NAME="Pool - Smoke ${TIMESTAMP}"
+
+# Track created IDs
+CREATED_AMENITY_IDS=()
+CREATED_AMENITY_IDS+=("$AMENITY_WIFI_ID")
+
+# Cleanup on exit (success or failure)
+trap cleanup EXIT
+cleanup() {
+  for amenity_id in "${CREATED_AMENITY_IDS[@]}"; do
+    DELETE /api/v1/amenities/${amenity_id}
+  done
+}
+```
+
+**Why this matters:**
+- Safe to rerun after failures (no leftover test data)
+- No manual cleanup needed
+- Parallel runs don't conflict (unique timestamps)
+- Works with UNIQUE(agency_id, name) constraint
+
+### 409 Conflict Handling (Idempotent Reruns)
+
+**Symptom:** If smoke script is interrupted (Ctrl+C, network failure) before cleanup, rerunning might encounter 409 Conflict if timestamp hasn't changed (same second).
+
+**Root Cause:** UNIQUE(agency_id, name) constraint violated when trying to create amenity with same name.
+
+**How Script Self-Heals:**
+1. POST /api/v1/amenities returns 409 Conflict
+2. Script logs warning: "409 Conflict (amenity exists), searching by name..."
+3. Script calls `find_amenity_by_name()` to search existing amenities by exact name
+4. If found: Reuses existing amenity ID and continues tests
+5. If not found: Logs failure (unexpected - conflict but amenity not found)
+
+**Example:**
+```bash
+# First run (interrupted before cleanup)
+WIFI_NAME="WLAN - Smoke 1737548123"  # Created successfully
+
+# Second run (same second, before cleanup)
+WIFI_NAME="WLAN - Smoke 1737548123"  # 409 Conflict
+# Script searches and finds existing ID, continues with tests
+```
+
+**Resolution:**
+Script automatically resolves 409 by reusing existing amenity. No manual intervention needed.
+
+**Prevention:**
+Run cleanup manually if interrupted:
+```bash
+# List amenities with "- Smoke" suffix
+curl -X GET "$HOST/api/v1/amenities?limit=1000" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" | jq '.[] | select(.name | contains("- Smoke"))'
+
+# Delete by ID
+curl -X DELETE "$HOST/api/v1/amenities/<amenity-id>" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
 ---
