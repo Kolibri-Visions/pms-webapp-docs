@@ -13575,6 +13575,32 @@ echo "rc=$?"
   - Shape-robust: Handles both `[]` and `{"items":[...]}` API responses
 - **Commit:** fix(p2): harden amenities smoke (idempotent "- Smoke" names + set -e safe)
 - **Result:** Smoke script can be run multiple times without manual cleanup, safe for parallel runs, continues through all 10 tests
+- **Status:** ✅ VERIFIED
+
+**PROD Verification Evidence (2026-01-22T15:30 UTC):**
+```
+Backend:  /api/v1/ops/version
+          source_commit=0331b1d5cfcff2283b090e0b5ee8ee2ba6b29c2a
+          started_at=2026-01-22T15:30:04.322622+00:00
+
+Admin:    /api/ops/version
+          source_commit=0331b1d5cfcff2283b090e0b5ee8ee2ba6b29c2a
+          started_at=2026-01-22T15:27:37.501Z
+
+Deploy:   backend/scripts/pms_verify_deploy.sh
+          rc=0 (commit match confirmed)
+
+Smoke:    backend/scripts/pms_amenities_smoke.sh
+          rc=0 (10 tests passed, 0 failed)
+          - Test 1-2: Create WLAN/Pool with "- Smoke" suffix
+          - Test 3: List amenities
+          - Test 4: Get amenity by ID
+          - Test 5: Update amenity description
+          - Test 6-7: Assign/verify property amenities
+          - Test 8-9: Delete + cascade verification
+          - Test 10: Cleanup
+          - Automatic cleanup via trap executed on EXIT
+```
 
 **Next Steps (Admin UI):**
 - [ ] Create admin UI page for amenities management (/amenities)
