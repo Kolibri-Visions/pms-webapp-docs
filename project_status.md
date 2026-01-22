@@ -12913,4 +12913,12 @@ File-based parsing avoids all these issues:
 - Script now computes expected total from `nights_breakdown` and validates against `total_cents`
 - On mismatch: Test FAILS (rc=1) with debug bundle saved to `/tmp/pms_quote_gap_debug_<timestamp>/`
 - Ensures production-grade validation: totals must match computed values or test fails
-- Status remains ✅ IMPLEMENTED pending re-verification in PROD (awaiting smoke rc=0 without warnings)
+- Status: ✅ VERIFIED
+
+**PROD Evidence** (Verified: 2026-01-22):
+- **API Base URL**: https://api.fewo.kolibri-visions.de
+- **Deployed Commit**: 1d3924f7e17a94d30acc8d379457b40b206c162d
+- **Deployment Timestamp**: 2026-01-22T05:20:48.161034+00:00
+- **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh` → rc=0
+- **Smoke Test**: `backend/scripts/pms_quote_keine_saison_smoke.sh` → rc=0
+- **Notes**: 409 fallback executed safely (temp property created+deleted); totals validation uses `total_cents` and matched computed total.
