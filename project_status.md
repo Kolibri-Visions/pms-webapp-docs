@@ -12922,3 +12922,81 @@ File-based parsing avoids all these issues:
 - **Deploy Verification**: `backend/scripts/pms_verify_deploy.sh` → rc=0
 - **Smoke Test**: `backend/scripts/pms_quote_keine_saison_smoke.sh` → rc=0
 - **Notes**: 409 fallback executed safely (temp property created+deleted); totals validation uses `total_cents` and matched computed total.
+
+---
+
+## P2.16 Bugfix: Template Sync Year-Bound Correction
+
+**Implementation Date:** 2026-01-22
+
+**Status:** ✅ IMPLEMENTED
+
+**Scope:** Fix template sync to correct out-of-year imported seasons instead of creating conflicts/duplicates.
+
+**Problem (Pre-Fix):**
+- Template "2026" corrected to have periods only within 2026 (e.g., "Nebensaison 2026-12-01 to 2026-12-31")
+- Property's rate plan has imported season incorrectly extending to 2027 (e.g., "2026-12-01 to 2027-01-15")
+- Sync would create conflict or skip instead of CORRECTING the existing season
+
+**Root Cause:**
+1. Pattern mode (single-year templates) did not enforce year boundaries when computing target dates
+2. No duplicate detection/handling for seasons with same match key (source_template_period_id + source_year)
+3. Seasons incorrectly extending beyond year boundary were not corrected during sync
+
+**Fix Implemented:**
+
+1. **Year Boundary Enforcement** (`backend/app/api/routes/pricing.py`):
+   - Pattern mode now clamps `target_date_to` to December 31 of `source_year`
+   - Prevents year-bound templates from creating/updating seasons beyond year boundary
+   - Logs warning when clamping occurs
+
+2. **Duplicate Season Detection**:
+   - New function `find_all_matching_seasons()`: Finds ALL seasons matching (rate_plan_id, source_template_period_id, source_year)
+   - Detects duplicate imported seasons before sync processing
+
+3. **Duplicate Archiving**:
+   - If multiple seasons match same template period + year: keeps most recently updated, archives rest
+   - Runs in PHASE 0 (before updates/creates) to clean up duplicates first
+   - Prevents duplicate creation during sync
+
+4. **Correction Logic**:
+   - Existing season matched by template period + year is UPDATED with corrected dates
+   - No longer skips or creates conflict when dates differ
+   - Respects `source_is_overridden=true` flag (does not overwrite manually edited seasons)
+
+**Files Changed:**
+- `backend/app/api/routes/pricing.py`: Year boundary enforcement, duplicate detection/archiving
+- `backend/scripts/pms_p216_template_sync_correction_smoke.sh`: New smoke test
+- `backend/scripts/README.md`: Smoke test documentation
+- `backend/docs/ops/runbook.md`: Troubleshooting section
+
+**Smoke Test:**
+- Script: `backend/scripts/pms_p216_template_sync_correction_smoke.sh`
+- Tests: Creates broken season (extends to 2027), triggers sync, verifies correction to 2026-12-31
+- Verifies: No duplicates, idempotency (re-sync makes no changes)
+
+**Verification Commands** (for VERIFIED status later):
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify deploy
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# Run sync correction smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="<jwt>"
+export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+./backend/scripts/pms_p216_template_sync_correction_smoke.sh
+echo "rc=$?"
+
+# Expected: rc=0, all 8 steps pass, season corrected to 2026-12-31, no duplicates
+```
+
+**Dependencies:**
+- P2.16 Season Sync implementation (existing sync logic)
+- Template periods with `date_from`, `date_to`, `source_template_period_id`
+- Rate plan seasons with `source_template_period_id`, `source_year`, `source_is_overridden` fields
+

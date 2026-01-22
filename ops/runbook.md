@@ -37203,3 +37203,90 @@ cat "$DEBUG_DIR/quote_with_fallback.json" | python3 -m json.tool
 - If `subtotal_cents` doesn't match computed_subtotal: nights_breakdown aggregation bug
 - If script reads wrong field: Update script to use `total_cents` (NOT `total_price_cents`)
 
+
+---
+
+## P2.16 Template Sync: Year-Bound Correction Issues
+
+**Symptom:** Template sync creates conflicts or duplicates instead of correcting out-of-year imported seasons.
+
+**Example Scenario:**
+- Template "2026" has "Nebensaison 2026-12-01 to 2026-12-31"
+- Property has imported season "Nebensaison 2026-12-01 to 2027-01-15" (incorrectly extends to 2027)
+- Sync fails with conflict or creates duplicate instead of correcting existing season
+
+**Root Cause:** Prior to P2.16 bugfix, sync did not enforce year boundaries for pattern-mode templates and did not handle duplicate seasons.
+
+**How It's Fixed (Commit: fix(p2.16): template sync corrects imported seasons)**:
+1. **Year Boundary Enforcement**: Pattern mode (single-year templates) now clamps `date_to` to December 31 of `source_year`
+2. **Duplicate Detection**: Finds ALL seasons matching (rate_plan_id, source_template_period_id, source_year) match key
+3. **Duplicate Archiving**: If multiple matches found, keeps most recently updated, archives rest
+4. **Correction Logic**: Updates existing season with corrected dates instead of skipping/conflicting
+
+**Diagnostic Commands**:
+```bash
+# [HOST-SERVER-TERMINAL] Check for out-of-year seasons
+RATE_PLAN_ID="<uuid>"
+psql $DATABASE_URL -c "
+SELECT id, label, date_from, date_to, source_year,
+       EXTRACT(YEAR FROM date_to) as date_to_year
+FROM rate_plan_seasons
+WHERE rate_plan_id = '$RATE_PLAN_ID'
+  AND archived_at IS NULL
+  AND source_year IS NOT NULL
+  AND EXTRACT(YEAR FROM date_to) != source_year
+ORDER BY date_from;
+"
+
+# Expected: Empty result (no out-of-year seasons)
+# If rows returned: These seasons extend beyond their source_year boundary
+
+# Check for duplicate seasons (same template period + year)
+psql $DATABASE_URL -c "
+SELECT source_template_period_id, source_year, COUNT(*) as duplicates
+FROM rate_plan_seasons
+WHERE rate_plan_id = '$RATE_PLAN_ID'
+  AND archived_at IS NULL
+  AND source_template_period_id IS NOT NULL
+GROUP BY source_template_period_id, source_year
+HAVING COUNT(*) > 1;
+"
+
+# Expected: Empty result (no duplicates)
+# If rows returned: Multiple active seasons for same template period + year
+```
+
+**Manual Correction (if sync doesn't fix)**:
+```bash
+# Archive duplicate seasons manually (keep most recent)
+DUPLICATE_SEASON_ID="<older-duplicate-uuid>"
+curl -X PATCH "https://api.fewo.kolibri-visions.de/api/v1/pricing/rate-plans/<rate-plan-id>/seasons/$DUPLICATE_SEASON_ID/archive" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+
+# Correct out-of-year season manually
+SEASON_ID="<season-uuid>"
+curl -X PATCH "https://api.fewo.kolibri-visions.de/api/v1/pricing/rate-plans/<rate-plan-id>/seasons/$SEASON_ID" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"date_to": "2026-12-31"}'
+```
+
+**Verification (After Fix)**:
+```bash
+# Run smoke test
+HOST=https://api.fewo.kolibri-visions.de \
+MANAGER_JWT_TOKEN="<jwt>" \
+AGENCY_ID="<agency-id>" \
+./backend/scripts/pms_p216_template_sync_correction_smoke.sh
+
+# Expected: rc=0, all tests pass
+# STEP F should show: "Season corrected to 2026-12-31 ✅"
+# STEP G should show: "Exactly 1 active season (no duplicates) ✅"
+```
+
+**Related Runbook Sections:**
+- [P2.16 Template Sync](../docs/ops/runbook.md#p216-template-sync) for general sync troubleshooting
+- [P2.13 Pricing Invariants](../docs/ops/runbook.md#p213-pricing-invariants-hardening) for season overlap constraints
+
