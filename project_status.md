@@ -13727,4 +13727,12 @@ echo "rc=$?"
 - [ ] Amenities usage analytics (which amenities most common)
 - [ ] Amenity templates (predefined sets like "Luxury", "Family-Friendly")
 
+**Build Fix Applied (2026-01-22):**
+- **Issue:** Coolify deploy failing with TypeScript error "Expected 1-2 arguments, but got 3" at properties/[id]/page.tsx:169
+- **Root Cause:** `apiClient.get()` and `apiClient.put()` called with 3-4 arguments (endpoint, token, headers) but signatures only accepted 1-2/2-3 arguments
+- **Fix:** Extended API client method signatures to accept optional headers as last parameter (backward compatible)
+- **Files Changed:** `frontend/app/lib/api-client.ts` (all 5 methods: get, post, put, patch, delete)
+- **Impact:** TypeScript compilation now succeeds, Coolify can build and deploy
+- **Status:** Still ✅ IMPLEMENTED (not VERIFIED - pending deploy + smoke test)
+
 ---

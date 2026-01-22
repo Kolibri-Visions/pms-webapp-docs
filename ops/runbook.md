@@ -37609,6 +37609,40 @@ WHERE tc.table_name = 'property_amenities'
 DELETE FROM property_amenities WHERE amenity_id NOT IN (SELECT id FROM amenities);
 ```
 
+### Build Fix: TypeScript Arguments Mismatch (2026-01-22)
+
+**Symptom:** Coolify deploy failing during `npm run build` with TypeScript error:
+```
+./app/properties/[id]/page.tsx:169:9
+Type error: Expected 1-2 arguments, but got 3.
+```
+
+**Root Cause:** `apiClient.get()` and `apiClient.put()` signatures only accepted (endpoint, token) and (endpoint, body, token), but properties page was calling with additional headers parameter for x-agency-id injection.
+
+**Fix Applied:** Extended API client signatures in `frontend/app/lib/api-client.ts` to accept optional headers as last parameter:
+- `get(endpoint, token?, headers?)`
+- `put(endpoint, body?, token?, headers?)`
+- `post(endpoint, body?, token?, headers?)`
+- `patch(endpoint, body?, token?, headers?)`
+- `delete(endpoint, token?, headers?)`
+
+**Backward Compatible:** All existing call sites continue to work (headers optional).
+
+**Verification After Deploy:**
+```bash
+# Verify build succeeds in Coolify logs
+# Expected: "Build completed successfully" (no TypeScript errors)
+
+# Verify deployment
+cd /data/repos/pms-webapp && git fetch origin main && git reset --hard origin/main
+./backend/scripts/pms_verify_deploy.sh
+echo "rc=$?"
+
+# Verify amenities UI still works
+ADMIN_URL="https://admin.fewo.kolibri-visions.de" ./frontend/scripts/pms_admin_amenities_ui_smoke.sh
+echo "rc=$?"
+```
+
 ---
 
 ## Central Rate Plans Page: Archived Plans Toggle Not Working
