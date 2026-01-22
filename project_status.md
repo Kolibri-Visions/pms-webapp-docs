@@ -13602,12 +13602,129 @@ Smoke:    backend/scripts/pms_amenities_smoke.sh
           - Automatic cleanup via trap executed on EXIT
 ```
 
-**Next Steps (Admin UI):**
-- [ ] Create admin UI page for amenities management (/amenities)
-  - List amenities with category filter
-  - Create/Edit/Delete amenity forms
-  - Assign amenities to properties (multi-select in property details page)
-- [ ] Add amenities display to property detail page (read-only list of assigned amenities)
-- [ ] Consider public-facing amenities display for booking sites
+**Admin UI Implementation (2026-01-22):**
+
+**Scope:** Frontend admin UI for amenities catalog management and property assignment.
+
+**Features Implemented:**
+
+1. **Amenities Catalog Page** (`frontend/app/amenities/page.tsx`):
+   - Full CRUD interface at `/amenities` route
+   - List amenities with search (name filter)
+   - Filter by category (Allgemein, Küche, Bad, Schlafzimmer, Außenbereich, Unterhaltung, Sicherheit, Barrierefreiheit)
+   - Create/Edit modal with form validation (name required, optional: description, category, icon, sort_order)
+   - Delete confirmation dialog (warns about cascade to property assignments)
+   - Error handling: 409 (duplicate name), 401 (session expired), 403 (access denied), 503 (service unavailable)
+   - Success/error toast notifications
+   - Pagination with "Mehr laden" button
+   - German labels throughout
+   - x-agency-id header injection from user.user_metadata.agency_id
+
+2. **Navigation Entry** (`frontend/app/components/AdminShell.tsx`):
+   - Added "Ausstattung" entry with Sparkles icon in "Betrieb" group
+   - Role restriction: admin/manager only (staff/owner cannot see)
+   - Positioned after "Objekte" entry
+
+3. **Property Amenities Assignment** (`frontend/app/properties/[id]/page.tsx`):
+   - New "Ausstattung" section in property detail view
+   - Shows assigned amenities as chips with icon, name, and category
+   - "Ausstattung zuweisen" button opens modal
+   - Modal with checkbox list of all available amenities
+   - Multi-select with Save/Cancel actions
+   - Atomic PUT replaces all property amenities
+   - Empty state: "Keine Ausstattung zugewiesen"
+   - Modal empty state: "Keine Ausstattung verfügbar" (prompts to create amenities first)
+   - Auto-refreshes assigned amenities after save
+   - Toast notifications for success/errors
+
+4. **UI Smoke Script** (`frontend/scripts/pms_admin_amenities_ui_smoke.sh`):
+   - Test 1: Docker container commit check (optional, if EXPECTED_COMMIT set)
+   - Test 2: /amenities page loads (HTTP 200)
+   - Test 3: Page content verification (Ausstattung heading, Neu button, Next.js markers, navigation)
+   - Test 4: /properties page amenities reference (soft check)
+   - Test 5: Navigation includes "Ausstattung" entry
+   - Exit code: 0 = all tests pass, 1+ = failures
+   - Bash-based (no Playwright) using curl + grep
+   - Temp files auto-cleanup via trap
+
+5. **Documentation** (`backend/docs/ops/runbook.md`):
+   - New "P2 Amenities Admin UI" section with:
+     - Overview, purpose, architecture
+     - UI routes, API endpoints
+     - Database tables
+     - Verification commands (UI smoke script)
+     - Common issues troubleshooting:
+       - 401 Session expired
+       - 403 Access denied (role check)
+       - 409 Name already exists
+       - Property amenities not saving
+       - Modal shows "Keine Ausstattung verfügbar"
+       - Delete cascade issues
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- Admin UI completes the amenities feature (backend + frontend)
+- Multi-tenant via x-agency-id header (JWT lacks agency_id claim)
+- Role-based access control enforced in navigation and API
+- Fully German localized
+- Responsive design (mobile-friendly modals and forms)
+- Error states and loading indicators throughout
+- Toast notifications (no external library, state-based)
+- Follows existing PMS admin UI patterns (AdminShell, bo- color system, modal z-50)
+
+**Files Changed:**
+- `frontend/app/amenities/page.tsx` (NEW - 450+ lines)
+- `frontend/app/components/AdminShell.tsx` (MODIFIED - added Sparkles import + nav entry)
+- `frontend/app/properties/[id]/page.tsx` (MODIFIED - added amenities section + modal)
+- `frontend/scripts/pms_admin_amenities_ui_smoke.sh` (NEW - 250+ lines)
+- `backend/docs/ops/runbook.md` (MODIFIED - added P2 Amenities Admin UI section)
+- `backend/docs/project_status.md` (MODIFIED - this entry)
+
+**Verification Commands** (for VERIFIED status later):
+```bash
+# 1. Verify frontend deployment
+export ADMIN_URL="https://admin.fewo.kolibri-visions.de"
+export EXPECTED_COMMIT="<commit-sha>"
+./frontend/scripts/pms_admin_amenities_ui_smoke.sh
+echo "rc=$?"
+
+# Expected: rc=0, all 5 tests pass
+
+# 2. Manual UI verification
+# - Login as admin/manager at /login
+# - Navigate to /amenities (check navigation entry exists)
+# - Create test amenity (e.g., "WLAN - Test")
+# - Edit amenity (change description)
+# - Navigate to /properties, click a property
+# - Scroll to "Ausstattung" section, click "Ausstattung zuweisen"
+# - Select test amenity, click "Speichern"
+# - Verify amenity appears as chip in property detail
+# - Return to /amenities, delete test amenity
+# - Verify property detail no longer shows deleted amenity (cascade)
+```
+
+**Dependencies:**
+- Backend amenities API (✅ VERIFIED 2026-01-22)
+- Next.js App Router
+- Tailwind CSS with bo- prefix
+- Lucide React icons (Sparkles, Plus, X)
+- Supabase auth (JWT + session management)
+
+**Known Limitations:**
+- No real-time updates (manual refresh required)
+- No image upload for amenities (icon field is text emoji/unicode)
+- No bulk operations (create multiple amenities at once)
+- No import/export (CSV, JSON)
+- Property assignment requires opening each property individually (no bulk assign)
+
+**Next Steps (Future Enhancements):**
+- [ ] Add amenities display to public-facing property pages (booking sites)
+- [ ] Real-time updates via Supabase subscriptions
+- [ ] Bulk create amenities (import from CSV/JSON)
+- [ ] Amenity icon picker (emoji/unicode selector)
+- [ ] Bulk assign amenities to multiple properties
+- [ ] Amenities usage analytics (which amenities most common)
+- [ ] Amenity templates (predefined sets like "Luxury", "Family-Friendly")
 
 ---

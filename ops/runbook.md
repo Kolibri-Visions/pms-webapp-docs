@@ -37409,6 +37409,208 @@ export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
 
 ---
 
+## P2 Amenities Admin UI
+
+**Overview:** Admin UI for managing amenities catalog and assigning amenities to properties.
+
+**Purpose:** Allow staff (manager/admin) to create and manage amenity definitions (e.g., WiFi, Pool, Kitchen features) and assign them to properties. Amenities are displayed in property detail views and can be used for filtering/marketing.
+
+**Architecture:**
+- **Database**: `amenities` table stores amenity definitions (name, description, category, icon, sort_order) scoped by agency_id
+- **Junction Table**: `property_amenities` maps properties to amenities (many-to-many relationship)
+- **RBAC**: Admin/manager roles required for amenity management
+- **Multi-tenant**: All queries scoped by x-agency-id header (JWT lacks agency_id claim)
+
+**UI Routes:**
+- `/amenities` - Amenities catalog page (list, create, edit, delete)
+- `/properties/[id]` - Property detail page with "Ausstattung" section (assign/view amenities)
+
+**API Endpoints:**
+
+Amenities CRUD:
+- `GET /api/v1/amenities` - List all amenities for agency
+- `POST /api/v1/amenities` - Create amenity (409 if name exists)
+- `PATCH /api/v1/amenities/{id}` - Update amenity
+- `DELETE /api/v1/amenities/{id}` - Delete amenity (cascade removes property assignments)
+
+Property Amenities:
+- `GET /api/v1/amenities/property/{property_id}` - Get property amenities
+- `PUT /api/v1/amenities/property/{property_id}` - Replace property amenities (atomic)
+
+**Database Tables:**
+- `amenities` - Amenity definitions with agency scoping
+- `property_amenities` - Property-to-amenity mappings (ON DELETE CASCADE)
+
+**Verification Commands:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Run UI smoke test
+export ADMIN_URL="https://admin.fewo.kolibri-visions.de"
+export EXPECTED_COMMIT="<commit-sha>"
+./frontend/scripts/pms_admin_amenities_ui_smoke.sh
+echo "rc=$?"
+
+# Expected output: 5 tests pass, rc=0
+# Test 1: Docker container commit match (if EXPECTED_COMMIT set)
+# Test 2: /amenities page loads (HTTP 200)
+# Test 3: Page content verified (Ausstattung heading, Neu button, Next.js markers)
+# Test 4: /properties page references amenities (soft check)
+# Test 5: Navigation includes "Ausstattung" entry
+```
+
+**Common Issues:**
+
+### Amenities Page Returns 401 (Session Expired)
+
+**Symptom:** /amenities page returns 401 Unauthorized or shows "Session abgelaufen" error.
+
+**Root Cause:** JWT token expired or not present in session/localStorage.
+
+**How to Debug:**
+```bash
+# Check browser console for auth errors
+# DevTools > Console > Look for "Session abgelaufen" or 401 errors
+
+# Check localStorage for session token
+# DevTools > Application > Local Storage > Check for auth token
+```
+
+**Solution:**
+- User must login again at /login
+- Check Supabase session persistence settings
+- Verify JWT_SECRET matches between backend and Supabase
+
+### Amenities Page Returns 403 (Access Denied)
+
+**Symptom:** /amenities page returns 403 Forbidden or shows "Keine Berechtigung" error.
+
+**Root Cause:** User role is not admin/manager. Amenities management requires elevated permissions.
+
+**How to Debug:**
+```bash
+# Decode JWT to check role claim
+echo $JWT_TOKEN | cut -d'.' -f2 | base64 -d | jq '.role'
+# Should return "admin" or "manager", not "staff" or "owner"
+
+# Check team_members table
+psql $DATABASE_URL -c "SELECT user_id, role FROM team_members WHERE user_id = '<user-id>';"
+```
+
+**Solution:**
+- Admin must upgrade user role via team_members table
+- Update role: `UPDATE team_members SET role = 'manager' WHERE user_id = '<user-id>';`
+- User must logout and login again to refresh JWT claims
+
+### Create Amenity Returns 409 (Name Already Exists)
+
+**Symptom:** POST /api/v1/amenities returns 409 Conflict with error "Amenity name already exists".
+
+**Root Cause:** UNIQUE constraint on (agency_id, name). Cannot create duplicate amenity names within same agency.
+
+**How to Debug:**
+```bash
+# Check existing amenities for agency
+curl -X GET "https://api.fewo.kolibri-visions.de/api/v1/amenities" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "x-agency-id: $AGENCY_ID" | jq '.[] | {id, name}'
+```
+
+**Solution:**
+- Use different amenity name (e.g., "WLAN" vs "WiFi", "Schwimmbad" vs "Pool")
+- Or update existing amenity instead: PATCH /api/v1/amenities/{id}
+- Or delete old amenity first (cascade deletes property assignments)
+
+### Property Amenities Not Saving
+
+**Symptom:** Clicking "Speichern" in amenities assignment modal shows success toast but amenities don't appear on property.
+
+**Root Cause:** PUT /api/v1/amenities/property/{property_id} returned success but subsequent GET returns empty array.
+
+**How to Debug:**
+```bash
+# Check property_amenities table directly
+PROPERTY_ID="<property-uuid>"
+psql $DATABASE_URL -c "
+SELECT pa.property_id, pa.amenity_id, a.name
+FROM property_amenities pa
+JOIN amenities a ON pa.amenity_id = a.id
+WHERE pa.property_id = '$PROPERTY_ID';
+"
+
+# Expected: Rows showing assigned amenities
+# If empty: Check if PUT request actually sent amenity_ids array
+```
+
+**Solution:**
+- Check browser DevTools Network tab: PUT request body should have `{"amenity_ids": ["uuid1", "uuid2"]}`
+- Verify x-agency-id header matches property's agency_id
+- Check property exists and user has permission to update it
+- If table has rows but UI doesn't show: Check GET request uses same x-agency-id header
+
+### Amenities Modal Shows "Keine Ausstattung verfügbar"
+
+**Symptom:** Opening amenities assignment modal shows "Keine Ausstattung verfügbar" message.
+
+**Root Cause:** GET /api/v1/amenities returns empty array - no amenities created for this agency yet.
+
+**How to Debug:**
+```bash
+# Check amenities table for agency
+AGENCY_ID="<agency-uuid>"
+psql $DATABASE_URL -c "SELECT id, name, category FROM amenities WHERE agency_id = '$AGENCY_ID';"
+
+# Expected: Rows showing amenities
+# If empty: No amenities created yet
+```
+
+**Solution:**
+- Go to /amenities page and create amenities first (click "Neu" button)
+- Create amenities with names like "WLAN", "Pool", "Küche", "Parkplatz", etc.
+- Then return to property detail and try assigning amenities again
+
+### Delete Amenity Cascade Issues
+
+**Symptom:** Deleting amenity fails or leaves orphaned property_amenities records.
+
+**Root Cause:** ON DELETE CASCADE constraint not working or missing in migration.
+
+**How to Debug:**
+```bash
+# Check FK constraint
+psql $DATABASE_URL -c "
+SELECT
+  tc.constraint_name,
+  tc.table_name,
+  kcu.column_name,
+  ccu.table_name AS foreign_table_name,
+  ccu.column_name AS foreign_column_name,
+  rc.delete_rule
+FROM information_schema.table_constraints AS tc
+JOIN information_schema.key_column_usage AS kcu
+  ON tc.constraint_name = kcu.constraint_name
+JOIN information_schema.constraint_column_usage AS ccu
+  ON ccu.constraint_name = tc.constraint_name
+JOIN information_schema.referential_constraints AS rc
+  ON tc.constraint_name = rc.constraint_name
+WHERE tc.table_name = 'property_amenities'
+  AND tc.constraint_type = 'FOREIGN KEY'
+  AND ccu.table_name = 'amenities';
+"
+
+# Expected: delete_rule = 'CASCADE'
+```
+
+**Solution:**
+- If cascade missing: Run migration to add ON DELETE CASCADE
+- If constraint exists but not working: Check Postgres version and RLS policies
+- Manual cleanup if needed:
+```sql
+-- Delete orphaned property_amenities
+DELETE FROM property_amenities WHERE amenity_id NOT IN (SELECT id FROM amenities);
+```
+
+---
+
 ## Central Rate Plans Page: Archived Plans Toggle Not Working
 
 **Symptom:** On legacy central rate plans page (`/pricing/rate-plans`), toggling "Archivierte anzeigen" does not show/hide archived plans, or toggle state resets after page refresh.
