@@ -13748,4 +13748,17 @@ echo "rc=$?"
 - **Files Changed:** `frontend/scripts/pms_admin_amenities_ui_smoke.sh` (complete rewrite)
 - **Status:** Still ✅ IMPLEMENTED (not VERIFIED - pending deploy + smoke rc=0)
 
+**Agency Context Resolution Fix (2026-01-22):**
+- **Issue:** /amenities showed dead-end red error banner "Keine Agentur-ID gefunden" instead of redirecting to login or handling agency context gracefully
+- **Fix:** Agency context resolution and auth protection:
+  - Redirect unauthenticated users to `/login?next=/amenities`
+  - Removed hard error banner (page now loads without requiring agency_id in user metadata)
+  - Backend can auto-resolve agency for single-tenant users via team_members table
+  - Smoke script now detects error banner as FAIL (functional regression detection)
+- **Files Changed:**
+  - `frontend/app/amenities/page.tsx` (added auth redirect, removed agency_id requirement, removed error banner)
+  - `frontend/scripts/pms_admin_amenities_ui_smoke.sh` (added banner detection in Test 3)
+  - `backend/docs/ops/runbook.md` (added troubleshooting section "Admin UI Shows 'Keine Agentur-ID gefunden'")
+- **Status:** Still ✅ IMPLEMENTED (not VERIFIED - pending deploy + smoke rc=0 + manual browser verification)
+
 ---

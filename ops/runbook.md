@@ -37609,6 +37609,52 @@ WHERE tc.table_name = 'property_amenities'
 DELETE FROM property_amenities WHERE amenity_id NOT IN (SELECT id FROM amenities);
 ```
 
+### Admin UI Shows "Keine Agentur-ID gefunden" on Amenities Page
+
+**Symptom:** Browser at /amenities shows red error banner: "Keine Agentur-ID gefunden. Bitte melden Sie sich erneut an." Page is not usable (dead-end, no functionality available).
+
+**Root Cause:** Page required agency_id in user.user_metadata and showed hard error banner if missing. Did not redirect to login for unauthenticated users or handle agency context resolution gracefully.
+
+**How It's Fixed (2026-01-22):**
+- **Auth Redirect:** Unauthenticated users are now redirected to `/login?next=/amenities`
+- **Agency Context Optional:** Page attempts to load amenities even without explicit agency_id in user metadata
+- **Backend Auto-Resolve:** Backend can auto-resolve agency for single-tenant users via team_members table
+- **No Hard Error Banner:** Removed dead-end error banner; errors now come from API calls with actionable messages
+
+**What Changed:**
+- `frontend/app/amenities/page.tsx`: Added redirect to login if no user, removed agency_id requirement for page render
+- `frontend/scripts/pms_admin_amenities_ui_smoke.sh`: Now fails if error banner is detected (regression detection)
+
+**How to Debug (if banner still appears):**
+```bash
+# Check if user is authenticated
+# DevTools > Application > Local Storage > Check for access_token
+
+# Check user metadata contains agency_id
+# DevTools > Console:
+# const user = JSON.parse(localStorage.getItem('user'));
+# console.log(user.user_metadata?.agency_id);
+
+# If agency_id is missing but user is authenticated:
+# Check backend: user's team_members entry should have agency_id set
+psql $DATABASE_URL -c "SELECT user_id, agency_id, role FROM team_members WHERE user_id = '<user-id>';"
+```
+
+**Solution:**
+- If not authenticated: Login at /login (should auto-redirect)
+- If authenticated but no agency_id in metadata: Contact admin to assign user to agency via team_members table
+- If backend returns 400/403: Check team_members table and backend logs for agency resolution errors
+
+**Verification:**
+```bash
+# After fix deployed, smoke script should pass without detecting error banner
+ADMIN_URL="https://admin.fewo.kolibri-visions.de" \
+EXPECTED_COMMIT="<commit-sha>" \
+./frontend/scripts/pms_admin_amenities_ui_smoke.sh
+
+# Test 3 should PASS without "Keine Agentur-ID gefunden" error
+```
+
 ### Build Fix: TypeScript Arguments Mismatch (2026-01-22)
 
 **Symptom:** Coolify deploy failing during `npm run build` with TypeScript error:
