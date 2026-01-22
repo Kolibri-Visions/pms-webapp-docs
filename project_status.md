@@ -13556,4 +13556,21 @@ echo "rc=$?"
 - Fills gap in property feature management
 - Enables richer property listings for booking sites
 
+**Hotfix (2026-01-22):** Tenant Auth Alignment
+- **Issue:** Initial implementation expected JWT to contain custom `agency_id` and `role` claims (PROD JWT lacks these)
+- **Fix:** Aligned with existing auth pattern used across PMS API:
+  - Agency context via `x-agency-id` header (validated via `get_current_agency_id` dependency + team_members table)
+  - Role enforcement via `require_roles("admin", "manager")` which queries team_members for DB-driven role checking
+  - RLS policies made permissive (USING (true)) since standard Supabase JWT lacks custom claims - backend handles all validation
+  - Fixed smoke script header building (use multiple -H flags instead of newline-separated HEADERS variable)
+- **Commit:** fix(p2): amenities tenant auth via x-agency-id + rls align + smoke headers
+
+**Next Steps (Admin UI):**
+- [ ] Create admin UI page for amenities management (/amenities)
+  - List amenities with category filter
+  - Create/Edit/Delete amenity forms
+  - Assign amenities to properties (multi-select in property details page)
+- [ ] Add amenities display to property detail page (read-only list of assigned amenities)
+- [ ] Consider public-facing amenities display for booking sites
+
 ---

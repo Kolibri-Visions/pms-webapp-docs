@@ -37915,4 +37915,80 @@ echo $ADMIN_TOKEN | cut -d'.' -f2 | base64 -d | jq '.agency_id'
 - Use correct property ID from same agency
 - Verify JWT agency_id matches property.agency_id
 
+### Agency Context Not Available (400 Bad Request)
+
+**Symptom:** API returns 400 with message "Agency context not available in token" or "Cannot resolve agency: user has N agency memberships. Please set x-agency-id header."
+
+**Root Cause:** Standard Supabase JWT lacks custom `agency_id` claim. Backend requires agency context via `x-agency-id` header for multi-tenant isolation.
+
+**How to Debug:**
+```bash
+# Check JWT structure (standard Supabase JWT has aud=authenticated, no custom claims)
+echo $ADMIN_TOKEN | cut -d'.' -f2 | base64 -d | jq '.'
+
+# Check user's agency memberships
+export USER_ID=$(echo $ADMIN_TOKEN | cut -d'.' -f2 | base64 -d | jq -r '.sub')
+psql $DATABASE_URL -c "SELECT agency_id, role FROM team_members WHERE user_id = '$USER_ID';"
+```
+
+**Solution (Single Membership):**
+If user has exactly one agency membership, backend auto-detects agency. No x-agency-id header needed.
+
+**Solution (Multiple Memberships):**
+User must specify agency via x-agency-id header:
+```bash
+# Specify agency explicitly
+HOST=https://api.fewo.kolibri-visions.de \
+ADMIN_TOKEN="eyJ..." \
+AGENCY_ID="<agency-uuid>" \
+PROPERTY_ID="<property-uuid>" \
+./backend/scripts/pms_amenities_smoke.sh
+```
+
+**Architecture Note:**
+- Amenities endpoints use `get_current_agency_id` dependency which accepts x-agency-id header and validates via team_members table
+- Role enforcement uses `require_roles("admin", "manager")` which queries team_members for DB-driven role checking
+- RLS policies are intentionally permissive (USING (true)) since JWT lacks custom claims - backend handles all validation
+
+### Smoke Script 401 Invalid Token
+
+**Symptom:** Smoke script returns 401 "Invalid token" even with valid JWT.
+
+**Root Cause:** Broken header building. Script tried to use newline-separated HEADERS variable which curl interprets as malformed header.
+
+**How to Debug:**
+```bash
+# Test curl command directly
+curl -X GET "https://api.fewo.kolibri-visions.de/api/v1/amenities?limit=10" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "x-agency-id: $AGENCY_ID" \
+  -w "\n%{http_code}\n"
+
+# Should return 200, not 401
+```
+
+**Solution:**
+Updated smoke script uses `curl_with_auth` helper function which correctly passes multiple -H flags:
+```bash
+curl_with_auth() {
+  local method="$1"
+  local url="$2"
+  shift 2
+
+  if [ -n "$AGENCY_ID" ]; then
+    curl -sS -w "\n%{http_code}" -X "$method" "$url" \
+      -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+      -H "x-agency-id: ${AGENCY_ID}" \
+      "$@"
+  else
+    curl -sS -w "\n%{http_code}" -X "$method" "$url" \
+      -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+      "$@"
+  fi
+}
+```
+
+**Verification:**
+Re-run smoke script after pulling latest code (commit: fix(p2): amenities tenant auth via x-agency-id + rls align + smoke headers).
+
 ---
