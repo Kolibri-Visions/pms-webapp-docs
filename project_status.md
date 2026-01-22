@@ -13091,7 +13091,7 @@ echo "rc=$?"
 
 **Implementation Date:** 2026-01-22
 
-**Status:** ✅ IMPLEMENTED (awaiting PROD verification)
+**Status:** ✅ VERIFIED
 
 **Scope:** Fix UnboundLocalError crash on no-op template sync (second sync with no changes).
 
@@ -13147,13 +13147,14 @@ echo "rc=$?"
 # Expected: STEP H PASSED (HTTP 200), rc=0
 ```
 
-**PROD Evidence** (to be filled after verification):
+**PROD Evidence** (Verification Date: 2026-01-22):
 ```
-Commit: <sha>
-Deploy verified: pms_verify_deploy.sh rc=0
-Started At: <timestamp from /api/v1/ops/version>
-Smoke: pms_p216_template_sync_correction_smoke.sh rc=0
-STEP H: HTTP 200, counts.update=0, counts.create=0
+Source Commit: 1f5d2d5616d0da0435905ae0bed9b94765b34554
+Started At: 2026-01-22T09:08:04.326922+00:00
+Deploy Verify: backend/scripts/pms_verify_deploy.sh rc=0 (exact commit match)
+Smoke Test: backend/scripts/pms_p216_template_sync_correction_smoke.sh rc=0
+STEP H: HTTP 200 (idempotent, no 500 UnboundLocalError)
+Result: counts.update=0, counts.create=0 (true no-op)
 ```
 
 **Dependencies:**

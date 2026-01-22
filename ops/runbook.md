@@ -37400,3 +37400,9 @@ export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
 **Related Runbook Sections:**
 - [P2.16 BUGFIX v2: Sync Not Idempotent](#p216-bugfix-v2-sync-not-idempotent-second-sync-returns-update1) for idempotency implementation
 
+
+**PROD Verification (2026-01-22):**
+- Commit: 1f5d2d5616d0da0435905ae0bed9b94765b34554
+- Deploy: pms_verify_deploy.sh rc=0
+- Smoke: pms_p216_template_sync_correction_smoke.sh rc=0 (STEP H HTTP 200, idempotent)
+
