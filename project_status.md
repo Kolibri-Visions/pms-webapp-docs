@@ -13171,7 +13171,7 @@ Result: counts.update=0, counts.create=0 (true no-op)
 
 **Implementation Date:** 2026-01-22
 
-**Status:** ✅ IMPLEMENTED (awaiting PROD verification)
+**Status:** ✅ VERIFIED
 
 **Scope:** UX improvement for legacy central rate plans page (/pricing/rate-plans): default-hide archived behavior with toggle and URL query parameter persistence.
 
@@ -13258,5 +13258,29 @@ Result: counts.update=0, counts.create=0 (true no-op)
 8. Verify archived plans disappear from list
 9. Directly navigate to /pricing/rate-plans?include_archived=1 → verify toggle pre-checked
 10. Test both "Tarifpläne" and "Vorlagen (Agentur)" tabs
+```
+
+**PROD Evidence** (Verification Date: 2026-01-22):
+```
+Commit: 7325d6c35cc4aa513becf2b2dca511ff639098c9
+Deploy Verification: pms_verify_deploy.sh rc=0 (exact commit match)
+
+Backend API (/api/v1/ops/version):
+- source_commit: 7325d6c35cc4aa513becf2b2dca511ff639098c9
+- started_at: 2026-01-22T10:03:04.225833+00:00
+- environment: development
+
+Admin UI (/api/ops/version):
+- source_commit: 7325d6c35cc4aa513becf2b2dca511ff639098c9
+- started_at: 2026-01-22T10:04:17.569Z
+- environment: production
+
+Manual UI Verification (https://admin.fewo.kolibri-visions.de/pricing/rate-plans):
+✓ Default hides archived rate plans (archived not visible)
+✓ Toggle "Archivierte anzeigen" OFF by default
+✓ Toggle ON shows archived immediately
+✓ URL query param `?include_archived=1` persists across refresh (shareable/bookmarkable)
+✓ Toggle OFF hides archived and removes query param
+✓ Both tabs ("Tarifpläne" and "Vorlagen (Agentur)") tested successfully
 ```
 

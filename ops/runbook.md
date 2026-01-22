@@ -37530,3 +37530,10 @@ document.querySelector('input[type="checkbox"]').click();
 - Toggle OFF → URL updates → API re-fetch → archived plans disappear
 - Page refresh → URL param preserved → toggle state restored
 
+**PROD Verification (2026-01-22):**
+- Commit: 7325d6c35cc4aa513becf2b2dca511ff639098c9
+- Backend API /api/v1/ops/version: source_commit match, started_at 2026-01-22T10:03:04.225833+00:00
+- Admin UI /api/ops/version: source_commit match, started_at 2026-01-22T10:04:17.569Z
+- Deploy: pms_verify_deploy.sh rc=0
+- Manual UI testing: All verification checks passed at https://admin.fewo.kolibri-visions.de/pricing/rate-plans
+
