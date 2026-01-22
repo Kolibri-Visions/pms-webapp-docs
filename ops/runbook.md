@@ -37714,3 +37714,205 @@ sed -n '247,252p' frontend/app/properties/[id]/rate-plans/page.tsx
   - Other query params preserved correctly ✅
 
 ---
+
+---
+
+## OpenAPI Gap Map (Generate + Interpret)
+
+**Overview:** Automated OpenAPI schema analysis for identifying missing/incomplete modules.
+
+**Purpose:** Generate a comprehensive gap analysis report by fetching the live OpenAPI schema from PROD and categorizing modules by completeness.
+
+**Script Location:** `backend/scripts/openapi_gap_map.py`
+
+**Output Location:** `backend/docs/ops/openapi_gap_map.md`
+
+**Usage:**
+```bash
+# Generate gap map (read-only, GET requests only)
+python3 backend/scripts/openapi_gap_map.py
+
+# Output: backend/docs/ops/openapi_gap_map.md
+```
+
+**Report Structure:**
+- **Summary:** Total paths, tags, module counts by status
+- **Tags Overview Table:** All tags with endpoint counts, HTTP methods, status, priority
+- **Detailed Module Analysis:** Categorized by Minimal (1-2 endpoints), Partial (3-7), Complete (8+)
+- **Implementation Candidates:** High/medium priority modules needing expansion
+- **Missing Common PMS Modules:** Identified gaps (Amenities, Reviews, Payments, etc.)
+
+**Categories:**
+- 🔴 **Minimal** (1-2 endpoints): High priority for expansion
+- 🟡 **Partial** (3-7 endpoints): Medium priority, review for missing operations
+- ✅ **Complete** (8+ endpoints): Low priority, good coverage
+
+**How to Interpret:**
+1. **Minimal modules** are candidates for next implementation (highest value-to-effort ratio)
+2. **Missing modules** represent greenfield opportunities
+3. **Partial modules** may need specific operations added (e.g., DELETE, PATCH)
+
+**Example Output:**
+```
+| Tag | Endpoints | GET | POST | PATCH | DELETE | PUT | Status | Priority |
+|-----|-----------|-----|------|-------|--------|-----|--------|----------|
+| Amenities | 0 | 0 | 0 | 0 | 0 | 0 | ⚪ Missing | Critical |
+| Branding | 2 | 1 | 0 | 0 | 0 | 1 | 🔴 Minimal | High |
+```
+
+**Verification:**
+- Script only performs read-only operations (GET/HEAD requests)
+- Does not modify database or PROD state
+- Safe to run anytime for current API state snapshot
+
+---
+
+## Amenities — Smoke / Verification
+
+**Overview:** Property amenities/features management module.
+
+**Purpose:** Enable property owners to define and assign amenities (WiFi, Pool, Parking, etc.) to properties for display on booking sites and guest information.
+
+**Architecture:**
+- **Tables:** `amenities` (catalog), `property_amenities` (many-to-many junction)
+- **RLS:** Tenant-scoped (agency_id), admin/manager write access
+- **Categories:** general, kitchen, bathroom, bedroom, outdoor, entertainment, safety, accessibility
+
+**API Endpoints:**
+
+Admin/Manager:
+- `GET /api/v1/amenities?category=&limit=&offset=` - List amenities for agency
+- `POST /api/v1/amenities` - Create amenity
+- `GET /api/v1/amenities/{amenity_id}` - Get amenity by ID
+- `PATCH /api/v1/amenities/{amenity_id}` - Update amenity
+- `DELETE /api/v1/amenities/{amenity_id}` - Delete amenity (cascade removes property assignments)
+
+Property Assignment:
+- `GET /api/v1/amenities/property/{property_id}` - Get property amenities
+- `PUT /api/v1/amenities/property/{property_id}` - Replace property amenities (admin/manager)
+
+**Database Schema:**
+
+```sql
+-- Amenities catalog
+CREATE TABLE amenities (
+  id uuid PRIMARY KEY,
+  agency_id uuid REFERENCES agencies(id),
+  name text NOT NULL,
+  description text,
+  category text,  -- general, kitchen, bathroom, etc.
+  icon text,      -- icon identifier (wifi, pool, parking)
+  sort_order int DEFAULT 0,
+  created_at timestamptz,
+  updated_at timestamptz,
+  CONSTRAINT amenities_unique_per_agency UNIQUE (agency_id, name)
+);
+
+-- Property assignments
+CREATE TABLE property_amenities (
+  property_id uuid REFERENCES properties(id) ON DELETE CASCADE,
+  amenity_id uuid REFERENCES amenities(id) ON DELETE CASCADE,
+  created_at timestamptz,
+  PRIMARY KEY (property_id, amenity_id)
+);
+```
+
+**Smoke Test Script:** `backend/scripts/pms_amenities_smoke.sh`
+
+**Required Environment Variables:**
+- `HOST` - Backend base URL (e.g., https://api.fewo.kolibri-visions.de)
+- `ADMIN_TOKEN` - JWT token with admin/manager role
+- `PROPERTY_ID` - Property UUID for assignment tests
+
+**Optional Environment Variables:**
+- `AGENCY_ID` - Agency UUID (for x-agency-id header in multi-tenant setups)
+
+**Usage:**
+```bash
+HOST=https://api.fewo.kolibri-visions.de \
+ADMIN_TOKEN="eyJ..." \
+PROPERTY_ID="<property-uuid>" \
+./backend/scripts/pms_amenities_smoke.sh
+```
+
+**Expected Output:**
+```
+ℹ Test 1: Create amenity 'WiFi' (category: general)
+✅ Test 1 PASSED: Created WiFi amenity (ID: ...)
+ℹ Test 2: Create amenity 'Pool' (category: outdoor)
+✅ Test 2 PASSED: Created Pool amenity (ID: ...)
+...
+ℹ Test 10: Cleanup - Delete WiFi amenity
+✅ Test 10 PASSED: Deleted WiFi amenity (cleanup complete)
+
+================================================================================
+✅ All Amenities smoke tests passed! 🎉
+================================================================================
+  Tests passed: 10
+  Tests failed: 0
+```
+
+**Test Coverage:**
+1. Create amenity (WiFi, category: general)
+2. Create amenity (Pool, category: outdoor)
+3. List amenities (verify count >= 2)
+4. Get amenity by ID (verify name = "WiFi")
+5. Update amenity (change description)
+6. Assign amenities to property (WiFi + Pool)
+7. Get property amenities (verify count = 2)
+8. Delete amenity (Pool) - cascade removes from property
+9. Verify cascade delete (property has only WiFi)
+10. Cleanup (delete WiFi amenity)
+
+**Common Issues:**
+
+### Table Not Found (503 Service Unavailable)
+
+**Symptom:** API returns 503 with message "Amenities service temporarily unavailable".
+
+**Root Cause:** Migration `20260122000000_add_amenities.sql` not applied to database.
+
+**How to Debug:**
+```bash
+# Check if amenities table exists
+psql $DATABASE_URL -c "\dt amenities"
+
+# Check migration status
+# (Supabase: check supabase_migrations table or Supabase dashboard)
+```
+
+**Solution:**
+- Apply migration: `supabase migration up` (local) or via Supabase dashboard (PROD)
+- Verify table exists before running smoke test
+
+### Amenity Name Conflict (409 Conflict)
+
+**Symptom:** POST /api/v1/amenities returns 409 with "Amenity with name '...' already exists for this agency".
+
+**Root Cause:** Unique constraint `amenities_unique_per_agency` violated (duplicate name within same agency).
+
+**Solution:**
+- Use different amenity name
+- Or DELETE existing amenity first
+- Or PATCH existing amenity instead of creating duplicate
+
+### Property Not Found (404 Not Found)
+
+**Symptom:** PUT /api/v1/amenities/property/{id} returns 404 "Property not found".
+
+**Root Cause:** Property ID does not exist or belongs to different agency.
+
+**How to Debug:**
+```bash
+# Verify property exists and agency_id
+psql $DATABASE_URL -c "SELECT id, agency_id, name FROM properties WHERE id = '<property-uuid>';"
+
+# Check user's agency_id from JWT
+echo $ADMIN_TOKEN | cut -d'.' -f2 | base64 -d | jq '.agency_id'
+```
+
+**Solution:**
+- Use correct property ID from same agency
+- Verify JWT agency_id matches property.agency_id
+
+---

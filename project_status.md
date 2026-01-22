@@ -13397,3 +13397,163 @@ echo "rc=$?"
 - Git diff: ~30 lines added/modified
 
 ---
+
+---
+
+# Schema Coverage – OpenAPI Gap Map
+
+**Implementation Date:** 2026-01-22
+
+**Scope:** Automated OpenAPI schema analysis tool for identifying missing/incomplete API modules.
+
+**Features Implemented:**
+
+1. **Gap Map Script** (`backend/scripts/openapi_gap_map.py`):
+   - Fetches live OpenAPI schema from PROD (GET requests only, read-only)
+   - Analyzes all tags/endpoints and categorizes by completeness
+   - Generates markdown report: `backend/docs/ops/openapi_gap_map.md`
+   - Categories: Minimal (1-2 endpoints), Partial (3-7), Complete (8+)
+   - Identifies missing common PMS modules (Amenities, Reviews, Payments, etc.)
+
+2. **Report Structure**:
+   - Summary: Total paths, tags, module counts by status
+   - Tags Overview Table: All tags with endpoint counts, HTTP methods, status, priority
+   - Detailed Module Analysis: Categorized lists with endpoint details
+   - Implementation Candidates: Prioritized list for next implementation
+   - Missing Common PMS Modules: Greenfield opportunities
+
+**Status:** ✅ IMPLEMENTED
+
+**Usage:**
+```bash
+# Generate gap map
+python3 backend/scripts/openapi_gap_map.py
+
+# Output: backend/docs/ops/openapi_gap_map.md
+```
+
+**Notes:**
+- Read-only operation (safe to run anytime)
+- Provides snapshot of current API state
+- Helps prioritize module development based on completeness
+- VERIFIED status requires: gap map generated successfully, report validates against current API
+
+**Dependencies:**
+- Live PROD API at https://api.fewo.kolibri-visions.de/openapi.json
+- Python 3.8+ with standard library only (no external dependencies)
+
+**Output Example:**
+```
+## Summary
+
+- Total API Paths: 81
+- Total Tags: 18
+- Complete Modules: 5 (8+ endpoints)
+- Partial Modules: 9 (3-7 endpoints)
+- Minimal Modules: 4 (1-2 endpoints)
+```
+
+---
+
+# Amenities Endpoints Completed
+
+**Implementation Date:** 2026-01-22
+
+**Scope:** Complete amenities management module for property features (WiFi, Pool, Parking, etc.).
+
+**Features Implemented:**
+
+1. **Database Migration** (`supabase/migrations/20260122000000_add_amenities.sql`):
+   - Created `amenities` table: id, agency_id, name, description, category, icon, sort_order, timestamps
+   - Created `property_amenities` junction table: property_id, amenity_id, created_at (many-to-many)
+   - Indexes: agency_id, category, property_id, amenity_id
+   - RLS policies: SELECT (all authenticated users), INSERT/UPDATE/DELETE (admin/manager only)
+   - Unique constraint: `(agency_id, name)` - prevent duplicate amenity names per agency
+   - Cascade delete: ON DELETE CASCADE for property and amenity FKs
+
+2. **Pydantic Schemas** (`backend/app/schemas/amenities.py`):
+   - `AmenityCreate`: Create amenity with validation (name, description, category, icon, sort_order)
+   - `AmenityUpdate`: Partial update schema
+   - `AmenityResponse`: Amenity response model
+   - `PropertyAmenitiesUpdate`: Replace property amenities (list of amenity IDs)
+   - Category validation: general, kitchen, bathroom, bedroom, outdoor, entertainment, safety, accessibility
+
+3. **Service Layer** (`backend/app/services/amenity_service.py`):
+   - `list_amenities()`: List amenities with optional category filter, pagination
+   - `get_amenity()`: Get amenity by ID
+   - `create_amenity()`: Create amenity with conflict detection (unique name per agency)
+   - `update_amenity()`: Partial update with dynamic query building
+   - `delete_amenity()`: Delete amenity (cascade removes property assignments)
+   - `get_property_amenities()`: Get amenities for a property
+   - `update_property_amenities()`: Replace all property amenities (transactional)
+
+4. **API Routes** (`backend/app/api/routes/amenities.py`):
+   - `GET /api/v1/amenities` - List amenities (category filter, pagination)
+   - `POST /api/v1/amenities` - Create amenity (admin/manager)
+   - `GET /api/v1/amenities/{id}` - Get amenity by ID
+   - `PATCH /api/v1/amenities/{id}` - Update amenity (admin/manager)
+   - `DELETE /api/v1/amenities/{id}` - Delete amenity (admin/manager)
+   - `GET /api/v1/amenities/property/{property_id}` - Get property amenities
+   - `PUT /api/v1/amenities/property/{property_id}` - Replace property amenities (admin/manager)
+
+5. **Module Registration** (`backend/app/modules/amenities.py`, `bootstrap.py`):
+   - Registered amenities router in module system
+   - Depends on: core_pms, properties
+   - Tags: Amenities
+
+6. **Smoke Test** (`backend/scripts/pms_amenities_smoke.sh`):
+   - Test 1-2: Create amenities (WiFi, Pool)
+   - Test 3: List amenities
+   - Test 4: Get amenity by ID
+   - Test 5: Update amenity
+   - Test 6: Assign amenities to property
+   - Test 7: Get property amenities
+   - Test 8: Delete amenity (cascade test)
+   - Test 9: Verify cascade delete
+   - Test 10: Cleanup
+   - Exit code: 0 = pass, 1+ = fail
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- Full CRUD with admin/manager role enforcement
+- Multi-tenant isolation via agency_id
+- Cascade delete removes property assignments automatically
+- Transaction support for atomic property amenity updates
+- Error handling: 503 for schema drift (table missing), 409 for conflicts, 404 for not found
+- VERIFIED status requires: PROD deploy + smoke test rc=0 + UI integration
+
+**Dependencies:**
+- Properties module (property FK constraint)
+- Migration system (Supabase)
+- Core PMS module (auth, database)
+
+**Verification Commands** (for VERIFIED status later):
+```bash
+# 1. Deploy to PROD
+# Coolify auto-deploys from main branch
+
+# 2. Apply migration
+# Supabase auto-applies migrations or via dashboard
+
+# 3. Verify deployment
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+echo "rc=$?"
+
+# 4. Run smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export ADMIN_TOKEN="<< JWT with admin/manager role>>"
+export PROPERTY_ID="<<Property UUID>>"
+./backend/scripts/pms_amenities_smoke.sh
+echo "rc=$?"
+
+# Expected: rc=0, all 10 tests pass
+```
+
+**Related:**
+- OpenAPI Gap Map identified Amenities as missing module (Critical priority)
+- Fills gap in property feature management
+- Enables richer property listings for booking sites
+
+---
