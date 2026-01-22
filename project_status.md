@@ -13084,3 +13084,82 @@ echo "rc=$?"
 - P2.16 Bugfix v1: Year-Bound Correction (prerequisite)
 - Runbook: "P2.16 BUGFIX v2: Sync Not Idempotent" troubleshooting section
 
+
+---
+
+## P2.16 Hotfix: No-op Sync 500 (is_relink UnboundLocalError)
+
+**Implementation Date:** 2026-01-22
+
+**Status:** ✅ IMPLEMENTED (awaiting PROD verification)
+
+**Scope:** Fix UnboundLocalError crash on no-op template sync (second sync with no changes).
+
+**Problem:**
+- After P2.16 BUGFIX v2 (commit ad4b43a), second template sync crashes with HTTP 500
+- Error: `UnboundLocalError: cannot access local variable 'is_relink' where it is not associated with a value`
+- Line 2375 in pricing.py references `is_relink` which was only defined inside `if needs_update:` block
+- In no-op case (needs_update=False), variable never assigned → crash
+
+**Root Cause:**
+Variable scope issue introduced in idempotency fix:
+- Line 2357: `is_relink = not matched_season.get('source_template_period_id')` inside `if needs_update:` block
+- Line 2375: `if is_relink:` outside the block (same indentation level)
+- When needs_update=False, code skips lines 2346-2367, leaving `is_relink` undefined
+
+**Fix Implemented:**
+Moved relink tracking inside `if needs_update:` block where `is_relink` is defined:
+- Lines 2368-2386 now inside `if needs_update:` (indented)
+- Variable only referenced in scope where it's assigned
+- No-op path skips entire update+relink block cleanly
+
+**Expected Result:**
+- First sync: HTTP 200, `counts.update=1, counts.relink=1` (correct)
+- Second sync: HTTP 200, `counts.update=0, counts.create=0` (no crash)
+- STEP H passes with HTTP 200
+
+**Files Changed:**
+- `backend/app/api/routes/pricing.py`: Moved relink tracking inside `if needs_update:` block (lines 2346-2388)
+
+**Smoke Test:**
+- Script: `backend/scripts/pms_p216_template_sync_correction_smoke.sh`
+- STEP H: Now passes with HTTP 200 instead of crashing with 500
+- Expected: rc=0, all 8 steps pass
+
+**Verification Commands** (for VERIFIED status):
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify deploy
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export EXPECT_COMMIT="<commit-sha-to-be-filled>"
+./backend/scripts/pms_verify_deploy.sh
+
+# Run smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="<jwt>"
+export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+./backend/scripts/pms_p216_template_sync_correction_smoke.sh
+echo "rc=$?"
+
+# Expected: STEP H PASSED (HTTP 200), rc=0
+```
+
+**PROD Evidence** (to be filled after verification):
+```
+Commit: <sha>
+Deploy verified: pms_verify_deploy.sh rc=0
+Started At: <timestamp from /api/v1/ops/version>
+Smoke: pms_p216_template_sync_correction_smoke.sh rc=0
+STEP H: HTTP 200, counts.update=0, counts.create=0
+```
+
+**Dependencies:**
+- P2.16 Bugfix v2 (Idempotency) - this hotfix corrects scope issue in that commit
+
+**Related:**
+- P2.16 Bugfix v2: Template Sync Idempotency (introduces the bug this fixes)
+- Runbook: "P2.16 Hotfix: No-op Sync Returns 500" troubleshooting section
+

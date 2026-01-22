@@ -37345,3 +37345,58 @@ export AGENCY_ID="<agency-id>"
 - [P2.16 Template Sync: Year-Bound Correction](#p216-template-sync-year-bound-correction-issues) for year boundary enforcement
 - [Season Templates](#season-templates-agency-wide-reusable-periods) for general template documentation
 
+
+---
+
+### P2.16 Hotfix (2026-01-22): No-op Sync Returns 500 (UnboundLocalError is_relink)
+
+**Symptom:** Second template sync (idempotency check) returns HTTP 500 with `UnboundLocalError: cannot access local variable 'is_relink'`.
+
+**Traceback:**
+```
+UnboundLocalError: cannot access local variable 'is_relink' where it is not associated with a value
+File "/app/app/api/routes/pricing.py", line 2375, in sync_seasons_from_template
+  if is_relink:
+```
+
+**Example Scenario:**
+- First sync corrects season successfully (HTTP 200, update=1, relink=1)
+- Second sync with same template crashes with 500 (instead of HTTP 200, update=0)
+- STEP H in smoke script fails with 500 instead of passing idempotency check
+
+**Root Cause:** 
+Variable `is_relink` was defined inside `if needs_update:` block (line 2357) but referenced outside it (line 2375). In no-op case where `needs_update=False`, the variable was never assigned, causing UnboundLocalError.
+
+**How It's Fixed:**
+Moved relink tracking (`if is_relink:` block) INSIDE the `if needs_update:` block where `is_relink` is defined. Now variable is only referenced in the same scope where it's assigned.
+
+**Expected Result:**
+- First sync: HTTP 200, `counts.update=1, counts.relink=1` (season corrected and linked)
+- Second sync: HTTP 200, `counts.update=0, counts.create=0` (true no-op, no crash)
+- STEP H passes with HTTP 200
+
+**Diagnostic Commands:**
+```bash
+# [HOST-SERVER-TERMINAL] Verify deployment
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export EXPECT_COMMIT="<new-commit-sha>"
+./backend/scripts/pms_verify_deploy.sh
+
+# Run smoke test (STEP H should now pass with 200)
+export HOST="https://api.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="<jwt>"
+export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+./backend/scripts/pms_p216_template_sync_correction_smoke.sh
+
+# Expected: STEP H PASSED: Idempotent (no changes on re-sync) ✅
+# SMOKE_RC=0
+```
+
+**Related Changes:**
+- File: `backend/app/api/routes/pricing.py` (lines 2346-2388)
+- Fix: Moved relink tracking inside `if needs_update:` block
+- Prevents UnboundLocalError on no-op sync paths
+
+**Related Runbook Sections:**
+- [P2.16 BUGFIX v2: Sync Not Idempotent](#p216-bugfix-v2-sync-not-idempotent-second-sync-returns-update1) for idempotency implementation
+
