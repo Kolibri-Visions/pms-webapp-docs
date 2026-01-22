@@ -38544,3 +38544,109 @@ ADMIN_URL="https://admin.fewo.kolibri-visions.de" \
 # Expected: Test 6 (backend amenities API) and Test 7 (property amenities API) both PASS
 ```
 
+
+---
+
+### Known Issue: Amenities "Erstellen" Button Does Nothing (Fixed 2026-01-22)
+
+**Symptom:** In admin UI at /amenities, clicking "Erstellen" button in "Neue Ausstattung" modal does nothing. No POST request fired, modal stays open, no error/success toast shown.
+
+**Root Cause:** Amenities page was calling backend API directly instead of using internal proxy routes:
+- Required `agencyId` from `user.user_metadata.agency_id` before attempting create/update/delete
+- For single-tenant users without explicit agency_id in metadata, `agencyId` was null
+- handleCreate early return: `if (!accessToken || !agencyId) return;` blocked create action
+- Direct backend API calls exposed JWT tokens in browser DevTools Network tab (security risk)
+
+**What Was Broken:**
+1. `handleCreate`: Required agencyId, called `/api/v1/amenities` directly with Bearer token + x-agency-id header
+2. `handleUpdate`: Required agencyId, called `/api/v1/amenities/{id}` directly
+3. `handleDelete`: Required agencyId, called `/api/v1/amenities/{id}` directly
+4. `fetchAmenities`: Called `/api/v1/amenities` directly with Bearer token
+
+**How It's Fixed (2026-01-22):**
+All CRUD operations now use internal Next.js API proxy routes:
+- **Create:** POST `/api/internal/amenities` (no agencyId check, uses session cookies)
+- **Read:** GET `/api/internal/amenities` (no agencyId check, uses session cookies)
+- **Update:** PUT `/api/internal/amenities/{id}` (no agencyId check, uses session cookies)
+- **Delete:** DELETE `/api/internal/amenities/{id}` (no agencyId check, uses session cookies)
+
+Internal proxy routes handle:
+- Server-side auth via Supabase session cookies (no JWT exposed in browser)
+- Agency resolution from user metadata or team_members table (auto-detect for single-tenant users)
+- Proper error responses with actionable messages
+
+**Files Changed:**
+- `frontend/app/amenities/page.tsx`:
+  - Removed `agencyId` requirement checks
+  - Changed all fetch calls to use `/api/internal/amenities` endpoints
+  - Removed Authorization + x-agency-id headers (internal proxy handles this)
+  - Updated handleUpdate to use PUT method (matches internal proxy route)
+
+**Verification Steps:**
+
+Manual Browser Test:
+```bash
+# 1. Login to admin UI
+https://admin.fewo.kolibri-visions.de/login
+
+# 2. Navigate to /amenities
+# Expected: Page loads with AdminShell (left nav + top bar)
+
+# 3. Click "Neu" button
+# Expected: "Neue Ausstattung" modal opens
+
+# 4. Fill in form:
+#    - Name: "Sauna - Test"
+#    - Beschreibung: "Optional description"
+#    - Kategorie: Select from dropdown (e.g., "Wellness")
+#    - Icon: "sauna" (optional)
+#    - Reihenfolge: 0
+
+# 5. Click "Erstellen" button
+# Expected:
+#   - Modal closes
+#   - Success toast: "Ausstattung erfolgreich erstellt"
+#   - New row appears in amenities list
+#   - DevTools Network tab shows: POST /api/internal/amenities (NOT /api/v1/amenities)
+#   - No JWT token visible in Network tab request headers (uses session cookie)
+
+# 6. Navigate to /properties, click a property
+# 7. Scroll to "Ausstattung" section, click "Ausstattung zuweisen"
+# Expected: Modal opens with list including "Sauna - Test"
+
+# 8. Select "Sauna - Test", click "Speichern"
+# Expected:
+#   - Modal closes
+#   - Success toast shown
+#   - "Sauna - Test" appears as chip in property detail
+
+# 9. Return to /amenities, delete "Sauna - Test"
+# Expected: Row removed, success toast shown
+```
+
+Backend API Verification (curl):
+```bash
+# Verify internal proxy routes work
+# (Requires authenticated session cookie - use browser DevTools to copy cookie)
+
+# Create amenity via internal proxy
+curl -X POST "https://admin.fewo.kolibri-visions.de/api/internal/amenities" \
+  -H "Content-Type: application/json" \
+  -H "Cookie: <session-cookie>" \
+  -d '{"name":"Test Amenity","description":"Test","category":"general","sort_order":0}'
+
+# Expected: 200 OK with amenity JSON
+
+# List amenities via internal proxy
+curl -X GET "https://admin.fewo.kolibri-visions.de/api/internal/amenities" \
+  -H "Cookie: <session-cookie>"
+
+# Expected: 200 OK with amenities array including "Test Amenity"
+```
+
+**Related Issues:**
+- This fix also resolves "Property Assignment Modal Loads Empty" issue (same root cause)
+- See: "Property Assignment Modal Loads Empty (Internal Proxy Routes - 2026-01-22)" section above
+
+**Status:** ✅ Fixed in commit bffd54b (internal proxy routes) + follow-up fix (this section)
+

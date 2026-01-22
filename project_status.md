@@ -13831,3 +13831,30 @@ echo "rc=$?"
 
 **Status:** ✅ VERIFIED in PROD
 
+**Regression Found After Verification (2026-01-22):**
+
+**Issue:** "Erstellen" button in amenities create modal did nothing. Root cause: amenities page still called backend API directly instead of internal proxy routes, required `agencyId` which blocked single-tenant users.
+
+**Impact:**
+- Create amenity: Blocked for users without explicit agency_id in user metadata
+- Update/Delete amenity: Same issue
+- Security: JWT tokens exposed in browser DevTools Network tab
+
+**Fix Applied:** Changed all CRUD operations in `frontend/app/amenities/page.tsx` to use internal proxy routes:
+- `GET /api/internal/amenities` (list)
+- `POST /api/internal/amenities` (create)
+- `PUT /api/internal/amenities/{id}` (update)
+- `DELETE /api/internal/amenities/{id}` (delete)
+- Removed agencyId requirement checks
+- Internal proxy handles auth via session cookies and agency resolution
+
+**Additional Hardening:**
+- Smoke script now redacts JWT token in output (shows only length + parts, not full token)
+- Fixed formatting: "Backend API Tests: enabled https://..." → "enabled " (added space)
+
+**Documentation:**
+- Added "Known Issue: Amenities 'Erstellen' Button Does Nothing" section to runbook.md with verification steps
+- This entry in project_status.md
+
+**Status After Fix:** Awaiting re-verification in PROD after deploy of regression fix commit.
+
