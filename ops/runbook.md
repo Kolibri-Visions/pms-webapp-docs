@@ -37643,6 +37643,72 @@ ADMIN_URL="https://admin.fewo.kolibri-visions.de" ./frontend/scripts/pms_admin_a
 echo "rc=$?"
 ```
 
+### UI Smoke Script Hardening (2026-01-22): Next.js App Router + Redirects
+
+**Issue:** Original smoke script expected SSR-visible strings ("Ausstattung" heading, nav text, buttons) in HTML but Next.js App Router uses client-side rendering. Script also failed on 307 redirects from auth middleware instead of treating them as PASS (protected routes working correctly).
+
+**Fix Applied:** Rewrote smoke script to be PROD-safe and handle Next.js CSR + auth redirects:
+- **Follow Redirects:** Uses `-L` flag to follow redirects and detect final landing page
+- **Cache-Busting:** Adds `?cb=timestamp` and `Cache-Control: no-cache` to avoid CDN caching
+- **Next.js Markers:** Checks for `id="__next"`, `/_next/static/`, `__NEXT_DATA__`, `<html>` (at least 2 required)
+- **Auth Redirect PASS:** Treats 30x redirects to `/login`, `/auth`, `/sign-in` as PASS (protected route exists, middleware works)
+- **Commit Verification:** Uses `/api/ops/version` instead of Docker inspect (more reliable)
+- **Weak Route Identity:** Optionally checks for "amenities" text but doesn't fail if missing (CSR bundles may not have readable strings)
+
+**PASS Criteria:**
+- **HTTP 200** with at least 2 Next.js markers = App deployed correctly
+- **HTTP 30x** to login/auth route = Protected route exists, middleware works
+- **All other status codes** = FAIL
+
+**Limitations (curl-only smoke without browser):**
+- Cannot verify client-side JavaScript execution
+- Cannot test login flow or authenticated navigation
+- Cannot verify modals, forms, or interactive elements
+- Can only confirm pages exist and are Next.js apps OR are properly protected
+
+**Verification Commands:**
+```bash
+# Run smoke test (recommended with EXPECTED_COMMIT for PROD verification)
+ADMIN_URL="https://admin.fewo.kolibri-visions.de" \
+EXPECTED_COMMIT="14349b2" \
+./frontend/scripts/pms_admin_amenities_ui_smoke.sh
+echo "rc=$?"
+
+# Expected output: 5 tests PASS, rc=0
+# Test 1: /api/ops/version commit match (if EXPECTED_COMMIT set)
+# Test 2: /amenities page loads OR redirects to auth
+# Test 3: /amenities content markers (if HTTP 200)
+# Test 4: /properties page loads OR redirects to auth
+# Test 5: Admin root page loads OR redirects
+
+# Debug with temp files kept
+KEEP_TEMP=true \
+ADMIN_URL="https://admin.fewo.kolibri-visions.de" \
+./frontend/scripts/pms_admin_amenities_ui_smoke.sh
+
+# Temp files location will be printed for inspection
+```
+
+**Troubleshooting:**
+
+*Test 1 SKIPPED (EXPECTED_COMMIT not set):*
+- Not a failure, just a warning
+- For PROD verification, always set EXPECTED_COMMIT to verify correct code is deployed
+
+*Test 2-4 PASS with "redirects to auth":*
+- This is CORRECT for protected routes without login cookies
+- Means middleware is working and routes exist
+
+*Test 2-4 FAIL with HTTP 4xx/5xx:*
+- Check Coolify logs for deployment errors
+- Verify admin URL is correct
+- Check if admin service is running: `curl -I $ADMIN_URL`
+
+*Test 3 FAIL with "missing Next.js markers":*
+- Page returned 200 but is not a valid Next.js app page
+- Check if static HTML was accidentally deployed instead of Next.js build
+- Verify Coolify build used `npm run build` and served `.next/` output
+
 ---
 
 ## Central Rate Plans Page: Archived Plans Toggle Not Working

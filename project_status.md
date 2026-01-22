@@ -13735,4 +13735,17 @@ echo "rc=$?"
 - **Impact:** TypeScript compilation now succeeds, Coolify can build and deploy
 - **Status:** Still ✅ IMPLEMENTED (not VERIFIED - pending deploy + smoke test)
 
+**UI Smoke Script Hardening (2026-01-22):**
+- **Issue:** Original smoke script expected SSR-visible strings but Next.js App Router uses CSR. Failed on 307 redirects from auth middleware instead of treating as PASS.
+- **Fix:** Rewrote smoke script to handle Next.js App Router and auth redirects:
+  - Follow redirects with `-L`, accept 30x to login/auth as PASS (protected routes working)
+  - Check Next.js markers (`id="__next"`, `/_next/static/`, etc.) instead of content text
+  - Cache-busting (`?cb=timestamp`) and `Cache-Control: no-cache` to avoid CDN issues
+  - Verify commit via `/api/ops/version` instead of Docker inspect
+  - Weak route identity check (doesn't fail if missing - CSR bundles may not have readable text)
+- **PASS Criteria:** HTTP 200 with Next.js markers OR 30x redirect to login/auth
+- **Limitations:** curl-only (no browser JS execution, no auth flow testing, no interactive element verification)
+- **Files Changed:** `frontend/scripts/pms_admin_amenities_ui_smoke.sh` (complete rewrite)
+- **Status:** Still ✅ IMPLEMENTED (not VERIFIED - pending deploy + smoke rc=0)
+
 ---
