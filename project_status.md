@@ -13318,14 +13318,42 @@ Manual UI Verification (https://admin.fewo.kolibri-visions.de/pricing/rate-plans
    - German UI label: "Archivierte"
    - Toggle switch: OFF (gray) → ON (primary color)
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
+
+**PROD Evidence** (Verification Date: 2026-01-22):
+
+Deployed Commit: `aaea1a852ce4bc85b20fc60fc5f45b9bfe5630cd`
+
+Deploy Verification:
+```bash
+$ export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+$ ./backend/scripts/pms_verify_deploy.sh
+rc=0 (exact commit match)
+```
+
+Backend `/api/v1/ops/version`:
+- source_commit: `aaea1a852ce4bc85b20fc60fc5f45b9bfe5630cd`
+- started_at: `2026-01-22T11:49:05.400906+00:00`
+
+Admin `/api/ops/version`:
+- source_commit: `aaea1a852ce4bc85b20fc60fc5f45b9bfe5630cd`
+- started_at: `2026-01-22T11:46:58.647Z`
+- environment: `production`
+
+Manual UI Testing Results (https://admin.fewo.kolibri-visions.de/properties/[id]/rate-plans):
+- ✅ **Default state:** Archived seasons hidden, URL has no `include_archived` parameter, toggle OFF (gray)
+- ✅ **Toggle ON:** URL updates to `?include_archived=1` without page reload, archived seasons appear, toggle ON (primary color)
+- ✅ **Page refresh:** URL parameter preserved (`?include_archived=1`), toggle state restored, archived seasons still visible
+- ✅ **Toggle OFF:** URL parameter removed, archived seasons disappear, clean URL restored
+- ✅ **Browser back/forward:** State syncs correctly with URL changes, toggle updates automatically
+- ✅ **Direct URL with param:** Loading `/properties/[id]/rate-plans?include_archived=1` shows archived seasons and toggle ON
+- ✅ **Other query params:** Preserved correctly (e.g., `?foo=bar&include_archived=1`)
 
 **Notes:**
 - URL survives page refresh (shareable/bookmarkable links)
 - No full page reload (shallow navigation via `router.replace`)
 - Browser back/forward navigation updates toggle state correctly
 - Pattern consistent with other Next.js App Router best practices
-- VERIFIED status requires PROD deployment + manual UI testing
 
 **Dependencies:**
 - Next.js `useSearchParams`, `usePathname`, `useRouter` hooks

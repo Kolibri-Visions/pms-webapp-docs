@@ -37699,4 +37699,18 @@ sed -n '247,252p' frontend/app/properties/[id]/rate-plans/page.tsx
 - Ensure effect calls `getShowArchivedFromUrl()` and updates state
 - Check for infinite loops (effect should only update if state differs from URL)
 
+**PROD Verification (2026-01-22):**
+- Commit: `aaea1a852ce4bc85b20fc60fc5f45b9bfe5630cd`
+- Backend `/api/v1/ops/version`: source_commit match, started_at `2026-01-22T11:49:05.400906+00:00`
+- Admin `/api/ops/version`: source_commit match, started_at `2026-01-22T11:46:58.647Z`, environment `production`
+- Deploy verify: `pms_verify_deploy.sh rc=0`
+- Manual UI testing: All 7 test cases passed at https://admin.fewo.kolibri-visions.de/properties/[id]/rate-plans
+  - Default state: archived hidden, no URL param ✅
+  - Toggle ON: URL gets `?include_archived=1` without reload ✅
+  - Refresh: state preserved from URL ✅
+  - Toggle OFF: URL param removed ✅
+  - Back/Forward: state syncs with URL ✅
+  - Direct URL with param: loads with archived visible ✅
+  - Other query params preserved correctly ✅
+
 ---
