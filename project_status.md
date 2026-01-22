@@ -13000,3 +13000,87 @@ echo "rc=$?"
 - Template periods with `date_from`, `date_to`, `source_template_period_id`
 - Rate plan seasons with `source_template_period_id`, `source_year`, `source_is_overridden` fields
 
+
+---
+
+## P2.16 Bugfix v2: Template Sync Idempotency
+
+**Implementation Date:** 2026-01-22
+
+**Status:** ✅ IMPLEMENTED
+
+**Scope:** Make template sync truly idempotent - second sync with no changes should return `update=0`.
+
+**Problem (Pre-Fix v2):**
+- First sync corrects season successfully (e.g., updates date_to from 2027-01-15 to 2026-12-31)
+- Second sync with same template returns `counts.update=1` instead of `0`
+- PROD smoke script STEP H (idempotency check) fails
+- Backend marks seasons for update even when no actual field changes
+
+**Root Cause:**
+Sync logic (line 2338 in `pricing.py`) unconditionally added matched seasons to `to_update` list without checking if managed fields actually differ. Every sync run would update `source_synced_at` and `updated_at` regardless of whether label/dates/source linkage changed.
+
+**Fix Implemented (Commit eef0d19):**
+
+1. **Strict Diff Check** (`backend/app/api/routes/pricing.py`, lines 2323-2369):
+   - Before adding season to `to_update`, compares 6 managed fields:
+     - `label`
+     - `date_from`
+     - `date_to`
+     - `source_template_id`
+     - `source_template_period_id`
+     - `source_year`
+   - Only appends to `to_update` if ANY field differs
+   - Tracks `changed_fields` list for debugging
+
+2. **No-Op Skip**:
+   - If ALL fields match existing season, skip update entirely
+   - Season not added to `to_update` list
+   - No DB update executed (source_synced_at NOT updated on no-op)
+
+3. **Debug Logging**:
+   - Logs `"Season {id} needs update: changed fields = {list}"` when update needed
+   - Logs `"Season {id} already up-to-date, skipping update"` when no changes
+
+**Expected Result:**
+- First sync: `counts.update=N` (N seasons corrected/linked)
+- Second sync: `counts.update=0` (true idempotency - no changes needed)
+- STEP H passes: `sync2.counts.update=0, sync2.counts.create=0`
+
+**Files Changed:**
+- `backend/app/api/routes/pricing.py`: Added diff check before `to_update.append()`
+
+**Smoke Test:**
+- Script: `backend/scripts/pms_p216_template_sync_correction_smoke.sh`
+- STEP H (Idempotency check): Runs sync twice, verifies second sync returns `update=0, create=0`
+- Expected: rc=0, all 8 steps pass
+
+**Verification Commands** (for VERIFIED status later):
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify deploy
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# Run smoke test (validates idempotency)
+export HOST="https://api.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="<jwt>"
+export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+./backend/scripts/pms_p216_template_sync_correction_smoke.sh
+echo "rc=$?"
+
+# Expected: rc=0, STEP H shows "Sync2 counts.update=0 (idempotent) ✅"
+```
+
+**Dependencies:**
+- P2.16 Bugfix v1 (Year-Bound Correction) - must be applied first
+- Existing sync logic with `to_update` list
+- Season fields: `label`, `date_from`, `date_to`, `source_template_id`, `source_template_period_id`, `source_year`
+
+**Related:**
+- P2.16 Bugfix v1: Year-Bound Correction (prerequisite)
+- Runbook: "P2.16 BUGFIX v2: Sync Not Idempotent" troubleshooting section
+

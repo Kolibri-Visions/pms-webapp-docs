@@ -37290,3 +37290,58 @@ AGENCY_ID="<agency-id>" \
 - [P2.16 Template Sync](../docs/ops/runbook.md#p216-template-sync) for general sync troubleshooting
 - [P2.13 Pricing Invariants](../docs/ops/runbook.md#p213-pricing-invariants-hardening) for season overlap constraints
 
+
+---
+
+### P2.16 BUGFIX v2: Sync Not Idempotent (Second Sync Returns update=1)
+
+**Symptom:** Second template sync returns `counts.update=1` instead of `0` when no actual changes needed. Smoke script STEP H (idempotency check) fails.
+
+**Example Scenario:**
+- First sync corrects season: 2026-12-01 to 2026-12-31 (success)
+- Second sync with same template returns: `counts.update=1` (should be 0)
+- No actual field changes, but season marked for update anyway
+
+**Root Cause:** Prior to P2.16 BUGFIX v2 (commit eef0d19), sync unconditionally added matched seasons to `to_update` list without checking if managed fields actually differ. Backend updated `source_synced_at` and `updated_at` on every sync run regardless of whether label/date_from/date_to/source_* fields changed.
+
+**How It's Fixed (Commit eef0d19: fix(p2.16): make template sync idempotent)**:
+1. **Strict Diff Check**: Before adding season to `to_update`, compares 6 managed fields:
+   - label
+   - date_from
+   - date_to
+   - source_template_id
+   - source_template_period_id
+   - source_year
+2. **No-Op Skip**: If ALL fields match, season is skipped entirely (not added to `to_update`)
+3. **No DB Update**: When no changes needed, DB update is not executed (source_synced_at NOT updated)
+4. **Debug Logging**: Logs `changed_fields` list when update needed, or "already up-to-date" when skipped
+
+**Expected Result:**
+- First sync: `counts.update=N` (N seasons corrected)
+- Second sync: `counts.update=0` (no changes needed - true idempotency)
+- STEP H passes: sync2 returns `counts.update=0, counts.create=0`
+
+**Diagnostic Commands**:
+```bash
+# [HOST-SERVER-TERMINAL] Run smoke script to verify idempotency
+export HOST="https://api.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="<jwt>"
+export AGENCY_ID="<agency-id>"
+./backend/scripts/pms_p216_template_sync_correction_smoke.sh
+
+# Expected: rc=0, all tests pass
+# STEP H should show: "Sync2 counts.update=0 (idempotent) ✅"
+
+# Manual verification: Check logs for debug messages
+# Should see: "Season {id} already up-to-date, skipping update" on second sync
+```
+
+**Related Changes:**
+- File: `backend/app/api/routes/pricing.py` (sync_seasons_from_template route, lines 2323-2369)
+- Commit: eef0d19 (fix(p2.16): make template sync idempotent)
+- Smoke script: `backend/scripts/pms_p216_template_sync_correction_smoke.sh` (STEP H validates idempotency)
+
+**Related Runbook Sections:**
+- [P2.16 Template Sync: Year-Bound Correction](#p216-template-sync-year-bound-correction-issues) for year boundary enforcement
+- [Season Templates](#season-templates-agency-wide-reusable-periods) for general template documentation
+
