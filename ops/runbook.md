@@ -37406,3 +37406,127 @@ export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
 - Deploy: pms_verify_deploy.sh rc=0
 - Smoke: pms_p216_template_sync_correction_smoke.sh rc=0 (STEP H HTTP 200, idempotent)
 
+
+---
+
+## Central Rate Plans Page: Archived Plans Toggle Not Working
+
+**Symptom:** On legacy central rate plans page (`/pricing/rate-plans`), toggling "Archivierte anzeigen" does not show/hide archived plans, or toggle state resets after page refresh.
+
+**Expected Behavior:**
+- Default view (no URL param): Toggle unchecked, archived plans hidden
+- Toggle checked: URL updates to `?include_archived=1`, archived plans visible
+- Page refresh: Toggle state persists via URL parameter
+
+**How to Debug:**
+
+1. **Check URL Parameter:**
+   ```
+   # URL when toggle ON should have:
+   /pricing/rate-plans?include_archived=1
+   
+   # URL when toggle OFF should have:
+   /pricing/rate-plans
+   ```
+
+2. **Check Browser DevTools Network Tab:**
+   - Verify API calls include correct query parameter:
+     - Toggle OFF: `GET /api/v1/pricing/rate-plans?property_id=<id>&include_archived=false&limit=100`
+     - Toggle ON: `GET /api/v1/pricing/rate-plans?property_id=<id>&include_archived=true&limit=100`
+
+3. **Check API Response:**
+   - Verify response does not include archived plans when `include_archived=false`
+   - Verify response includes archived plans when `include_archived=true`
+   - Archived plans have `archived_at` field set to timestamp (not null)
+
+**Common Issues:**
+
+### Toggle Changes But Plans Don't Update
+
+**Root Cause:** `useEffect` dependency on `showArchived` not triggering re-fetch.
+
+**Solution:**
+- Verify `useEffect` includes `showArchived` in dependency array (line ~164-170)
+- Check `fetchPropertyPlans()` and `fetchTemplatePlans()` are called inside effect
+- Clear browser cache and hard refresh (Cmd+Shift+R / Ctrl+F5)
+
+### Toggle State Resets After Page Refresh
+
+**Root Cause:** State initialization not reading from URL parameter.
+
+**Solution:**
+- Verify `useState` initialization reads from `useSearchParams()` (line ~74-77):
+  ```tsx
+  const [showArchived, setShowArchived] = useState(() => {
+    const param = searchParams?.get("include_archived");
+    return param === "true" || param === "1";
+  });
+  ```
+- Check `useSearchParams()` is imported from `next/navigation`
+
+### Archived Plans Still Show When Toggle OFF
+
+**Root Cause:** Client-side filter not applied or API returning incorrect data.
+
+**Solution:**
+- Verify client-side filter exists (line ~743-747):
+  ```tsx
+  const displayedPlans = showArchived
+    ? basePlans
+    : basePlans.filter((plan) => !plan.archived_at);
+  ```
+- Check API backend filters by `archived_at IS NULL` when `include_archived=false`
+- Verify `plan.archived_at` is correctly null for non-archived plans
+
+### URL Parameter Not Updating When Toggle Changes
+
+**Root Cause:** `handleToggleArchived` not calling `window.history.replaceState`.
+
+**Solution:**
+- Verify `handleToggleArchived` function (line ~245-256) includes:
+  ```tsx
+  const params = new URLSearchParams(window.location.search);
+  if (checked) {
+    params.set("include_archived", "1");
+  } else {
+    params.delete("include_archived");
+  }
+  const newUrl = params.toString() ? `${window.location.pathname}?${params.toString()}` : window.location.pathname;
+  window.history.replaceState({}, "", newUrl);
+  ```
+- Check toggle checkbox uses `onChange={(e) => handleToggleArchived(e.target.checked)}`
+
+**Diagnostic Commands:**
+```bash
+# BROWSER CONSOLE
+# 1. Check current URL param
+console.log(window.location.search);
+// Expected when toggle ON: "?include_archived=1"
+// Expected when toggle OFF: ""
+
+# 2. Check component state (React DevTools)
+# Find RatePlansPage component → check showArchived state
+# Should match URL param
+
+# 3. Test toggle manually
+document.querySelector('input[type="checkbox"]').click();
+// Watch network tab for API re-fetch with updated param
+```
+
+**Related Features:**
+- P2.11.1: Property-specific rate plans page (`/properties/[id]/rate-plans`) has similar toggle but WITHOUT URL persistence
+- This feature (P2 UI Polish) adds URL persistence to legacy central page
+
+**Implementation Details:**
+- File: `frontend/app/pricing/rate-plans/page.tsx`
+- State initialization: Line ~74-77 (reads `include_archived` URL param)
+- Toggle handler: Line ~245-256 (updates URL on change)
+- Client-side filter: Line ~743-747 (defensive filter)
+- API calls: Line ~207, 225 (includes `include_archived=${showArchived}`)
+
+**Expected Timeline:**
+- Default load → 0 archived plans visible
+- Toggle ON → URL updates → API re-fetch → archived plans appear
+- Toggle OFF → URL updates → API re-fetch → archived plans disappear
+- Page refresh → URL param preserved → toggle state restored
+

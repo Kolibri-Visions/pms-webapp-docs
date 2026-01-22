@@ -13164,3 +13164,99 @@ Result: counts.update=0, counts.create=0 (true no-op)
 - P2.16 Bugfix v2: Template Sync Idempotency (introduces the bug this fixes)
 - Runbook: "P2.16 Hotfix: No-op Sync Returns 500" troubleshooting section
 
+
+---
+
+## P2 UI Polish — Central Rate Plans Page: Hide Archived + URL Persistence
+
+**Implementation Date:** 2026-01-22
+
+**Status:** ✅ IMPLEMENTED (awaiting PROD verification)
+
+**Scope:** UX improvement for legacy central rate plans page (/pricing/rate-plans): default-hide archived behavior with toggle and URL query parameter persistence.
+
+**Purpose:** Reduce clutter on legacy central rate plans admin page by hiding archived plans from default view, providing toggle control, and persisting toggle state via URL query parameter for shareable/bookmarkable views.
+
+**Features Implemented:**
+
+1. **Default Filter Behavior**:
+   - Default view shows **only non-archived plans** (archived_at IS NULL)
+   - URL default: no `include_archived` param → showArchived = false
+   - API called with `include_archived=false` by default
+
+2. **Toggle "Archivierte anzeigen"** with URL Persistence:
+   - Checkbox control in header (top-right, next to tabs)
+   - Default state: unchecked (showArchived = false)
+   - When checked: Updates URL query param `include_archived=1` via `window.history.replaceState`
+   - When unchecked: Removes `include_archived` param from URL
+   - State initialization: Reads `include_archived` param on mount via `useSearchParams()`
+   - Triggers immediate API re-fetch via `useEffect` dependency on `showArchived`
+
+3. **Client-Side Filtering** (Safety Measure):
+   - Defensive filter: `basePlans.filter((plan) => !plan.archived_at)` when toggle OFF
+   - Guarantees archived plans never render even if API mistakenly returns them
+   - Ensures UX consistency regardless of backend response
+
+4. **URL Shareable/Bookmarkable**:
+   - Shareable URL: `/pricing/rate-plans?include_archived=1` → toggle pre-checked, shows archived
+   - Default URL: `/pricing/rate-plans` → toggle unchecked, hides archived
+   - State persists across browser refreshes (not just component state)
+
+**Code Locations:**
+
+- File: `frontend/app/pricing/rate-plans/page.tsx`
+- Import: Line 4 → Added `useRouter, useSearchParams` from `next/navigation`
+- State init: Lines 74-77 → `useState(() => { const param = searchParams?.get("include_archived"); return param === "true" || param === "1"; })`
+- Toggle handler: Lines 245-256 → `handleToggleArchived(checked: boolean)` updates URL
+- API calls: Lines 207, 225 → `include_archived=${showArchived}` param
+- Client filter: Lines 743-747 → `basePlans.filter((plan) => !plan.archived_at)` when toggle OFF
+- Toggle UI: Lines 814-825 → Checkbox with `onChange={(e) => handleToggleArchived(e.target.checked)}`
+- Re-fetch trigger: Lines 163-170 → `useEffect` depends on `showArchived`
+
+**Files Changed:**
+- `frontend/app/pricing/rate-plans/page.tsx`:
+  - Added `useSearchParams` hook for URL param reading
+  - Modified `showArchived` state to initialize from URL
+  - Added `handleToggleArchived` to update URL on toggle change
+  - Added client-side filter to `displayedPlans` for safety
+  - Updated toggle checkbox to use `handleToggleArchived`
+
+**Acceptance Criteria:**
+- ✓ Default list view shows no archived plans (verified via showArchived=false initialization)
+- ✓ Toggling ON adds `?include_archived=1` to URL (verified via replaceState)
+- ✓ Toggling OFF removes param from URL (verified via params.delete)
+- ✓ Navigating to `/pricing/rate-plans?include_archived=1` pre-checks toggle and shows archived (verified via useSearchParams)
+- ✓ Client-side filter ensures archived plans never render when toggle OFF (verified via filter logic)
+- ✓ State persists across page refresh (verified via URL param reading on mount)
+
+**Dependencies:**
+- P2.11.1 Rate Plans UI: Default Hide Archived (property-specific page implementation, different route)
+- Rate Plans DELETE/Archive API endpoints
+
+**Related:**
+- P2.11.1: Implemented same hide archived for `/properties/[id]/rate-plans` but WITHOUT URL persistence (component state only)
+- This feature adds URL persistence to the legacy central page `/pricing/rate-plans`
+
+**Notes:**
+- Frontend-only changes (no backend API changes)
+- Difference from P2.11.1: URL query parameter persistence (shareable/bookmarkable state)
+- Legacy page still available for multi-property overview; new property-specific pages are primary UI
+- Migration banner directs users to new property-specific page
+- Build verified with TypeScript compilation
+- Not yet marked VERIFIED (requires manual PROD UI testing)
+
+**Verification Commands** (for VERIFIED status):
+```bash
+# BROWSER
+1. Navigate to https://app.fewo.kolibri-visions.de/pricing/rate-plans
+2. Verify toggle "Archivierte anzeigen" is unchecked by default
+3. Verify archived plans do not appear in list (both tabs)
+4. Check toggle ON → URL changes to ?include_archived=1
+5. Verify archived plans now appear with "archiviert" badge
+6. Refresh page → verify toggle remains checked and URL preserved
+7. Uncheck toggle → URL returns to /pricing/rate-plans (no param)
+8. Verify archived plans disappear from list
+9. Directly navigate to /pricing/rate-plans?include_archived=1 → verify toggle pre-checked
+10. Test both "Tarifpläne" and "Vorlagen (Agentur)" tabs
+```
+
