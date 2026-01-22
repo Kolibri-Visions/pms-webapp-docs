@@ -37162,3 +37162,44 @@ The `pms_quote_keine_saison_smoke.sh` script implements automatic 409 handling:
 ✅ STEP B PASSED: Preisplan erstellt mit Smoke Property (id=<plan-uuid>)
 ```
 
+
+**Quote Totals Validation Failure (pms_quote_keine_saison_smoke.sh):**
+
+**Symptom:** STEP G.2 fails with "Quote totals mismatch or incorrect" and creates debug bundle.
+
+**Root Cause:** API quote response totals don't match computed values from nights_breakdown, or subtotal is incorrect.
+
+**Canonical Fields (QuoteResponse schema):**
+- `total_cents`: Grand total (subtotal + fees + taxes) - THIS is the canonical total field
+- `subtotal_cents`: Accommodation subtotal (sum of all nights from nights_breakdown)
+- `fees_total_cents`: Total of all fees
+- `taxes_total_cents`: Total of all taxes
+- `nights_breakdown[]`: Per-night pricing array
+
+**How Validation Works:**
+1. Computes `computed_subtotal = sum(nights_breakdown[].nightly_cents)`
+2. Computes `computed_total = computed_subtotal + fees_total_cents + taxes_total_cents`
+3. Validates: `total_cents == computed_total` AND `subtotal_cents == computed_subtotal`
+4. On mismatch: FAILS test (rc=1) and saves debug bundle
+
+**Debug Bundle Location:** `/tmp/pms_quote_gap_debug_<timestamp>/`
+- `quote_with_fallback.json`: Full API response
+- `validation_summary.txt`: Computed vs actual values
+
+**How to Debug:**
+```bash
+# [HOST-SERVER-TERMINAL] Check debug bundle
+DEBUG_DIR=$(ls -td /tmp/pms_quote_gap_debug_* 2>/dev/null | head -1)
+cat "$DEBUG_DIR/validation_summary.txt"
+cat "$DEBUG_DIR/quote_with_fallback.json" | python3 -m json.tool
+
+# Expected behavior:
+# total_cents = subtotal_cents + fees_total_cents + taxes_total_cents
+# subtotal_cents = sum of all nights_breakdown[].nightly_cents
+```
+
+**Solution:**
+- If `total_cents` is 0 or null: API bug in quote calculation (check backend/app/services/pricing_service.py)
+- If `subtotal_cents` doesn't match computed_subtotal: nights_breakdown aggregation bug
+- If script reads wrong field: Update script to use `total_cents` (NOT `total_price_cents`)
+

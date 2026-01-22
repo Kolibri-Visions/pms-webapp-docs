@@ -12906,3 +12906,11 @@ File-based parsing avoids all these issues:
 - Cleanup via trap EXIT deletes both rate plan and smoke property (if created) even on failure
 - Smoke property naming: "Quote Gap Objekt YYYYMMDD-HHMMSS - Smoke"
 - See [runbook troubleshooting section](../docs/ops/runbook.md#automatic-fallback-pms_quote_keine_saison_smokesh) for details
+
+**Enhancement (2026-01-21 v2): Quote Totals Validation Fix:**
+- Fixed `pms_quote_keine_saison_smoke.sh` to read correct total field: `total_cents` (NOT `total_price_cents`)
+- Previous PROD run (commit 1c1fbd5) exposed totals field mismatch: STEP G.2 showed `total_price_cents=0` warning
+- Script now computes expected total from `nights_breakdown` and validates against `total_cents`
+- On mismatch: Test FAILS (rc=1) with debug bundle saved to `/tmp/pms_quote_gap_debug_<timestamp>/`
+- Ensures production-grade validation: totals must match computed values or test fails
+- Status remains ✅ IMPLEMENTED pending re-verification in PROD (awaiting smoke rc=0 without warnings)
