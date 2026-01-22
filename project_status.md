@@ -13762,3 +13762,33 @@ echo "rc=$?"
 - **Status:** Still ✅ IMPLEMENTED (not VERIFIED - pending deploy + smoke rc=0 + manual browser verification)
 
 ---
+
+**AdminShell Layout + Internal Proxy Routes Fix (2026-01-22):**
+- **Issue:** 
+  - /amenities page rendered without AdminShell (no left nav, no top bar) - missing layout.tsx file
+  - Property assignment modal showed "Keine Ausstattung verfügbar" even when amenities existed
+  - Client-side direct backend API calls exposed JWT tokens in browser (security risk)
+  - Required x-agency-id in user metadata (failed for single-tenant users without explicit agency_id)
+- **Fix:** AdminShell layout wrapper + internal Next.js API proxy routes:
+  - Created `frontend/app/amenities/layout.tsx` - wraps page with AdminShell + server-side auth via getAuthenticatedUser()
+  - Created internal proxy routes at `/api/internal/amenities` and `/api/internal/properties/[id]/amenities`
+  - Internal routes use Supabase session cookies (server-side), proxy to backend with JWT + x-agency-id
+  - Updated property detail page to use internal routes instead of direct backend calls
+  - Agency ID auto-resolved server-side from user metadata or team_members table (single-tenant users)
+- **Architecture:** Browser → Next.js internal route (session cookie) → Backend API (JWT + x-agency-id header)
+- **Security Improvement:** JWT tokens stay server-side, not exposed in browser DevTools Network tab
+- **UX Improvement:** Amenities page now has consistent admin shell navigation, property modal loads amenities correctly
+- **Smoke Script Enhancement:** Added optional backend API tests (Test 6-7) if HOST + ADMIN_TOKEN env vars set
+- **Files Changed:**
+  - `frontend/app/amenities/layout.tsx` - NEW FILE, AdminShell wrapper with server auth
+  - `frontend/app/api/internal/amenities/route.ts` - NEW FILE, GET/POST proxy
+  - `frontend/app/api/internal/amenities/[id]/route.ts` - NEW FILE, PUT/DELETE proxy by ID
+  - `frontend/app/api/internal/properties/[id]/amenities/route.ts` - NEW FILE, GET/PUT property amenities proxy (backend uses /amenities/property/{id})
+  - `frontend/app/properties/[id]/page.tsx` - Updated to use internal routes, removed direct backend calls, removed agencyId dependency
+  - `frontend/scripts/pms_admin_amenities_ui_smoke.sh` - Added Test 6 (GET amenities API), Test 7 (GET property amenities API) with ADMIN_TOKEN auth
+  - `backend/docs/ops/runbook.md` - Added "AdminShell Missing from Amenities Page" and "Property Assignment Modal Loads Empty (Internal Proxy Routes)" sections
+- **Testing:** 
+  - UI tests (1-5) still pass without auth (checks page loads, Next.js markers, error banner detection)
+  - Backend API tests (6-7) optional, run if HOST + ADMIN_TOKEN set (verifies data layer works)
+- **Status:** ✅ IMPLEMENTED (not VERIFIED - pending deploy + smoke rc=0 + manual UI verification that modal loads amenities)
+

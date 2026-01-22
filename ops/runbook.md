@@ -38414,3 +38414,133 @@ curl -X DELETE "$HOST/api/v1/amenities/<amenity-id>" \
 ```
 
 ---
+
+### AdminShell Missing from Amenities Page (Layout Fix - 2026-01-22)
+
+**Symptom:** /amenities page renders without left navigation sidebar and top header bar. Page content appears naked without AdminShell wrapper.
+
+**Root Cause:** `/amenities` directory had no `layout.tsx` file. Other admin pages (properties, dashboard) have layout files that wrap children with AdminShell component using server-side auth.
+
+**How It's Fixed (2026-01-22):**
+- **Created Layout:** Added `frontend/app/amenities/layout.tsx` that wraps children with AdminShell
+- **Server-Side Auth:** Layout uses `getAuthenticatedUser('/amenities')` for consistent auth check
+- **Auth Enforcement:** Unauthenticated users are redirected to `/login?next=/amenities` via layout
+
+**What Changed:**
+- `frontend/app/amenities/layout.tsx` - NEW FILE, wraps page with AdminShell + server auth
+- Pattern matches `/properties/layout.tsx` and `/dashboard/layout.tsx`
+
+**Architecture Note:**
+Each admin page directory must have its own `layout.tsx` to apply AdminShell wrapper. Next.js App Router does NOT use route groups like `(admin)` for shared layouts - each route segment explicitly declares its layout.
+
+**How to Debug (if AdminShell still missing):**
+```bash
+# Check if layout.tsx exists
+ls -la frontend/app/amenities/layout.tsx
+
+# Expected: File should exist and contain AdminShell import + getAuthenticatedUser
+
+# Check file contents
+cat frontend/app/amenities/layout.tsx | grep -E '(AdminShell|getAuthenticatedUser)'
+
+# Expected output:
+# import AdminShell from "../components/AdminShell";
+# import { getAuthenticatedUser } from "../lib/server-auth";
+# const userData = await getAuthenticatedUser('/amenities');
+# return <AdminShell ...>{children}</AdminShell>
+```
+
+**Solution (if layout missing):**
+Create `frontend/app/amenities/layout.tsx` following this pattern:
+```typescript
+import AdminShell from "../components/AdminShell";
+import { getAuthenticatedUser } from "../lib/server-auth";
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
+
+export default async function AmenitiesLayout({ children }: { children: React.ReactNode }) {
+  const userData = await getAuthenticatedUser('/amenities');
+  return <AdminShell userRole={userData.role} userName={userData.name} agencyName={userData.agencyName}>{children}</AdminShell>;
+}
+```
+
+---
+
+### Property Assignment Modal Loads Empty (Internal Proxy Routes - 2026-01-22)
+
+**Symptom:** Property detail page amenities assignment modal shows "Keine Ausstattung verfügbar" even when amenities exist in catalog. Browser DevTools may show CORS errors or auth failures when calling backend API directly.
+
+**Root Cause:** Property detail page was calling backend API directly from client-side:
+- `GET /api/v1/amenities` with bearer token + x-agency-id header
+- This exposed JWT tokens in browser (security risk)
+- Required x-agency-id in user metadata (fails for single-tenant users)
+- Client-side API calls don't have access to httpOnly session cookies
+
+**How It's Fixed (2026-01-22):**
+- **Internal Proxy Routes:** Created Next.js API routes that proxy to backend:
+  - `GET /api/internal/amenities` → `GET /api/v1/amenities`
+  - `GET /api/internal/properties/{id}/amenities` → `GET /api/v1/amenities/property/{id}`
+  - `PUT /api/internal/properties/{id}/amenities` → `PUT /api/v1/amenities/property/{id}`
+- **Server-Side Auth:** Internal routes use `createSupabaseServerClient()` to get session from cookies
+- **Agency Resolution:** Internal routes auto-resolve agency_id from user metadata or team_members table
+- **Token Security:** JWT tokens stay server-side, not exposed in browser
+
+**What Changed:**
+- `frontend/app/api/internal/amenities/route.ts` - NEW FILE, GET/POST amenities proxy
+- `frontend/app/api/internal/amenities/[id]/route.ts` - NEW FILE, PUT/DELETE amenity by ID proxy
+- `frontend/app/api/internal/properties/[id]/amenities/route.ts` - NEW FILE, GET/PUT property amenities proxy
+- `frontend/app/properties/[id]/page.tsx` - Updated to use internal routes instead of direct backend calls
+
+**Architecture:**
+```
+Browser Client
+  ↓ fetch("/api/internal/amenities") - session cookie
+Next.js API Route (server-side)
+  ↓ createSupabaseServerClient() → get JWT from session
+  ↓ fetch("https://api.../api/v1/amenities", {Authorization: Bearer <jwt>, x-agency-id: <agency>})
+Backend API
+```
+
+**How to Debug (if modal still empty):**
+```bash
+# Check internal route exists
+ls -la frontend/app/api/internal/amenities/route.ts
+ls -la frontend/app/api/internal/properties/[id]/amenities/route.ts
+
+# Expected: Files should exist
+
+# Test internal route directly (requires authenticated session cookie)
+curl -X GET "https://admin.fewo.kolibri-visions.de/api/internal/amenities" \
+  -H "Cookie: <session-cookie>" \
+  -v
+
+# Expected: 200 OK with amenities array OR 401 if not authenticated
+
+# Check browser DevTools Network tab
+# Should see: GET /api/internal/amenities (NOT /api/v1/amenities)
+# Should NOT see: x-agency-id header in request (handled server-side)
+# Should NOT see: Authorization bearer token in request (uses session cookie)
+```
+
+**Solution (if modal still fails):**
+1. Verify internal routes deployed: Check Next.js build includes API routes
+2. Check browser console for errors: Look for 401/403 from internal routes
+3. Verify Supabase session valid: User must be authenticated with active session
+4. Test backend API directly: Use smoke script with ADMIN_TOKEN to verify backend works
+5. Check team_members table: User must have agency_id set for agency resolution
+
+**Verification:**
+```bash
+# Run smoke script with backend API testing enabled
+HOST="https://api.fewo.kolibri-visions.de" \
+ADMIN_TOKEN="<jwt>" \
+AGENCY_ID="<agency-uuid>" \
+PROPERTY_ID="<property-uuid>" \
+ADMIN_URL="https://admin.fewo.kolibri-visions.de" \
+./frontend/scripts/pms_admin_amenities_ui_smoke.sh
+
+# Expected: Test 6 (backend amenities API) and Test 7 (property amenities API) both PASS
+```
+
