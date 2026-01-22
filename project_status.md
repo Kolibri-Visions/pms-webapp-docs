@@ -13284,3 +13284,88 @@ Manual UI Verification (https://admin.fewo.kolibri-visions.de/pricing/rate-plans
 ✓ Both tabs ("Tarifpläne" and "Vorlagen (Agentur)") tested successfully
 ```
 
+
+---
+
+# P2 UI Polish - Property Rate Plans Archived Toggle URL Persistence
+
+**Implementation Date:** 2026-01-22
+
+**Scope:** Add URL-persisted archived toggle to property-specific rate plans page (`/properties/[id]/rate-plans`).
+
+**Features Implemented:**
+
+1. **URL State Management** (`frontend/app/properties/[id]/rate-plans/page.tsx`):
+   - Added `useSearchParams` and `usePathname` hooks from `next/navigation`
+   - Modified `showArchived` state initialization to read from `include_archived` URL param
+   - Default: Archived hidden (param absent)
+   - URL param: `include_archived=1` (shows archived seasons)
+
+2. **Toggle Handler** (`handleToggleArchived`):
+   - Updates `showArchived` state
+   - Updates URL via `router.replace` (shallow navigation, no reload)
+   - Preserves other query parameters
+   - Removes param when toggled OFF (clean URLs)
+
+3. **Back/Forward Navigation Support**:
+   - Added `useEffect` that syncs state with URL changes
+   - Watches `searchParams` dependency
+   - Handles browser back/forward button correctly
+   - Supports external URL edits (e.g., manually typing param in address bar)
+
+4. **UI Integration**:
+   - Toggle button onClick updated to use `handleToggleArchived`
+   - German UI label: "Archivierte"
+   - Toggle switch: OFF (gray) → ON (primary color)
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- URL survives page refresh (shareable/bookmarkable links)
+- No full page reload (shallow navigation via `router.replace`)
+- Browser back/forward navigation updates toggle state correctly
+- Pattern consistent with other Next.js App Router best practices
+- VERIFIED status requires PROD deployment + manual UI testing
+
+**Dependencies:**
+- Next.js `useSearchParams`, `usePathname`, `useRouter` hooks
+- Browser `history` API (for back/forward navigation)
+
+**Verification Commands** (for VERIFIED status later):
+
+```bash
+# 1. Deploy to PROD
+# Coolify auto-deploys from main branch
+
+# 2. Verify deployment
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+echo "rc=$?"
+
+# 3. Manual UI verification at https://admin.fewo.kolibri-visions.de
+# Follow steps in runbook.md section "P2 UI: Property Rate Plans — Archivierte Toggle URL-persistiert"
+
+# Test checklist:
+# ✓ Default state: archived hidden, no URL param
+# ✓ Toggle ON: URL gets ?include_archived=1
+# ✓ Refresh: state preserved from URL
+# ✓ Toggle OFF: URL param removed
+# ✓ Back/Forward: state syncs with URL
+# ✓ Direct URL with param: loads with archived visible
+# ✓ Other query params: preserved correctly
+```
+
+**QA Proofs:**
+- `/tmp/p2_property_rate_plans_url_toggle_proofs.txt`
+
+**Related:**
+- P2.11.1: Property rate plans archived toggle (component state only, no URL persistence)
+- P2 UI Polish - Central Rate Plans Archived Toggle (✅ VERIFIED, URL persistence)
+- Pattern: Same `include_archived` query param key for consistency
+
+**Implementation Details:**
+- File: `frontend/app/properties/[id]/rate-plans/page.tsx`
+- Lines changed: 4 (imports), 140-160 (hooks + state init), 247-268 (effect + handler), 1287 (onClick)
+- Git diff: ~30 lines added/modified
+
+---

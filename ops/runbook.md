@@ -37537,3 +37537,166 @@ document.querySelector('input[type="checkbox"]').click();
 - Deploy: pms_verify_deploy.sh rc=0
 - Manual UI testing: All verification checks passed at https://admin.fewo.kolibri-visions.de/pricing/rate-plans
 
+
+---
+
+## P2 UI: Property Rate Plans — Archivierte Toggle URL-persistiert
+
+**Overview:** Property-specific rate plans page with URL-persisted archived toggle.
+
+**Purpose:** Enable property-level seasonal pricing with archived season visibility controlled by URL parameter, supporting bookmarkable/shareable links and proper browser back/forward navigation.
+
+**Architecture:**
+- **Route:** `/properties/[id]/rate-plans`
+- **Query Param:** `include_archived` (values: `1` for show, omitted for hide)
+- **URL State:** Managed via Next.js `useSearchParams` + `usePathname` + `router.replace`
+- **Back/Forward:** `useEffect` syncs state with URL changes (browser navigation)
+- **Default:** Archived seasons hidden (param absent)
+
+**Implementation Details:**
+- File: `frontend/app/properties/[id]/rate-plans/page.tsx`
+- Imports: Line 4 (added `useSearchParams`, `usePathname`)
+- URL read helper: Line 147-150 (`getShowArchivedFromUrl`)
+- State init: Line 160 (reads `include_archived` URL param on mount)
+- URL sync effect: Line 247-252 (handles back/forward navigation)
+- Toggle handler: Line 255-268 (`handleToggleArchived` - updates state + URL)
+- Toggle UI: Line 1287 (onClick calls `handleToggleArchived`)
+
+**Behavior:**
+1. **Load without param:** `/properties/[id]/rate-plans` → archived hidden, showArchived=false
+2. **Load with param:** `/properties/[id]/rate-plans?include_archived=1` → archived visible, showArchived=true
+3. **Toggle ON:** User clicks → state updates → URL becomes `...?include_archived=1` (shallow navigation, no reload)
+4. **Toggle OFF:** User clicks → state updates → URL param removed (clean URL)
+5. **Browser refresh:** State restored from URL param
+6. **Back/Forward:** useEffect detects URL change → syncs state
+7. **Other params:** Preserved (e.g., `?foo=bar&include_archived=1` works correctly)
+
+**PROD Verification Steps:**
+
+```bash
+# 1. Deploy to PROD (Coolify auto-deploy from main branch)
+
+# 2. Verify deployment
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+echo "rc=$?"
+
+# 3. Manual UI verification at https://admin.fewo.kolibri-visions.de
+# Test Case 1: Default state (archived hidden)
+#   - Navigate to /properties/[id]/rate-plans (pick any property ID)
+#   - Expected: Archived seasons NOT visible, URL has NO include_archived param
+#   - Expected: Toggle switch is OFF (gray)
+
+# Test Case 2: Toggle ON
+#   - Click "Archivierte" toggle
+#   - Expected: URL updates to ?include_archived=1 (NO page reload)
+#   - Expected: Archived seasons become visible
+#   - Expected: Toggle switch is ON (primary color)
+
+# Test Case 3: Page refresh with param
+#   - Browser refresh (Cmd+R / Ctrl+R)
+#   - Expected: URL still has ?include_archived=1
+#   - Expected: Archived seasons still visible
+#   - Expected: Toggle switch still ON
+
+# Test Case 4: Toggle OFF
+#   - Click "Archivierte" toggle again
+#   - Expected: URL param removed (?include_archived=1 disappears)
+#   - Expected: Archived seasons disappear
+#   - Expected: Toggle switch is OFF
+
+# Test Case 5: Browser back/forward
+#   - Click browser back button
+#   - Expected: URL gets ?include_archived=1 again
+#   - Expected: Toggle switch turns ON
+#   - Expected: Archived seasons reappear
+#   - Click browser forward button
+#   - Expected: URL param removed
+#   - Expected: Toggle switch turns OFF
+#   - Expected: Archived seasons disappear
+
+# Test Case 6: Direct URL with param
+#   - Copy URL with ?include_archived=1
+#   - Open in new tab or share with colleague
+#   - Expected: Page loads with archived visible
+#   - Expected: Toggle switch is ON
+
+# Test Case 7: Other query params preserved
+#   - Add custom param: /properties/[id]/rate-plans?foo=bar
+#   - Toggle ON
+#   - Expected: URL becomes ?foo=bar&include_archived=1 (both params present)
+#   - Toggle OFF
+#   - Expected: URL becomes ?foo=bar (only custom param remains)
+```
+
+**Common Issues:**
+
+### Toggle Works But URL Doesn't Update
+
+**Symptom:** Archived toggle changes UI but URL remains unchanged after clicking.
+
+**Root Cause:** `handleToggleArchived` not called or `router.replace` not working.
+
+**How to Debug:**
+```bash
+# Check browser console for errors
+# Verify onClick handler in DevTools Elements tab
+# Should be: onClick={() => handleToggleArchived(!showArchived)}
+# NOT: onClick={() => setShowArchived(!showArchived)}
+
+# Check implementation
+rg -n "handleToggleArchived" frontend/app/properties/[id]/rate-plans/page.tsx
+```
+
+**Solution:**
+- Verify toggle button onClick uses `handleToggleArchived` (line ~1287)
+- Ensure `router.replace` is called in handler (line ~267)
+- Check Next.js router is available (not in SSR context issue)
+
+### State Doesn't Restore After Refresh
+
+**Symptom:** Archived toggle resets to hidden after page refresh, even with `?include_archived=1` in URL.
+
+**Root Cause:** `showArchived` state not reading from `searchParams` on mount.
+
+**How to Debug:**
+```bash
+# Check state initialization
+sed -n '147,160p' frontend/app/properties/[id]/rate-plans/page.tsx
+
+# Should see:
+# const getShowArchivedFromUrl = () => { ... }
+# const [showArchived, setShowArchived] = useState(getShowArchivedFromUrl);
+```
+
+**Solution:**
+- Verify state initialization uses lazy initializer: `useState(getShowArchivedFromUrl)`
+- Ensure `getShowArchivedFromUrl` reads `searchParams?.get("include_archived")`
+- Check `useSearchParams` is imported and called (line 4, line 140)
+
+### Back/Forward Navigation Doesn't Update Toggle
+
+**Symptom:** Browser back/forward button changes URL but toggle switch doesn't update.
+
+**Root Cause:** Missing `useEffect` that syncs state with URL changes.
+
+**How to Debug:**
+```bash
+# Check for URL sync effect
+sed -n '247,252p' frontend/app/properties/[id]/rate-plans/page.tsx
+
+# Should see:
+# useEffect(() => {
+#   const fromUrl = getShowArchivedFromUrl();
+#   if (fromUrl !== showArchived) {
+#     setShowArchived(fromUrl);
+#   }
+# }, [searchParams]);
+```
+
+**Solution:**
+- Verify useEffect with `[searchParams]` dependency exists (line ~247-252)
+- Ensure effect calls `getShowArchivedFromUrl()` and updates state
+- Check for infinite loops (effect should only update if state differs from URL)
+
+---
