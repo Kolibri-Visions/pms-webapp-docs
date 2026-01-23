@@ -14323,3 +14323,19 @@ curl -X POST "$API_BASE/api/v1/bookings" \
 - Runbook section: "Admin UI: Buchungen (Bookings) - Smoke + Troubleshooting"
 - Runbook section: "Database: Exclusion Constraints (Booking Conflicts)"
 - Runbook section: "Booking Status Workflow: Inquiry Policy (Non-Blocking Status)"
+
+**Verification Commands (HOST-SERVER-TERMINAL):**
+```bash
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Run full smoke test
+ENABLE_BACKEND_API_TESTS=1 \
+ADMIN_URL="https://admin.fewo.kolibri-visions.de" \
+HOST="https://api.fewo.kolibri-visions.de" \
+ADMIN_TOKEN="$MANAGER_JWT_TOKEN" \
+AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7" \
+./frontend/scripts/pms_admin_bookings_ui_smoke.sh
+
+# Expected: Test 6 PASSED (create, verify, cancel all succeed)
+```

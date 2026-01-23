@@ -40156,3 +40156,10 @@ echo "Booking created and cancelled successfully"
 - See "Admin UI: Buchungen (Bookings) - Smoke + Troubleshooting" for list/detail/confirm/cancel operations
 - See "Database: Exclusion Constraints (Booking Conflicts)" for double-booking prevention
 - See "Booking Status Workflow: Inquiry Policy (Non-Blocking Status)" for inquiry vs confirmed blocking behavior
+
+**BookingCancelRequest Payload:**
+- `cancelled_by` (required): Enum literal "guest" | "host" | "platform" | "system"
+- `cancellation_reason` (optional): String reason
+- `refund_amount` (optional): Decimal refund amount
+
+Admin UI sends: `cancelled_by: "host"`
