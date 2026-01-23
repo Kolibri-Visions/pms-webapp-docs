@@ -14374,3 +14374,108 @@ AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7" \
   - **Test 7 Verification**: Properties endpoint `GET /api/v1/properties?offset=0&limit=100&is_active=true` returns HTTP 200 with properties items (not 422)
   - **UI Verification**: "Neue Buchung erstellen" modal properties dropdown populated correctly (browser DevTools shows limit=100 request)
 
+
+## P2 Bookings Admin UI - Completion Round #2 (Filters + Enhanced Cancel + Display) ✅ IMPLEMENTED
+
+**Status:** IMPLEMENTED (commit TBD)
+**Implementation Date:** 2026-01-23
+**Verification Status:** PENDING (mark VERIFIED only after prod smoke passes)
+
+**Overview:**
+Bookings Admin UI completion round #2 adds production-ready filters, enhanced cancel modal, and improved property/guest display. Makes the UI fully functional for daily operations.
+
+**Features Implemented:**
+
+1. **List Page Server-Side Filters:**
+   - **Status Filter**: Sends `?status=<status>` query parameter to backend (previously client-side only)
+   - **Property Filter**: New dropdown sends `?property_id=<uuid>` query parameter to backend
+   - **Backend Support**: Both filters already existed in backend `BookingFilter` schema, just needed to be used
+   - **Clear Filters Button**: "Filter zurücksetzen" button resets all filters (search, status, property)
+
+2. **Property Name Display:**
+   - **List Page**: Properties fetched on load via `GET /api/v1/properties?offset=0&limit=100&is_active=true`
+   - **Helper Function**: `getPropertyName(propertyId)` maps UUIDs to names
+   - **Table Display**: Shows property name instead of truncated UUID (`Objekt <uuid>...` fallback)
+   - **Filter Dropdown**: Populated with property names for easy selection
+
+3. **Detail Page Enhancements:**
+   - **Property Name**: Fetches `GET /api/v1/properties/{id}` on page load, displays name instead of "Objekt-ID: <uuid>"
+   - **Enhanced Cancel Modal**:
+     - `cancelled_by` dropdown: guest | host | platform | system (previously hardcoded to "host")
+     - `post_cancel_hold_hours` number input: 0-168 hours (default 0 = immediate availability)
+     - `cancellation_reason` textarea (required)
+     - `refund_amount` number input (optional)
+   - **Guest Existence Check**: Already existed, no changes needed
+
+**Files Changed:**
+- `frontend/app/bookings/page.tsx` - Server-side filters, property filter dropdown, property name display (~50 lines changed)
+- `frontend/app/bookings/[id]/page.tsx` - Cancel modal fields (cancelled_by, post_cancel_hold_hours), property name fetch (~30 lines changed)
+- `backend/docs/ops/runbook.md` - Added "Bookings UI: Filters + Cancel Modal + Property/Guest Display" section (~50 lines)
+- `backend/scripts/README.md` - Added UI improvements note (~6 lines)
+- `backend/docs/project_status.md` - This entry
+
+**Backend API Endpoints Used (No New Endpoints):**
+- `GET /api/v1/bookings?status=<status>&property_id=<uuid>&limit=<n>&offset=<n>` - Existing, now used by UI
+- `GET /api/v1/properties?offset=0&limit=100&is_active=true` - Existing, used for filter/display
+- `GET /api/v1/properties/{id}` - Existing, used for detail page property name
+- `POST /api/v1/bookings/{id}/cancel` - Existing, payload enhanced with dropdown values
+- `GET /api/v1/guests/{id}` - Existing, used for guest existence check
+
+**ANTI-KREISREGEL Compliance:**
+- ✅ Audited backend API first (all endpoints already exist, just needed to be connected to UI)
+- ✅ Did NOT rebuild existing features (cancel modal, guest check already existed, only enhanced)
+- ✅ Did NOT add internal proxy routes (kept direct API pattern)
+- ✅ Minimal changes, maximum impact
+
+**Smoke Test Coverage:**
+- Existing `frontend/scripts/pms_admin_bookings_ui_smoke.sh` covers:
+  - Test 6: Create + cancel (tests cancel endpoint with enhanced payload)
+  - Test 7: Properties fetch (tests properties endpoint used for filter/display)
+- No new smoke tests needed (backend endpoints unchanged)
+
+**Verification Commands (HOST-SERVER-TERMINAL):**
+```bash
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Run full smoke test
+ENABLE_BACKEND_API_TESTS=1 \
+ADMIN_URL="https://admin.fewo.kolibri-visions.de" \
+HOST="https://api.fewo.kolibri-visions.de" \
+ADMIN_TOKEN="$MANAGER_JWT_TOKEN" \
+AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7" \
+./frontend/scripts/pms_admin_bookings_ui_smoke.sh
+
+# Expected: All 7 tests pass, rc=0
+```
+
+**Manual UI Verification:**
+```bash
+# 1. Login to admin UI
+open https://admin.fewo.kolibri-visions.de/bookings
+
+# 2. Verify filters work:
+#    - Status dropdown → Network tab shows ?status=confirmed
+#    - Property dropdown → Network tab shows ?property_id=<uuid>
+#    - "Filter zurücksetzen" button clears all
+
+# 3. Verify property names display (not UUIDs)
+
+# 4. Open booking detail page
+
+# 5. Click "Stornieren" button
+
+# 6. Verify modal has:
+#    - "Storniert von" dropdown (4 options)
+#    - "Sperrfrist nach Stornierung" input (0-168)
+#    - "Stornierungsgrund" textarea
+#    - "Rückerstattungsbetrag" input
+
+# 7. Verify property name displays (not "Objekt-ID: <uuid>")
+```
+
+**Related Documentation:**
+- Runbook section: "Bookings UI: Filters + Cancel Modal + Property/Guest Display"
+- Runbook section: "Admin UI: Buchungen (Bookings) - Smoke + Troubleshooting"
+- Scripts README: "Bookings Smoke Script" (UI improvements note)
+

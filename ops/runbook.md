@@ -40179,3 +40179,84 @@ Admin UI sends: `cancelled_by: "host"`
 - **Pagination**: If agency has > 100 properties, implement pagination or search filter in dropdown
 - **Smoke Test**: Test 7 verifies properties endpoint returns valid data with limit=100
 
+
+## Bookings UI: Filters + Cancel Modal + Property/Guest Display
+
+**Overview:**
+Bookings Admin UI completion round #2 adds server-side filters, enhanced cancel modal, and improved property/guest display.
+
+**Features:**
+
+**List Page (/bookings):**
+1. **Server-Side Status Filter**:
+   - Status dropdown sends `?status=confirmed` query parameter to backend
+   - Backend-supported values: requested, under_review, inquiry, pending, confirmed, checked_in, checked_out, cancelled, declined
+   - Reduces client-side data transfer (only matching bookings returned)
+
+2. **Server-Side Property Filter**:
+   - Property dropdown sends `?property_id=<uuid>` query parameter to backend
+   - Properties fetched from `GET /api/v1/properties?offset=0&limit=100&is_active=true`
+   - Shows property names in dropdown (not IDs)
+
+3. **Property Name Display**:
+   - List table shows property name instead of truncated UUID
+   - Fetches properties on page load for both filter and display
+   - Fallback: `Objekt <uuid>...` if property not found in cache
+
+4. **Filter Reset Button**:
+   - "Filter zurücksetzen" button clears all filters (search, status, property)
+   - Only visible when at least one filter is active
+
+**Detail Page (/bookings/[id]):**
+1. **Enhanced Cancel Modal**:
+   - `cancelled_by` dropdown: guest | host | platform | system (previously hardcoded to "host")
+   - `post_cancel_hold_hours` field: 0-168 hours (default 0 = immediate availability)
+   - `cancellation_reason` textarea (required)
+   - `refund_amount` input (optional)
+
+2. **Property Name Display**:
+   - Fetches property via `GET /api/v1/properties/{id}` on page load
+   - Displays property name instead of "Objekt-ID: <uuid>"
+   - Fallback: `ID: <uuid>...` if fetch fails
+
+3. **Guest Existence Check**:
+   - Already implemented (checks `GET /api/v1/guests/{id}`)
+   - Shows link to guest page if guest exists
+   - Shows "guest_id: ..." if guest doesn't exist
+
+**Backend API Endpoints Used:**
+- `GET /api/v1/bookings?status=<status>&property_id=<uuid>&limit=<n>&offset=<n>` - List with filters
+- `GET /api/v1/properties?offset=0&limit=100&is_active=true` - Properties for filter/display
+- `GET /api/v1/properties/{id}` - Single property for detail page
+- `POST /api/v1/bookings/{id}/cancel` - Cancel with enhanced payload
+- `GET /api/v1/guests/{id}` - Guest existence check
+
+**Verification:**
+```bash
+# Verify filters work (network tab shows query params)
+# 1. Open /bookings in browser
+# 2. Select status filter → URL should show ?status=confirmed
+# 3. Select property filter → URL should append &property_id=<uuid>
+# 4. Network tab: GET /api/v1/bookings?status=confirmed&property_id=<uuid>
+
+# Verify cancel modal fields
+# 1. Open /bookings/<id> detail page
+# 2. Click "Stornieren" button
+# 3. Modal should show:
+#    - "Storniert von" dropdown (4 options)
+#    - "Sperrfrist nach Stornierung" number input (0-168)
+#    - "Stornierungsgrund" textarea
+#    - "Rückerstattungsbetrag" number input
+
+# Verify property names display
+# 1. List page should show property names (not UUIDs)
+# 2. Detail page should show "Objekt: <property name>"
+```
+
+**Troubleshooting:**
+
+- **Filters don't work / still client-side**: Check browser DevTools Network tab - request should include query params `?status=...&property_id=...`
+- **Property dropdown empty**: Properties fetch failed (401/403) or no active properties exist
+- **Property names not showing**: Properties fetch returned 422 (limit > 100) or 401 (token expired)
+- **Cancel modal missing fields**: Old frontend version cached - hard refresh (Cmd+Shift+R / Ctrl+F5)
+
