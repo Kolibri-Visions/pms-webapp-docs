@@ -40171,3 +40171,11 @@ Admin UI sends: `cancelled_by: "host"`
 - **Cancellation Reason Persistence**: Already-cancelled bookings keep their original `cancellation_reason` (not overwritten)
 - **Verification**: To verify cancellation, check `booking.status == "cancelled"` (NOT by comparing `cancellation_reason`)
 - **Post-Cancel Hold**: Optional `post_cancel_hold_hours` field delays re-booking window (default 0 = immediate)
+**Properties Dropdown (Neue Buchung Modal):**
+- Frontend fetches properties via: `GET /api/v1/properties?offset=0&limit=100&is_active=true`
+- **API Limit Validation**: Maximum limit=100 (backend enforces via OpenAPI spec)
+- **422 Validation Error**: Requesting limit > 100 causes 422 Unprocessable Entity with validation error: `{"field": "limit", "message": "ensure this value is less than or equal to 100"}`
+- **Solution**: Frontend MUST use limit <= 100 (current: limit=100, is_active=true to show only active properties)
+- **Pagination**: If agency has > 100 properties, implement pagination or search filter in dropdown
+- **Smoke Test**: Test 7 verifies properties endpoint returns valid data with limit=100
+

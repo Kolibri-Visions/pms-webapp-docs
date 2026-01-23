@@ -14344,3 +14344,15 @@ AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7" \
 - **Test 6 Fails with HTTP 401**: Token may have expired → Generate fresh JWT and re-export `ADMIN_TOKEN` or `MANAGER_JWT_TOKEN`
 - **Cancel Verification**: Smoke cleanup verifies via `booking.status == "cancelled"` (idempotent, safe for already-cancelled bookings)
 - **Idempotent Cleanup**: Re-cancelling already-cancelled bookings is allowed (status changes to "cancelled", original `cancellation_reason` preserved)
+**Properties Dropdown Fix (2026-01-23):**
+- **Issue**: "Neue Buchung erstellen" modal properties dropdown empty due to 422 validation error
+- **Root Cause**: Frontend requested `GET /api/v1/properties?limit=1000` but backend enforces limit <= 100 (OpenAPI spec)
+- **Fix**: Changed frontend fetch to `GET /api/v1/properties?offset=0&limit=100&is_active=true`
+- **Smoke Test 7**: Added properties endpoint validation test (verifies 200 response with >= 1 property)
+- **Files Changed**:
+  - `frontend/app/bookings/page.tsx` - Changed limit from 1000 to 100
+  - `frontend/scripts/pms_admin_bookings_ui_smoke.sh` - Added Test 7 for properties fetch
+  - `backend/docs/ops/runbook.md` - Added "Properties Dropdown" notes
+  - `backend/scripts/README.md` - Added Test 7 documentation
+- **Verification**: Test 7 passes with rc=0 (properties endpoint returns valid data)
+
