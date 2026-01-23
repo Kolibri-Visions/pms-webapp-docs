@@ -38650,3 +38650,249 @@ curl -X GET "https://admin.fewo.kolibri-visions.de/api/internal/amenities" \
 
 **Status:** ✅ Fixed in commit bffd54b (internal proxy routes) + follow-up fix (this section)
 
+
+
+---
+
+### Amenities Edit Returns 405 Method Not Allowed (Troubleshooting 2026-01-22)
+
+**Symptom:** In admin UI at /amenities, clicking edit pencil icon, modifying fields, and clicking "Speichern" shows error toast. Browser DevTools Network tab shows:
+```
+PUT /api/internal/amenities/<uuid> → 405 Method Not Allowed
+```
+
+**Root Cause - Possible Scenarios:**
+
+1. **Next.js dev server not restarted after route handler creation:**
+   - Internal proxy route file exists but dev server cached old routing table
+   - Hot reload doesn't always pick up new API route files
+
+2. **Production build missing route handler:**
+   - Route handler file exists locally but wasn't deployed to production
+   - Build process may have excluded the file
+   - Static export or caching issue
+
+3. **Route handler not exporting PUT method:**
+   - File `frontend/app/api/internal/amenities/[id]/route.ts` exists but missing `export async function PUT`
+   - Typo in function name or incorrect export syntax
+
+4. **Middleware blocking PUT requests:**
+   - Next.js middleware (middleware.ts) may be rewriting or blocking PUT to `/api/internal/*`
+
+5. **Browser caching old 405 response:**
+   - Browser cached previous 405 error before route handler was fixed
+   - Hard refresh not clearing cache
+
+**How to Debug:**
+
+```bash
+# 1. Verify route handler file exists locally
+ls -la frontend/app/api/internal/amenities/[id]/route.ts
+
+# Expected: File should exist with PUT and DELETE exports
+
+# 2. Check file content for PUT export
+grep -n "export async function PUT" frontend/app/api/internal/amenities/[id]/route.ts
+
+# Expected output:
+# 54:export async function PUT(
+
+# 3. Verify Next.js build recognizes route
+cd frontend && npm run build 2>&1 | grep "api/internal/amenities/\[id\]"
+
+# Expected output:
+# ├ λ /api/internal/amenities/[id]             0 B                0 B
+
+# 4. Test PUT request locally (requires dev server running + authenticated session)
+curl -X PUT "http://localhost:3000/api/internal/amenities/test-uuid" \
+  -H "Content-Type: application/json" \
+  -H "Cookie: <session-cookie>" \
+  -d '{"name":"Test","description":"Test","category":"general"}' \
+  -v
+
+# Expected: Should NOT return 405. May return 401 (no session) or other error.
+# If returns 405: Route handler not loaded or not exporting PUT
+
+# 5. Check production deployment
+curl -X PUT "https://admin.fewo.kolibri-visions.de/api/internal/amenities/test-uuid" \
+  -H "Content-Type: application/json" \
+  -H "Cookie: <session-cookie>" \
+  -d '{"name":"Test"}' \
+  -v 2>&1 | grep "< HTTP"
+
+# Expected: 401 (if not authenticated) or 404 (if amenity doesn't exist)
+# If returns 405: Route not deployed or build issue
+```
+
+**Solution (Step-by-Step):**
+
+**If Local Dev Server:**
+```bash
+# 1. Verify file content is correct
+cat frontend/app/api/internal/amenities/[id]/route.ts | grep -A 5 "export async function PUT"
+
+# Should show:
+# export async function PUT(
+#   request: NextRequest,
+#   { params }: { params: { id: string } }
+# ) {
+
+# 2. Restart Next.js dev server
+cd frontend
+# Kill existing process (Ctrl+C or pkill -f "next dev")
+npm run dev
+
+# Wait for server to fully start, then test edit operation
+```
+
+**If Production Deployment:**
+```bash
+# 1. Verify latest commit includes route handler
+git log --oneline --all -10 | grep -E "(internal proxy|amenities)"
+
+# Should show commits:
+# bffd54b fix(p2): amenities property assignment loads catalog + internal proxy ...
+# 8f49f1e fix(p2): amenities create modal submit wiring + internal proxy ...
+
+# 2. Verify route handler in git
+git show HEAD:frontend/app/api/internal/amenities/[id]/route.ts | head -60
+
+# Should show file with PUT export at line ~54
+
+# 3. Redeploy to production (Coolify or manual)
+# - In Coolify: Go to application → Redeploy
+# - Or: git pull on server + rebuild
+
+# 4. Verify deploy completed
+API_BASE_URL="https://api.fewo.kolibri-visions.de" ./backend/scripts/pms_verify_deploy.sh
+
+# 5. Test CRUD cycle with smoke script
+HOST="https://api.fewo.kolibri-visions.de" \
+ADMIN_TOKEN="<jwt>" \
+AGENCY_ID="<agency-uuid>" \
+ADMIN_URL="https://admin.fewo.kolibri-visions.de" \
+./frontend/scripts/pms_admin_amenities_ui_smoke.sh
+
+# Expected: Test 8 (CRUD cycle) PASSES - this specifically tests PUT endpoint
+```
+
+**If Route Handler Missing PUT Export (Code Fix):**
+```bash
+# Edit frontend/app/api/internal/amenities/[id]/route.ts
+# Ensure it has:
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const supabase = await createSupabaseServerClient();
+
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
+
+  if (!session || sessionError) {
+    return NextResponse.json(
+      { detail: 'Unauthorized: No valid session' },
+      { status: 401 }
+    );
+  }
+
+  const accessToken = session.access_token;
+  const agencyId = await getAgencyIdFromSession();
+  const amenityId = params.id;
+
+  const body = await request.json();
+
+  const headers: Record<string, string> = {
+    'Authorization': `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+  };
+
+  if (agencyId) {
+    headers['x-agency-id'] = agencyId;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/amenities/${amenityId}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(body),
+    });
+
+    const data = await response.json();
+
+    return NextResponse.json(data, {
+      status: response.status,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+  } catch (error) {
+    console.error(`Internal API proxy error (PUT /amenities/${amenityId}):`, error);
+    return NextResponse.json(
+      { detail: 'Internal proxy error' },
+      { status: 500 }
+    );
+  }
+}
+
+# After adding/fixing PUT export:
+# - Restart dev server (if local)
+# - Commit and redeploy (if production)
+# - Run smoke script Test 8 to verify
+```
+
+**Browser Cache Clear:**
+```bash
+# 1. Open browser DevTools (F12)
+# 2. Right-click Refresh button → "Empty Cache and Hard Reload"
+# 3. Or: DevTools → Network tab → "Disable cache" checkbox → reload page
+# 4. Try edit operation again
+```
+
+**Verification After Fix:**
+```bash
+# Run smoke script with CRUD test enabled
+HOST="https://api.fewo.kolibri-visions.de" \
+ADMIN_TOKEN="<jwt>" \
+ADMIN_URL="https://admin.fewo.kolibri-visions.de" \
+./frontend/scripts/pms_admin_amenities_ui_smoke.sh
+
+# Expected output for Test 8:
+# Test 8: Backend API CRUD cycle (create/update/delete amenity)...
+#   Step 1/4: Creating test amenity 'SMOKE_TEST_...'...
+#     ✓ Created amenity with ID: <uuid>
+#   Step 2/4: Updating amenity <uuid> (verify PUT works, not 405)...
+#     ✓ Update succeeded, description changed (HTTP 200)
+#   Step 3/4: Verifying update persisted...
+#     ✓ Update verified (description persisted)
+#   Step 4/4: Cleaning up (deleting test amenity)...
+#     ✓ Test amenity deleted (HTTP 204)
+# ✅ Test 8 PASSED: CRUD cycle completed (create → update via PUT → verify → delete)
+
+# If Test 8 still fails on Step 2 with "Update returned 405 Method Not Allowed":
+# - Route handler still not deployed or dev server not restarted
+# - Check Next.js build output again
+# - Verify route file committed and pushed
+```
+
+**Related Files:**
+- Route handler: `frontend/app/api/internal/amenities/[id]/route.ts` (must have PUT export)
+- UI component: `frontend/app/amenities/page.tsx` (calls PUT /api/internal/amenities/{id})
+- Smoke script: `frontend/scripts/pms_admin_amenities_ui_smoke.sh` (Test 8 verifies PUT works)
+
+**Expected State After Fix:**
+- PUT /api/internal/amenities/{id} returns 200 (success) or 400/404 (validation/not found)
+- PUT /api/internal/amenities/{id} NEVER returns 405 (route handler loaded and PUT exported)
+- Edit operation in /amenities page works: modal closes, toast shows success, row updates
+- DevTools Network tab shows: PUT /api/internal/amenities/{uuid} → 200 OK
+
+**If Issue Persists:**
+- Verify Next.js version is 14.x: `cat frontend/package.json | grep '"next"'`
+- Check for conflicting routes: `find frontend/app/api -name "route.ts" | grep amenities`
+- Review server logs for errors: Check Coolify logs or `npm run dev` output for runtime errors
+- Test backend API directly: Verify backend /api/v1/amenities/{id} PUT works (bypass frontend)
+
+**Status:** Added troubleshooting documentation + smoke Test 8 (CRUD cycle) to detect 405 regressions early

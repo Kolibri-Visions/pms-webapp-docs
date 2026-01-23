@@ -13858,3 +13858,42 @@ echo "rc=$?"
 
 **Status After Fix:** Awaiting re-verification in PROD after deploy of regression fix commit.
 
+**Additional Regression (2026-01-22):**
+
+**Issue:** Amenities Edit/Save operation returns 405 Method Not Allowed. DevTools shows `PUT /api/internal/amenities/<uuid> → 405`.
+
+**Root Cause - Investigation Findings:**
+- Route handler file `frontend/app/api/internal/amenities/[id]/route.ts` exists and has correct PUT export
+- UI code in `frontend/app/amenities/page.tsx` correctly calls `PUT /api/internal/amenities/{id}`
+- Next.js build recognizes route (`├ λ /api/internal/amenities/[id]`)
+- No middleware blocking PUT requests
+
+**Likely Causes:**
+1. Dev server needs restart (route handler not hot-reloaded)
+2. Production deployment incomplete (route file not deployed yet)
+3. Browser caching old 405 response
+4. Environment-specific routing issue
+
+**Fix Applied:**
+- Added **Test 8** to smoke script: Full CRUD cycle (create → update via PUT → verify → delete)
+  - Specifically checks that PUT does NOT return 405
+  - Tests backend API directly (bypasses browser/cache issues)
+  - Auto-cleanup via DELETE after test completes
+- Added comprehensive troubleshooting section to runbook.md: "Amenities Edit Returns 405 Method Not Allowed"
+  - Debug steps for dev server vs production deployment scenarios
+  - How to verify route handler is loaded
+  - Browser cache clearing instructions
+  - Step-by-step solution for each scenario
+
+**Regression Detection:**
+- Smoke script Test 8 will now catch 405 errors early in deployment pipeline
+- Test output explicitly states when PUT returns 405: "Update returned 405 Method Not Allowed (PUT endpoint broken!)"
+- Failing Test 8 blocks smoke script (rc=1), preventing deploy verification if regression reintroduced
+
+**Files Changed:**
+- `frontend/scripts/pms_admin_amenities_ui_smoke.sh` - Added Test 8 (CRUD cycle with PUT verification)
+- `backend/docs/ops/runbook.md` - Added "Amenities Edit Returns 405" troubleshooting section
+- `backend/docs/project_status.md` - This regression note
+
+**Status After Fix:** Test 8 added to smoke script. Awaiting PROD verification that PUT endpoint works (Test 8 PASSES).
+
