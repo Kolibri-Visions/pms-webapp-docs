@@ -13684,6 +13684,9 @@ Regression discovered after VERIFIED status: Edit/Save operation returns 405 Met
 - Smoke Tests 7b, 7c, 7d must all PASS
 - Manual browser test: /amenities → edit → "Speichern" → 200 OK (PATCH), modal closes, toast shows
 
+**Smoke Script Test 9 Correction (2026-01-23):**
+Test 9 in `frontend/scripts/pms_admin_amenities_ui_smoke.sh` was using PUT for the update step, which caused false-negative failures (405) due to backend PATCH-only semantics. Corrected to use PATCH in update step to match verified backend behavior (Test 7c confirms: PUT=405, PATCH=200 by design). Test 9 now passes correctly: create → update via PATCH → verify → delete.
+
 **Notes:**
 - Admin UI completes the amenities feature (backend + frontend)
 - Multi-tenant via x-agency-id header (JWT lacks agency_id claim)

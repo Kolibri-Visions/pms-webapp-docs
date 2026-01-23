@@ -38139,6 +38139,13 @@ Property Assignment:
 - `GET /api/v1/amenities/property/{property_id}` - Get property amenities
 - `PUT /api/v1/amenities/property/{property_id}` - Replace property amenities (admin/manager)
 
+**Important - Backend Update Semantics:**
+- Backend supports **PATCH-only** for amenity updates: `PATCH /api/v1/amenities/{id}` → 200 OK
+- Backend does **NOT** support PUT for amenity updates: `PUT /api/v1/amenities/{id}` → 405 Method Not Allowed
+- This is by design (verified via smoke Test 7c)
+- Smoke Test 9 uses PATCH for the update step to match backend semantics
+- Internal Next.js proxy (`/api/internal/amenities/{id}`) accepts both PUT and PATCH from clients and forwards as PATCH to backend
+
 **Database Schema:**
 
 ```sql
