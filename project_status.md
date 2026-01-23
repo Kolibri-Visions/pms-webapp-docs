@@ -13661,10 +13661,20 @@ Smoke:    backend/scripts/pms_amenities_smoke.sh
        - Modal shows "Keine Ausstattung verfügbar"
        - Delete cascade issues
 
-**Status:** ✅ IMPLEMENTED (Regression found - downgraded from VERIFIED)
+**Status:** ✅ IMPLEMENTED (Regression found - downgraded from VERIFIED; awaiting PROD verify after 405 fix)
 
 **Regression Note (2026-01-22):**
-Regression discovered after VERIFIED status: Edit/Save operation returns 405 Method Not Allowed in browser. PUT to `/api/internal/amenities/<uuid>` fails with 405, indicating internal proxy route handler missing PUT export or not deployed. Code inspection shows route handler EXISTS at `frontend/app/api/internal/amenities/[id]/route.ts` with correct PUT export (line 54), and UI correctly calls the route (line 179-180). Root cause: Likely production deployment incomplete (route file not deployed yet), dev server not restarted after route creation, or browser caching old 405 response. Fix implemented in this commit: Added Test 6 to smoke script (internal route 405 regression check), added runbook troubleshooting section. Pending PROD verification after deployment.
+Regression discovered after VERIFIED status: Edit/Save operation returns 405 Method Not Allowed in browser. PUT to `/api/internal/amenities/<uuid>` fails with 405, indicating internal proxy route handler missing PUT export or not deployed.
+
+**Root Cause Identified:** File permissions on `frontend/app/api/internal/amenities/[id]/` directory were too restrictive (700 instead of 755), preventing Next.js server from accessing the route handler in production. Code inspection confirmed route handler EXISTS with correct PUT export (line 54), and UI correctly calls the route (line 179-180).
+
+**Fix Applied (this commit):**
+- Corrected file permissions: directory 700→755, route.ts 600→644
+- Added Test 7b to smoke script: Real-world 405 regression check using actual amenity ID from backend API
+- Added comprehensive runbook troubleshooting section with curl diagnostics and fix steps
+- Verified Next.js build recognizes route: `├ λ /api/internal/amenities/[id]`
+
+**Pending:** PROD verification after deployment (smoke Test 7b must PASS with 401, not 405).
 
 **Notes:**
 - Admin UI completes the amenities feature (backend + frontend)

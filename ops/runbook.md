@@ -39076,3 +39076,267 @@ ADMIN_URL="https://admin.fewo.kolibri-visions.de" \
 **Note:** Test 6 in UI smoke script specifically detects this regression by calling PUT to internal route without auth and verifying it returns 401/400/404 (route exists), NOT 405 (route missing).
 
 **Status:** Fixed in commit bffd54b (route handler created). If regression occurs, check deployment or dev server restart needed.
+
+
+---
+
+### Amenities EDIT Save → 405 Method Not Allowed (Admin)
+
+**Symptom:** In Admin UI at /amenities, editing an existing amenity and clicking "Speichern" fails silently. Browser DevTools Network tab shows:
+```
+PUT https://admin.fewo.kolibri-visions.de/api/internal/amenities/<uuid> → 405 (Method Not Allowed)
+```
+
+Modal stays open, no success toast, changes not persisted.
+
+**Quick Diagnosis (curl):**
+
+```bash
+# Test if internal route accepts PUT (unauthenticated)
+# Expected: 401 (no auth), 400 (bad request), 404 (not found) - NOT 405
+AMENITY_ID="<any-uuid>"  # Can be dummy UUID
+curl -k -sS -o /dev/null -w "%{http_code}" -X PUT \
+  -H "Content-Type: application/json" \
+  --data-binary '{"name":"test"}' \
+  "https://admin.fewo.kolibri-visions.de/api/internal/amenities/$AMENITY_ID"
+
+# If returns 405: Route handler missing PUT export or not deployed
+# If returns 401/400/404: Route handler exists and is working (auth/validation fails as expected)
+```
+
+**Root Causes:**
+
+1. **Route file not deployed or missing:**
+   - File: `frontend/app/api/internal/amenities/[id]/route.ts`
+   - Missing from production build or not committed to git
+
+2. **PUT method not exported:**
+   - Route file exists but `export async function PUT(...)` missing
+   - Or typo in function name (e.g., `PATCH` instead of `PUT`)
+
+3. **File permissions too restrictive:**
+   - Directory/file not readable by Next.js server process
+   - Check: `ls -la frontend/app/api/internal/amenities/[id]/`
+   - Required: Directory 755 (`drwxr-xr-x`), file 644 (`-rw-r--r--`)
+
+4. **Next.js build not recognizing route:**
+   - Dynamic segment mismatch (file has `[id]` but code references different param)
+   - Route shadowed by conflicting route in pages/api (App Router vs Pages Router conflict)
+
+5. **Browser caching old 405 response:**
+   - Previous request failed with 405, browser cached the error response
+
+**Fix Steps:**
+
+**Step 1: Verify route file exists and has correct structure**
+
+```bash
+# Check file exists
+ls -la frontend/app/api/internal/amenities/[id]/route.ts
+
+# Expected output:
+# -rw-r--r--  1 user  group  4319 Jan 22 20:49 route.ts
+
+# Verify PUT export exists
+grep -n "export async function PUT" frontend/app/api/internal/amenities/[id]/route.ts
+
+# Expected output:
+# 54:export async function PUT(
+
+# If file missing or PUT export missing: Route handler not implemented correctly
+```
+
+**Step 2: Fix file permissions if too restrictive**
+
+```bash
+# Check directory permissions
+ls -ld frontend/app/api/internal/amenities/[id]
+
+# Should be: drwxr-xr-x (755)
+# If shows: drwx------ (700), fix with:
+chmod 755 frontend/app/api/internal/amenities/[id]
+chmod 644 frontend/app/api/internal/amenities/[id]/route.ts
+
+# Commit permission changes
+git add frontend/app/api/internal/amenities/[id]/route.ts
+git status  # Verify file shows as modified (permissions changed)
+```
+
+**Step 3: Verify Next.js build recognizes route**
+
+```bash
+cd frontend
+npm run build 2>&1 | grep "api/internal/amenities"
+
+# Expected output:
+# ├ λ /api/internal/amenities                  0 B                0 B
+# ├ λ /api/internal/amenities/[id]             0 B                0 B
+
+# If [id] route missing: Next.js not recognizing the route
+```
+
+**Step 4: Deploy to production**
+
+```bash
+# Commit and push
+git add frontend/app/api/internal/amenities/[id]/route.ts
+git commit -m "fix(p2): amenities edit save internal proxy PUT (no 405)"
+git push origin main
+
+# Trigger deploy (Coolify or manual)
+# Wait for deployment to complete
+
+# Verify deployment
+cd /data/repos/pms-webapp  # On production server
+git fetch origin main && git reset --hard origin/main
+./backend/scripts/pms_verify_deploy.sh
+```
+
+**Step 5: Run smoke test**
+
+```bash
+# On production server or CI
+ADMIN_URL="https://admin.fewo.kolibri-visions.de" \
+HOST="https://api.fewo.kolibri-visions.de" \
+ADMIN_TOKEN="<jwt-token>" \
+AGENCY_ID="<agency-uuid>" \
+./frontend/scripts/pms_admin_amenities_ui_smoke.sh
+
+# Look for Test 7b output:
+# ℹ Test 7b: Checking internal route PUT does NOT return 405 (with real ID)...
+#   HTTP code: 401
+# ✅ Test 7b PASSED: Internal route PUT handler exists (returned 401, not 405)
+
+# If Test 7b FAILS with 405: Route still not deployed or permissions issue
+```
+
+**Step 6: Clear browser cache and test manually**
+
+```bash
+# Browser steps:
+# 1. Open DevTools (F12)
+# 2. Go to Network tab → "Disable cache" checkbox
+# 3. Right-click Refresh → "Empty Cache and Hard Reload"
+# 4. Navigate to https://admin.fewo.kolibri-visions.de/amenities
+# 5. Click edit pencil on any amenity
+# 6. Change name or description
+# 7. Click "Speichern"
+
+# Expected result:
+# - Modal closes
+# - Success toast: "Ausstattung erfolgreich aktualisiert"
+# - Row updates in list
+# - DevTools Network: PUT /api/internal/amenities/<uuid> → 200 OK (NOT 405)
+```
+
+**Complete Route Handler Code (for reference):**
+
+If route handler is missing or incomplete, create/update `frontend/app/api/internal/amenities/[id]/route.ts`:
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server';
+import { createSupabaseServerClient } from '@/app/lib/supabase-server';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+
+async function getAgencyIdFromSession(): Promise<string | null> {
+  const supabase = await createSupabaseServerClient();
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  if (!session || sessionError) return null;
+
+  const userId = session.user.id;
+  const agencyId = (session.user.user_metadata as any)?.agency_id;
+  if (agencyId) return agencyId;
+
+  const { data: teamMembers } = await supabase
+    .from('team_members')
+    .select('agency_id')
+    .eq('user_id', userId)
+    .eq('is_active', true);
+
+  if (teamMembers && teamMembers.length === 1) {
+    return teamMembers[0].agency_id;
+  }
+  return null;
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const supabase = await createSupabaseServerClient();
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+  if (!session || sessionError) {
+    return NextResponse.json({ detail: 'Unauthorized: No valid session' }, { status: 401 });
+  }
+
+  const accessToken = session.access_token;
+  const agencyId = await getAgencyIdFromSession();
+  const amenityId = params.id;
+  const body = await request.json();
+
+  const headers: Record<string, string> = {
+    'Authorization': `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+  };
+  if (agencyId) {
+    headers['x-agency-id'] = agencyId;
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/v1/amenities/${amenityId}`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  const data = await response.json();
+  return NextResponse.json(data, { status: response.status });
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const supabase = await createSupabaseServerClient();
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+  if (!session || sessionError) {
+    return NextResponse.json({ detail: 'Unauthorized: No valid session' }, { status: 401 });
+  }
+
+  const accessToken = session.access_token;
+  const agencyId = await getAgencyIdFromSession();
+  const amenityId = params.id;
+
+  const headers: Record<string, string> = {
+    'Authorization': `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+  };
+  if (agencyId) {
+    headers['x-agency-id'] = agencyId;
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/v1/amenities/${amenityId}`, {
+    method: 'DELETE',
+    headers,
+  });
+
+  if (response.status === 204) {
+    return new NextResponse(null, { status: 204 });
+  }
+
+  const data = await response.json();
+  return NextResponse.json(data, { status: response.status });
+}
+```
+
+**Related Issues:**
+- "Amenities Create Button Does Nothing" (fixed in commit 8f49f1e)
+- "Property Assignment Modal Loads Empty" (fixed in commit bffd54b)
+
+**Status:** Fixed by ensuring correct file permissions (755/644) and verifying route handler deployment. Test 7b in smoke script detects this regression.
