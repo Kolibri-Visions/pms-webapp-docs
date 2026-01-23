@@ -14375,11 +14375,11 @@ AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7" \
   - **UI Verification**: "Neue Buchung erstellen" modal properties dropdown populated correctly (browser DevTools shows limit=100 request)
 
 
-## P2 Bookings Admin UI - Completion Round #2 (Filters + Enhanced Cancel + Display) ✅ IMPLEMENTED
+## P2 Bookings Admin UI - Completion Round #2 (Filters + Enhanced Cancel + Display) ✅ VERIFIED
 
-**Status:** IMPLEMENTED (commit TBD)
+**Status:** ✅ VERIFIED (2026-01-23, commit 1759bbd)
 **Implementation Date:** 2026-01-23
-**Verification Status:** PENDING (mark VERIFIED only after prod smoke passes)
+**Verification Status:** ✅ VERIFIED (PROD smoke rc=0, all 7 tests passed)
 
 **Overview:**
 Bookings Admin UI completion round #2 adds production-ready filters, enhanced cancel modal, and improved property/guest display. Makes the UI fully functional for daily operations.
@@ -14432,6 +14432,29 @@ Bookings Admin UI completion round #2 adds production-ready filters, enhanced ca
   - Test 6: Create + cancel (tests cancel endpoint with enhanced payload)
   - Test 7: Properties fetch (tests properties endpoint used for filter/display)
 - No new smoke tests needed (backend endpoints unchanged)
+
+**PROD Evidence (2026-01-23):**
+- **Admin Version**: `GET /api/ops/version` → `service=pms-admin, source_commit=1759bbd7c7d061b94b26a31861ba09b25aac7537, started_at=2026-01-23T20:27:40.978Z`
+- **Backend Version**: `GET /api/v1/ops/version` → `service=pms-backend, source_commit=1759bbd7c7d061b94b26a31861ba09b25aac7537, started_at=2026-01-23T20:26:13.077433+00:00`
+- **Smoke Test**: `./frontend/scripts/pms_admin_bookings_ui_smoke.sh` → `rc=0` (all 7 tests passed)
+  ```bash
+  ENABLE_BACKEND_API_TESTS=1 \
+  ADMIN_URL="https://admin.fewo.kolibri-visions.de" \
+  HOST="https://api.fewo.kolibri-visions.de" \
+  ADMIN_TOKEN="$MANAGER_JWT_TOKEN" \
+  AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7" \
+  ./frontend/scripts/pms_admin_bookings_ui_smoke.sh
+  # Test 1 PASSED: Commit matches (1759bbd...)
+  # Test 2 PASSED: /bookings page loads
+  # Test 3 PASSED: Content markers verified
+  # Test 4 PASSED: Backend API list bookings
+  # Test 5 PASSED: Booking detail page
+  # Test 6 PASSED: Create + verify + cancel booking
+  # Test 7 PASSED: Properties endpoint (limit=100)
+  # All bookings UI smoke tests passed! rc=0
+  ```
+- **UI Verification**: Filters work (status/property dropdowns send query params), property names display correctly, cancel modal has all 4 fields (cancelled_by, cancellation_reason, refund_amount, post_cancel_hold_hours)
+- **Build Fix**: Commit 1759bbd also fixed TDZ (Temporal Dead Zone) build blocker - `fetchProperties` hook ordering corrected before Coolify deploy
 
 **Verification Commands (HOST-SERVER-TERMINAL):**
 ```bash
