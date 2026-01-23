@@ -38896,3 +38896,183 @@ ADMIN_URL="https://admin.fewo.kolibri-visions.de" \
 - Test backend API directly: Verify backend /api/v1/amenities/{id} PUT works (bypass frontend)
 
 **Status:** Added troubleshooting documentation + smoke Test 8 (CRUD cycle) to detect 405 regressions early
+
+
+---
+
+### Amenities Edit 405 (Internal Proxy Missing PUT)
+
+**Symptom:** In admin UI at /amenities, editing an existing amenity and clicking "Speichern" fails. Browser console shows:
+```
+PUT https://admin.fewo.kolibri-visions.de/api/internal/amenities/<uuid> → 405 (Method Not Allowed)
+```
+
+No toast message appears, modal stays open, changes not persisted.
+
+**Root Cause:** Next.js internal API route handler missing PUT export, or route not deployed/loaded.
+
+**Confirmation Steps:**
+
+1. **Browser Console Check:**
+   ```javascript
+   // Open DevTools → Console → Network tab
+   // Click edit pencil → modify amenity → click "Speichern"
+   // Look for: PUT /api/internal/amenities/<uuid>
+   // Status: 405 = bug, 200/400/404 = route works
+   ```
+
+2. **Local File Check:**
+   ```bash
+   # Verify route file exists
+   ls -la frontend/app/api/internal/amenities/[id]/route.ts
+   
+   # Verify PUT export exists
+   grep -n "export async function PUT" frontend/app/api/internal/amenities/[id]/route.ts
+   
+   # Expected: Line ~54 should show: export async function PUT(
+   ```
+
+3. **Next.js Build Check:**
+   ```bash
+   cd frontend && npm run build 2>&1 | grep "api/internal/amenities/\[id\]"
+   
+   # Expected output:
+   # ├ λ /api/internal/amenities/[id]             0 B                0 B
+   # 
+   # If missing: Route not recognized by Next.js
+   ```
+
+4. **Smoke Test Check:**
+   ```bash
+   # Run Test 6 (internal route 405 check)
+   ADMIN_URL="https://admin.fewo.kolibri-visions.de" \
+   ./frontend/scripts/pms_admin_amenities_ui_smoke.sh
+   
+   # Expected: Test 6 PASSED (returned 401/400/404, not 405)
+   # If Test 6 FAILED: Route missing or not deployed
+   ```
+
+**Fix Summary:**
+
+The route handler must exist at: `frontend/app/api/internal/amenities/[id]/route.ts`
+
+And must export:
+```typescript
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const supabase = await createSupabaseServerClient();
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  if (!session || sessionError) {
+    return NextResponse.json({ detail: 'Unauthorized: No valid session' }, { status: 401 });
+  }
+
+  const accessToken = session.access_token;
+  const agencyId = await getAgencyIdFromSession();  // Reuse existing helper
+  const amenityId = params.id;
+  const body = await request.json();
+
+  const headers: Record<string, string> = {
+    'Authorization': `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+  };
+  if (agencyId) {
+    headers['x-agency-id'] = agencyId;
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/v1/amenities/${amenityId}`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  const data = await response.json();
+  return NextResponse.json(data, { status: response.status });
+}
+```
+
+**Solution (Step-by-Step):**
+
+**If Route File Missing:**
+```bash
+# Create the file with PUT + DELETE exports
+# (See fix summary above for full implementation)
+```
+
+**If Route Exists But Dev Server Not Restarted:**
+```bash
+# Restart Next.js dev server
+cd frontend
+# Kill existing: Ctrl+C or pkill -f "next dev"
+npm run dev
+
+# Wait for server to start, then test edit operation
+```
+
+**If Deployed But Not Working (Production):**
+```bash
+# 1. Verify commit includes route handler
+git log --oneline -10 | grep -E "(internal proxy|amenities)"
+
+# Should show commits like:
+# bffd54b fix(p2): amenities property assignment loads catalog + internal proxy ...
+
+# 2. Verify file in deployed commit
+git show HEAD:frontend/app/api/internal/amenities/[id]/route.ts | head -60
+
+# Should show PUT export at line ~54
+
+# 3. Redeploy (Coolify or manual)
+# - Coolify: Go to application → Redeploy
+# - Manual: git pull && npm run build
+
+# 4. Run smoke test after deploy
+ADMIN_URL="https://admin.fewo.kolibri-visions.de" \
+./frontend/scripts/pms_admin_amenities_ui_smoke.sh
+
+# Expected: Test 6 PASSED
+```
+
+**If Browser Cache:**
+```bash
+# 1. Open DevTools (F12)
+# 2. Right-click Refresh → "Empty Cache and Hard Reload"
+# 3. Or: DevTools → Network tab → "Disable cache" checkbox → reload
+# 4. Try edit operation again
+```
+
+**Verification After Fix:**
+
+1. **Smoke Test:**
+   ```bash
+   ADMIN_URL="https://admin.fewo.kolibri-visions.de" \
+   ./frontend/scripts/pms_admin_amenities_ui_smoke.sh
+   
+   # Expected output for Test 6:
+   # ℹ Test 6: Checking internal route does NOT return 405 (regression check)...
+   #   HTTP code: 401
+   # ✅ Test 6 PASSED: Internal route exists (returned 401, not 405)
+   #   Note: 401 is expected without authentication - route handler is present
+   ```
+
+2. **Manual Browser Test:**
+   ```bash
+   # 1. Login at https://admin.fewo.kolibri-visions.de/amenities
+   # 2. Click edit pencil on any amenity
+   # 3. Change name or description
+   # 4. Click "Speichern"
+   # Expected:
+   #   - Modal closes
+   #   - Success toast: "Ausstattung erfolgreich aktualisiert"
+   #   - Row updates in list
+   #   - DevTools: PUT /api/internal/amenities/<uuid> → 200 OK (NOT 405)
+   ```
+
+**Related Issues:**
+- "Amenities Create Button Does Nothing" (fixed in earlier commits)
+- "Property Assignment Modal Loads Empty" (fixed in bffd54b - same internal proxy fix)
+
+**Note:** Test 6 in UI smoke script specifically detects this regression by calling PUT to internal route without auth and verifying it returns 401/400/404 (route exists), NOT 405 (route missing).
+
+**Status:** Fixed in commit bffd54b (route handler created). If regression occurs, check deployment or dev server restart needed.

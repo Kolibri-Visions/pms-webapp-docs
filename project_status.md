@@ -13661,7 +13661,10 @@ Smoke:    backend/scripts/pms_amenities_smoke.sh
        - Modal shows "Keine Ausstattung verfügbar"
        - Delete cascade issues
 
-**Status:** ✅ VERIFIED
+**Status:** ✅ IMPLEMENTED (Regression found - downgraded from VERIFIED)
+
+**Regression Note (2026-01-22):**
+Regression discovered after VERIFIED status: Edit/Save operation returns 405 Method Not Allowed in browser. PUT to `/api/internal/amenities/<uuid>` fails with 405, indicating internal proxy route handler missing PUT export or not deployed. Code inspection shows route handler EXISTS at `frontend/app/api/internal/amenities/[id]/route.ts` with correct PUT export (line 54), and UI correctly calls the route (line 179-180). Root cause: Likely production deployment incomplete (route file not deployed yet), dev server not restarted after route creation, or browser caching old 405 response. Fix implemented in this commit: Added Test 6 to smoke script (internal route 405 regression check), added runbook troubleshooting section. Pending PROD verification after deployment.
 
 **Notes:**
 - Admin UI completes the amenities feature (backend + frontend)
