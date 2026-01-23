@@ -14479,3 +14479,32 @@ open https://admin.fewo.kolibri-visions.de/bookings
 - Runbook section: "Admin UI: Buchungen (Bookings) - Smoke + Troubleshooting"
 - Scripts README: "Bookings Smoke Script" (UI improvements note)
 
+
+## P2 Admin UI - Build Blocker Fix (Hook Ordering) ✅ IMPLEMENTED
+
+**Status:** IMPLEMENTED (commit TBD)
+**Implementation Date:** 2026-01-23
+
+**Issue:** Coolify redeploy failed during `npm run build` with TypeScript error:
+```
+Type error: Block-scoped variable 'fetchProperties' used before its declaration
+  in app/bookings/page.tsx:192:20
+```
+
+**Root Cause:** A `useEffect` hook referenced `fetchProperties` in its dependency array (line 192) before `fetchProperties` was declared with `useCallback` (line 239). This violated JavaScript's Temporal Dead Zone (TDZ) rules.
+
+**Fix:** Moved `fetchProperties` declaration (and its dependency `showToast`) to BEFORE the `useEffect` that references it.
+
+**Files Changed:**
+- `frontend/app/bookings/page.tsx` - Reordered hook declarations to fix TDZ violation (~30 lines moved)
+
+**Verification:**
+```bash
+cd frontend
+npm run build
+# Expected: Build completes successfully without TDZ errors
+```
+
+**Related Documentation:**
+- Runbook section: "Next.js Build Fails: Block-Scoped Variable Used Before Declaration"
+

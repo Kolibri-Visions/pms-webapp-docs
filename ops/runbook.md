@@ -40260,3 +40260,74 @@ Bookings Admin UI completion round #2 adds server-side filters, enhanced cancel 
 - **Property names not showing**: Properties fetch returned 422 (limit > 100) or 401 (token expired)
 - **Cancel modal missing fields**: Old frontend version cached - hard refresh (Cmd+Shift+R / Ctrl+F5)
 
+
+## Next.js Build Fails: Block-Scoped Variable Used Before Declaration
+
+**Symptom:** Coolify redeploy fails during `npm run build` with TypeScript error:
+```
+Type error: Block-scoped variable 'X' used before its declaration.
+```
+
+**Common Cause:** A `useEffect` hook references a function/variable in its dependency array before that function is declared in the file. This violates JavaScript's Temporal Dead Zone (TDZ) rules.
+
+**Example Error:**
+```
+Type error: Block-scoped variable 'fetchProperties' used before its declaration
+  in app/bookings/page.tsx:192:20
+```
+
+**Root Cause:**
+```tsx
+// WRONG ORDER - TDZ violation
+useEffect(() => {
+  fetchProperties();  // References fetchProperties
+}, [accessToken, fetchProperties]);  // Line 192: Uses fetchProperties in deps
+
+// ...other code...
+
+const fetchProperties = useCallback(...);  // Line 239: Declared too late!
+```
+
+**Solution:**
+Move the function declaration BEFORE the `useEffect` that references it:
+
+```tsx
+// CORRECT ORDER
+const fetchProperties = useCallback(...);  // Declare first
+
+useEffect(() => {
+  fetchProperties();  // Now safe to reference
+}, [accessToken, fetchProperties]);  // Now safe in deps
+```
+
+**If the function uses other helpers:**
+Ensure all dependencies are also declared in the correct order (helper functions before callbacks that use them):
+
+```tsx
+// 1. Helper functions first (no deps)
+const showToast = (...) => { ... };
+
+// 2. Callbacks that use helpers (with deps)
+const fetchProperties = useCallback(async () => {
+  showToast(...);  // Safe - showToast declared above
+}, [accessToken]);
+
+// 3. Effects that use callbacks
+useEffect(() => {
+  fetchProperties();
+}, [accessToken, fetchProperties]);
+```
+
+**Quick Fix Steps:**
+1. Identify the function referenced in the error (e.g., `fetchProperties`)
+2. Find where it's declared (search for `const fetchProperties = `)
+3. Move its declaration (and any helpers it uses) to BEFORE the first `useEffect` that references it
+4. Rebuild: `npm run build`
+
+**Verification:**
+```bash
+cd frontend
+npm run build
+# Should complete without "used before declaration" errors
+```
+
