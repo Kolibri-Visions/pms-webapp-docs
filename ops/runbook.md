@@ -40161,5 +40161,13 @@ echo "Booking created and cancelled successfully"
 - `cancelled_by` (required): Enum literal "guest" | "host" | "platform" | "system"
 - `cancellation_reason` (optional): String reason
 - `refund_amount` (optional): Decimal refund amount
+- `post_cancel_hold_hours` (optional): Integer hours to hold booking before allowing re-booking (default: 0)
 
 Admin UI sends: `cancelled_by: "host"`
+
+**Cancel Behavior Notes:**
+- **Idempotent Operation**: Re-cancelling already-cancelled bookings is allowed ("first cancel wins")
+- **Status Update**: Booking `status` changes to `"cancelled"` on successful cancellation
+- **Cancellation Reason Persistence**: Already-cancelled bookings keep their original `cancellation_reason` (not overwritten)
+- **Verification**: To verify cancellation, check `booking.status == "cancelled"` (NOT by comparing `cancellation_reason`)
+- **Post-Cancel Hold**: Optional `post_cancel_hold_hours` field delays re-booking window (default 0 = immediate)

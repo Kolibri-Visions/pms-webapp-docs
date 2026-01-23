@@ -14339,3 +14339,8 @@ AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7" \
 
 # Expected: Test 6 PASSED (create, verify, cancel all succeed)
 ```
+
+**Troubleshooting Notes:**
+- **Test 6 Fails with HTTP 401**: Token may have expired → Generate fresh JWT and re-export `ADMIN_TOKEN` or `MANAGER_JWT_TOKEN`
+- **Cancel Verification**: Smoke cleanup verifies via `booking.status == "cancelled"` (idempotent, safe for already-cancelled bookings)
+- **Idempotent Cleanup**: Re-cancelling already-cancelled bookings is allowed (status changes to "cancelled", original `cancellation_reason` preserved)
