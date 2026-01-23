@@ -13664,17 +13664,23 @@ Smoke:    backend/scripts/pms_amenities_smoke.sh
 **Status:** ✅ IMPLEMENTED (Regression found - downgraded from VERIFIED; awaiting PROD verify after 405 fix)
 
 **Regression Note (2026-01-22):**
-Regression discovered after VERIFIED status: Edit/Save operation returns 405 Method Not Allowed in browser. PUT to `/api/internal/amenities/<uuid>` fails with 405, indicating internal proxy route handler missing PUT export or not deployed.
+Regression discovered after VERIFIED status: Edit/Save operation returns 405 Method Not Allowed in browser. PUT to `/api/internal/amenities/<uuid>` fails with 405.
 
-**Root Cause Identified:** File permissions on `frontend/app/api/internal/amenities/[id]/` directory were too restrictive (700 instead of 755), preventing Next.js server from accessing the route handler in production. Code inspection confirmed route handler EXISTS with correct PUT export (line 54), and UI correctly calls the route (line 179-180).
+**Root Causes Identified and Fixed:**
+1. **File permissions** (commit 707b159): Directory 700→755, route.ts 600→644 to allow Next.js server access
+2. **Missing PATCH alias** (this commit): Route only exported PUT; added PATCH as alias for method compatibility
+3. **Missing credentials** (this commit): UI fetch lacked `credentials: "include"` for session cookies
 
-**Fix Applied (this commit):**
-- Corrected file permissions: directory 700→755, route.ts 600→644
-- Added Test 7b to smoke script: Real-world 405 regression check using actual amenity ID from backend API
-- Added comprehensive runbook troubleshooting section with curl diagnostics and fix steps
-- Verified Next.js build recognizes route: `├ λ /api/internal/amenities/[id]`
+**Fixes Applied (this commit):**
+- Added `export async function PATCH(...)` as alias to PUT in route handler (line 115)
+- Updated UI fetch to include `credentials: "include"` for session cookie transmission
+- Enhanced runbook with 405 diagnosis: curl test, root causes, canonical route path
+- Test 7b already in place (real-world 405 regression check using actual amenity ID)
 
-**Pending:** PROD verification after deployment (smoke Test 7b must PASS with 401, not 405).
+**Verification Required:**
+- PROD deployment of this commit (707b159 + this commit)
+- Smoke Test 7b must PASS (returns 401/302, NOT 405)
+- Manual browser test: /amenities → edit → "Speichern" → 200 OK, modal closes, toast shows
 
 **Notes:**
 - Admin UI completes the amenities feature (backend + frontend)

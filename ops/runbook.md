@@ -39340,3 +39340,206 @@ export async function DELETE(
 - "Property Assignment Modal Loads Empty" (fixed in commit bffd54b)
 
 **Status:** Fixed by ensuring correct file permissions (755/644) and verifying route handler deployment. Test 7b in smoke script detects this regression.
+
+
+---
+
+### Amenities Edit 405 (Method Not Allowed) - Route Handler Missing Method
+
+**Symptom:** In Admin UI at /amenities, editing an existing amenity and clicking "Speichern" returns 405 Method Not Allowed. Browser DevTools Network tab shows:
+```
+PUT https://admin.fewo.kolibri-visions.de/api/internal/amenities/<uuid> → 405 (Method Not Allowed)
+```
+
+Response headers contain Next.js/RSC markers. Modal stays open, no success toast, changes not persisted.
+
+**What 405 Means:**
+405 from Next.js indicates:
+1. Route handler file exists BUT does not export the requested HTTP method (PUT/PATCH)
+2. Route conflict: Pages Router `/pages/api/...` overrides App Router `/app/api/...` for same path
+3. Method name typo (e.g., `put` instead of `PUT` - must be uppercase)
+
+**Quick Diagnosis (curl):**
+
+```bash
+# Test if internal route accepts PUT (unauthenticated, no cookies)
+# Expected: 401 (no auth), 400 (bad request), 302 (redirect) - NOT 405
+AMENITY_ID="<any-uuid-from-backend>"
+curl -k -sS -o /dev/null -w "%{http_code}\n" -X PUT \
+  -H "Content-Type: application/json" \
+  --data-binary '{"name":"test"}' \
+  "https://admin.fewo.kolibri-visions.de/api/internal/amenities/$AMENITY_ID"
+
+# Result interpretation:
+# 405: Route handler missing PUT export → FIX REQUIRED
+# 401/302: Route exists, auth required → WORKING (no fix needed, just auth missing)
+# 400: Route exists, validation fails → WORKING (route present)
+```
+
+**Root Causes:**
+
+1. **Missing PUT/PATCH export in route handler:**
+   - File: `frontend/app/api/internal/amenities/[id]/route.ts`
+   - Missing: `export async function PUT(...)` or `export async function PATCH(...)`
+   - Uppercase required: `PUT` not `put`
+
+2. **Pages Router conflict (legacy API routes):**
+   - If `frontend/pages/api/internal/amenities/[id].ts` exists, it can override App Router
+   - Check: `ls frontend/pages/api/ 2>/dev/null`
+   - If exists: Remove legacy route or update to support PUT
+
+3. **Method mismatch (UI vs route handler):**
+   - UI sends PUT but route only exports PATCH (or vice versa)
+   - Fix: Export both PUT and PATCH as aliases
+
+**Fix Steps:**
+
+**Step 1: Verify route file exists and check exports**
+
+```bash
+# Check file exists
+ls -la frontend/app/api/internal/amenities/[id]/route.ts
+
+# Verify PUT/PATCH exports
+grep -n "export async function" frontend/app/api/internal/amenities/[id]/route.ts
+
+# Expected output should include:
+# 54:export async function PUT(
+# 115:export async function PATCH(  (optional but recommended)
+# 124:export async function DELETE(
+```
+
+**Step 2: Check for Pages Router conflicts**
+
+```bash
+# Check if legacy Pages Router API exists
+ls -R frontend/pages/api/internal/amenities/ 2>/dev/null
+
+# If files exist: This is the conflict!
+# Solution: Remove or rename legacy route, prefer App Router
+```
+
+**Step 3: Ensure route handler exports PUT and PATCH**
+
+If missing, update `frontend/app/api/internal/amenities/[id]/route.ts`:
+
+```typescript
+// PUT /api/internal/amenities/:id - Update amenity
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const supabase = await createSupabaseServerClient();
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+  if (!session || sessionError) {
+    return NextResponse.json({ detail: 'Unauthorized: No valid session' }, { status: 401 });
+  }
+
+  const accessToken = session.access_token;
+  const agencyId = await getAgencyIdFromSession();
+  const amenityId = params.id;
+  const body = await request.json();
+
+  const headers: Record<string, string> = {
+    'Authorization': `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+  };
+  if (agencyId) {
+    headers['x-agency-id'] = agencyId;
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/v1/amenities/${amenityId}`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  const data = await response.json();
+  return NextResponse.json(data, { status: response.status });
+}
+
+// PATCH /api/internal/amenities/:id - Update amenity (alias for PUT)
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  // PATCH is an alias for PUT - delegates to same handler logic
+  return PUT(request, { params });
+}
+
+export async function DELETE(...) { ... }
+```
+
+**Step 4: Verify UI uses correct method and credentials**
+
+In `frontend/app/amenities/page.tsx` handleUpdate function:
+
+```typescript
+const response = await fetch(`/api/internal/amenities/${editingAmenity.id}`, {
+  method: "PUT",  // or "PATCH" - both should work now
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify(formData),
+  credentials: "include",  // Ensure session cookies are sent
+});
+```
+
+**Step 5: Deploy and verify**
+
+```bash
+# Commit and push
+git add frontend/app/api/internal/amenities/[id]/route.ts
+git add frontend/app/amenities/page.tsx
+git commit -m "fix(p2): amenities edit save internal route supports PUT/PATCH (no 405)"
+git push origin main
+
+# Deploy (Coolify or manual)
+# On production server:
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+./backend/scripts/pms_verify_deploy.sh
+
+# Run smoke test
+ADMIN_URL="https://admin.fewo.kolibri-visions.de" \
+HOST="https://api.fewo.kolibri-visions.de" \
+ADMIN_TOKEN="<jwt>" \
+AGENCY_ID="<agency-uuid>" \
+./frontend/scripts/pms_admin_amenities_ui_smoke.sh
+
+# Look for Test 7b:
+# ✅ Test 7b PASSED: Internal route PUT handler exists (returned 401, not 405)
+```
+
+**Step 6: Manual browser verification**
+
+```bash
+# 1. Login at https://admin.fewo.kolibri-visions.de/amenities
+# 2. Click edit pencil on any amenity
+# 3. Change name or description
+# 4. Click "Speichern"
+
+# Expected results:
+# - Modal closes
+# - Success toast: "Ausstattung erfolgreich aktualisiert"
+# - Row updates in list
+# - DevTools Network: PUT /api/internal/amenities/<uuid> → 200/204 (NOT 405)
+```
+
+**Canonical Route File:**
+- App Router: `frontend/app/api/internal/amenities/[id]/route.ts` (MUST export PUT/PATCH/DELETE)
+- Pages Router: Should NOT exist for this path (conflict if present)
+
+**Related Issues:**
+- "Amenities Create Button Does Nothing" (fixed: POST to internal route)
+- "Property Assignment Modal Loads Empty" (fixed: internal proxy routes)
+
+**Smoke Test:**
+Test 7b in `pms_admin_amenities_ui_smoke.sh` specifically detects this regression:
+- Extracts real amenity ID from backend API
+- Performs unauthenticated PUT to internal route
+- FAIL on 405 (route missing method)
+- PASS on 401/400/302 (route exists, auth/validation fails as expected)
+
+**Status:** Fixed by ensuring route handler exports both PUT (primary) and PATCH (alias), and UI includes `credentials: "include"`.
