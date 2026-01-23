@@ -39746,3 +39746,126 @@ AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7" \
 - [ ] Smoke Tests 7b, 7c, 7d all PASS
 - [ ] Manual browser test: Edit → Speichern → 200 OK, modal closes, toast shows
 
+---
+
+## Admin UI: Buchungen - Smoke + Troubleshooting
+
+**Issue**: Bookings list or detail page not loading, or actions (confirm/cancel) failing.
+
+**Last Updated**: 2026-01-23
+
+### Quick Overview
+
+The Bookings Admin UI provides:
+- **List view** (`/bookings`): Display all bookings with filters (status, date ranges)
+- **Detail view** (`/bookings/[id]`): Show booking details with confirm/cancel actions
+- **Internal proxy routes**: `/api/internal/bookings` and `/api/internal/bookings/[id]` (GET/PATCH/POST)
+
+All UI interactions go through internal proxy routes (server-side auth) - NO direct backend API calls from browser.
+
+### Smoke Test Commands
+
+**Quick Smoke (UI pages only)**:
+```bash
+# From project root
+ADMIN_URL="https://admin.fewo.kolibri-visions.de" \
+./frontend/scripts/pms_admin_bookings_ui_smoke.sh
+```
+
+**Full Smoke (with backend API tests)**:
+```bash
+# Requires valid admin/manager JWT token
+ADMIN_URL="https://admin.fewo.kolibri-visions.de" \
+HOST="https://api.fewo.kolibri-visions.de" \
+ADMIN_TOKEN="${MANAGER_JWT_TOKEN}" \
+AGENCY_ID="${AGENCY_UUID}" \
+./frontend/scripts/pms_admin_bookings_ui_smoke.sh
+```
+
+**Expected Output**:
+```
+✅ Test 1 PASSED: Commit matches
+✅ Test 2 PASSED: /bookings returns 200 with Next.js markers
+✅ Test 3 PASSED: Content markers verified (3/3)
+✅ Test 4 PASSED: Backend API returned bookings response
+✅ Test 5 PASSED: /bookings/[id] returns 200 with Next.js markers
+All bookings UI smoke tests passed!
+```
+
+### Troubleshooting
+
+#### Issue: /bookings page returns 401 Unauthorized
+
+**Symptom**: Browser shows "Session abgelaufen" error banner.
+
+**Cause**: Supabase session expired or missing.
+
+**Fix**:
+```bash
+# 1. Verify user is logged in (browser)
+# Open DevTools → Application → Cookies → Check supabase-auth-token cookie
+
+# 2. Check internal proxy auth logic (server-side)
+# Verify createSupabaseServerClient works
+
+# 3. Force re-login
+# Browser: Clear cookies → Go to /login → Login again
+```
+
+#### Issue: /bookings/[id] returns 404 Not Found
+
+**Symptom**: Detail page shows "Buchung nicht gefunden" error.
+
+**Cause**: Booking ID doesn't exist or user has no access to agency bookings.
+
+**Fix**: Verify booking exists in database and user agency membership is correct.
+
+#### Issue: "Bestätigen" button returns 403 Forbidden
+
+**Symptom**: Toast shows "Keine Berechtigung" after clicking confirm.
+
+**Cause**: User role insufficient (requires admin/manager role for status changes).
+
+**Fix**: Check user role in team_members table and update if needed.
+
+#### Issue: Smoke test fails on commit mismatch
+
+**Symptom**: Test 1 FAILED: Commit mismatch
+
+**Cause**: Frontend deployment out of sync with expected commit.
+
+**Fix**: Check /api/ops/version and redeploy if needed.
+
+### Common Issues
+
+**1. Page loads but shows empty table**
+- Cause: No bookings exist or filters too restrictive
+- Fix: Reset filters, check database bookings count
+
+**2. Network tab shows 405 Method Not Allowed**
+- Cause: Internal proxy route not exporting required HTTP method
+- Fix: Verify route.ts exports GET, PATCH, POST
+
+**3. Actions not available for confirmed/cancelled bookings**
+- Cause: Intentional - actions hidden when status is final
+- Expected: Only show actions for pending/inquiry status
+
+### Related Files
+
+**Frontend UI**:
+- `frontend/app/bookings/page.tsx` - List view
+- `frontend/app/bookings/[id]/page.tsx` - Detail view + actions
+
+**Internal Proxy Routes**:
+- `frontend/app/api/internal/bookings/route.ts` - List proxy (GET)
+- `frontend/app/api/internal/bookings/[id]/route.ts` - Detail/actions proxy (GET/PATCH/POST)
+
+**Backend API Endpoints**:
+- `GET /api/v1/bookings` - List bookings
+- `GET /api/v1/bookings/{id}` - Get booking details
+- `PATCH /api/v1/bookings/{id}/status` - Update status
+- `POST /api/v1/bookings/{id}/cancel` - Cancel booking
+
+**Smoke Test**:
+- `frontend/scripts/pms_admin_bookings_ui_smoke.sh`
+

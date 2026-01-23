@@ -13941,3 +13941,66 @@ echo "rc=$?"
 
 **Status After Fix:** Test 8 added to smoke script. Awaiting PROD verification that PUT endpoint works (Test 8 PASSES).
 
+---
+
+## Admin UI: Buchungen (List + Detail + Actions) ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-23
+**Status**: Implemented (internal proxy routes + UI pages + smoke tests)
+**Commit**: TBD (pending commit)
+
+**Features:**
+- List view (`/bookings`): Display all bookings with status filters (inquiry, pending, confirmed, cancelled, checked_in, checked_out)
+- Detail view (`/bookings/[id]`): Show full booking details (dates, guests, pricing, notes)
+- Actions: "Bestätigen" button (confirm booking) + "Stornieren" modal (cancel with reason)
+- German labels throughout (Buchungen, Zeitraum, Gast, Objekt, Bestätigen, Stornieren)
+- AdminShell layout integration (sidebar navigation under "Betrieb" section)
+
+**Internal Proxy Routes (pattern: amenities):**
+- `frontend/app/api/internal/bookings/route.ts` - GET list (proxies to `/api/v1/bookings`)
+- `frontend/app/api/internal/bookings/[id]/route.ts` - GET detail, PATCH status, POST cancel
+- Server-side session auth via createSupabaseServerClient (no token in browser Network tab)
+- Auto-resolve x-agency-id header from user metadata or team_members table
+
+**Backend API Endpoints Used:**
+- `GET /api/v1/bookings` - List bookings (filters: property_id, status, source, guest_email, date ranges; pagination: limit, offset)
+- `GET /api/v1/bookings/{id}` - Get booking details
+- `PATCH /api/v1/bookings/{id}/status` - Update status (body: {status, notes?})
+- `POST /api/v1/bookings/{id}/cancel` - Cancel booking (body: {cancelled_by, cancellation_reason?, refund_amount?})
+
+**Smoke Test:**
+- `frontend/scripts/pms_admin_bookings_ui_smoke.sh`
+- Tests: /api/ops/version commit check, /bookings page load (200 or auth redirect), content markers (Next.js + Buchungen heading), backend API GET /api/v1/bookings (if HOST+ADMIN_TOKEN set), /bookings/[id] detail page load
+- Exit code 0 = all tests passed
+
+**Documentation:**
+- `backend/docs/ops/runbook.md` - New section "Admin UI: Buchungen - Smoke + Troubleshooting"
+  - Smoke test commands (quick UI-only + full with backend API)
+  - Troubleshooting: 401 Unauthorized, 404 Not Found, 403 Forbidden, commit mismatch
+  - Common issues: empty table, 405 Method Not Allowed, actions hidden for final statuses
+  - Related files list (UI pages, proxy routes, backend endpoints, smoke script)
+- This entry in `backend/docs/project_status.md`
+
+**Files Changed:**
+- `frontend/app/api/internal/bookings/route.ts` - NEW (list proxy, GET only)
+- `frontend/app/api/internal/bookings/[id]/route.ts` - NEW (detail proxy, GET/PATCH/POST)
+- `frontend/app/bookings/page.tsx` - UPDATED (switch from direct API to internal proxy)
+- `frontend/app/bookings/[id]/page.tsx` - UPDATED (add confirm/cancel actions, use internal proxy)
+- `frontend/scripts/pms_admin_bookings_ui_smoke.sh` - NEW (5 tests: commit, list page, content, backend API, detail page)
+- `backend/docs/ops/runbook.md` - UPDATED (appended bookings troubleshooting section)
+- `backend/docs/project_status.md` - UPDATED (this entry)
+
+**AdminShell Navigation:**
+- Already exists in `frontend/app/components/AdminShell.tsx` (line 77):
+  ```typescript
+  { label: "Buchungen", href: "/bookings", icon: Calendar },
+  ```
+- Located in "Betrieb" section, after "Objekte" and "Ausstattung"
+
+**Security:**
+- NO JWT tokens exposed in browser Network tab (all requests use session cookies via internal proxy)
+- Server-side authentication prevents token leakage
+- Actions require admin/manager role (enforced by backend API)
+
+**Status:** Awaiting commit and deployment. Smoke test ready for verification.
+
