@@ -13661,10 +13661,10 @@ Smoke:    backend/scripts/pms_amenities_smoke.sh
        - Modal shows "Keine Ausstattung verfügbar"
        - Delete cascade issues
 
-**Status:** ✅ IMPLEMENTED (Regression found - downgraded from VERIFIED; awaiting PROD verify after 405 fix)
+**Status:** ✅ VERIFIED in PROD (2026-01-23)
 
-**Regression Note (2026-01-22/2026-01-23):**
-Regression discovered after VERIFIED status: Edit/Save operation returns 405 Method Not Allowed in browser. PUT to `/api/internal/amenities/<uuid>` fails with 405.
+**Regression Note (2026-01-22/2026-01-23) - RESOLVED:**
+Regression was discovered after initial VERIFIED status: Edit/Save operation returned 405 Method Not Allowed in browser. PUT to `/api/internal/amenities/<uuid>` failed with 405. All issues resolved and re-verified in PROD on 2026-01-23.
 
 **Root Causes Identified and Fixed:**
 1. **File permissions** (commit 707b159): Directory 700→755, route.ts 600→644 to allow Next.js server access
@@ -13679,10 +13679,28 @@ Regression discovered after VERIFIED status: Edit/Save operation returns 405 Met
 - Enhanced runbook with "Amenities Edit Save 405 (Backend PATCH-Only Semantics)" troubleshooting section
 - Comment added to route handler documenting backend PATCH-only behavior
 
-**Verification Required:**
-- PROD deployment of this commit
-- Smoke Tests 7b, 7c, 7d must all PASS
-- Manual browser test: /amenities → edit → "Speichern" → 200 OK (PATCH), modal closes, toast shows
+**PROD Verification Evidence (2026-01-23):**
+
+Admin Frontend:
+- URL: https://admin.fewo.kolibri-visions.de
+- /api/ops/version commit: b28d4f8120918be48cca6a51f6b4e6e63ea55a34
+- started_at: 2026-01-23T10:43:50.437Z
+
+Smoke Test:
+- Script: frontend/scripts/pms_admin_amenities_ui_smoke.sh
+- Result: rc=0 (all tests PASSED)
+- Tests included:
+  - Test 7b: Internal route PUT handler (returns 401, not 405) ✅
+  - Test 7c: Backend semantics verified (PUT=405, PATCH=200 by design) ✅
+  - Test 7d: Internal route PATCH handler (returns 401, not 405) ✅
+  - Test 9: CRUD cycle (create → update via PATCH → verify → delete) ✅
+
+Verified Functionality:
+- Edit/Save operations use PATCH method (backend PATCH-only semantics)
+- Internal proxy accepts both PUT and PATCH, forwards as PATCH to backend
+- No 405 errors in edit operations
+- Regression tests (7b, 7c, 7d) prevent future 405 issues
+- CRUD cycle verified end-to-end
 
 **Smoke Script Test 9 Correction (2026-01-23):**
 Test 9 in `frontend/scripts/pms_admin_amenities_ui_smoke.sh` was using PUT for the update step, which caused false-negative failures (405) due to backend PATCH-only semantics. Corrected to use PATCH in update step to match verified backend behavior (Test 7c confirms: PUT=405, PATCH=200 by design). Test 9 now passes correctly: create → update via PATCH → verify → delete.
@@ -13705,27 +13723,29 @@ Test 9 in `frontend/scripts/pms_admin_amenities_ui_smoke.sh` was using PUT for t
 - `backend/docs/ops/runbook.md` (MODIFIED - added P2 Amenities Admin UI section)
 - `backend/docs/project_status.md` (MODIFIED - this entry)
 
-**Verification Commands** (for VERIFIED status later):
+**Verification Commands** (COMPLETED - see PROD Verification Evidence above):
 ```bash
+# These commands were executed on 2026-01-23 with successful results (rc=0)
+
 # 1. Verify frontend deployment
 export ADMIN_URL="https://admin.fewo.kolibri-visions.de"
-export EXPECTED_COMMIT="<commit-sha>"
+export EXPECTED_COMMIT="b28d4f8120918be48cca6a51f6b4e6e63ea55a34"
 ./frontend/scripts/pms_admin_amenities_ui_smoke.sh
 echo "rc=$?"
-
-# Expected: rc=0, all 5 tests pass
+# Result: rc=0 (all tests PASSED including 7b, 7c, 7d, 9)
 
 # 2. Manual UI verification
 # - Login as admin/manager at /login
 # - Navigate to /amenities (check navigation entry exists)
 # - Create test amenity (e.g., "WLAN - Test")
-# - Edit amenity (change description)
+# - Edit amenity (change description) - uses PATCH, no 405 errors
 # - Navigate to /properties, click a property
 # - Scroll to "Ausstattung" section, click "Ausstattung zuweisen"
 # - Select test amenity, click "Speichern"
 # - Verify amenity appears as chip in property detail
 # - Return to /amenities, delete test amenity
 # - Verify property detail no longer shows deleted amenity (cascade)
+# Result: All manual tests PASSED
 ```
 
 **Dependencies:**
@@ -13757,7 +13777,7 @@ echo "rc=$?"
 - **Fix:** Extended API client method signatures to accept optional headers as last parameter (backward compatible)
 - **Files Changed:** `frontend/app/lib/api-client.ts` (all 5 methods: get, post, put, patch, delete)
 - **Impact:** TypeScript compilation now succeeds, Coolify can build and deploy
-- **Status:** Still ✅ IMPLEMENTED (not VERIFIED - pending deploy + smoke test)
+- **Status:** ✅ VERIFIED (included in 2026-01-23 PROD verification)
 
 **UI Smoke Script Hardening (2026-01-22):**
 - **Issue:** Original smoke script expected SSR-visible strings but Next.js App Router uses CSR. Failed on 307 redirects from auth middleware instead of treating as PASS.
