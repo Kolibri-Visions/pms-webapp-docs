@@ -13663,24 +13663,26 @@ Smoke:    backend/scripts/pms_amenities_smoke.sh
 
 **Status:** ✅ IMPLEMENTED (Regression found - downgraded from VERIFIED; awaiting PROD verify after 405 fix)
 
-**Regression Note (2026-01-22):**
+**Regression Note (2026-01-22/2026-01-23):**
 Regression discovered after VERIFIED status: Edit/Save operation returns 405 Method Not Allowed in browser. PUT to `/api/internal/amenities/<uuid>` fails with 405.
 
 **Root Causes Identified and Fixed:**
 1. **File permissions** (commit 707b159): Directory 700→755, route.ts 600→644 to allow Next.js server access
-2. **Missing PATCH alias** (this commit): Route only exported PUT; added PATCH as alias for method compatibility
-3. **Missing credentials** (this commit): UI fetch lacked `credentials: "include"` for session cookies
+2. **Missing PATCH alias** (commit 5bb3b51): Route only exported PUT; added PATCH as alias for method compatibility
+3. **Missing credentials** (commit 5bb3b51): UI fetch lacked `credentials: "include"` for session cookies
+4. **Backend PATCH-only semantics** (current commit): Backend API only supports PATCH for updates (PUT returns 405). Internal proxy was forwarding PUT as PUT to backend, causing 405. Fixed by mapping both PUT and PATCH client requests to PATCH when forwarding to backend.
 
-**Fixes Applied (this commit):**
-- Added `export async function PATCH(...)` as alias to PUT in route handler (line 115)
-- Updated UI fetch to include `credentials: "include"` for session cookie transmission
-- Enhanced runbook with 405 diagnosis: curl test, root causes, canonical route path
-- Test 7b already in place (real-world 405 regression check using actual amenity ID)
+**Fixes Applied (current commit):**
+- Internal route now forwards as PATCH to backend (line 92: `method: 'PATCH'`)
+- UI updated to use PATCH for edit save (cleaner, aligns with backend semantics)
+- Added smoke Tests 7c (backend semantics: PUT=405, PATCH=200) and 7d (internal route PATCH check)
+- Enhanced runbook with "Amenities Edit Save 405 (Backend PATCH-Only Semantics)" troubleshooting section
+- Comment added to route handler documenting backend PATCH-only behavior
 
 **Verification Required:**
-- PROD deployment of this commit (707b159 + this commit)
-- Smoke Test 7b must PASS (returns 401/302, NOT 405)
-- Manual browser test: /amenities → edit → "Speichern" → 200 OK, modal closes, toast shows
+- PROD deployment of this commit
+- Smoke Tests 7b, 7c, 7d must all PASS
+- Manual browser test: /amenities → edit → "Speichern" → 200 OK (PATCH), modal closes, toast shows
 
 **Notes:**
 - Admin UI completes the amenities feature (backend + frontend)

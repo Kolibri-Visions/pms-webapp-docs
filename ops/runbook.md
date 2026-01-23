@@ -39543,3 +39543,199 @@ Test 7b in `pms_admin_amenities_ui_smoke.sh` specifically detects this regressio
 - PASS on 401/400/302 (route exists, auth/validation fails as expected)
 
 **Status:** Fixed by ensuring route handler exports both PUT (primary) and PATCH (alias), and UI includes `credentials: "include"`.
+
+---
+
+### Amenities Edit Save 405 (Backend PATCH-Only Semantics)
+
+**Symptom:** Clicking "Speichern" (Save) in amenities edit modal returns 405 Method Not Allowed. Browser DevTools shows `PUT /api/internal/amenities/{id}` or `PATCH /api/internal/amenities/{id}` returning 405.
+
+**Root Cause:** Backend API only supports PATCH for amenity updates, not PUT:
+- `PUT /api/v1/amenities/{id}` → **405 Method Not Allowed**
+- `PATCH /api/v1/amenities/{id}` → **200 OK** (with valid auth + payload)
+
+If the internal Next.js proxy forwards PUT as PUT to the backend, it will fail with 405. The proxy must map both PUT and PATCH client requests to PATCH when forwarding to the backend.
+
+**How to Debug:**
+
+```bash
+# 1. Verify backend semantics (from HOST-SERVER-TERMINAL or locally)
+export HOST="https://api.fewo.kolibri-visions.de"
+export ADMIN_TOKEN="<your-jwt-token>"
+export AGENCY_ID="<your-agency-id>"
+export AMENITY_ID="<existing-amenity-id>"
+
+# Test PUT (should return 405)
+curl -X PUT "$HOST/api/v1/amenities/$AMENITY_ID" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "x-agency-id: $AGENCY_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"test","description":"test","category":"general","icon":"wifi","sort_order":10}' \
+  -w "\nHTTP: %{http_code}\n"
+
+# Expected: HTTP 405 (PUT not supported by backend)
+
+# Test PATCH (should return 200 or 422)
+curl -X PATCH "$HOST/api/v1/amenities/$AMENITY_ID" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "x-agency-id: $AGENCY_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"test","description":"test","category":"general","icon":"wifi","sort_order":10}' \
+  -w "\nHTTP: %{http_code}\n"
+
+# Expected: HTTP 200 (success) or 422 (validation error)
+
+# 2. Check internal proxy route methods (should accept PUT and PATCH)
+export ADMIN_URL="https://admin.fewo.kolibri-visions.de"
+
+# Test PUT to internal route (unauthenticated, expect 401 not 405)
+curl -X PUT "$ADMIN_URL/api/internal/amenities/$AMENITY_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"test"}' \
+  -w "\nHTTP: %{http_code}\n"
+
+# Expected: HTTP 401 (unauthorized) or 302 (redirect) - NOT 405
+
+# Test PATCH to internal route (unauthenticated, expect 401 not 405)
+curl -X PATCH "$ADMIN_URL/api/internal/amenities/$AMENITY_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"test"}' \
+  -w "\nHTTP: %{http_code}\n"
+
+# Expected: HTTP 401 (unauthorized) or 302 (redirect) - NOT 405
+
+# If either returns 405: internal route handler missing method export or not deployed
+```
+
+**Solution:**
+
+1. **Internal Proxy Route** (`frontend/app/api/internal/amenities/[id]/route.ts`):
+   - Must export both `PUT` and `PATCH` functions
+   - Both must forward to backend using **PATCH method**:
+
+```typescript
+// Shared helper that always uses PATCH when forwarding to backend
+async function proxyUpdate(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const supabase = await createSupabaseServerClient();
+  const { data: { session } } = await supabase.auth.getSession();
+
+  if (!session) {
+    return NextResponse.json({ detail: 'Unauthorized' }, { status: 401 });
+  }
+
+  const accessToken = session.access_token;
+  const agencyId = await getAgencyIdFromSession();
+  const body = await request.json();
+
+  const headers: Record<string, string> = {
+    'Authorization': `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+  };
+
+  if (agencyId) {
+    headers['x-agency-id'] = agencyId;
+  }
+
+  // Always use PATCH when forwarding to backend (backend only supports PATCH)
+  const response = await fetch(`${API_BASE_URL}/api/v1/amenities/${params.id}`, {
+    method: 'PATCH',  // <-- Critical: always PATCH, never PUT
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  const data = await response.json();
+  return NextResponse.json(data, { status: response.status });
+}
+
+// Export both PUT and PATCH - both delegate to proxyUpdate
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  return proxyUpdate(request, { params });
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  return proxyUpdate(request, { params });
+}
+```
+
+2. **UI Code** (`frontend/app/amenities/page.tsx`):
+   - Use **PATCH** for edit save (cleaner, aligns with backend):
+
+```typescript
+const response = await fetch(`/api/internal/amenities/${editingAmenity.id}`, {
+  method: "PATCH",  // <-- Use PATCH (backend semantics)
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify(formData),
+  credentials: "include",
+});
+```
+
+3. **Deploy and Verify**:
+
+```bash
+# On HOST-SERVER-TERMINAL after deployment
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Run smoke script (Tests 7c + 7d verify semantics)
+ADMIN_URL="https://admin.fewo.kolibri-visions.de" \
+HOST="https://api.fewo.kolibri-visions.de" \
+ADMIN_TOKEN="${MANAGER_JWT_TOKEN}" \
+AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7" \
+./frontend/scripts/pms_admin_amenities_ui_smoke.sh
+
+# Expected output:
+# ✅ Test 7c PASSED: Backend semantics verified (PUT=405, PATCH=200)
+# ✅ Test 7d PASSED: Internal route PATCH handler exists (returned 401, not 405)
+```
+
+4. **Manual Browser Test**:
+   - Login at https://admin.fewo.kolibri-visions.de/amenities
+   - Open DevTools (F12) → Network tab
+   - Hard refresh (Cmd+Shift+R / Ctrl+F5) to clear cached JS
+   - Click edit pencil on any amenity
+   - Change name or description
+   - Click "Speichern"
+   - **Expected:**
+     - Network tab: `PATCH /api/internal/amenities/{id}` → **200 OK** (NOT 405)
+     - Modal closes
+     - Success toast: "Ausstattung erfolgreich aktualisiert"
+     - Row updates in list
+
+**Common Issues:**
+
+- **405 persists after code fix**: Browser cached old JavaScript bundle. Hard refresh (Cmd+Shift+R / Ctrl+F5) or clear browser cache.
+- **405 on internal route but backend works**: Route handler not deployed or file permissions issue (directory must be 755, file 644).
+- **Backend returns 405 for PATCH**: Verify backend version supports PATCH (check `/api/ops/version` commit). Backend changed semantics at some point to PATCH-only.
+- **Both PUT and PATCH return 405**: Internal route handler not exporting both methods or route path typo.
+
+**Smoke Tests:**
+
+- **Test 7c**: Verifies backend semantics (PUT=405, PATCH=200)
+- **Test 7d**: Verifies internal route accepts PATCH (returns 401/400, not 405)
+- **Test 7b**: Verifies internal route accepts PUT (returns 401/400, not 405)
+
+**Related Issues:**
+- "Amenities Edit Returns 405 Method Not Allowed" (multiple previous fixes)
+- File permissions regression (commit 707b159)
+- Missing PATCH alias (commit 5bb3b51)
+
+**Fix Commit:** TBD (PUT→PATCH mapping in internal proxy)
+
+**Verification Checklist:**
+- [ ] Backend PUT returns 405, PATCH returns 200/422
+- [ ] Internal route PUT returns 401/302 (not 405)
+- [ ] Internal route PATCH returns 401/302 (not 405)
+- [ ] Smoke Tests 7b, 7c, 7d all PASS
+- [ ] Manual browser test: Edit → Speichern → 200 OK, modal closes, toast shows
+
