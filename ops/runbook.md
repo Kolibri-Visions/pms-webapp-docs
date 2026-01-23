@@ -39927,3 +39927,232 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" \
 #    - If status is not terminal, test "Stornieren" button
 ```
 
+
+---
+
+## Admin UI: Buchungen - Manuell anlegen (Create Booking)
+
+**Overview:**
+Manual booking creation via Admin UI allows staff to create bookings directly through the frontend interface. This is typically used for phone bookings, walk-in reservations, or manual entry of bookings from external channels.
+
+**Required Fields:**
+- `property_id` (UUID) - Property being booked
+- `check_in` (date) - Check-in date (YYYY-MM-DD format, cannot be in the past)
+- `check_out` (date) - Check-out date (must be after check_in)
+- `num_adults` (integer) - Number of adult guests (minimum: 1)
+- `source` (string) - Booking source: direct, airbnb, booking_com, expedia, fewo_direkt, google, other
+
+**Optional Fields:**
+- `guest_id` (UUID) - Guest making the booking (defaults to null if not provided)
+- `num_children` (integer) - Number of children (default: 0)
+- `num_infants` (integer) - Number of infants (default: 0)
+- `num_pets` (integer) - Number of pets (default: 0)
+- `status` (string) - Booking status: inquiry, pending, confirmed, checked_in, checked_out, cancelled, declined, no_show (default: inquiry)
+- `nightly_rate` (decimal) - Rate per night (defaults to property base_price if not provided)
+- `subtotal` (decimal) - Subtotal before fees (computed from nightly_rate × num_nights if not provided)
+- `cleaning_fee` (decimal) - Cleaning fee (default: 0)
+- `service_fee` (decimal) - Service fee (default: 0)
+- `extra_guest_fee` (decimal) - Extra guest fee (default: 0)
+- `discount_amount` (decimal) - Discount amount (default: 0)
+- `discount_code` (string) - Discount code applied
+- `tax_amount` (decimal) - Tax amount (default: 0)
+- `total_price` (decimal) - Total price (computed from subtotal + fees - discounts if not provided)
+- `currency` (string) - Currency code (default: EUR)
+- `cancellation_policy` (string) - flexible, moderate, strict, non_refundable
+- `guest_message` (text) - Message from guest
+- `special_requests` (text) - Special requests
+- `internal_notes` (text) - Internal staff notes
+- `booking_reference` (string) - Booking reference (auto-generated if not provided, format: PMS-YYYY-NNNNNN)
+- `channel_booking_id` (string) - External booking ID from channel
+- `channel_guest_id` (string) - External guest ID from channel
+
+**API Endpoint:**
+```
+POST /api/v1/bookings
+```
+
+**Request Headers:**
+```
+Authorization: Bearer <JWT_TOKEN>
+Content-Type: application/json
+```
+
+**Minimal Request Example:**
+```json
+{
+  "property_id": "123e4567-e89b-12d3-a456-426614174000",
+  "check_in": "2026-07-01",
+  "check_out": "2026-07-08",
+  "num_adults": 2,
+  "source": "direct",
+  "status": "inquiry"
+}
+```
+
+**Full Request Example:**
+```json
+{
+  "property_id": "123e4567-e89b-12d3-a456-426614174000",
+  "guest_id": "123e4567-e89b-12d3-a456-426614174001",
+  "check_in": "2026-07-01",
+  "check_out": "2026-07-08",
+  "num_adults": 2,
+  "num_children": 1,
+  "source": "direct",
+  "status": "confirmed",
+  "nightly_rate": "120.00",
+  "subtotal": "840.00",
+  "cleaning_fee": "50.00",
+  "tax_amount": "62.30",
+  "total_price": "952.30",
+  "currency": "EUR",
+  "cancellation_policy": "moderate",
+  "guest_message": "Early check-in requested",
+  "internal_notes": "VIP guest - prepare welcome basket"
+}
+```
+
+**Success Response (201 Created):**
+```json
+{
+  "id": "123e4567-e89b-12d3-a456-426614174002",
+  "booking_reference": "PMS-2026-000123",
+  "property_id": "123e4567-e89b-12d3-a456-426614174000",
+  "guest_id": "123e4567-e89b-12d3-a456-426614174001",
+  "check_in": "2026-07-01",
+  "check_out": "2026-07-08",
+  "status": "confirmed",
+  "total_price": "952.30",
+  "currency": "EUR",
+  "created_at": "2026-01-23T10:30:00Z"
+}
+```
+
+**Common Errors:**
+
+**Error 400 - Bad Request (Validation Failed):**
+- **Symptom:** HTTP 400 with validation error message
+- **Common Causes:**
+  - `check_in` date is in the past
+  - `check_out` is not after `check_in`
+  - `num_adults` is less than 1
+  - Invalid `source` value (not one of: direct, airbnb, booking_com, expedia, fewo_direkt, google, other)
+  - Invalid `status` value (not one of: inquiry, pending, confirmed, checked_in, checked_out, cancelled, declined, no_show)
+  - Invalid UUID format for `property_id` or `guest_id`
+  - Missing required fields
+- **Solution:**
+  - Check error message for specific validation failure
+  - Ensure `check_in` is today or future date
+  - Ensure `check_out` > `check_in`
+  - Ensure `num_adults` >= 1
+  - Use valid enum values for `source` and `status`
+  - Verify UUIDs are properly formatted
+  - Provide all required fields: property_id, check_in, check_out, num_adults, source
+
+**Error 401 - Unauthorized:**
+- **Symptom:** HTTP 401 "Invalid authentication token" or "Token expired"
+- **Cause:** JWT token is missing, expired, or invalid
+- **Solution:**
+  - Re-login to get fresh JWT token
+  - Check Authorization header: `Bearer <token>`
+  - Verify token hasn't expired (default: 24h lifetime)
+
+**Error 403 - Forbidden:**
+- **Symptom:** HTTP 403 "Insufficient permissions"
+- **Cause:** User role lacks permission to create bookings
+- **RBAC Policy:** Only admin, manager, and staff roles can create bookings
+- **Solution:**
+  - Verify user role: `curl -H "Authorization: Bearer $TOKEN" $API_BASE/api/v1/users/me`
+  - Owner, accountant roles cannot create bookings (by design)
+  - Contact admin to upgrade role if needed
+
+**Error 404 - Property Not Found:**
+- **Symptom:** HTTP 404 "Property not found"
+- **Cause:** `property_id` does not exist or belongs to different agency
+- **Solution:**
+  - Verify property exists: `GET /api/v1/properties/{property_id}`
+  - Check property belongs to same agency as authenticated user
+  - Confirm UUID is correct (no typos)
+
+**Error 404 - Guest Not Found:**
+- **Symptom:** HTTP 422 "guest_id does not reference an existing guest" (or HTTP 404)
+- **Cause:** `guest_id` provided but does not exist in database
+- **Solution:**
+  - Omit `guest_id` field to create booking without guest (guest_id will be null)
+  - Or create guest first: `POST /api/v1/guests`
+  - Or verify guest exists: `GET /api/v1/guests/{guest_id}`
+  - Confirm guest belongs to same agency as property
+
+**Error 409 - Conflict (Double Booking):**
+- **Symptom:** HTTP 409 with `"conflict_type": "inventory_overlap"` or `"conflict_type": "double_booking"`
+- **Cause:** Property already has confirmed booking for overlapping dates
+- **Root Cause:** Database exclusion constraint prevents overlapping bookings for same property
+- **Solution:**
+  - Check availability first: `GET /api/v1/availability?property_id=X&start_date=Y&end_date=Z`
+  - If dates show as blocked, pick different dates
+  - If status=inquiry bookings exist, they do NOT block (non-blocking status)
+  - Only confirmed/checked_in bookings block availability
+  - To override: Cancel conflicting booking first, then create new booking
+
+**Error 503 - Service Unavailable:**
+- **Symptom:** HTTP 503 "Database temporarily unavailable" or "Service unavailable"
+- **Cause:** Backend database connection pool exhausted, maintenance mode, or backend crash
+- **Solution:**
+  - Wait 30 seconds and retry request
+  - Check backend health: `GET /api/ops/health`
+  - Check database connectivity from backend container
+  - Review backend logs for connection errors: `docker logs pms-backend`
+  - If persistent, restart backend: `docker-compose restart backend`
+
+**Smoke Test Commands:**
+
+Test booking creation + cancellation workflow:
+```bash
+# Set environment variables
+export API_BASE="https://api.fewo.kolibri-visions.de"
+export ADMIN_TOKEN="your-jwt-token-here"
+export PROPERTY_ID="your-property-uuid"
+
+# Step 1: Create booking
+BOOKING_RESPONSE=$(curl -s -X POST "$API_BASE/api/v1/bookings" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "property_id": "'"$PROPERTY_ID"'",
+    "check_in": "2026-12-01",
+    "check_out": "2026-12-08",
+    "num_adults": 2,
+    "source": "direct",
+    "status": "inquiry"
+  }')
+
+echo "Create Response: $BOOKING_RESPONSE"
+
+# Extract booking ID (requires jq or python)
+BOOKING_ID=$(echo "$BOOKING_RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin)['id'])")
+echo "Created Booking ID: $BOOKING_ID"
+
+# Step 2: Verify booking was created
+curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "$API_BASE/api/v1/bookings/$BOOKING_ID"
+
+# Step 3: Cancel booking (cleanup)
+curl -s -X POST "$API_BASE/api/v1/bookings/$BOOKING_ID/cancel" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cancellation_reason": "Smoke test cleanup"
+  }'
+
+echo "Booking created and cancelled successfully"
+```
+
+**Expected Results:**
+- Step 1: HTTP 201 Created, response contains booking ID and reference
+- Step 2: HTTP 200 OK, response shows booking details with status=inquiry
+- Step 3: HTTP 200 OK, booking status updated to cancelled
+
+**Related Sections:**
+- See "Admin UI: Buchungen (Bookings) - Smoke + Troubleshooting" for list/detail/confirm/cancel operations
+- See "Database: Exclusion Constraints (Booking Conflicts)" for double-booking prevention
+- See "Booking Status Workflow: Inquiry Policy (Non-Blocking Status)" for inquiry vs confirmed blocking behavior
