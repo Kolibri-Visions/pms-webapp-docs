@@ -13968,3 +13968,176 @@ echo "rc=$?"
 
 **Note:** This entry documents the rollback for historical tracking. The feature may be re-implemented in the future.
 
+
+---
+
+## Admin UI: Buchungen (Direct API Integration) ✅ IMPLEMENTED
+
+**Status:** ✅ IMPLEMENTED (commit TBD)
+**Implementation Date:** 2026-01-23
+**Verification Status:** ⏳ PENDING PROD SMOKE TEST (mark as VERIFIED only after PROD smoke test passes with rc=0)
+
+**Overview:**
+The Admin Bookings UI provides a full-featured interface for managing bookings through the admin panel at `/bookings`. Unlike the previous rolled-back implementation (cd9680a) which used internal Next.js API proxy routes, this implementation uses **direct backend API integration** with JWT authentication from the auth context.
+
+**Architecture Decision:**
+- **Direct Backend API Calls**: UI components make direct requests to `/api/v1/bookings/*` endpoints
+- **JWT Authentication**: Uses `accessToken` from `useAuth()` hook (NextAuth.js session)
+- **No Internal Proxy**: Differs from Amenities UI pattern (which uses `/api/internal/amenities/*`)
+- **Rationale**: Simpler architecture, fewer layers, direct error propagation from backend to UI
+
+**Features Implemented:**
+
+**1. List View (`/bookings`):**
+- Paginated booking list with 50 items per page
+- Search by booking reference, property ID, guest ID (client-side filtering)
+- Status filter dropdown (all, inquiry, pending, confirmed, checked_in, checked_out, cancelled, declined)
+- Displays: reference, check-in/out dates, status badge, total price, created date
+- Click row to navigate to detail view
+- Handles empty state, loading state, error state (401/403/503)
+
+**2. Detail View (`/bookings/[id]`):**
+- Full booking details in organized sections:
+  - Aufenthaltsinformationen (stay info): check-in, check-out, nights, guest count breakdown
+  - Preisinformationen (pricing): nightly rate, subtotal, fees, tax, total price
+  - IDs und Referenzen: booking ID, property ID, guest ID, channel booking ID
+  - Zeitstempel: created_at, updated_at
+  - Notizen (optional): special requests, internal notes
+- Link to guest detail page (if guest exists)
+- Action buttons (conditionally rendered based on status)
+- Toast notifications for action success/failure
+
+**3. Confirm Action:**
+- **Button Label:** "Bestätigen"
+- **Availability:** Shown only when `status = 'inquiry' OR 'pending'`
+- **Endpoint:** `PATCH /api/v1/bookings/{id}/status` with `{"status": "confirmed"}`
+- **Success:** Updates booking status to `confirmed`, shows toast, refreshes detail view
+- **Errors:** 401 (session expired), 403 (forbidden), 404 (not found), 400 (invalid transition)
+
+**4. Cancel Action:**
+- **Button Label:** "Stornieren"
+- **Availability:** Shown when status is NOT `cancelled`, `declined`, or `checked_out`
+- **Modal:** Opens cancel modal requiring cancellation reason + optional refund amount
+- **Endpoint:** `POST /api/v1/bookings/{id}/cancel` with `{cancellation_reason, refund_amount?}`
+- **RBAC:** Requires `admin` or `manager` role (staff/accountant/owner get 403)
+- **Success:** Updates status to `cancelled`, shows toast, closes modal, refreshes view
+
+**Backend Endpoints Used:**
+
+| Method | Endpoint | Purpose | RBAC |
+|--------|----------|---------|------|
+| `GET` | `/api/v1/bookings` | List all bookings (with filters + pagination) | All roles (owner sees only their properties) |
+| `GET` | `/api/v1/bookings/{id}` | Get single booking details | All roles (owner: property ownership check) |
+| `PATCH` | `/api/v1/bookings/{id}/status` | Update booking status (confirm action) | admin, manager, staff |
+| `POST` | `/api/v1/bookings/{id}/cancel` | Cancel booking | admin, manager only |
+
+**Files Changed:**
+
+**Frontend:**
+- `frontend/app/bookings/page.tsx` - Enhanced list view with search, filters, pagination
+- `frontend/app/bookings/[id]/page.tsx` - Detail view with confirm/cancel actions, toast notifications
+- `frontend/app/lib/api-client.ts` - Direct backend API client (already existed)
+- `frontend/app/lib/auth-context.tsx` - JWT auth context provider (already existed)
+
+**Backend:**
+- `backend/app/api/routes/bookings.py` - All endpoints already implemented (no changes needed)
+- `backend/app/services/booking_service.py` - Business logic (already existed)
+- `backend/app/schemas/bookings.py` - Request/response schemas (already existed)
+
+**Smoke Test:**
+- **Script Location:** `frontend/scripts/pms_admin_bookings_ui_smoke.sh` (NOT YET CREATED)
+- **When Created, Should Test:**
+  - Test 1: List bookings (GET /api/v1/bookings) → 200 OK
+  - Test 2: Get booking detail (GET /api/v1/bookings/{id}) → 200 OK or 404
+  - Test 3: Confirm action (PATCH /api/v1/bookings/{id}/status) → 200 or 400 (depending on current status)
+  - Test 4: Cancel action (POST /api/v1/bookings/{id}/cancel) → 200 or 400/403
+  - Test 5: UI pages load (GET /bookings, GET /bookings/{id}) → 200 OK
+
+**Verification Commands for PROD:**
+
+**Prerequisites:**
+```bash
+# Get admin JWT token from browser DevTools:
+# 1. Login at https://admin.fewo.kolibri-visions.de
+# 2. Open DevTools → Application → Cookies
+# 3. Copy value from next-auth.session-token or similar
+# 4. Decode JWT to get access_token field
+
+export ADMIN_TOKEN="your-jwt-token-here"
+export API_BASE="https://api.fewo.kolibri-visions.de"
+export ADMIN_UI_BASE="https://admin.fewo.kolibri-visions.de"
+```
+
+**Run Verification:**
+```bash
+# 1. Backend health check
+curl -f $API_BASE/api/ops/health || echo "FAIL: Backend unhealthy"
+
+# 2. List bookings endpoint
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  $API_BASE/api/v1/bookings?limit=10)
+[ "$HTTP_CODE" = "200" ] && echo "PASS: List bookings" || echo "FAIL: List bookings ($HTTP_CODE)"
+
+# 3. UI pages load (200 OK, not 404/500)
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" $ADMIN_UI_BASE/bookings)
+[ "$HTTP_CODE" = "200" ] && echo "PASS: List page loads" || echo "FAIL: List page ($HTTP_CODE)"
+
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+  $ADMIN_UI_BASE/bookings/00000000-0000-0000-0000-000000000000)
+[ "$HTTP_CODE" = "200" ] && echo "PASS: Detail page loads" || echo "FAIL: Detail page ($HTTP_CODE)"
+
+# 4. Manual browser test (required - cannot automate action buttons):
+#    - Navigate to $ADMIN_UI_BASE/bookings
+#    - Click on a booking with status "inquiry" or "pending"
+#    - Click "Bestätigen" button → should show success toast + status updates
+#    - Find a booking with non-terminal status
+#    - Click "Stornieren" → modal opens → enter reason → should cancel
+```
+
+**Use Existing Deploy Verification Script:**
+```bash
+# When smoke script is created, run it:
+cd /path/to/PMS-Webapp
+ADMIN_TOKEN="$ADMIN_TOKEN" \
+AGENCY_ID="your-agency-uuid" \
+./frontend/scripts/pms_admin_bookings_ui_smoke.sh
+
+# Expected output (when script exists):
+# ✅ Test 1 PASSED: List bookings (200 OK)
+# ✅ Test 2 PASSED: Get booking detail (200 OK or 404 expected)
+# ✅ Test 3 PASSED: Confirm action endpoint exists
+# ✅ Test 4 PASSED: Cancel action endpoint exists
+# ✅ Test 5 PASSED: UI pages load (200 OK)
+# ALL TESTS PASSED (rc=0)
+```
+
+**Mark as VERIFIED Only After:**
+1. ✅ Backend endpoints return 200 OK (or expected 400/403 for invalid operations)
+2. ✅ Frontend pages load without 404/500 errors
+3. ✅ Manual browser test: Confirm button works (status updates, toast shows)
+4. ✅ Manual browser test: Cancel button works (modal opens, cancellation succeeds)
+5. ✅ Smoke script passes with rc=0 (when created)
+6. ✅ No console errors in browser DevTools
+7. ✅ RBAC enforced: Staff cannot cancel (403), Admin/Manager can cancel (200)
+
+**Known Differences from Amenities UI:**
+- **No Internal Proxy:** Amenities uses `/api/internal/amenities/*`, Bookings uses direct `/api/v1/bookings/*`
+- **Authentication:** Amenities uses server-side session cookies, Bookings uses client-side JWT bearer token
+- **Error Handling:** Direct API calls mean frontend sees raw backend errors (no proxy translation layer)
+- **Why Different:** Bookings implementation follows simpler pattern with fewer abstraction layers
+
+**Troubleshooting Guide:**
+See `backend/docs/ops/runbook.md` section "Admin UI: Buchungen (Bookings) - Smoke + Troubleshooting" for:
+- Common issues (401, 403, 404, empty list, actions not available)
+- Solutions for each issue
+- Step-by-step debugging commands
+- Related files reference
+
+**Next Steps:**
+1. ⏳ Create smoke test script: `frontend/scripts/pms_admin_bookings_ui_smoke.sh`
+2. ⏳ Run smoke test in STAGING environment
+3. ⏳ Deploy to PROD
+4. ⏳ Run PROD verification (smoke test + manual browser test)
+5. ⏳ Mark as VERIFIED in this doc (update status line above)
+

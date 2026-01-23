@@ -39772,3 +39772,158 @@ Admin Bookings UI with internal proxy routes was implemented in commit cd9680a b
 
 **Note:** This section exists for historical tracking only. Feature may be re-implemented in the future.
 
+
+---
+
+## Admin UI: Buchungen (Bookings) - Smoke + Troubleshooting
+
+**Status:** ✅ IMPLEMENTED (2026-01-23)
+
+**Overview:**
+The Admin Bookings UI provides a comprehensive interface for managing bookings with:
+- **List View** (`/bookings`): Search/filter bookings by reference, property, guest, status
+- **Detail View** (`/bookings/[id]`): View full booking details with confirm/cancel actions
+- **Direct Backend API Integration**: Uses JWT-based auth from auth context (NOT internal proxy pattern)
+- **Action Buttons**: Confirm (inquiry/pending → confirmed), Cancel (any non-terminal status → cancelled)
+
+**Architecture Note:**
+Unlike the Amenities UI which uses an internal Next.js API proxy (`/api/internal/*`), the Bookings UI makes **direct calls to the backend API** (`/api/v1/bookings/*`) using the JWT access token from the auth context. This architectural difference is intentional.
+
+**Backend Endpoints:**
+- `GET /api/v1/bookings` - List bookings with filters
+- `GET /api/v1/bookings/{id}` - Get single booking details
+- `PATCH /api/v1/bookings/{id}/status` - Update booking status (confirm)
+- `POST /api/v1/bookings/{id}/cancel` - Cancel booking
+
+**Smoke Test Commands:**
+
+**1. Auth-Safe Mode (No Admin Token):**
+```bash
+# Verify UI pages are accessible (200 OK, not 404/500)
+curl -s -o /dev/null -w "%{http_code}" https://admin.fewo.kolibri-visions.de/bookings
+# Expected: 200 (page loads, shows auth-required message if not logged in)
+
+curl -s -o /dev/null -w "%{http_code}" https://admin.fewo.kolibri-visions.de/bookings/00000000-0000-0000-0000-000000000000
+# Expected: 200 (page loads, shows auth-required message if not logged in)
+```
+
+**2. Full Mode with Backend API (Requires Admin Token):**
+```bash
+# Set your admin JWT token
+export ADMIN_TOKEN="eyJ..."
+
+# Test 1: List bookings
+curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
+  https://api.fewo.kolibri-visions.de/api/v1/bookings?limit=10
+# Expected: 200 OK with JSON array of bookings
+
+# Test 2: Get single booking (replace with real booking ID)
+BOOKING_ID="existing-booking-uuid"
+curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
+  https://api.fewo.kolibri-visions.de/api/v1/bookings/$BOOKING_ID
+# Expected: 200 OK with booking JSON
+
+# Test 3: Confirm action (status update)
+curl -s -X PATCH -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "confirmed"}' \
+  https://api.fewo.kolibri-visions.de/api/v1/bookings/$BOOKING_ID/status
+# Expected: 200 OK (if status is inquiry/pending) OR 400 (invalid transition)
+
+# Test 4: Cancel action
+curl -s -X POST -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"cancellation_reason": "Smoke test", "cancelled_by": "system"}' \
+  https://api.fewo.kolibri-visions.de/api/v1/bookings/$BOOKING_ID/cancel
+# Expected: 200 OK (if not already cancelled) OR 400 (already terminal status)
+```
+
+**Troubleshooting Common Issues:**
+
+**Issue 1: 401 Unauthorized**
+- **Symptom:** API returns 401 when listing or viewing bookings
+- **Cause:** Session expired, JWT token invalid, or not logged in
+- **Solution:**
+  - Clear browser cookies and log in again
+  - Check that JWT token in auth context is valid (not expired)
+  - Verify backend `/api/ops/health` returns 200 (backend is running)
+
+**Issue 2: 404 Not Found**
+- **Symptom:** Detail page shows "Buchung nicht gefunden"
+- **Cause:** Booking ID doesn't exist in database, or wrong agency
+- **Solution:**
+  - Verify booking ID exists: `SELECT id FROM bookings WHERE id = '<uuid>'`
+  - Check agency multi-tenancy: Booking must belong to user's agency_id
+  - Confirm booking wasn't deleted (soft delete check if applicable)
+
+**Issue 3: 403 Forbidden (Insufficient Permissions)**
+- **Symptom:** Cancel action returns "Keine Berechtigung. Nur Admins und Manager können stornieren."
+- **Cause:** User role is 'staff', 'accountant', or 'owner' (not admin/manager)
+- **Solution:**
+  - Check user role in JWT: `SELECT role FROM users WHERE id = '<user_id>'`
+  - Cancel action requires `admin` or `manager` role
+  - Confirm action only requires `admin`, `manager`, or `staff` role
+
+**Issue 4: Empty List (No Bookings in Database)**
+- **Symptom:** List page shows "Keine Buchungen gefunden"
+- **Cause:** No bookings exist for agency, or filters exclude all results
+- **Solution:**
+  - Check database: `SELECT COUNT(*) FROM bookings WHERE agency_id = '<uuid>'`
+  - Clear search filters and status filter (set to "Alle Status")
+  - Verify agency_id in JWT matches agency with bookings
+  - Create test booking via Public Booking Request or Channel Manager sync
+
+**Issue 5: Actions Not Available (Status Already Terminal)**
+- **Symptom:** Confirm/Cancel buttons don't appear on detail page
+- **Cause:** Booking status is terminal (cancelled, declined, checked_out)
+- **Solution:**
+  - Check current status: Terminal states = `cancelled`, `declined`, `checked_out`
+  - Confirm button: Only shown for `inquiry` or `pending` status
+  - Cancel button: Hidden for `cancelled`, `declined`, `checked_out`
+  - This is expected behavior (cannot modify terminal bookings)
+
+**Issue 6: 400 Bad Request (Invalid Status Transition)**
+- **Symptom:** Confirm action fails with "Ungültiger Statusübergang"
+- **Cause:** Status workflow doesn't allow transition (e.g., checked_out → confirmed)
+- **Solution:**
+  - Review status workflow in backend: `backend/app/api/routes/bookings.py`
+  - Valid confirm transitions: `inquiry|pending → confirmed`
+  - Check current booking status before attempting action
+
+**Related Files:**
+
+**Frontend (UI Pages):**
+- `/Users/khaled/Documents/KI/Claude/Claude Code/Projekte/PMS-Webapp/frontend/app/bookings/page.tsx` - List view
+- `/Users/khaled/Documents/KI/Claude/Claude Code/Projekte/PMS-Webapp/frontend/app/bookings/[id]/page.tsx` - Detail view with actions
+- `/Users/khaled/Documents/KI/Claude/Claude Code/Projekte/PMS-Webapp/frontend/app/lib/api-client.ts` - Direct backend API client
+- `/Users/khaled/Documents/KI/Claude/Claude Code/Projekte/PMS-Webapp/frontend/app/lib/auth-context.tsx` - JWT auth context provider
+
+**Backend (API Endpoints):**
+- `/Users/khaled/Documents/KI/Claude/Claude Code/Projekte/PMS-Webapp/backend/app/api/routes/bookings.py` - All booking endpoints
+- `/Users/khaled/Documents/KI/Claude/Claude Code/Projekte/PMS-Webapp/backend/app/services/booking_service.py` - Business logic
+- `/Users/khaled/Documents/KI/Claude/Claude Code/Projekte/PMS-Webapp/backend/app/schemas/bookings.py` - Request/response schemas
+
+**Smoke Test (TBD):**
+- Smoke script location: `frontend/scripts/pms_admin_bookings_ui_smoke.sh` (not yet created)
+- When created, should test: List (200), Detail (200/404), Confirm (200/400), Cancel (200/400/403)
+
+**Deployment Verification:**
+```bash
+# 1. Check backend API health
+curl https://api.fewo.kolibri-visions.de/api/ops/health
+
+# 2. Verify frontend pages load (200 OK)
+curl -s -o /dev/null -w "%{http_code}" https://admin.fewo.kolibri-visions.de/bookings
+
+# 3. Test backend endpoints (with admin token)
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  https://api.fewo.kolibri-visions.de/api/v1/bookings?limit=5
+
+# 4. Manual browser test:
+#    - Login at https://admin.fewo.kolibri-visions.de
+#    - Navigate to /bookings
+#    - Click on a booking to view details
+#    - If status is inquiry/pending, test "Bestätigen" button
+#    - If status is not terminal, test "Stornieren" button
+```
+
