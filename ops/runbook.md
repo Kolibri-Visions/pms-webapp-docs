@@ -40567,3 +40567,110 @@ npm run build
 - `/pricing/seasons` helper text: References "Objekte → Objekt → Preiseinstellungen" (not /pricing/rate-plans)
 - Property rate plans page: Archive uses PATCH /archive, restore uses PATCH /restore (not DELETE for soft-delete)
 
+
+---
+
+## Modal: Aus Saisonvorlage importieren (Objekt-Preiseinstellungen)
+
+**Overview:** Polished import/sync modal for season templates on property rate plans page with clear button labels, proper enablement logic, and improved readability.
+
+**Purpose:** Allow users to import or synchronize season templates to property rate plans with clear understanding of the difference between Import and Sync operations.
+
+**Location:** Objekte → Objekt → Preiseinstellungen → Button "Aus Saisonvorlage importieren"
+
+**UI Elements:**
+
+1. **Buttons** (Clear, concise labels):
+   - **Abbrechen**: Always enabled, closes modal
+   - **Importieren**: Enabled only when template(s) selected AND years set
+   - **Synchronisieren**: Enabled only when exactly 1 template selected AND years set
+
+2. **Explanatory Text** (Displayed above buttons):
+   - **Importieren**: "Erstellt nur fehlende Saisonzeiten aus der Vorlage (ändert bestehende nicht)."
+   - **Synchronisieren**: "Aktualisiert bereits importierte Saisonzeiten aus der Vorlage und repariert Verknüpfungen (kann bestehende Einträge ändern)."
+
+3. **Empty State** (When no templates exist):
+   - Message: "Keine Saisonvorlagen vorhanden"
+   - CTA Button: "Saisonvorlagen anlegen" → navigates to /pricing/seasons
+   - Importieren/Synchronisieren buttons: disabled
+
+**Button Enablement Logic:**
+
+| Condition | Abbrechen | Importieren | Synchronisieren |
+|-----------|-----------|-------------|-----------------|
+| No templates exist | ✅ Enabled | ❌ Disabled | ❌ Disabled |
+| Templates exist, none selected | ✅ Enabled | ❌ Disabled | ❌ Disabled |
+| 1+ templates selected, no years | ✅ Enabled | ❌ Disabled | ❌ Disabled |
+| 1+ templates selected, years set | ✅ Enabled | ✅ Enabled | ✅ Enabled (only if exactly 1 template) |
+| Loading (import/sync in progress) | ❌ Disabled | ❌ Disabled | ❌ Disabled |
+
+**Operations:**
+
+1. **Importieren (Create Strategy)**:
+   - Endpoint: `POST /api/v1/pricing/rate-plans/{id}/seasons/sync-from-template`
+   - Strategy: `create`
+   - Behavior: Creates only missing seasons that don't exist yet (based on date ranges)
+   - Use Case: Initial import, adding new seasons without touching existing ones
+
+2. **Synchronisieren (Sync Strategy)**:
+   - Endpoint: `POST /api/v1/pricing/rate-plans/{id}/seasons/sync-from-template`
+   - Strategy: `sync`
+   - Behavior: Creates new seasons, updates linked seasons, relinks legacy seasons, skips overridden seasons
+   - Use Case: Updating existing seasons after template changes, repairing broken links
+
+**Info Box Styling (Improved Contrast):**
+- Background: `bg-white` or `bg-slate-50` (light, readable)
+- Border: `border-slate-200` or `border-blue-400` (subtle, visible)
+- Text: `text-slate-900` / `text-slate-700` (dark, high contrast)
+- Sync Preview: White background with blue border for clear readability
+
+**Verification:**
+
+```bash
+# UI Manual Check (after deployment):
+# 1. Navigate to: Objekte → pick property → Preiseinstellungen
+# 2. Click "Aus Saisonvorlage importieren" button
+# 3. Verify button labels: Abbrechen | Importieren | Synchronisieren
+# 4. Verify explanatory text above buttons (2 lines explaining Import vs Sync)
+# 5. Without selection: Importieren + Synchronisieren disabled
+# 6. Select template(s): Buttons enable (if years also set)
+# 7. Info boxes: Check light background, dark text, good readability
+# 8. If no templates exist: Empty state shows "Saisonvorlagen anlegen" link
+```
+
+**Troubleshooting:**
+
+### Buttons Always Disabled
+
+**Symptom:** Importieren/Synchronisieren buttons remain disabled even after selecting templates.
+
+**Root Cause:** `selectedYears` state is empty (years not computed from template selection).
+
+**Solution:**
+- Verify template selection triggers years computation (lines 216-242 in page.tsx)
+- Check browser DevTools React state: selectedTemplateIds and selectedYears arrays
+- Ensure template has valid periods with date ranges
+
+### Empty State Not Showing Link
+
+**Symptom:** When no templates exist, modal shows message but no "Saisonvorlagen anlegen" button.
+
+**Root Cause:** Empty state condition not matching or link not rendered.
+
+**Solution:**
+- Verify `templates.length === 0` condition (line 1704)
+- Check link element at lines 1708-1712 (href="/pricing/seasons")
+- Clear browser cache and hard refresh
+
+### Info Box Unreadable
+
+**Symptom:** Explanatory text or sync preview box has poor contrast (gray on gray).
+
+**Root Cause:** Dark mode or theme variables not applying correctly.
+
+**Solution:**
+- Verify info box uses `bg-white` or `bg-slate-50` (not dark bg)
+- Verify text uses `text-slate-900` / `text-slate-700` (not muted colors)
+- Check Sync Preview div at line 1604: should have `bg-white` and `border-blue-400`
+- Check Explanatory Text div at line 1748: should have `bg-slate-50` and `text-slate-900`
+

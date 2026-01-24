@@ -14727,3 +14727,90 @@ curl -sS "https://admin.fewo.kolibri-visions.de/api/ops/version" | jq -r '.sourc
 - Bookmarks to old `/pricing/rate-plans` route will see redirect message, then auto-redirect
 - This simplifies onboarding and reduces user confusion about "which rate plans page to use"
 
+
+## Pricing UI: Import/Synchronize Modal Polish (Objekt-Preiseinstellungen)
+
+**Implementation Date:** 2026-01-24
+
+**Status:** ✅ IMPLEMENTED
+
+**Scope:** Polish the "Aus Saisonvorlage importieren" modal on the canonical property rate plans page (/properties/[id]/rate-plans) with clear button labels, proper enablement logic, and improved readability.
+
+**Problem:**
+- Button labels too long and inconsistent: "Nur fehlende importieren", "Vorlage synchronisieren"
+- Enablement logic unclear (buttons enabled without proper validation)
+- Info boxes had poor contrast (dark/gray text on dark background)
+- No empty state when no templates exist (no guidance to create templates)
+- No clear explanation of Import vs Sync operations
+
+**Solution:**
+
+1. **Button Labels** (Concise, clear):
+   - OLD: "Nur fehlende importieren" → NEW: **"Importieren"**
+   - OLD: "Vorlage synchronisieren" → NEW: **"Synchronisieren"**
+   - "Abbrechen" unchanged
+
+2. **Enablement Logic** (Deterministic, validated):
+   - Abbrechen: Always enabled
+   - Importieren: Enabled ONLY when `selectedTemplateIds.length > 0 && selectedYears.length > 0`
+   - Synchronisieren: Enabled ONLY when `selectedTemplateIds.length === 1 && selectedYears.length > 0`
+   - Loading state: All buttons disabled except Abbrechen
+
+3. **Empty State** (When templates.length === 0):
+   - Message: "Keine Saisonvorlagen vorhanden"
+   - CTA Link: "Saisonvorlagen anlegen" → `/pricing/seasons`
+   - Importieren/Synchronisieren: disabled
+
+4. **Explanatory Text** (Above buttons, 2 lines):
+   - **Importieren**: "Erstellt nur fehlende Saisonzeiten aus der Vorlage (ändert bestehende nicht)."
+   - **Synchronisieren**: "Aktualisiert bereits importierte Saisonzeiten aus der Vorlage und repariert Verknüpfungen (kann bestehende Einträge ändern)."
+
+5. **Info Box Contrast** (High readability):
+   - Sync Preview: `bg-white border-blue-400 text-slate-900` (was: `bg-blue-50 border-blue-300`)
+   - Explanatory Text: `bg-slate-50 border-slate-200 text-slate-900` (new)
+   - All text: Dark colors (`text-slate-900`, `text-slate-700`) on light backgrounds
+
+**Files Changed:**
+- `frontend/app/properties/[id]/rate-plans/page.tsx` - Updated modal UI (~30 lines changed)
+- `backend/docs/ops/runbook.md` - Added "Modal: Aus Saisonvorlage importieren" section
+- `backend/docs/project_status.md` - This entry
+- `backend/scripts/README.md` - Updated Admin UI notes (if applicable)
+
+**API Endpoints (Unchanged):**
+- `POST /api/v1/pricing/rate-plans/{id}/seasons/sync-from-template` (strategy: create or sync)
+- No backend changes required
+
+**Verification Commands (HOST-SERVER-TERMINAL):**
+```bash
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify deployed commit
+curl -sS "https://admin.fewo.kolibri-visions.de/api/ops/version" | jq -r '.source_commit'
+# Expected: matches git commit hash
+
+# Manual UI verification at https://admin.fewo.kolibri-visions.de
+# 1. Objekte → pick property → Preiseinstellungen
+# 2. Click "Aus Saisonvorlage importieren"
+# 3. Verify button labels: Abbrechen | Importieren | Synchronisieren
+# 4. Verify explanatory text (2 lines above buttons)
+# 5. Without selection: Importieren + Synchronisieren disabled
+# 6. Select template: Verify buttons enable (if years set)
+# 7. Info boxes: Light background, dark text, readable
+# 8. If no templates: Empty state with "Saisonvorlagen anlegen" link
+```
+
+**Verification Criteria for VERIFIED status:**
+1. ✅ Deployed commit matches git commit hash
+2. ✅ Button labels: "Importieren", "Synchronisieren" (not old long labels)
+3. ✅ Enablement: Buttons disabled without template + years selection
+4. ✅ Empty state: Shows link to /pricing/seasons when no templates
+5. ✅ Explanatory text: 2 lines explaining Import vs Sync above buttons
+6. ✅ Contrast: Info boxes readable (light bg, dark text)
+
+**Notes:**
+- No backend changes required (only UI polish)
+- Endpoints unchanged: POST /seasons/sync-from-template with strategy parameter
+- Button text change does NOT affect API behavior (strategy still create vs sync)
+- Empty state CTA improves onboarding for new users
+
