@@ -14814,3 +14814,122 @@ curl -sS "https://admin.fewo.kolibri-visions.de/api/ops/version" | jq -r '.sourc
 - Button text change does NOT affect API behavior (strategy still create vs sync)
 - Empty state CTA improves onboarding for new users
 
+
+---
+
+## Pricing: Season Sync Atomicity & Concurrency Control
+
+**Implementation Date:** 2026-01-24
+
+**Status:** ✅ IMPLEMENTED
+
+**Scope:** Refactor season template sync endpoint to use single-transaction atomicity with advisory locks for data consistency and race condition prevention.
+
+**Problem:**
+- Sync operations used multiple small transactions (one per season operation)
+- Partial failures possible: 5 seasons created, then error → incomplete state
+- Race conditions: 2 users sync parallel → exclusion constraint violations
+- Poor UX: Users see DB constraint errors instead of smooth handling
+- No serialization: Parallel operations on same rate plan could interfere
+
+**Solution:**
+
+1. **Advisory Lock** (backend/app/api/routes/pricing.py:2442-2445):
+   - Acquire transaction-scoped advisory lock on rate_plan_id
+   - Lock: `pg_advisory_xact_lock(hashtextextended(rate_plan_id, 1))`
+   - Serializes all sync operations on same rate plan
+   - Auto-released on transaction commit/rollback
+   - Hash seed 1 (distinguishes from booking service seed 0)
+
+2. **Single Transaction Wrapper** (backend/app/api/routes/pricing.py:2439-~2670):
+   - Wrap ALL sync operations in ONE transaction
+   - Phase 0: Archive duplicates
+   - Phase 1: Updates (shrinks → equals → expansions)
+   - Phase 2: Creates
+   - All-or-nothing guarantee: Either ALL succeed OR none (rollback)
+
+3. **Error Handling**:
+   - ExclusionViolationError → Add to conflicts (do NOT rollback)
+   - Other errors (DB timeout, network) → Re-raise (triggers rollback)
+   - Phase 0 errors → Re-raise immediately (rollback entire sync)
+
+**Files Changed:**
+- `backend/app/api/routes/pricing.py` - sync_seasons_from_template endpoint (~250 lines refactored)
+- `backend/docs/ops/runbook.md` - Added "Pricing: Season Sync Atomicity & Advisory Locks" section
+- `backend/docs/project_status.md` - This entry
+
+**API Endpoints (Unchanged):**
+- `POST /api/v1/pricing/rate-plans/{id}/seasons/sync-from-template` (behavior improved, signature unchanged)
+
+**Benefits:**
+- ✅ All-or-nothing atomicity (no partial failures)
+- ✅ Serialized execution (no race conditions)
+- ✅ Automatic rollback on error
+- ✅ Better performance (1 transaction vs. N transactions)
+- ✅ Cleaner error handling
+
+**Verification Commands (HOST-SERVER-TERMINAL):**
+```bash
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify deployed commit
+curl -sS "https://api.fewo.kolibri-visions.de/api/ops/version" | jq -r '.source_commit'
+# Expected: matches git commit hash
+
+# Test atomicity: Run existing smoke script (should pass as before)
+export HOST="https://api.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="<<<manager/admin JWT>>>"
+export PROPERTY_ID="<<<property UUID>>>"
+# Optional: export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+./backend/scripts/pms_pricing_season_template_smoke.sh
+echo "rc=$?"
+# Expected: rc=0 (all tests pass)
+
+# Test serialization: Run 2 parallel syncs (second should wait for first)
+# Terminal 1:
+curl -X POST "$HOST/api/v1/pricing/rate-plans/<rate_plan_id>/seasons/sync-from-template" \
+  -H "Authorization: Bearer $MANAGER_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"template_id":"<template_id>","years":[2025],"mode":"apply","strategy":"sync"}' &
+
+# Terminal 2 (start immediately after):
+time curl -X POST "$HOST/api/v1/pricing/rate-plans/<rate_plan_id>/seasons/sync-from-template" \
+  -H "Authorization: Bearer $MANAGER_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"template_id":"<template_id>","years":[2025],"mode":"apply","strategy":"sync"}'
+# Expected: Second request waits for first to complete (duration >0s), both succeed
+
+# Check advisory lock usage in DB logs
+psql $DATABASE_URL -c "
+SELECT locktype, objid, mode, granted, pg_backend_pid()
+FROM pg_locks 
+WHERE locktype = 'advisory' 
+  AND objid = hashtextextended('<rate_plan_id>'::text, 1)
+LIMIT 5;
+"
+# Expected during sync: 1 row with granted=true
+# Expected after sync: 0 rows (lock released)
+```
+
+**Verification Criteria for VERIFIED status:**
+1. ✅ Deployed commit matches git commit hash
+2. ✅ Existing smoke script passes (backward compatibility)
+3. ✅ Parallel sync test: Second request waits for first
+4. ✅ Error rollback test: DB error triggers full rollback (no partial state)
+5. ✅ Advisory lock visible in pg_locks during sync
+6. ✅ No partial failures reported by users
+
+**Migration:** None required (code-only change)
+
+**Rollback Plan:** 
+- If critical bug found: Revert commit (single file change)
+- Advisory lock timeout can be adjusted: `SET lock_timeout = '30s';`
+
+**Notes:**
+- No API signature changes (backward compatible)
+- Existing smoke script tests atomicity implicitly
+- Advisory lock uses hash seed 1 (booking service uses 0)
+- ExclusionViolationError still possible (manual edits during sync) but handled as conflicts
+
+---

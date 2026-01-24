@@ -40674,3 +40674,150 @@ npm run build
 - Check Sync Preview div at line 1604: should have `bg-white` and `border-blue-400`
 - Check Explanatory Text div at line 1748: should have `bg-slate-50` and `text-slate-900`
 
+
+---
+
+## Pricing: Season Sync Atomicity & Advisory Locks
+
+**Overview:** Season template sync operations use single-transaction atomicity with advisory locks to prevent race conditions and ensure data consistency.
+
+**Purpose:** Prevent partial failures and race conditions when multiple users sync season templates to the same rate plan simultaneously.
+
+**Implementation Date:** 2026-01-24
+
+**Architecture:**
+
+**Advisory Lock:**
+- Endpoint: `POST /api/v1/pricing/rate-plans/{id}/seasons/sync-from-template`
+- Lock: `pg_advisory_xact_lock(hashtextextended(rate_plan_id, 1))`  
+- Scope: Rate plan level (serializes all syncs on same rate plan)
+- Type: Transaction-scoped (auto-released on COMMIT/ROLLBACK)
+- Hash seed: `1` (distinguishes from booking service which uses seed `0`)
+
+**Single Transaction:**
+- All sync operations (archive duplicates, updates, creates) wrapped in ONE transaction
+- All-or-nothing guarantee: Either ALL seasons are synced successfully OR none
+- Automatic rollback on error (DB timeout, network error, constraint violation that shouldn't happen)
+- ExclusionViolationError exceptions are caught and added to conflicts (do NOT trigger rollback)
+
+**Execution Flow:**
+```python
+async with db.transaction():
+    # 1. Acquire advisory lock (blocks if another sync is running on same rate plan)
+    await db.execute("SELECT pg_advisory_xact_lock(...)", rate_plan_id)
+    
+    # 2. Phase 0: Archive duplicates
+    for dup in duplicates:
+        await db.execute("UPDATE rate_plan_seasons SET archived_at = now() ...")
+    
+    # 3. Phase 1: Updates (shrinks → equals → expansions)
+    for update in ordered_updates:
+        await db.execute("UPDATE rate_plan_seasons SET ...")
+    
+    # 4. Phase 2: Creates
+    for create in to_create:
+        await db.fetchval("INSERT INTO rate_plan_seasons ...")
+    
+    # Transaction commits here (lock released)
+```
+
+**Benefits:**
+- ✅ **Atomicity**: No partial failures (either all seasons synced or none)
+- ✅ **Serialization**: Parallel syncs on same rate plan are queued (no race conditions)
+- ✅ **Consistency**: DB exclusion constraint + advisory lock provide double protection
+- ✅ **Rollback**: Errors trigger automatic transaction rollback
+- ✅ **Performance**: Single transaction reduces overhead vs. multiple small transactions
+
+**Common Issues:**
+
+### Sync Hangs / Times Out
+
+**Symptom:** Sync operation hangs for 30+ seconds, then returns timeout error.
+
+**Root Cause:** Another user is already syncing the same rate plan. Advisory lock causes current sync to wait.
+
+**How to Debug:**
+```bash
+# Check if advisory locks are held
+psql $DATABASE_URL -c "
+SELECT 
+    pg_backend_pid() as current_pid,
+    locktype, 
+    objid, 
+    mode, 
+    granted,
+    pg_blocking_pids(pid) as blocking_pids
+FROM pg_locks 
+WHERE locktype = 'advisory' 
+  AND objid = hashtextextended('<rate_plan_id>'::text, 1);
+"
+
+# Check long-running transactions
+psql $DATABASE_URL -c "
+SELECT pid, now() - xact_start AS duration, query 
+FROM pg_stat_activity 
+WHERE state = 'active' 
+  AND now() - xact_start > interval '10 seconds';
+"
+```
+
+**Solution:**
+- **Normal behavior**: Wait for first sync to complete (usually <10s)
+- **Stuck sync**: If duration >30s, may indicate deadlock or slow query
+  - Option 1: Wait for timeout
+  - Option 2: Cancel stuck backend: `SELECT pg_cancel_backend(<pid>);`
+  - Option 3: Terminate stuck backend: `SELECT pg_terminate_backend(<pid>);` (last resort)
+
+### Partial Sync After Error
+
+**Symptom:** User reports "some seasons created, but not all" after error message.
+
+**Root Cause:** This should NOT happen anymore (single transaction guarantees rollback).
+
+**How to Debug:**
+```bash
+# Check sync logs for transaction errors
+grep "Sync applied" /var/log/pms-backend.log | tail -20
+
+# Check if any seasons have source_synced_at in last 5 minutes
+psql $DATABASE_URL -c "
+SELECT id, label, source_synced_at, source_template_id, source_year
+FROM rate_plan_seasons 
+WHERE rate_plan_id = '<rate_plan_id>'
+  AND source_synced_at > now() - interval '5 minutes'
+ORDER BY source_synced_at DESC;
+"
+```
+
+**Solution:**
+- If partial sync detected: **BUG** in transaction implementation
+  - File bug report with exact error message and logs
+  - Manual cleanup: Archive partial seasons or complete sync manually
+- If NO partial sync: Error occurred BEFORE transaction started (e.g., validation error)
+  - Check error detail, fix issue, retry sync
+
+### ExclusionViolationError Despite Advisory Lock
+
+**Symptom:** Sync returns conflicts with "DB constraint" error, even though advisory lock should prevent this.
+
+**Root Cause:** Advisory lock prevents parallel syncs on SAME rate plan, but does NOT prevent:
+- Manual season edits during sync
+- Syncs on DIFFERENT rate plans that share overlapping date ranges (if properties are related)
+
+**How to Debug:**
+```bash
+# Check if manual edits happened during sync window
+psql $DATABASE_URL -c "
+SELECT id, label, date_from, date_to, updated_at, source_is_overridden
+FROM rate_plan_seasons 
+WHERE rate_plan_id = '<rate_plan_id>'
+  AND updated_at > now() - interval '1 minute'
+ORDER BY updated_at DESC;
+"
+```
+
+**Solution:**
+- **Manual edits**: Normal behavior. User should mark season as overridden to prevent future sync conflicts.
+- **Sync retry**: If conflict is transient, retry sync after resolving overlaps.
+
+---
