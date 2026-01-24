@@ -14639,3 +14639,91 @@ echo "Exit code: $?"
 - This fix makes the smoke script PROD-safe for environments with existing active rate plans
 - Previous commit (234471d) added normalize_items for array/{items:[]} response compatibility
 - Combined, these fixes enable reliable PROD verification of Season Template Sync (Option 2)
+
+## UI Cleanup: Remove Legacy /pricing/rate-plans (Canonical Property Rate Plans)
+
+**Implementation Date:** 2026-01-24
+
+**Status:** ✅ IMPLEMENTED
+
+**Scope:** Remove duplicate legacy central rate plans page and establish property-specific rate plans as the canonical access path for rate plan management.
+
+**Problem:**
+- Duplicate UI routes: `/pricing/rate-plans` (central) AND `/properties/[id]/rate-plans` (property-specific)
+- Unclear navigation: Users confused about which page to use
+- Inconsistent patterns: Central page had different UX than property page
+- Maintenance burden: Two pages for the same feature set
+
+**Solution:**
+
+1. **Legacy Page Removed** (`frontend/app/pricing/rate-plans/page.tsx`):
+   - Replaced 1500+ line component with minimal redirect stub (~37 lines)
+   - Redirects to `/properties` with explanatory message: "Preispläne werden jetzt pro Objekt verwaltet"
+   - No functional UI, no tab system, no data fetching
+
+2. **Navigation Updated**:
+   - Sidebar: NO link to /pricing/rate-plans (already removed previously)
+   - Seasons page: Helper text updated from "/pricing/rate-plans" to "Objekte → Objekt → Preiseinstellungen"
+   - Property layout: Tab navigation "Preiseinstellungen" is the canonical access path
+
+3. **Canonical Flow Verified** (`/properties/[id]/rate-plans`):
+   - ✅ Rate plan CRUD (create, edit, archive, restore, delete)
+   - ✅ Archive via PATCH /api/v1/pricing/rate-plans/{id}/archive (OpenAPI-compliant)
+   - ✅ Restore via PATCH /api/v1/pricing/rate-plans/{id}/restore (OpenAPI-compliant)
+   - ✅ Seasons CRUD with template sync
+   - ✅ Default plan selection (is_default)
+   - ✅ Archived plans toggle (default: hidden)
+   - ✅ Context-sensitive actions (archived vs non-archived)
+
+**Files Changed:**
+- `frontend/app/pricing/rate-plans/page.tsx` - Replaced with redirect stub (~1500 lines → 37 lines)
+- `frontend/app/pricing/seasons/page.tsx` - Updated helper text (line 437)
+- `backend/docs/ops/runbook.md` - Added "Pricing UI: Navigation / Informationsarchitektur" section
+- `backend/docs/project_status.md` - This entry
+
+**ANTI-KREISREGEL Compliance:**
+- ✅ Audited existing routes FIRST (found duplicate functionality)
+- ✅ Did NOT rebuild existing features (property rate plans already had everything)
+- ✅ Only removed duplicate UI, kept canonical version
+- ✅ Minimal changes to achieve goal
+
+**Navigation Structure (After Cleanup):**
+1. **Saisonvorlagen**: `/pricing/seasons` (Sidebar: Pricing → Saisonzeiten)
+2. **Objektpreise**: `/properties/[id]/rate-plans` (Access: Objekte → Objekt → Tab "Preiseinstellungen")
+3. **Quote Test**: `/pricing/quote` (Direct URL, no sidebar link)
+4. **Legacy Redirect**: `/pricing/rate-plans` → `/properties` (explanatory message)
+
+**Verification Commands (HOST-SERVER-TERMINAL):**
+```bash
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify deployed commit via ops endpoint
+curl -sS "https://admin.fewo.kolibri-visions.de/api/ops/version" | jq -r '.source_commit'
+# Expected: matches git commit hash
+
+# Manual UI verification at https://admin.fewo.kolibri-visions.de
+# 1. Visit /pricing/rate-plans → Should redirect to /properties with message
+# 2. Sidebar: No "Tarifpläne" menu under Pricing (only "Saisonzeiten")
+# 3. Visit /pricing/seasons → Helper text should say "Objekte → Objekt → Preiseinstellungen"
+# 4. Objekte → pick property → Preiseinstellungen tab:
+#    - Archive a plan → Verify uses PATCH /archive (check Network tab)
+#    - Toggle "Archivierte anzeigen" → Plan visible
+#    - Restore plan → Verify uses PATCH /restore (check Network tab)
+#    - Plan disappears from archived list
+```
+
+**Verification Criteria for VERIFIED status:**
+1. ✅ Deployed commit matches git commit hash (via `/api/ops/version`)
+2. ✅ Legacy route redirects to /properties (no functional UI)
+3. ✅ Sidebar has no "Tarifpläne" link under Pricing
+4. ✅ Seasons page helper text correct ("Objekte → Objekt → Preiseinstellungen")
+5. ✅ Property rate plans page: Archive/Restore use PATCH endpoints (not DELETE for soft-delete)
+6. ✅ Property rate plans page: All features work (create, edit, archive, restore, seasons)
+
+**Notes:**
+- API endpoints unchanged: `/api/v1/pricing/rate-plans/*` still exists and works
+- No backend changes required (UI-only cleanup)
+- Bookmarks to old `/pricing/rate-plans` route will see redirect message, then auto-redirect
+- This simplifies onboarding and reduces user confusion about "which rate plans page to use"
+

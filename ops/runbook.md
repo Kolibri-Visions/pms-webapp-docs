@@ -40505,3 +40505,65 @@ npm run build
 # Should complete without "used before declaration" errors
 ```
 
+
+---
+
+## Pricing UI: Navigation / Informationsarchitektur
+
+**Overview:** Simplified pricing UI navigation with property-scoped rate plans as the canonical access path.
+
+**Purpose:** Eliminate duplicate/legacy UI routes and establish clear, consistent navigation for pricing features.
+
+**Navigation Structure:**
+
+1. **Saisonvorlagen** (Season Templates):
+   - Route: `/pricing/seasons`
+   - Sidebar: Pricing → Saisonzeiten
+   - Purpose: Agenturweite Saisonvorlagen erstellen und verwalten
+   - Apply to: Property rate plans via Objekte → Objekt → Preiseinstellungen
+
+2. **Objektpreise** (Property Rate Plans):
+   - Route: `/properties/[id]/rate-plans`
+   - Access: Objekte → Objekt öffnen → Tab "Preiseinstellungen"
+   - Purpose: Objektspezifische Tarifpläne und Saisonzeiten verwalten
+   - Features:
+     - Rate plan CRUD (create, edit, archive, restore, delete)
+     - Seasons CRUD with template sync
+     - Archive/restore via PATCH /archive and /restore endpoints
+     - Default plan selection (is_default)
+     - Archived plans toggle (default: hidden)
+
+3. **Quote Test** (Preisberechnung):
+   - Route: `/pricing/quote`
+   - Sidebar: (no link, direct URL access only)
+   - Purpose: Test pricing calculation with per-night breakdown
+
+**Legacy Route Removed:**
+- `/pricing/rate-plans` (central rate plans page) has been REMOVED
+- Redirects to `/properties` with message: "Preispläne werden jetzt pro Objekt verwaltet"
+- Rationale: Duplicate of property-specific rate plans page; canonical is per-property management
+
+**API Endpoints (Unchanged):**
+- Rate plan endpoints remain at `/api/v1/pricing/rate-plans/*`
+- Season endpoints remain at `/api/v1/pricing/rate-plans/{id}/seasons/*`
+- Season template endpoints remain at `/api/v1/pricing/season-templates/*`
+
+**User Flow:**
+1. Create season templates: `/pricing/seasons`
+2. Manage property rate plans: Objekte → pick property → Preiseinstellungen tab
+3. Apply templates to rate plan: Within Preiseinstellungen → "Vorlage anwenden"
+4. Test pricing: Navigate directly to `/pricing/quote`
+
+**Code Locations:**
+- Legacy redirect stub: `frontend/app/pricing/rate-plans/page.tsx` (minimal redirect component)
+- Canonical property rate plans: `frontend/app/properties/[id]/rate-plans/page.tsx`
+- Property tabs layout: `frontend/app/properties/[id]/layout.tsx` (Überblick + Preiseinstellungen)
+- Seasons page: `frontend/app/pricing/seasons/page.tsx` (updated helper text)
+- Sidebar nav: `frontend/app/components/AdminShell.tsx` (no link to /pricing/rate-plans)
+
+**Verification:**
+- Visit `/pricing/rate-plans` → Redirects to `/properties` with explanatory message
+- Sidebar: No "Tarifpläne" menu item under Pricing section (only Saisonzeiten)
+- `/pricing/seasons` helper text: References "Objekte → Objekt → Preiseinstellungen" (not /pricing/rate-plans)
+- Property rate plans page: Archive uses PATCH /archive, restore uses PATCH /restore (not DELETE for soft-delete)
+
