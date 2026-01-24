@@ -15049,7 +15049,13 @@ python -m pytest tests/integration/test_season_sync_atomic_rollback.py -v
 
 **Implementation Date:** 2026-01-24
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED (2026-01-24, commit ad9f51d)
+
+**PROD Evidence (2026-01-24):**
+- Backend API version: commit `ad9f51d6e9e2f20ea39a44f3b906869c3f16136f`, started 2026-01-24T19:52:04Z
+- Admin UI version: commit `ad9f51d6e9e2f20ea39a44f3b906869c3f16136f`, started 2026-01-24T19:50:01Z
+- Deploy verification: `pms_verify_deploy.sh` rc=0 (commit match confirmed)
+- Smoke test: `pms_season_sync_concurrency_rollback_smoke.sh` rc=0 (Test A: 24 seasons created, serialized; Test B: HTTP 409, strict rollback verified)
 
 **Scope:** Production-safe smoke script to verify concurrency serialization (advisory lock) and strict atomic rollback (409 on constraint conflicts) for season sync APPLY mode.
 
