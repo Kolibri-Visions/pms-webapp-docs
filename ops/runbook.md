@@ -41031,3 +41031,155 @@ Prior version (commit 89bdeb9) had HTTP response parsing bug in Test B:
 - See `backend/docs/project_status.md` for implementation details of advisory lock and atomic rollback
 
 ---
+
+### Season Template Import - Atomic "missing_only" Strategy
+
+**Implementation Date:** 2026-01-24
+
+**Purpose:** Server-side atomic import of missing seasons from template, replacing client-side per-season POST loops with single bulk call.
+
+**Behavior:**
+- Frontend "Importieren" button now uses `POST /api/v1/pricing/rate-plans/{id}/seasons/sync-from-template` with `strategy="missing_only"` and `mode="apply"`
+- Backend uses same atomic approach as sync: `pg_advisory_xact_lock` + single transaction
+- Existing seasons treated as conflicts (skipped), only missing seasons created
+- Idempotent: Re-importing same template creates 0 new seasons (all skipped as conflicts)
+
+**Architecture:**
+- **Endpoint:** `POST /api/v1/pricing/rate-plans/{id}/seasons/sync-from-template`
+- **Strategy:** `"missing_only"` (vs `"sync"` which updates existing seasons)
+- **Mode:** `"apply"` (vs `"preview"` which dry-runs)
+- **Advisory Lock:** `pg_advisory_xact_lock(hashtextextended(rate_plan_id, 1))`
+- **Transaction:** All-or-nothing atomicity (same as sync)
+- **Conflict Handling:** Existing seasons added to `conflicts[]` response, not treated as errors
+
+**Frontend Changes:**
+- File: `frontend/app/properties/[id]/rate-plans/page.tsx:610-645`
+- Replaced: Client-side per-period POST loop with existence check
+- Now: Single server-side bulk call to sync endpoint
+- Validation: Only allows single template selection (backend limitation)
+- Success message: Shows created count + conflicts (skipped) count
+
+**Response Structure:**
+```json
+{
+  "counts": {
+    "created": 4,
+    "updated": 0,
+    "skipped_overridden": 0
+  },
+  "conflicts": [
+    {
+      "label": "Q1 2026",
+      "date_from": "2026-01-01",
+      "date_to": "2026-03-31",
+      "reason": "Saisonzeit existiert bereits (missing_only Modus)",
+      "hint": "Im 'missing_only' Modus werden bestehende Saisonzeiten nicht aktualisiert.",
+      "conflicting_season_id": "...",
+      "conflicting_range": "[2026-01-01, 2026-03-31)"
+    }
+  ],
+  "to_create": [...],
+  "to_update": [],
+  "skipped_overridden": []
+}
+```
+
+**Smoke Test:**
+
+**Script:** `pms_season_template_import_missing_smoke.sh`
+
+**Required Environment Variables:**
+- `HOST`: PMS backend base URL (e.g., https://api.fewo.kolibri-visions.de)
+- `ADMIN_JWT_TOKEN`: JWT token with manager/admin role
+
+**Optional Environment Variables:**
+- `AGENCY_ID`: Agency UUID for x-agency-id header
+- `PROPERTY_ID`: Property UUID (auto-selected if not provided)
+- `YEAR`: Import year (default: 2026)
+
+**Usage:**
+```bash
+# Production test
+HOST=https://api.fewo.kolibri-visions.de \
+ADMIN_JWT_TOKEN="<jwt>" \
+./backend/scripts/pms_season_template_import_missing_smoke.sh
+
+# With specific agency and year
+HOST=https://api.fewo.kolibri-visions.de \
+ADMIN_JWT_TOKEN="<jwt>" \
+AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7" \
+YEAR=2027 \
+./backend/scripts/pms_season_template_import_missing_smoke.sh
+```
+
+**What It Tests:**
+
+**Test A: Import Missing (First Run)**
+- Creates test template with 4 quarterly periods (Q1-Q4)
+- Runs APPLY with `strategy="missing_only"`, `mode="apply"`
+- Expects: 4 seasons created, 0 conflicts, season count increases by 4
+
+**Test B: Re-import (Second Run, Idempotency)**
+- Re-runs same APPLY request on same rate plan + template + year
+- Expects: 0 seasons created, 4 conflicts (all periods skipped), season count unchanged
+- Verifies: Idempotent behavior, no duplicates created
+
+**Expected Output:**
+```
+ℹ ===================================================================
+ℹ PMS Season Template Import - Atomic 'missing_only' Smoke Test
+ℹ ===================================================================
+✅ Created test rate plan: ... (INACTIVE)
+✅ Created test season template: ... (4 periods)
+ℹ ===================================================================
+ℹ TEST A: Import missing (first run)
+ℹ ===================================================================
+ℹ Baseline season count: 0
+ℹ Importing missing seasons (strategy=missing_only, mode=apply)...
+✅ Import APPLY response: HTTP 200
+ℹ Import result: 4 created, 0 conflicts (skipped)
+ℹ Final season count: 4 (baseline: 0)
+✅ Test A PASSED: 4 seasons created, season count correct (0 → 4)
+ℹ ===================================================================
+ℹ TEST B: Re-import (second run, idempotency check)
+ℹ ===================================================================
+ℹ Re-importing (strategy=missing_only, mode=apply)...
+✅ Re-import APPLY response: HTTP 200
+ℹ Re-import result: 0 created, 4 conflicts (skipped)
+✅ Test B PASSED: 0 created, 4 skipped (conflicts), season count unchanged (idempotent)
+ℹ ===================================================================
+✅ All tests passed! 🎉
+ℹ ===================================================================
+ℹ Summary:
+ℹ   - Test A: Import missing created 4 seasons correctly ✓
+ℹ   - Test B: Re-import skipped all (idempotent, no duplicates) ✓
+```
+
+**Exit Codes:**
+- `0`: All tests passed
+- `1`: Test failure or setup error
+
+**Troubleshooting:**
+
+- **Test A fails (wrong created count):** Backend not creating all periods, check template has 4 active periods
+- **Test A fails (season count wrong):** Partial failure or atomicity issue, check transaction boundaries
+- **Test B fails (created > 0):** NOT idempotent, backend creating duplicates despite existing seasons
+- **Test B fails (conflicts != 4):** Backend not detecting all existing seasons as conflicts in missing_only mode
+- **401 Unauthorized:** JWT token expired or invalid
+- **403 Forbidden:** JWT lacks manager/admin role
+- **400 "At least one season template must be selected":** Payload missing template_id
+
+**Verification:**
+
+This smoke test verifies P2.17 implementation (2026-01-24):
+- Frontend uses server-side bulk endpoint (no client-side loops)
+- Backend `strategy="missing_only"` correctly skips existing seasons
+- Atomicity via advisory lock + transaction (same safety as sync)
+- Idempotent re-import behavior (conflicts, not errors)
+
+**Related Documentation:**
+- See "Pricing: Season Sync Atomicity & Advisory Locks" above for advisory lock and transaction details
+- See `backend/scripts/README.md` for complete smoke script documentation
+- See `backend/docs/project_status.md` for P2.17 implementation details
+
+---

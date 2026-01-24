@@ -15186,3 +15186,135 @@ echo "rc=$?"
   ```
 
 ---
+
+## P2.17 Pricing — Season Template Import: Server-Side Atomic "missing_only" Strategy
+
+**Implementation Date:** 2026-01-24
+
+**Status:** ✅ IMPLEMENTED
+
+**Scope:** Replace frontend client-side per-season POST loop with server-side atomic bulk import using existing sync endpoint's `strategy="missing_only"` mode.
+
+**Problem:**
+- Frontend "Importieren" button used client-side per-period loop: check existence → POST individual season
+- No atomicity: Partial failures possible if network/server error during loop
+- No concurrency protection: Parallel imports could create duplicates
+- Inefficient: N+1 requests (N = number of template periods)
+
+**Solution:**
+- Frontend now uses `POST /api/v1/pricing/rate-plans/{id}/seasons/sync-from-template` with `strategy="missing_only"`, `mode="apply"`
+- Backend already had `missing_only` strategy support (treats existing seasons as conflicts, creates only missing)
+- Backend uses same atomic approach as sync: `pg_advisory_xact_lock` + single transaction
+- Idempotent: Re-importing same template creates 0 new seasons (all skipped as conflicts)
+
+**Features Implemented:**
+
+1. **Frontend Change** (`frontend/app/properties/[id]/rate-plans/page.tsx:610-645`):
+   - Replaced: Client-side per-period POST loop with existence check
+   - Now: Single server-side bulk call to sync endpoint
+   - Payload: `{template_id, years, mode: "apply", strategy: "missing_only"}`
+   - Validation: Enforces single template selection (backend limitation)
+   - Success message: Shows created count + conflicts (skipped) count from response
+
+2. **Backend (No Changes Required)**:
+   - Endpoint: `POST /api/v1/pricing/rate-plans/{id}/seasons/sync-from-template`
+   - Strategy: `"missing_only"` (existing feature in `SeasonSyncRequest` schema)
+   - Atomicity: `pg_advisory_xact_lock(hashtextextended(rate_plan_id, 1))` + transaction
+   - Conflict handling: Existing seasons added to `conflicts[]` response, not errors
+   - Transaction: All-or-nothing guarantee (same as sync strategy)
+
+3. **Smoke Script** (`backend/scripts/pms_season_template_import_missing_smoke.sh`):
+   - Test A: Import missing (first run) → creates 4 seasons, 0 conflicts
+   - Test B: Re-import (second run) → creates 0 seasons, 4 conflicts (idempotent)
+   - Verifies: Correct season counts, idempotency, no duplicates
+   - PROD-safe: INACTIVE test rate plan, auto-cleanup via trap EXIT
+
+4. **Documentation** (DOCS SAFE MODE - add-only):
+   - `backend/docs/ops/runbook.md`: Added "Season Template Import - Atomic 'missing_only' Strategy" section
+   - `backend/scripts/README.md`: Added smoke script documentation with usage, troubleshooting
+   - `backend/docs/project_status.md`: This entry (P2.17)
+
+**API Changes:**
+- None (backend endpoint already existed with `strategy="missing_only"` support)
+
+**Frontend Changes:**
+- `frontend/app/properties/[id]/rate-plans/page.tsx:610-645`: `handleImport` function
+  - Removed: Client-side per-period POST loop
+  - Added: Single call to sync endpoint with `strategy="missing_only"`
+  - Added: Validation check (only 1 template allowed)
+  - Updated: Success message to show created + conflicts counts
+
+**Backend Strategy Behavior:**
+- `strategy="sync"`: Updates existing seasons (relinking), creates missing
+- `strategy="missing_only"` (NEW USE CASE): Skips existing seasons (conflicts), creates only missing
+  - Existing seasons added to `conflicts[]` with reason: "Saisonzeit existiert bereits (missing_only Modus)"
+  - Frontend shows as "X übersprungen (bereits vorhanden)"
+
+**Response Example:**
+```json
+{
+  "counts": {"created": 4, "updated": 0, "skipped_overridden": 0},
+  "conflicts": [
+    {
+      "label": "Q1 2026",
+      "date_from": "2026-01-01",
+      "date_to": "2026-03-31",
+      "reason": "Saisonzeit existiert bereits (missing_only Modus)",
+      "hint": "Im 'missing_only' Modus werden bestehende Saisonzeiten nicht aktualisiert.",
+      "conflicting_season_id": "...",
+      "conflicting_range": "[2026-01-01, 2026-03-31)"
+    }
+  ]
+}
+```
+
+**Benefits:**
+- ✅ **Atomicity**: All-or-nothing via transaction (no partial imports on error)
+- ✅ **Concurrency**: Advisory lock prevents race conditions on same rate plan
+- ✅ **Idempotency**: Re-importing same template creates 0 duplicates
+- ✅ **Efficiency**: Single request vs. N+1 requests
+- ✅ **Consistency**: Same safety guarantees as sync strategy
+
+**Verification Commands:**
+
+```bash
+# Run smoke script (PROD or staging)
+HOST=https://api.fewo.kolibri-visions.de \
+ADMIN_JWT_TOKEN="<<<jwt>>>" \
+./backend/scripts/pms_season_template_import_missing_smoke.sh
+
+# Expected:
+# - Test A: 4 seasons created, 0 conflicts
+# - Test B: 0 seasons created, 4 conflicts (idempotent)
+# - rc=0
+```
+
+**Manual UI Verification:**
+1. Login as manager/admin
+2. Navigate to `/properties/{id}/rate-plans`
+3. Open rate plan detail (INACTIVE test plan)
+4. Click "Saisonzeiten" tab
+5. Click "Importieren" button
+6. Select single template + year
+7. Click "Importieren" button
+8. Verify: Success toast shows "X Saison(en) importiert"
+9. Re-import same template + year
+10. Verify: Success toast shows "0 Saison(en) importiert, X übersprungen (bereits vorhanden)"
+
+**Related Implementations:**
+- P2.16: Season template sync atomicity & advisory locks
+- Season Sync Concurrency + Rollback Smoke: Parallel APPLY serialization tests
+
+**Files Modified:**
+- `frontend/app/properties/[id]/rate-plans/page.tsx` (handleImport function: ~35 lines)
+- `backend/scripts/pms_season_template_import_missing_smoke.sh` (new file: ~300 lines)
+- `backend/docs/ops/runbook.md` (add-only: ~150 lines)
+- `backend/scripts/README.md` (add-only: ~100 lines)
+- `backend/docs/project_status.md` (add-only: this entry)
+
+**Dependencies:**
+- Backend sync endpoint with `strategy="missing_only"` support (already existed)
+- Advisory lock infrastructure (P2.16)
+- Transaction atomicity (P2.16)
+
+---
