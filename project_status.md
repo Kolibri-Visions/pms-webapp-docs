@@ -14940,7 +14940,13 @@ LIMIT 5;
 
 **Implementation Date:** 2026-01-24 (hotfix after atomicity implementation)
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED (2026-01-24, commit 25ccf94)
+
+**PROD Evidence (2026-01-24):**
+- Backend API version: commit `25ccf94b28550b3e56cc0a253564cd1185c081c2`, started 2026-01-24T18:27:03Z
+- Admin UI version: commit `25ccf94b28550b3e56cc0a253564cd1185c081c2`, started 2026-01-24T18:24:56Z
+- Deploy verification: `pms_verify_deploy.sh` rc=0 (all checks passed)
+- Smoke test: `pms_season_template_sync_apply_smoke.sh` rc=0 (Preview+Apply+Verify+422+cleanup OK)
 
 **Scope:** Fix transaction-aborted bug in season sync APPLY mode by removing inner constraint violation handlers and implementing strict atomic rollback with 409 response.
 
