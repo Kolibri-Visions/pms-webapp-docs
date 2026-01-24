@@ -37921,6 +37921,147 @@ document.querySelector('input[type="checkbox"]').click();
 
 ---
 
+## Central Rate Plans Page: Restore Archived Plans
+
+**Overview:** Legacy central rate plans page (`/pricing/rate-plans`) now supports restoring archived rate plans via "Wiederherstellen" button.
+
+**Purpose:** Allow staff to unarchive rate plans that were previously archived, restoring them to active use.
+
+**Architecture:**
+- **Route:** `/pricing/rate-plans`
+- **Restore Endpoint:** `PATCH /api/v1/pricing/rate-plans/{id}/restore`
+- **UI Pattern:** Same as property-specific rate plans page (context-sensitive actions based on `archived_at`)
+
+**Behavior:**
+- **Non-archived plans:** Show normal actions (Als Standard, Seasons, Bearbeiten, Archivieren)
+- **Archived plans:** Show only "Wiederherstellen" button (green, replaces all other actions)
+- **After restore:** Plan is unarchived (archived_at set to NULL), state refreshes automatically, plan appears in normal list
+- **Restore success:** Toast message "Tarifplan erfolgreich wiederhergestellt"
+- **Restore failure:** Toast message with error details
+
+**Implementation Details:**
+- File: `frontend/app/pricing/rate-plans/page.tsx`
+- Restore state: Line ~73 (`confirmRestore` state similar to `confirmArchive`)
+- Restore handler: Line ~418-436 (calls PATCH /restore endpoint)
+- Restore button (property plans): Line ~928-934 (conditional on `plan.archived_at`)
+- Restore button (templates): Line ~956-962 (conditional on `plan.archived_at`)
+- Restore confirmation dialog: Line ~1115-1137 (similar to archive dialog)
+
+**UI Flow:**
+1. User toggles "Archivierte anzeigen" to show archived plans
+2. Archived plans display with "archiviert" badge and only "Wiederherstellen" action
+3. User clicks "Wiederherstellen" → Confirmation dialog appears
+4. User confirms → PATCH /restore called → Toast success → List refreshes → Plan appears unarchived
+
+**API Endpoint:**
+```http
+PATCH /api/v1/pricing/rate-plans/{id}/restore
+Authorization: Bearer <token>
+```
+
+**Expected Response:**
+```http
+HTTP 204 No Content
+```
+
+**Restore Handler (UI):**
+```tsx
+const handleRestore = async (plan: RatePlan) => {
+  if (!accessToken) return;
+
+  try {
+    await apiClient.patch(`/api/v1/pricing/rate-plans/${plan.id}/restore`, {}, accessToken);
+    showToast(`${plan.name} erfolgreich wiederhergestellt`, "success");
+    setConfirmRestore(null);
+    // Refresh the appropriate list based on plan type
+    if (plan.property_id) {
+      fetchPropertyPlans();
+    } else {
+      fetchTemplatePlans();
+    }
+  } catch (error) {
+    const message = error instanceof ApiError ? error.statusText : "Failed to restore rate plan";
+    showToast(message, "error");
+    setConfirmRestore(null);
+  }
+};
+```
+
+**Verification Commands:**
+```bash
+# BROWSER MANUAL TEST
+# 1. Navigate to https://admin.fewo.kolibri-visions.de/pricing/rate-plans
+# 2. Toggle "Archivierte anzeigen" ON
+# 3. Find an archived plan (has "archiviert" badge)
+# 4. Verify only "Wiederherstellen" button is shown (no other actions)
+# 5. Click "Wiederherstellen" → Confirmation dialog appears
+# 6. Click "Wiederherstellen" in dialog → Toast success appears
+# 7. Plan disappears from list (if toggle OFF) or shows without "archiviert" badge
+# 8. Toggle OFF → Plan should appear in normal list with all actions
+
+# API TEST
+export HOST="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<manager/admin JWT>"
+export RATE_PLAN_ID="<uuid of archived plan>"
+
+# Restore archived plan
+curl -X PATCH "$HOST/api/v1/pricing/rate-plans/$RATE_PLAN_ID/restore" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -w "\nHTTP %{http_code}\n"
+
+# Expected: HTTP 204 No Content
+# Verify: Plan's archived_at field is now NULL
+```
+
+**Common Issues:**
+
+### Restore Button Not Showing for Archived Plans
+
+**Symptom:** Archived plans don't show "Wiederherstellen" button.
+
+**Root Cause:** Conditional rendering logic not checking `plan.archived_at`.
+
+**Solution:**
+- Verify conditional rendering (line ~928 for property plans, ~956 for templates):
+  ```tsx
+  {plan.archived_at ? (
+    <button onClick={() => setConfirmRestore(plan)} className="text-green-600">
+      Wiederherstellen
+    </button>
+  ) : (
+    // Normal actions...
+  )}
+  ```
+- Check `plan.archived_at` is correctly set in API response (timestamp or null)
+
+### Restore Returns 404 Not Found
+
+**Symptom:** Clicking "Wiederherstellen" shows 404 error.
+
+**Root Cause:** Plan not found or restore endpoint path incorrect.
+
+**Solution:**
+- Verify plan ID is correct (check browser DevTools Network tab)
+- Verify endpoint path is `/api/v1/pricing/rate-plans/{id}/restore` (not `/archived/{id}/restore`)
+- Check plan exists in database: `SELECT id, archived_at FROM rate_plans WHERE id = '<uuid>'`
+
+### List Doesn't Refresh After Restore
+
+**Symptom:** Plan still shows as archived after successful restore.
+
+**Root Cause:** List not re-fetched after restore.
+
+**Solution:**
+- Verify restore handler calls `fetchPropertyPlans()` or `fetchTemplatePlans()` based on plan type
+- Clear browser cache and hard refresh (Cmd+Shift+R / Ctrl+F5)
+
+**Related Features:**
+- Property-specific rate plans page (`/properties/[id]/rate-plans`) already has restore functionality (implemented in P2.11.2)
+- This feature adds restore to legacy central page for consistency
+
+
+---
+
 ## P2 UI: Property Rate Plans — Archivierte Toggle URL-persistiert
 
 **Overview:** Property-specific rate plans page with URL-persisted archived toggle.
