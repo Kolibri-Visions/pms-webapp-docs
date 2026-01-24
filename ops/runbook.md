@@ -40821,3 +40821,56 @@ ORDER BY updated_at DESC;
 - **Sync retry**: If conflict is transient, retry sync after resolving overlaps.
 
 ---
+
+### APPLY Returns 409 on Constraint Violations (Strict Atomic Behavior)
+
+**Implementation Date:** 2026-01-24 (hotfix)
+
+**Behavior:**
+- APPLY mode now has strict atomic semantics: Either ALL seasons are synced OR none
+- Any constraint violation (ExclusionViolationError, UniqueViolationError) during APPLY triggers:
+  - Immediate transaction rollback (all changes discarded)
+  - HTTP 409 Conflict response
+  - Message: "No changes were applied. Re-run preview mode to identify conflicts."
+
+**What Changed:**
+- REMOVED: Inner try/except blocks that caught constraint violations and tried to continue
+- ADDED: Outer try/except wrapper that catches constraint violations AFTER transaction completes
+- Result: Transaction is never in aborted state; rollback is clean
+
+**409 Response Structure:**
+```json
+{
+  "detail": {
+    "error": "conflict",
+    "message": "Season sync apply failed due to a conflicting season overlap or duplicate. No changes were applied. Please re-run preview mode to identify conflicts and resolve them before retrying.",
+    "constraint": "exclude_constraint_name or unique_constraint_name"
+  }
+}
+```
+
+**When 409 Occurs:**
+- Parallel sync created overlapping season during our transaction (advisory lock missed due to timing)
+- Manual season edit created overlap during our transaction
+- Rare race condition despite advisory lock (e.g., different rate plan with shared constraint)
+
+**User Action on 409:**
+1. Run PREVIEW mode to see current conflicts
+2. Resolve conflicts manually (archive/delete overlapping seasons)
+3. Retry APPLY
+
+**Verification:**
+```bash
+# Check that no partial changes were applied
+psql $DATABASE_URL -c "
+SELECT COUNT(*) as season_count, 
+       MAX(source_synced_at) as last_sync
+FROM rate_plan_seasons 
+WHERE rate_plan_id = '<rate_plan_id>' 
+  AND archived_at IS NULL;
+"
+# Expected: season_count unchanged from before APPLY attempt
+# Expected: last_sync unchanged (NULL if never synced before)
+```
+
+---

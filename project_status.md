@@ -14933,3 +14933,108 @@ LIMIT 5;
 - ExclusionViolationError still possible (manual edits during sync) but handled as conflicts
 
 ---
+
+---
+
+## Pricing: Season Sync APPLY - Strict Atomic Rollback (409 on Constraint Violations)
+
+**Implementation Date:** 2026-01-24 (hotfix after atomicity implementation)
+
+**Status:** ✅ IMPLEMENTED
+
+**Scope:** Fix transaction-aborted bug in season sync APPLY mode by removing inner constraint violation handlers and implementing strict atomic rollback with 409 response.
+
+**Problem:**
+- Previous atomicity implementation (commit 2dfcd02) wrapped APPLY in single transaction + advisory lock
+- BUT: Code still caught `ExclusionViolationError` INSIDE the transaction and tried to continue
+- PostgreSQL aborts transactions on any error; cannot continue without SAVEPOINT
+- Result: Transaction in aborted state, subsequent SQL commands fail silently or error
+
+**Root Cause:**
+- Two inner try/except blocks catching `asyncpg.exceptions.ExclusionViolationError`:
+  - Line ~2570: During UPDATE operations (Phase 1)
+  - Line ~2656: During CREATE operations (Phase 2)
+- Both inside `async with db.transaction():` block
+- Tried to add to `conflicts` list and continue → transaction already aborted
+
+**Solution:**
+
+1. **Removed Inner Exception Handlers** (backend/app/api/routes/pricing.py):
+   - Deleted try/except blocks at Phase 1 UPDATE (~line 2543-2585)
+   - Deleted try/except blocks at Phase 2 CREATE (~line 2632-2670)
+   - Let constraint violations bubble up naturally
+
+2. **Added Outer Exception Handler** (~line 2660+):
+   - Wrapped entire `if sync_request.mode == "apply":` block in try/except
+   - Catch `ExclusionViolationError` and `UniqueViolationError` OUTSIDE transaction
+   - Transaction completes (rollback) before exception is caught
+   - Raise `HTTPException(409)` with structured detail
+
+3. **409 Response Structure**:
+   ```python
+   {
+       "error": "conflict",
+       "message": "Season sync apply failed due to a conflicting season overlap or duplicate. "
+                  "No changes were applied. Please re-run preview mode to identify conflicts and resolve them before retrying.",
+       "constraint": str(e).split('\n')[0]
+   }
+   ```
+
+**Files Changed:**
+- `backend/app/api/routes/pricing.py` - sync_seasons_from_template endpoint (~100 lines refactored)
+- `backend/tests/integration/test_season_sync_atomic_rollback.py` - New integration tests
+- `backend/docs/ops/runbook.md` - Added "APPLY Returns 409 on Constraint Violations" section
+- `backend/docs/project_status.md` - This entry
+
+**API Changes:**
+- **Breaking Change**: APPLY mode now returns 409 instead of 200 with conflicts when constraint violations occur
+- **Rationale**: 200 with conflicts was misleading (implied partial success); 409 is clearer (nothing applied)
+- **Migration**: Frontend should handle 409 and show "retry after resolving conflicts" message
+
+**Benefits:**
+- ✅ True atomic behavior (all-or-nothing, no transaction-aborted state)
+- ✅ Clear error semantics (409 = conflict, 200 = success)
+- ✅ No partial failures (rollback guaranteed)
+- ✅ Actionable error message ("re-run preview")
+
+**Verification Commands (HOST-SERVER-TERMINAL):**
+```bash
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify deployed commit
+curl -sS "https://api.fewo.kolibri-visions.de/api/ops/version" | jq -r '.source_commit'
+# Expected: matches git commit hash
+
+# Test constraint violation → 409 (manual test)
+# 1. Create rate plan + season (2025-06-01 to 2025-06-30)
+# 2. Create template with overlapping period
+# 3. APPLY template
+# Expected: 409 with "no changes were applied" message
+
+# Run integration tests
+cd backend
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/test" \
+JWT_SECRET="test-secret-key-1234567890123456" \
+python -m pytest tests/integration/test_season_sync_atomic_rollback.py -v
+# Expected: All tests pass
+```
+
+**Verification Criteria for VERIFIED status:**
+1. ✅ Deployed commit matches git commit hash
+2. ✅ Integration tests pass (test_season_sync_atomic_rollback.py)
+3. ✅ Manual test: Constraint violation returns 409 (not 200 with conflicts)
+4. ✅ Manual test: Season count unchanged after 409 (atomic rollback verified)
+5. ✅ No transaction-aborted errors in logs
+
+**Rollback Plan:**
+- If critical issue: Revert commit to 2dfcd02 (previous atomicity implementation)
+- Note: Reverting loses strict 409 behavior but restores "200 with conflicts" fallback
+
+**Notes:**
+- This is a hotfix to the atomicity implementation (commit 2dfcd02)
+- Runtime overlap checks (PREVIEW mode) should prevent most constraint violations
+- 409 should be rare in production (only on race conditions despite advisory lock)
+- Advisory lock + runtime checks = defense in depth
+
+---
