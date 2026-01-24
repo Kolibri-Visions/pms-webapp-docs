@@ -35348,6 +35348,32 @@ Archived seasons can be restored or permanently deleted:
 
 **Solution:** Archive the season first using `DELETE /api/v1/pricing/rate-plans/{id}/seasons/{season_id}` (soft delete), then call the purge endpoint. The purge endpoint requires `is_archived=true`.
 
+**Verification Commands (Season Template Sync):**
+
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# [HOST-SERVER-TERMINAL] Optional: Verify deploy after Coolify redeploy
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# [HOST-SERVER-TERMINAL] Run season template sync smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export ADMIN_JWT_TOKEN="<<<manager/admin JWT>>>"
+# Optional:
+# export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
+# export TEMPLATE_ID="550e8400-e29b-41d4-a716-446655440000"
+# export YEARS="2025 2026"
+# export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+./backend/scripts/pms_season_template_sync_apply_smoke.sh
+echo "rc=$?"
+
+# Expected output: All 4 tests pass, rc=0
+# Script handles both array and {items:[]} API response formats automatically
+```
+
 
 **Common Issues:**
 
