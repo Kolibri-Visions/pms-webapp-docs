@@ -14531,3 +14531,92 @@ npm run build
 **Related Documentation:**
 - Runbook section: "Next.js Build Fails: Block-Scoped Variable Used Before Declaration"
 
+
+
+---
+
+## P2.16 Smoke Script Hardening — Season Template Sync (PROD 409 Fix)
+
+**Implementation Date:** 2026-01-24
+
+**Status:** ✅ IMPLEMENTED
+
+**Scope:** Fix season template sync smoke script to avoid HTTP 409 conflicts in PROD environments where properties already have active rate plans.
+
+**Problem:**
+- Backend enforces ONE active rate plan per property
+- Script attempted to create `"active": true` test rate plan
+- PROD environments already have active plans → HTTP 409 "Für dieses Objekt ist bereits ein aktiver Preisplan vorhanden"
+- Script failed before tests could run
+
+**Solution:**
+
+1. **Create Inactive Test Plan** (`backend/scripts/pms_season_template_sync_apply_smoke.sh`):
+   - Changed test rate plan creation from `"active": true` to `"active": false`
+   - Avoids 409 conflicts with existing active plans
+   - All sync operations (preview/apply) work correctly with inactive plans
+
+2. **Enhanced 409 Error Handling**:
+   - Detects HTTP 409 specifically
+   - Prints actionable troubleshooting steps
+   - Suggests verifying `"active": false` in request payload
+   - Suggests using dedicated test property if needed
+
+3. **Updated Comments**:
+   - Added "PROD-safe: Creates INACTIVE plan (active=false)" comment
+   - Documents the strategy for avoiding conflicts
+
+**Files Changed:**
+- `backend/scripts/pms_season_template_sync_apply_smoke.sh` - active=false, 409 error handling, comments (~10 lines)
+- `backend/scripts/README.md` - Note on PROD safety (inactive test plan) (~3 lines)
+- `backend/docs/ops/runbook.md` - PROD behavior notes section (~6 lines)
+
+**Dependencies:**
+- Previous fix (commit 234471d): normalize_items helper for array/{items:[]} responses
+- Backend constraint: ONE active rate plan per property
+
+**Verification Commands (HOST-SERVER-TERMINAL):**
+```bash
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify commit hash matches
+git log -1 --oneline
+# Expected: <commit_hash> fix(p2): season sync smoke avoids active plan 409 + normalizes list responses
+
+# Verify deployed commit via ops endpoint
+curl -sS "https://api.fewo.kolibri-visions.de/api/v1/ops/version" | jq -r '.source_commit'
+# Expected: matches git commit hash
+
+# Run smoke test in PROD
+export HOST="https://api.fewo.kolibri-visions.de"
+export ADMIN_JWT_TOKEN="<<<manager/admin JWT>>>"
+# Optional overrides:
+# export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
+# export TEMPLATE_ID="550e8400-e29b-41d4-a716-446655440000"
+# export YEARS="2025 2026"
+# export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+./backend/scripts/pms_season_template_sync_apply_smoke.sh
+echo "Exit code: $?"
+
+# Expected: rc=0, all 4 tests pass
+# Expected output: "Creating dedicated test rate plan for smoke test..."
+#                  "Created test rate plan: <uuid>"
+#                  "Test 1 PASSED: Preview mode returned 200"
+#                  "Test 2 PASSED: Apply mode returned 200"
+#                  "Test 3 PASSED: Verified N active seasons in rate plan"
+#                  "Test 4 PASSED: Received expected 422 error when years missing"
+#                  "All Saisonvorlagen Sync smoke tests passed!"
+```
+
+**Verification Criteria for VERIFIED status:**
+1. ✅ Smoke script `rc=0` in PROD (all 4 tests pass)
+2. ✅ Deployed commit matches git commit hash (via `/api/v1/ops/version`)
+3. ✅ No HTTP 409 errors during test rate plan creation
+4. ✅ Test rate plan created with `active=false` (verify in backend logs or DB)
+5. ✅ Cleanup successful (all test artifacts archived on exit)
+
+**Notes:**
+- This fix makes the smoke script PROD-safe for environments with existing active rate plans
+- Previous commit (234471d) added normalize_items for array/{items:[]} response compatibility
+- Combined, these fixes enable reliable PROD verification of Season Template Sync (Option 2)

@@ -35374,6 +35374,13 @@ echo "rc=$?"
 # Script handles both array and {items:[]} API response formats automatically
 ```
 
+**PROD Behavior Notes:**
+- Backend enforces ONE active rate plan per property (409 if violated)
+- Smoke script creates an **INACTIVE** test rate plan (`active=false`) to avoid conflicts with existing active plans
+- Script supports both array `[{...}]` and paginated `{items:[...]}` API responses
+- Auto-selects property if PROPERTY_ID not provided; auto-creates template if TEMPLATE_ID not provided
+- Cleanup via trap EXIT archives all test artifacts (template, seasons, test rate plan) even on failure
+
 
 **Common Issues:**
 
