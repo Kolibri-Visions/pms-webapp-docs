@@ -41177,6 +41177,19 @@ This smoke test verifies P2.17 implementation (2026-01-24):
 - Atomicity via advisory lock + transaction (same safety as sync)
 - Idempotent re-import behavior (conflicts, not errors)
 
+**Common Issues:**
+
+- **UI shows "0 importiert" but seasons were created**: Frontend parsing bug (fixed 2026-01-24). Frontend was using `response.counts?.created` instead of `response.counts?.create`. Backend returns `counts.create` (not `counts.created`). Upgrade to commit >5899929.
+- **Smoke script Test A fails with "0 created"**: Smoke parsing bug (fixed 2026-01-24). Script was parsing `.get('created')` instead of `.get('create')`. Backend response schema: `counts: {create, update, skip, conflict}`. Upgrade to latest smoke script.
+- **Re-import creates duplicates (not idempotent)**: Backend missing_only strategy not working. Check backend logs for strategy value, verify sync endpoint handles `strategy="missing_only"` correctly (should add existing seasons to conflicts, not create).
+- **Import shows conflicts but UI says "0 übersprungen"**: Frontend skippedCount fallback chain incorrect. After fix, uses: `counts?.skip ?? counts?.conflict ?? conflicts?.length`. Verify response structure in network tab.
+
+**Expected UI Behavior:**
+
+- **First import**: Toast shows "Import abgeschlossen: 4 importiert" (no skipped)
+- **Re-import (idempotent)**: Toast shows "Import abgeschlossen: 0 importiert, 4 übersprungen"
+- **Conflict (409)**: Toast shows "Konflikt: Import abgebrochen (keine Änderungen). Bitte Vorschau/Synchronisieren nutzen und Konflikte lösen."
+
 **Related Documentation:**
 - See "Pricing: Season Sync Atomicity & Advisory Locks" above for advisory lock and transaction details
 - See `backend/scripts/README.md` for complete smoke script documentation

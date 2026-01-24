@@ -15191,7 +15191,18 @@ echo "rc=$?"
 
 **Implementation Date:** 2026-01-24
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ IMPLEMENTED (awaiting PROD verification after bugfix)
+
+**Bug Fixed (2026-01-24):**
+- **Issue**: Frontend + smoke script parsed `response.counts?.created` instead of `response.counts?.create`
+- **Impact**: UI showed "0 importiert" despite successful imports; smoke script Test A failed with "0 created"
+- **Root cause**: Backend returns `counts: {create, update, skip, conflict}` (not `created/updated/skipped`)
+- **Fix (commit >5899929)**:
+  - Frontend: Robust parsing with fallbacks `counts?.create ?? counts?.created ?? 0`
+  - Frontend: Added 409 handling for strict rollback mode
+  - Smoke: PREVIEW mode first to compute expected creates, then deterministic GET verification
+  - Smoke: Robust parsing + temp file logging for debugging
+  - Docs: Updated troubleshooting sections in runbook + README
 
 **Scope:** Replace frontend client-side per-season POST loop with server-side atomic bulk import using existing sync endpoint's `strategy="missing_only"` mode.
 
@@ -15250,10 +15261,10 @@ echo "rc=$?"
   - Existing seasons added to `conflicts[]` with reason: "Saisonzeit existiert bereits (missing_only Modus)"
   - Frontend shows as "X übersprungen (bereits vorhanden)"
 
-**Response Example:**
+**Response Example (after bugfix):**
 ```json
 {
-  "counts": {"created": 4, "updated": 0, "skipped_overridden": 0},
+  "counts": {"create": 4, "update": 0, "skip": 0, "conflict": 4},
   "conflicts": [
     {
       "label": "Q1 2026",
@@ -15267,6 +15278,8 @@ echo "rc=$?"
   ]
 }
 ```
+
+**Note:** Backend returns `counts.create` (not `counts.created`), `counts.skip` (not `counts.skipped`), etc. Frontend after bugfix uses robust parsing with fallbacks to handle schema variations.
 
 **Benefits:**
 - ✅ **Atomicity**: All-or-nothing via transaction (no partial imports on error)
