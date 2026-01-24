@@ -15044,3 +15044,121 @@ python -m pytest tests/integration/test_season_sync_atomic_rollback.py -v
 - Advisory lock + runtime checks = defense in depth
 
 ---
+
+## Pricing: Season Sync Concurrency + Atomic Rollback Smoke
+
+**Implementation Date:** 2026-01-24
+
+**Status:** ✅ IMPLEMENTED
+
+**Scope:** Production-safe smoke script to verify concurrency serialization (advisory lock) and strict atomic rollback (409 on constraint conflicts) for season sync APPLY mode.
+
+**Features Implemented:**
+
+1. **Smoke Script** (`backend/scripts/pms_season_sync_concurrency_rollback_smoke.sh`):
+   - Test A: Concurrency Serialization
+     - Creates INACTIVE test rate plan with 12 monthly template periods (German labels: Januar-Dezember)
+     - Uses multi-year workload (default: 2026-2030 = 60 expected seasons)
+     - Fires 2 concurrent APPLY requests on same rate plan + template + years
+     - Verifies both HTTP 200, correct final season count, no duplicates by (date_from, date_to)
+     - Validates advisory lock (`pg_advisory_xact_lock`) serializes parallel requests
+
+   - Test B: Strict Atomic Rollback on 409 Conflict
+     - Creates single conflicting season (2026-01-15 to 2026-01-25, overlaps Januar 2026)
+     - Runs APPLY with overlapping dates
+     - Expects HTTP 409 (DB constraint) or HTTP 200 (runtime conflict detection)
+     - Verifies strict atomicity: season count unchanged, no partial changes applied
+     - Validates "no changes were applied" message in 409 response
+
+2. **PROD-Safe Design:**
+   - Creates INACTIVE test rate plan (active=false) to avoid 409 conflicts with existing active plans
+   - Uses German labels with "- Smoke" suffix for easy identification
+   - Auto-archives all created resources via trap EXIT (seasons, template, rate plan)
+   - Runs on real property data but isolated via dedicated test rate plan
+   - No side effects on existing active rate plans or seasons
+
+3. **Documentation** (DOCS SAFE MODE):
+   - backend/docs/ops/runbook.md: Added "Concurrency + Atomic Rollback Smoke Test" section with usage, expected output, troubleshooting
+   - backend/scripts/README.md: Added complete script entry with API endpoints tested, verification commands, related tests
+
+**Environment Variables:**
+- Required: `HOST`, `ADMIN_JWT_TOKEN`
+- Optional: `AGENCY_ID`, `PROPERTY_ID`, `YEARS` (default: "2026 2027 2028 2029 2030")
+
+**Exit Codes:**
+- `0`: All tests passed (both concurrency and rollback tests succeeded)
+- `1`: Test failure or setup error
+
+**API Endpoints Tested:**
+- GET /api/v1/properties (auto-select)
+- POST /api/v1/pricing/rate-plans (create INACTIVE test plan)
+- POST /api/v1/pricing/season-templates (create test template)
+- POST /api/v1/pricing/season-templates/{id}/periods (add 12 monthly periods)
+- POST /api/v1/pricing/rate-plans/{id}/seasons/sync-from-template (concurrent APPLY × 2, conflict APPLY)
+- GET /api/v1/pricing/rate-plans/{id}/seasons (verify results)
+- POST /api/v1/pricing/rate-plans/{id}/seasons (create conflicting season)
+- DELETE /api/v1/pricing/rate-plans/{id}/seasons/{id} (cleanup)
+- DELETE /api/v1/pricing/season-templates/{id} (cleanup)
+- PATCH /api/v1/pricing/rate-plans/{id}/archive (cleanup)
+
+**Verification of Fixes:**
+This smoke test validates the fixes from 2026-01-24:
+1. **Advisory Lock (commit 2dfcd02):** Prevents race conditions during concurrent APPLY requests via `pg_advisory_xact_lock(hashtextextended($1::text, 1))`
+2. **Strict Atomic Rollback (commit 25ccf94):** Ensures 409 constraint conflicts trigger complete rollback with no partial changes
+
+**Files Created:**
+- `backend/scripts/pms_season_sync_concurrency_rollback_smoke.sh` - New smoke script
+
+**Files Modified:**
+- `backend/docs/ops/runbook.md` - Added smoke test documentation section
+- `backend/scripts/README.md` - Added smoke test entry
+- `backend/docs/project_status.md` - This entry
+
+**Dependencies:**
+- Requires P2.2 (season sync with advisory lock, commit 2dfcd02)
+- Requires P2.X (strict atomic rollback, commit 25ccf94)
+- Related to `pms_season_template_sync_apply_smoke.sh` (basic sync testing)
+- Similar pattern to `pms_booking_concurrency_smoke.sh` (concurrency testing)
+
+**Verification Commands (HOST-SERVER-TERMINAL):**
+```bash
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Optional: Verify deploy matches commit
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+# Expected: rc=0, commit hash matches git
+
+# Run concurrency + rollback smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export ADMIN_JWT_TOKEN="<<<manager/admin JWT>>>"
+# Optional: export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+./backend/scripts/pms_season_sync_concurrency_rollback_smoke.sh
+echo "rc=$?"
+
+# Expected output:
+# - Test A: Both HTTP 200, 60 seasons created, no duplicates
+# - Test B: HTTP 409 or 200, no partial changes, season count unchanged
+# - Exit code: rc=0
+```
+
+**Verification Criteria for VERIFIED status:**
+1. Deployed commit matches implementation commit (via pms_verify_deploy.sh rc=0)
+2. Smoke script returns rc=0 in PROD
+3. Test A passes: Concurrency serialized, correct season count, no duplicates
+4. Test B passes: Atomic rollback verified, no partial changes on conflict
+5. No errors in backend logs during smoke test execution
+
+**Expected PROD Results:**
+- Test A.1-A.4 PASSED: Concurrency serialization via advisory lock verified
+- Test B.1-B.4 PASSED: Strict atomic rollback verified (no partial writes)
+- Exit code: 0
+
+**Notes:**
+- Status stays IMPLEMENTED until user runs in PROD with rc=0 + deploy verify commit match
+- To mark VERIFIED: Add PROD Evidence block with backend version, deploy verify rc=0, smoke rc=0, date
+- Script uses multi-year workload (60 seasons) to make concurrency behavior noticeable (one request takes ~3-5s, forcing serialization)
+- Script validates fixes that prevent transaction-aborted bugs and ensure true atomicity
+
+---

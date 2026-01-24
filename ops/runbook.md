@@ -40874,3 +40874,151 @@ WHERE rate_plan_id = '<rate_plan_id>'
 ```
 
 ---
+
+### Concurrency + Atomic Rollback Smoke Test
+
+**Script:** `pms_season_sync_concurrency_rollback_smoke.sh`
+
+**Purpose:** Production-safe validation of season sync APPLY concurrency serialization (advisory lock) and strict atomic rollback on 409 constraint conflicts.
+
+**What It Tests:**
+
+**Test A: Concurrency Serialization via Advisory Lock**
+- Creates test rate plan (INACTIVE) with 12 monthly template periods
+- Uses multi-year workload (default: 2026-2030) for noticeable sync time
+- Fires 2 concurrent APPLY requests on same rate plan + template + years
+- Expects: Both HTTP 200, correct final season count (12 × 5 = 60 seasons), no duplicates
+- Verifies: Advisory lock (`pg_advisory_xact_lock`) serializes parallel requests
+
+**Test B: Strict Atomic Rollback on 409 Conflict**
+- Creates single conflicting season that overlaps with template period (2026-01-15 to 2026-01-25)
+- Runs APPLY with same years (should detect conflict on Januar 2026)
+- Expects: HTTP 409 or HTTP 200 with conflict detection
+- Verifies strict atomicity:
+  - Season count unchanged from baseline (only conflicting season remains)
+  - No partial changes applied despite multi-period APPLY
+  - "No changes were applied" message in 409 response (if 409 path taken)
+
+**PROD-Safe Features:**
+- Creates INACTIVE test rate plan (active=false) to avoid 409 conflicts with existing active plans
+- Uses German labels with "- Smoke" suffix for easy identification
+- Auto-archives all created resources via trap EXIT (seasons, template, rate plan)
+- Runs on real property data but isolated via dedicated test rate plan
+
+**Required Environment Variables:**
+- `HOST`: PMS backend base URL (e.g., https://api.fewo.kolibri-visions.de)
+- `ADMIN_JWT_TOKEN`: JWT token with manager/admin role
+
+**Optional Environment Variables:**
+- `AGENCY_ID`: Agency UUID for x-agency-id header (multi-tenant setups)
+- `PROPERTY_ID`: Property UUID (auto-selected if not provided)
+- `YEARS`: Space-separated years list (default: "2026 2027 2028 2029 2030")
+
+**Usage:**
+
+```bash
+# Production test (minimal)
+HOST=https://api.fewo.kolibri-visions.de \
+ADMIN_JWT_TOKEN="<jwt>" \
+./backend/scripts/pms_season_sync_concurrency_rollback_smoke.sh
+
+# With specific agency
+HOST=https://api.fewo.kolibri-visions.de \
+ADMIN_JWT_TOKEN="<jwt>" \
+AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7" \
+./backend/scripts/pms_season_sync_concurrency_rollback_smoke.sh
+
+# With custom years (reduced workload for faster testing)
+HOST=https://api.fewo.kolibri-visions.de \
+ADMIN_JWT_TOKEN="<jwt>" \
+YEARS="2026 2027" \
+./backend/scripts/pms_season_sync_concurrency_rollback_smoke.sh
+```
+
+**Expected Output:**
+
+```
+ℹ ==========================================
+ℹ Season Sync Concurrency + Rollback Test
+ℹ ==========================================
+ℹ Auto-selected property: 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
+✅ Created test rate plan: 660e8400-e29b-41d4-a716-446655440000
+✅ Created test template: 550e8400-e29b-41d4-a716-446655440000
+✅ Created 12 monthly periods
+✅ Verified template has 12 active periods
+ℹ ==========================================
+ℹ Test A: Concurrency Serialization
+ℹ ==========================================
+ℹ Using years: 2026 2027 2028 2029 2030
+ℹ Expected seasons: 12 periods × 5 years = 60 seasons
+ℹ Firing 2 concurrent APPLY requests...
+✅ Both requests completed
+ℹ Request A duration: 3s
+ℹ Request B duration: 5s
+ℹ Request A: HTTP 200
+ℹ Request B: HTTP 200
+ℹ Request A: created=60, updated=0
+ℹ Request B: created=0, updated=60
+✅ Test A.1 PASSED: Both requests returned HTTP 200
+✅ Test A.2 PASSED: Total created=60, updated=60
+ℹ Verifying final season count and no duplicates...
+ℹ Found 60 active seasons (expected 60)
+✅ Test A.3 PASSED: Correct season count (60 seasons)
+✅ Test A.4 PASSED: No duplicate seasons (advisory lock serialized requests)
+ℹ ==========================================
+ℹ Test B: Atomic Rollback (409 Conflict)
+ℹ ==========================================
+✅ Archived existing seasons
+✅ Verified: Rate plan has 0 seasons (clean slate)
+ℹ Creating conflicting season (2026-01-15 to 2026-01-25, overlaps Januar 2026)...
+✅ Created conflicting season: 770e8400-e29b-41d4-a716-446655440000
+✅ Baseline: 1 conflicting season exists
+ℹ Attempting APPLY with overlapping dates (expect 409 or 200 with conflicts)...
+ℹ APPLY response: HTTP 200
+✅ Test B.1 PASSED: Received HTTP 200 (runtime conflict detection)
+✅ Test B.2 PASSED: Response reports 1 conflict(s)
+ℹ Final season count: 1 (baseline: 1)
+✅ Test B.3 PASSED: ROLLBACK VERIFIED - Season count unchanged (1 seasons)
+✅ Test B.4 PASSED: Strict atomicity enforced (no partial writes)
+ℹ ==========================================
+✅ All concurrency + rollback tests passed!
+ℹ ==========================================
+ℹ Summary:
+ℹ   Test A (Concurrency):
+ℹ     - 2 parallel APPLY requests serialized via advisory lock ✓
+ℹ     - 60 seasons created (expected 60) ✓
+ℹ     - No duplicate seasons ✓
+ℹ
+ℹ   Test B (Atomic Rollback):
+ℹ     - Conflict detected (HTTP 200) ✓
+ℹ     - No partial changes applied ✓
+ℹ     - Season count unchanged (1) ✓
+ℹ ==========================================
+```
+
+**Exit Codes:**
+- `0`: All tests passed
+- `1`: Test failure or setup error
+
+**Troubleshooting:**
+
+- **Test A fails (both requests != 200):** Check JWT token valid, property exists, backend is healthy
+- **Test A fails (wrong season count):** Advisory lock not working, check PostgreSQL logs for lock errors
+- **Test A fails (duplicates found):** Advisory lock failed to serialize requests, check `pg_advisory_xact_lock` in backend code
+- **Test B fails (wrong HTTP code):** Expected 409 or 200, verify conflict detection logic in backend
+- **Test B fails (partial changes applied):** ATOMICITY VIOLATION! Check transaction boundaries and exception handling in sync endpoint
+- **401 Unauthorized:** JWT token expired or invalid
+- **403 Forbidden:** JWT lacks manager/admin role
+- **No properties found:** Database empty or agency filter too restrictive
+
+**Verification of Fixes:**
+
+This smoke test verifies the fixes from 2026-01-24:
+1. **Advisory Lock (commit 2dfcd02):** Prevents race conditions during concurrent APPLY requests
+2. **Strict Atomic Rollback (commit 25ccf94):** Ensures 409 constraint conflicts trigger complete rollback with no partial changes
+
+**Related Documentation:**
+- See "APPLY Returns 409 on Constraint Violations" above for 409 response structure and user actions
+- See `backend/docs/project_status.md` for implementation details of advisory lock and atomic rollback
+
+---
