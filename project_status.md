@@ -15191,13 +15191,19 @@ echo "rc=$?"
 
 **Implementation Date:** 2026-01-24
 
-**Status:** ✅ IMPLEMENTED (awaiting PROD verification after bugfix)
+**Status:** ✅ VERIFIED (2026-01-24, commit f97ebcf)
+
+**PROD Evidence (2026-01-24):**
+- Backend API version: commit `f97ebcf3b273ce02231957710913a24cbef940a4`, started 2026-01-24T21:29:03.953886+00:00
+- Admin UI version: commit `f97ebcf3b273ce02231957710913a24cbef940a4`, started 2026-01-24T21:29:54.491Z
+- Deploy verification: `pms_verify_deploy.sh` rc=0 (commit match confirmed)
+- Smoke test: `pms_season_template_import_missing_smoke.sh` rc=0 (Test A: 0→4 seasons; Test B: idempotent 4→4, conflicts=4)
 
 **Bug Fixed (2026-01-24):**
 - **Issue**: Frontend + smoke script parsed `response.counts?.created` instead of `response.counts?.create`
 - **Impact**: UI showed "0 importiert" despite successful imports; smoke script Test A failed with "0 created"
 - **Root cause**: Backend returns `counts: {create, update, skip, conflict}` (not `created/updated/skipped`)
-- **Fix (commit >5899929)**:
+- **Fix (commit f97ebcf)**:
   - Frontend: Robust parsing with fallbacks `counts?.create ?? counts?.created ?? 0`
   - Frontend: Added 409 handling for strict rollback mode
   - Smoke: PREVIEW mode first to compute expected creates, then deterministic GET verification
