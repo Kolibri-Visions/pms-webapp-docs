@@ -15432,3 +15432,81 @@ Manual UI Verification:
 - `frontend/app/properties/[id]/rate-plans/page.tsx` (P2.18: 4 edits; P2.18.1: 3 edits)
 
 ---
+
+# Season Templates Archived-Only Toggle + Bulk Delete Periods (P2.18.4 + P2.18.5)
+
+**Implementation Date:** 2026-01-25
+
+**Scope:** Fixed archived toggle to show ONLY archived templates + added bulk delete for periods.
+
+**Features Implemented:**
+
+1. **P2.18.4 - Archived-Only Toggle**:
+   - Backend: Added `archived_only` query parameter to `GET /season-templates` endpoint
+   - SQL Filter: `WHERE archived_at IS NOT NULL` (only archived) takes precedence over `include_archived`
+   - Frontend: Updated toggle to use `archived_only=true` instead of `include_archived=true`
+   - UI Label: Changed to "Nur archivierte anzeigen" (only archived, not active+archived)
+
+2. **P2.18.5 - Bulk Delete Periods**:
+   - Backend: Added `POST /season-templates/{id}/periods/bulk-delete` endpoint
+   - Schemas: `SeasonTemplatePeriodBulkDeleteRequest` (period_ids array, min 1, max 50)
+   - Schemas: `SeasonTemplatePeriodBulkDeleteResponse` (requested_count, deleted_count, not_found_count, errors)
+   - Transaction Safety: All deletes in single DB transaction (atomic)
+   - Frontend: Checkboxes in periods table + "select all" checkbox
+   - Frontend: Bulk actions bar showing count + "Ausgewählte löschen" button
+   - Frontend: Confirmation dialog for bulk delete
+   - Frontend: Toast with result count after deletion
+
+3. **Smoke Scripts**:
+   - `pms_season_templates_archived_only_toggle_smoke.sh`: 6 tests (active/archived filtering)
+   - `pms_season_template_period_bulk_delete_smoke.sh`: 7 tests (bulk delete + partial success)
+
+4. **Documentation** (DOCS SAFE MODE):
+   - backend/scripts/README.md: Added 2 sections (archived-only toggle + bulk delete smoke scripts)
+   - backend/docs/ops/runbook.md: Added 2 sections (P2.18.4 + P2.18.5 troubleshooting)
+   - backend/docs/project_status.md: This entry
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- P2.18.4: Toggle now shows ONLY archived (not active+archived) - OFF = active only, ON = archived only
+- P2.18.5: Bulk delete is HARD DELETE (consistent with single delete behavior)
+- Bulk delete supports partial success (some IDs not found, returns not_found_count)
+- UI clears checkboxes after successful bulk delete
+- Transaction safety ensures all-or-nothing delete within same template
+
+**Dependencies:**
+- Season Templates domain (pricing_season_templates, pricing_season_template_periods tables)
+- Migration 20260115000000 (season templates)
+
+**Verification Commands:**
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Run archived-only toggle smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export ADMIN_JWT_TOKEN="<<<manager/admin JWT>>>"
+./backend/scripts/pms_season_templates_archived_only_toggle_smoke.sh
+echo "rc=$?"
+
+# Run bulk delete smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export ADMIN_JWT_TOKEN="<<<manager/admin JWT>>>"
+./backend/scripts/pms_season_template_period_bulk_delete_smoke.sh
+echo "rc=$?"
+
+# Manual UI verification
+# 1. Login as admin/manager
+# 2. Navigate to /pricing/seasons
+# 3. Create template and add multiple periods
+# 4. Toggle "Nur archivierte anzeigen" - should show only archived templates
+# 5. Select multiple periods via checkboxes
+# 6. Click "Ausgewählte löschen" and confirm
+# 7. Verify selected periods are deleted and checkboxes cleared
+# 8. Archive template and toggle ON - should appear in list
+# 9. Toggle OFF - archived template should disappear
+```
+
+---

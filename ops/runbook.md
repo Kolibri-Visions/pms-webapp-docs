@@ -41204,3 +41204,204 @@ This smoke test verifies P2.17 implementation (2026-01-24):
 - See `backend/docs/project_status.md` for P2.17 implementation details
 
 ---
+
+---
+
+## Season Templates Archived Toggle (P2.18.4)
+
+**Overview:** Fixed "Archivierte anzeigen" toggle to show ONLY archived templates (not active+archived).
+
+**Purpose:** Allow admin to switch between viewing active templates (default) and ONLY archived templates (toggle ON).
+
+**Architecture:**
+- **Query Parameter**: `archived_only=true` replaces `include_archived=true` for "only archived" mode
+- **SQL Filter**: `WHERE archived_at IS NOT NULL` (only archived) vs `WHERE archived_at IS NULL` (only active)
+- **UI Toggle**: "Nur archivierte anzeigen" checkbox
+
+**API Endpoints:**
+
+- `GET /api/v1/pricing/season-templates?archived_only=true&limit=&offset=` - List ONLY archived templates
+
+**Verification Commands:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# [HOST-SERVER-TERMINAL] Run archived-only toggle smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export ADMIN_JWT_TOKEN="<<<manager/admin JWT>>>"
+# Optional:
+# export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+./backend/scripts/pms_season_templates_archived_only_toggle_smoke.sh
+echo "rc=$?"
+
+# Expected output: All 6 tests pass, rc=0
+```
+
+**Common Issues:**
+
+### Toggle Shows Both Active and Archived Templates
+
+**Symptom:** When "Nur archivierte anzeigen" is checked, both active and archived templates appear in the list.
+
+**Root Cause:** Frontend using `include_archived=true` instead of `archived_only=true` query parameter.
+
+**How to Debug:**
+```bash
+# Check network tab (DevTools)
+# Should see: GET /api/v1/pricing/season-templates?archived_only=true
+# NOT: GET /api/v1/pricing/season-templates?include_archived=true
+
+# Verify fetchTemplates in frontend/app/pricing/seasons/page.tsx line ~85-90
+```
+
+**Solution:**
+- Verify page.tsx uses: `archived_only=true` when `showArchived` is true
+- Check toggle state variable: `const [showArchived, setShowArchived] = useState(false);`
+- Hard refresh frontend (Cmd+Shift+R / Ctrl+F5) to clear cache
+
+### Backend Returns Active Templates with archived_only=true
+
+**Symptom:** GET /api/v1/pricing/season-templates?archived_only=true returns active templates (archived_at IS NULL).
+
+**Root Cause:** Backend not filtering by `archived_at IS NOT NULL` when `archived_only=true`.
+
+**How to Debug:**
+```bash
+# Test archived_only filter
+curl -X GET "$HOST/api/v1/pricing/season-templates?archived_only=true&limit=10" \
+  -H "Authorization: Bearer $ADMIN_JWT_TOKEN" | jq '.[] | {id, name, archived_at}'
+
+# All results should have archived_at != null
+```
+
+**Solution:**
+- Verify pricing.py line ~3025-3030: should have `if archived_only: conditions.append("archived_at IS NOT NULL")`
+- Check archived_only parameter is correctly parsed from query string
+- Ensure archived_only takes precedence over include_archived (if archived_only: ... elif not include_archived: ...)
+
+---
+
+## Season Template Period Bulk Delete (P2.18.5)
+
+**Overview:** Bulk delete endpoint for season template periods with multi-select UI.
+
+**Purpose:** Allow admin to select multiple periods and delete them in a single operation.
+
+**Architecture:**
+- **Endpoint**: `POST /season-templates/{template_id}/periods/bulk-delete`
+- **Request**: `{"period_ids": ["uuid1", "uuid2", ...]}`
+- **Response**: `{"requested_count": 2, "deleted_count": 2, "not_found_count": 0, "errors": []}`
+- **Transaction Safety**: All deletes in a single DB transaction (atomic)
+- **UI**: Checkboxes in periods table + "Ausgewählte löschen" button
+
+**API Endpoints:**
+
+- `POST /api/v1/pricing/season-templates/{id}/periods/bulk-delete` - Bulk delete periods (requires `period_ids` array, min 1, max 50)
+
+**Verification Commands:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# [HOST-SERVER-TERMINAL] Run bulk delete smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export ADMIN_JWT_TOKEN="<<<manager/admin JWT>>>"
+# Optional:
+# export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+./backend/scripts/pms_season_template_period_bulk_delete_smoke.sh
+echo "rc=$?"
+
+# Expected output: All 7 tests pass, rc=0
+```
+
+**Common Issues:**
+
+### Bulk Delete Returns 400 (Validation Error)
+
+**Symptom:** POST /periods/bulk-delete returns 400 Bad Request with validation error.
+
+**Root Cause:** Request body invalid (empty array, too many IDs, or invalid UUIDs).
+
+**How to Debug:**
+```bash
+# Test with valid request
+curl -X POST "$HOST/api/v1/pricing/season-templates/<template_id>/periods/bulk-delete" \
+  -H "Authorization: Bearer $ADMIN_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"period_ids": ["<valid-uuid-1>", "<valid-uuid-2>"]}' -w "\n%{http_code}\n"
+
+# Should return 200 with deleted_count response
+```
+
+**Solution:**
+- Verify request has `period_ids` array with 1-50 valid UUIDs
+- Check frontend sends correct payload: `{ period_ids: selectedPeriodIds.map(...) }`
+- Ensure UUIDs are valid (hyphenated format: 8-4-4-4-12)
+
+### Bulk Delete Deletes Wrong Periods
+
+**Symptom:** Bulk delete removes periods from different template or all periods in template.
+
+**Root Cause:** SQL query missing `WHERE template_id = $1` filter.
+
+**How to Debug:**
+```bash
+# Check SQL query in pricing.py:bulk_delete_template_periods line ~3920-3925
+# Should be:
+# DELETE FROM pricing_season_template_periods
+# WHERE template_id = $1 AND id = ANY($2::uuid[])
+# RETURNING id
+```
+
+**Solution:**
+- Verify SQL query includes `WHERE template_id = $1 AND id = ANY($2::uuid[])`
+- Check parameters are bound correctly: `template_id, period_ids`
+- Ensure `template_id` from URL path is used in query
+
+### UI Checkboxes Don't Clear After Delete
+
+**Symptom:** After bulk delete, checkboxes remain checked for deleted periods.
+
+**Root Cause:** Frontend state `selectedPeriodIds` not cleared after successful delete.
+
+**How to Debug:**
+```bash
+# Check handleBulkDeletePeriods in page.tsx line ~221-240
+# Should clear selectedPeriodIds after successful delete:
+# setSelectedPeriodIds(new Set());
+```
+
+**Solution:**
+- Verify handler calls `setSelectedPeriodIds(new Set())` after successful delete
+- Check template list is refetched: `fetchTemplates()` after delete
+- Clear selection in finally block to ensure cleanup even on error
+
+### Partial Success Not Reported
+
+**Symptom:** Bulk delete returns 200 but `not_found_count` is always 0, even when some IDs don't exist.
+
+**Root Cause:** Backend not calculating `not_found_count` correctly.
+
+**How to Debug:**
+```bash
+# Test with 1 valid ID and 1 fake ID
+curl -X POST "$HOST/api/v1/pricing/season-templates/<template_id>/periods/bulk-delete" \
+  -H "Authorization: Bearer $ADMIN_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"period_ids": ["<valid-uuid>", "00000000-0000-0000-0000-000000000000"]}' \
+  | jq '{deleted_count, not_found_count}'
+
+# Expected: {"deleted_count": 1, "not_found_count": 1}
+```
+
+**Solution:**
+- Verify backend calculates `not_found_count = requested_count - deleted_count`
+- Check response includes all fields: requested_count, deleted_count, not_found_count, errors
+- Ensure RETURNING clause counts actual deleted rows, not requested IDs
+
+---
