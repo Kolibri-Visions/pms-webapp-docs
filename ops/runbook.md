@@ -40973,10 +40973,10 @@ YEARS="2026 2027" \
 ℹ Creating conflicting season (2026-01-15 to 2026-01-25, overlaps Januar 2026)...
 ✅ Created conflicting season: 770e8400-e29b-41d4-a716-446655440000
 ✅ Baseline: 1 conflicting season exists
-ℹ Attempting APPLY with overlapping dates (expect 409 or 200 with conflicts)...
-ℹ APPLY response: HTTP 200
-✅ Test B.1 PASSED: Received HTTP 200 (runtime conflict detection)
-✅ Test B.2 PASSED: Response reports 1 conflict(s)
+ℹ Attempting APPLY with overlapping dates (expect 409 strict rollback)...
+ℹ APPLY response: HTTP 409
+✅ Test B.1 PASSED: Received HTTP 409 (strict atomic rollback)
+✅ Test B.2 PASSED: 409 response includes 'no changes were applied' message
 ℹ Final season count: 1 (baseline: 1)
 ✅ Test B.3 PASSED: ROLLBACK VERIFIED - Season count unchanged (1 seasons)
 ✅ Test B.4 PASSED: Strict atomicity enforced (no partial writes)
@@ -40990,7 +40990,7 @@ YEARS="2026 2027" \
 ℹ     - No duplicate seasons ✓
 ℹ
 ℹ   Test B (Atomic Rollback):
-ℹ     - Conflict detected (HTTP 200) ✓
+ℹ     - Conflict detected (HTTP 409) ✓
 ℹ     - No partial changes applied ✓
 ℹ     - Season count unchanged (1) ✓
 ℹ ==========================================
@@ -41016,6 +41016,15 @@ YEARS="2026 2027" \
 This smoke test verifies the fixes from 2026-01-24:
 1. **Advisory Lock (commit 2dfcd02):** Prevents race conditions during concurrent APPLY requests
 2. **Strict Atomic Rollback (commit 25ccf94):** Ensures 409 constraint conflicts trigger complete rollback with no partial changes
+
+**Known Pitfall Fixed (2026-01-24):**
+
+Prior version (commit 89bdeb9) had HTTP response parsing bug in Test B:
+- **Bug:** Script used `grep "HTTP_CODE:" "$CONFLICT_RESPONSE"` where `$CONFLICT_RESPONSE` was a variable, not a file
+- **Symptom:** `grep: {json} HTTP_CODE:409: File name too long` when backend returned long JSON response
+- **Impact:** Test B failed even though backend behavior was correct (409 returned, rollback successful)
+- **Fix:** Changed Test B to use temp file pattern (same as Test A): `CONFLICT_RESPONSE_FILE=$(mktemp)` + `curl > "$CONFLICT_RESPONSE_FILE"` + `grep "HTTP_CODE:" "$CONFLICT_RESPONSE_FILE"`
+- **Expected in PROD:** Test B now correctly reports `HTTP 409` (strict atomic rollback mode) and verifies no partial changes applied
 
 **Related Documentation:**
 - See "APPLY Returns 409 on Constraint Violations" above for 409 response structure and user actions

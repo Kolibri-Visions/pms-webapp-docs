@@ -15139,7 +15139,7 @@ echo "rc=$?"
 
 # Expected output:
 # - Test A: Both HTTP 200, 60 seasons created, no duplicates
-# - Test B: HTTP 409 or 200, no partial changes, season count unchanged
+# - Test B: HTTP 409 (strict atomic rollback), no partial changes, season count unchanged
 # - Exit code: rc=0
 ```
 
@@ -15160,5 +15160,22 @@ echo "rc=$?"
 - To mark VERIFIED: Add PROD Evidence block with backend version, deploy verify rc=0, smoke rc=0, date
 - Script uses multi-year workload (60 seasons) to make concurrency behavior noticeable (one request takes ~3-5s, forcing serialization)
 - Script validates fixes that prevent transaction-aborted bugs and ensure true atomicity
+
+**Bug Fixed (2026-01-24):**
+- **Issue:** Initial version (commit 89bdeb9) had HTTP response parsing bug in Test B
+  - Used `grep "HTTP_CODE:" "$CONFLICT_RESPONSE"` where `$CONFLICT_RESPONSE` was a string variable, not a file
+  - Caused `grep: {json} HTTP_CODE:409: File name too long` error when backend returned long JSON (409 response)
+  - Test B failed even though backend behavior was correct (409 returned, rollback successful)
+- **Fix:** Changed Test B to use temp file pattern (same as Test A)
+  - `CONFLICT_RESPONSE_FILE=$(mktemp)` + `curl > "$CONFLICT_RESPONSE_FILE"` + `grep "HTTP_CODE:" "$CONFLICT_RESPONSE_FILE"`
+  - Robust HTTP parsing, no grep filename errors
+- **Re-verify Command:**
+  ```bash
+  # After fix deployment
+  HOST=https://api.fewo.kolibri-visions.de \
+  ADMIN_JWT_TOKEN="<<<jwt>>>" \
+  ./backend/scripts/pms_season_sync_concurrency_rollback_smoke.sh
+  # Expected: Test B now shows "HTTP 409" and passes (rc=0)
+  ```
 
 ---
