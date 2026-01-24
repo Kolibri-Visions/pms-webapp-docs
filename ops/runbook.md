@@ -41190,6 +41190,13 @@ This smoke test verifies P2.17 implementation (2026-01-24):
 - **Re-import (idempotent)**: Toast shows "Import abgeschlossen: 0 importiert, 4 übersprungen"
 - **Conflict (409)**: Toast shows "Konflikt: Import abgebrochen (keine Änderungen). Bitte Vorschau/Synchronisieren nutzen und Konflikte lösen."
 
+**UI Hardening (P2.18, 2026-01-24):**
+
+- **Template selection**: Changed from checkboxes to radio buttons (single-select only)
+- **Button validation**: Both Import and Sync buttons require exactly 1 template + years
+- **Explanatory text**: Simplified from 5 lines to 2 compact lines
+- **Effect**: Clearer UX, prevents multi-template confusion (backend limitation)
+
 **Related Documentation:**
 - See "Pricing: Season Sync Atomicity & Advisory Locks" above for advisory lock and transaction details
 - See `backend/scripts/README.md` for complete smoke script documentation

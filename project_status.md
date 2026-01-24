@@ -15337,3 +15337,79 @@ ADMIN_JWT_TOKEN="<<<jwt>>>" \
 - Transaction atomicity (P2.16)
 
 ---
+
+## P2.18 Pricing — Season Template Import/Sync Modal: Single-Template Selection UX
+
+**Implementation Date:** 2026-01-24
+
+**Status:** ✅ IMPLEMENTED
+
+**Scope:** Enforce single-template selection in the import/sync modal with clearer UX and concise explanatory text.
+
+**Problem:**
+- Import modal allowed multiple template selection via checkboxes
+- Import button enabled with 0+ templates (inconsistent with sync button requirement)
+- Sync button already required exactly 1 template
+- Explanatory text was verbose (5 lines spread across 2 divs)
+- Potential user confusion about multi-template support (backend limitation)
+
+**Solution:**
+- Changed template selection from checkboxes to radio buttons (single-select)
+- Both Import and Sync buttons now require exactly 1 template + years
+- Simplified explanatory text to 2 concise lines
+- Consistent UX for both actions
+
+**Features Implemented:**
+
+1. **Single-Template Selection** (`frontend/app/properties/[id]/rate-plans/page.tsx:1716-1723`):
+   - Changed: `type="checkbox"` → `type="radio"` with `name="selectedTemplate"`
+   - Updated: `onChange` handler to set single template: `setSelectedTemplateIds([template.id])`
+   - Effect: Selecting a template automatically deselects the previous one
+
+2. **Import Button Validation** (`frontend/app/properties/[id]/rate-plans/page.tsx:1812`):
+   - Changed: `selectedTemplateIds.length === 0` → `selectedTemplateIds.length !== 1`
+   - Effect: Button disabled unless exactly 1 template + years selected (consistent with Sync button)
+
+3. **Concise Explanatory Text** (`frontend/app/properties/[id]/rate-plans/page.tsx:1749-1756`):
+   - Before: 5 lines with nested divs, separate strong/span tags
+   - After: 2 compact lines with inline formatting
+   - Content preserved: Import creates missing only, Sync updates existing + repairs links
+   - Layout: Reduced padding, single compact div with `<br />` separator
+
+**Frontend Changes:**
+- `frontend/app/properties/[id]/rate-plans/page.tsx`:
+  - Line 1717: `type="checkbox"` → `type="radio"` with `name="selectedTemplate"`
+  - Lines 1719-1721: Multi-select onChange → Single-select: `setSelectedTemplateIds([template.id])`
+  - Line 1812: Import button disabled logic: `length === 0` → `length !== 1`
+  - Lines 1749-1756: Simplified explanatory text (5 lines → 2 lines)
+
+**UX Improvements:**
+- ✅ **Clear Selection**: Radio buttons make single-select obvious
+- ✅ **Consistent Validation**: Both Import/Sync require exactly 1 template
+- ✅ **Concise Guidance**: 2-line explanation instead of 5
+- ✅ **No Multi-Template Confusion**: UI enforces backend limitation
+
+**Verification:**
+
+Manual UI Verification:
+1. Login as manager/admin
+2. Navigate to `/properties/{id}/rate-plans`
+3. Open rate plan detail
+4. Click "Saisonzeiten" tab
+5. Click "Importieren" button (opens modal)
+6. Verify: Template list shows radio buttons (not checkboxes)
+7. Select template A → Verify: template A selected
+8. Select template B → Verify: template A deselected, template B selected (single-select)
+9. Verify: Import button disabled unless exactly 1 template + years
+10. Verify: Sync button disabled unless exactly 1 template + years
+11. Verify: Explanatory text is 2 compact lines
+12. Select template + year → Click Import → Verify: Import succeeds with toast message
+
+**Related Implementations:**
+- P2.17: Season template import atomic "missing_only" strategy (backend foundation)
+- P2.16: Season template sync atomicity & advisory locks
+
+**Files Modified:**
+- `frontend/app/properties/[id]/rate-plans/page.tsx` (4 edits: radio type, onChange, button logic, text)
+
+---
