@@ -41196,6 +41196,7 @@ This smoke test verifies P2.17 implementation (2026-01-24):
 - **Button validation**: Both Import and Sync buttons require exactly 1 template + years
 - **Explanatory text**: Simplified from 5 lines to 2 compact lines
 - **Effect**: Clearer UX, prevents multi-template confusion (backend limitation)
+- **Period count fix (P2.18.1)**: Modal now shows only active periods (archived periods not counted); refetch on modal open ensures fresh data
 
 **Related Documentation:**
 - See "Pricing: Season Sync Atomicity & Advisory Locks" above for advisory lock and transaction details

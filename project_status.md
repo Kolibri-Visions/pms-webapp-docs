@@ -15405,11 +15405,30 @@ Manual UI Verification:
 11. Verify: Explanatory text is 2 compact lines
 12. Select template + year → Click Import → Verify: Import succeeds with toast message
 
+**Bugfix (P2.18.1, 2026-01-24):**
+
+**Problem**: Modal showed incorrect period count after template period deletion (e.g., "3 Saisonzeit(en)" when only 2 active periods remained). Frontend displayed ALL periods (including archived/inactive) instead of only active periods.
+
+**Root Cause**:
+- Backend API GET /api/v1/pricing/season-templates/{id}/periods returns ALL periods with `active` field (no filter)
+- Frontend type was missing `active` field
+- Frontend display used `template.periods.length` (counted ALL periods including inactive)
+
+**Fix**:
+- Frontend type: Added `active?: boolean` field to period type
+- Helper function: `getActivePeriodCount(template)` filters `periods.filter(p => p.active !== false).length`
+- UI display: Replaced `template.periods.length` with `getActivePeriodCount(template)`
+- Empty state: Updated text to "Vorlage enthält keine aktiven Zeiträume"
+- Refetch: Already present (`handleOpenImportModal` fetches fresh data on open)
+
+**Files Modified**:
+- `frontend/app/properties/[id]/rate-plans/page.tsx` (3 changes: type extended, helper added, display updated)
+
 **Related Implementations:**
 - P2.17: Season template import atomic "missing_only" strategy (backend foundation)
 - P2.16: Season template sync atomicity & advisory locks
 
 **Files Modified:**
-- `frontend/app/properties/[id]/rate-plans/page.tsx` (4 edits: radio type, onChange, button logic, text)
+- `frontend/app/properties/[id]/rate-plans/page.tsx` (P2.18: 4 edits; P2.18.1: 3 edits)
 
 ---
