@@ -42232,61 +42232,92 @@ Expected ',', got '{'
 
 Error occurs around line ~852 at `{/* Amenities Assignment Modal */}` comment.
 
-**Root Cause:** JSX leaked outside the component's return statement. When inner tabs were removed in P2.21.2 (commit f12d10a), an extra `</div>` at line 555 prematurely closed the outer return div, leaving all modals (Amenities, Delete Confirmation, Edit, Toast) outside the return statement.
+**Root Cause:** Extra closing `</div>` at line 849 (8-space indent) had no matching opening div. This caused the OUTER return div to close prematurely, leaving all modals (Amenities, Delete Confirmation, Edit, Toast) outside the JSX tree.
 
 **TSX Structure (Before Fix - BROKEN):**
 ```tsx
 return (
-  <div className="space-y-6">  // line 493 - outer div
+  <div className="space-y-6">  // line 493 - OUTER div opens
     {/* Header */}
-    <div>...</div>  // line 495-554
-  </div>  // line 555 - WRONG! Closes outer div too early
+    <div>...</div>  // line 495-554 - Header section
 
-  {/* Content */}
-  <div className="space-y-6">  // line 557 - orphaned
-    ...
-  </div>
-);  // end of return
+    {/* Content */}
+    <div className="space-y-6">  // line 557 - Content div opens
+      ...
+      <div className="bg-bo-surface...">  // line 813 - Ausstattung card
+        ...
+      </div>  // line 848 - closes Ausstattung card
+    </div>  // line 849 - closes Content div
+  </div>  // line 850 - closes OUTER div - WRONG! Too early!
+);  // line 851
 
 {/* Amenities Assignment Modal */}  // line 852 - OUTSIDE return!
 {showAmenitiesModal && (...)}  // JSX in non-JSX context = syntax error
 ```
 
+**Issue:** Lines 848-850 had THREE closing `</div>` tags, but only TWO divs should close:
+- Line 848: Close Ausstattung card (10-space indent) ✓
+- Line 849: Close Content div (should be 6-space indent, was 8-space) ✗ EXTRA!
+- Line 850: Close OUTER div (6-space indent) - became Content close after fix ✓
+
 **Fix (P2.21.2.1):**
-- Removed premature closing `</div>` at line 555
-- Kept content wrapper div at line 557
-- All modals now correctly inside outer div (after content div closes)
+- Removed extra closing `</div>` at line 849 (8-space indent with no matching opening)
+- Content div now closes at line 849 (was line 850)
+- OUTER div now closes at line 1119 (end of return)
+- All modals now correctly inside OUTER div
 
 **TSX Structure (After Fix - CORRECT):**
 ```tsx
 return (
-  <div className="space-y-6">  // line 493 - outer div (stays open)
+  <div className="space-y-6">  // line 493 - OUTER div (stays open)
     {/* Header */}
-    <div>...</div>  // line 495-554
-    
+    <div>...</div>  // line 495-554 - Header section
+
     {/* Content */}
-    <div className="space-y-6">  // line 557 - content wrapper
+    <div className="space-y-6">  // line 557 - Content div
       ...
-    </div>  // line 850 - closes content
-    
-    {/* Amenities Assignment Modal */}  // line 852 - INSIDE outer div
+      <div className="bg-bo-surface...">  // line 813 - Ausstattung card
+        ...
+      </div>  // line 848 - closes Ausstattung card
+    </div>  // line 849 - closes Content div (FIXED)
+
+    {/* Amenities Assignment Modal */}  // line 851 - INSIDE OUTER div
     {showAmenitiesModal && (...)}
     {/* other modals */}
-  </div>  // closes outer div
+  </div>  // line 1119 - closes OUTER div
 );
 ```
 
 **Verification Steps:**
 
+Build Verification (MANDATORY):
+```bash
+# Build must succeed
+cd frontend
+npm run build
+
+# Expected output:
+# ✓ Compiled successfully
+# ✓ Generating static pages (38/38)
+```
+
 Grep Proof (Modals Inside Return):
 ```bash
-# Count opening/closing divs in return statement
-sed -n '492,1121p' frontend/app/properties/[id]/page.tsx | grep -c '<div'
-# Should match closing div count (balanced)
+# Verify modal location
+rg -n "Amenities Assignment Modal" frontend/app/properties/[id]/page.tsx
+# Should show line 851 (inside return, after content close at 849)
 
-# Verify modals after content but before return close
-rg -n "Amenities Assignment Modal|Delete Confirmation|Edit Modal|Toast Notification" frontend/app/properties/[id]/page.tsx
-# All should be between line 850 (content close) and ~1119 (outer close)
+# Verify no extra 8-space closing divs
+python3 << 'EOF'
+with open('frontend/app/properties/[id]/page.tsx') as f:
+    lines = f.readlines()
+for i in range(556, 851):
+    line = lines[i]
+    indent = len(line) - len(line.lstrip())
+    if indent == 8 and '</div>' in line:
+        print(f"Line {i+1}: {line.strip()}")
+# Should output nothing (no 8-space closing divs)
+EOF
 
 # Verify no ?tab= query params (P2.21.2 architecture intact)
 rg '\?tab=' frontend/app/properties/[id]/page.tsx

@@ -16066,7 +16066,7 @@ See `backend/scripts/README.md` P2.21 section for full troubleshooting. Key issu
 
 **Notes:**
 - **BUGFIX P2.21.2 (2026-01-25)**: Fixed duplicate tabs bug from d4bb088. Removed inner ?tab= navigation, created dedicated /media route. TOP tabs now: Überblick (/properties/{id}), Preiseinstellungen (/properties/{id}/rate-plans), Media (/properties/{id}/media). See runbook.md for verification.
-- **BUGFIX P2.21.2.1 (2026-01-25)**: Fixed admin build TSX syntax error from f12d10a. Removed premature closing div that leaked modals outside return statement. Enables deployment of P2.21.2.
+- **BUGFIX P2.21.2.1 (2026-01-25)**: Fixed admin build TSX syntax error from f12d10a. Removed extra closing div at line 849 (8-space indent) that had no matching opening div, causing OUTER return div to close prematurely and leaving modals outside JSX tree. Build now succeeds. Enables deployment of P2.21.2.
 - Media upload is URL-based (no file upload/storage provider integration in MVP)
 - Bulk operations support up to 50 properties at once (validation limit)
 - CSV export streams results (no row limit, memory-efficient)
