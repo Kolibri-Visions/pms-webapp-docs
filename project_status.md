@@ -15510,3 +15510,34 @@ echo "rc=$?"
 ```
 
 ---
+
+# P2.18.4/5 Hotfix - Import Error Fix
+
+**Hotfix Date:** 2026-01-25
+
+**Issue:** Backend restart loop after P2.18.5 deployment (NameError at import time)
+
+**Root Cause:** Bulk delete schemas (SeasonTemplatePeriodBulkDeleteRequest, SeasonTemplatePeriodBulkDeleteResponse) were not imported in pricing.py despite being used in route decorator.
+
+**Fix:**
+- Added 2 missing import lines to backend/app/api/routes/pricing.py (lines 65-66)
+- Schemas already existed in backend/app/schemas/pricing.py (lines 342, 352)
+- No logic changes, only import fix
+
+**Files Modified:**
+- backend/app/api/routes/pricing.py (import section)
+
+**Status:** ✅ HOTFIX APPLIED
+
+**Verification Required:**
+P2.18.4 + P2.18.5 status remains **IMPLEMENTED** (not VERIFIED) until:
+1. PROD backend starts successfully (no restart loop)
+2. /api/v1/ops/version returns 200 with correct commit hash
+3. pms_verify_deploy.sh confirms commit match
+4. pms_season_templates_archived_only_toggle_smoke.sh returns rc=0
+5. pms_season_template_period_bulk_delete_smoke.sh returns rc=0
+6. Manual UI verification of toggle + bulk delete features
+
+Once all verification steps pass, P2.18.4 + P2.18.5 can be marked as **VERIFIED**.
+
+---

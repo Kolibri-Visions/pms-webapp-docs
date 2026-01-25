@@ -41405,3 +41405,74 @@ curl -X POST "$HOST/api/v1/pricing/season-templates/<template_id>/periods/bulk-d
 - Ensure RETURNING clause counts actual deleted rows, not requested IDs
 
 ---
+
+---
+
+## Backend Restart Loop After P2.18.5 Deployment (NameError Hotfix)
+
+**Incident Date:** 2026-01-25
+
+**Symptom:** Backend fails to start after P2.18.5 deployment with restart loop. Error log shows:
+```
+NameError: name 'SeasonTemplatePeriodBulkDeleteResponse' is not defined
+File "app/api/routes/pricing.py", line 3918, in <module>
+  @router.post("/season-templates/{template_id}/periods/bulk-delete", response_model=SeasonTemplatePeriodBulkDeleteResponse)
+```
+
+**Root Cause:** P2.18.5 added bulk delete endpoint for season template periods but forgot to import the schemas:
+- SeasonTemplatePeriodBulkDeleteRequest
+- SeasonTemplatePeriodBulkDeleteResponse
+
+Schemas exist in `backend/app/schemas/pricing.py` (lines 342, 352) but were not imported in `backend/app/api/routes/pricing.py`. Route decorator references undefined symbol at import time → NameError → startup crash.
+
+**Fix Applied:** Added missing imports to `backend/app/api/routes/pricing.py` (lines 65-66):
+```python
+from ...schemas.pricing import (
+    # ...
+    SeasonTemplatePeriodBulkDeleteRequest,
+    SeasonTemplatePeriodBulkDeleteResponse,
+    # ...
+)
+```
+
+**Verification Steps:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code with hotfix
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# [HOST-SERVER-TERMINAL] Verify backend starts successfully
+# Wait for Coolify redeploy or restart container manually
+# Check /api/v1/ops/version endpoint returns 200
+
+curl -sS https://api.fewo.kolibri-visions.de/api/v1/ops/version | jq '.'
+# Expected: {"commit": "...", "version": "..."}
+
+# [HOST-SERVER-TERMINAL] Run deploy verification script
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# [HOST-SERVER-TERMINAL] Run P2.18.4 smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export ADMIN_JWT_TOKEN="<<<manager/admin JWT>>>"
+./backend/scripts/pms_season_templates_archived_only_toggle_smoke.sh
+echo "rc=$?"
+
+# [HOST-SERVER-TERMINAL] Run P2.18.5 smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export ADMIN_JWT_TOKEN="<<<manager/admin JWT>>>"
+./backend/scripts/pms_season_template_period_bulk_delete_smoke.sh
+echo "rc=$?"
+```
+
+**Prevention:**
+- Import sanity check: `python3 -m py_compile app/api/routes/pricing.py` before commit
+- Full import test: `python3 -c "from app.api.routes import pricing"` (requires valid config)
+- Code review: ensure all schemas used in decorators are imported
+
+**Related Issues:**
+- P2.18.4: Archived-only toggle (fixed in same commit)
+- P2.18.5: Bulk delete periods (import-time crash from this feature)
+
+---
