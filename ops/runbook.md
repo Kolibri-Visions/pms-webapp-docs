@@ -41843,3 +41843,68 @@ Removed the invalid conditional sections from detail page:
 - Use ANTI-KREISREGEL: check actual code/schema first, don't guess field names
 
 ---
+
+### CRUD Smoke Test Fails: deleted_at Not Set (P2.20.1 Bugfix)
+
+**Symptom:** `pms_properties_crud_smoke.sh` fails at TEST 7 with error:
+```
+✗ TEST 7 FAILED: deleted_at not set (got '')
+```
+
+After DELETE, cleanup reports "Property not found" when attempting second delete.
+
+**Root Cause (Before Fix):** DELETE endpoint returned `SuccessResponse` without property data. The soft delete worked (deleted_at was set in database), but the response didn't include the deleted property, so smoke script couldn't verify deleted_at timestamp. GET by ID filtered out deleted properties (WHERE deleted_at IS NULL), causing 404.
+
+**Fix (P2.20.1):** DELETE response now includes the deleted property with deleted_at timestamp:
+- New `PropertyDeleteResponse` schema with `success`, `message`, and `property` fields
+- Service `delete_property()` returns full property data with deleted_at set
+- DELETE route returns PropertyDeleteResponse instead of SuccessResponse
+- Backward compatible: existing clients checking `.success` or `.message` still work
+
+**Expected DELETE Response (After Fix):**
+```json
+{
+  "success": true,
+  "message": "Property <uuid> deleted successfully",
+  "property": {
+    "id": "...",
+    "name": "...",
+    "deleted_at": "2026-01-25T12:34:56.789Z",
+    "is_active": false,
+    ...
+  }
+}
+```
+
+**How to Debug:**
+```bash
+# Test DELETE returns property with deleted_at
+DELETE_RESPONSE=$(curl -sS -X DELETE "$HOST/api/v1/properties/$PROPERTY_ID" \
+  -H "Authorization: Bearer $ADMIN_JWT")
+
+# Check response structure
+echo "$DELETE_RESPONSE" | jq '.property.deleted_at'
+# Should output: "2026-01-25T12:34:56.789Z" (not null or empty)
+
+# Verify soft delete in database
+psql $DATABASE_URL -c "SELECT id, deleted_at, is_active FROM properties WHERE id = '$PROPERTY_ID';"
+# Should show: deleted_at IS NOT NULL, is_active = false
+```
+
+**Solution:**
+- Pull latest code (commit includes PropertyDeleteResponse schema)
+- Redeploy backend
+- Rerun smoke script: `./backend/scripts/pms_properties_crud_smoke.sh`
+- TEST 7 should now pass with message: "Property has deleted_at timestamp (<timestamp>)"
+
+**Smoke Script Update (P2.20.1):**
+- TEST 7 now verifies `.property.deleted_at` from DELETE response
+- Contract-agnostic parsing: tries `.property.deleted_at`, fallback to `.deleted_at`
+- Cleanup already best-effort with `|| true`, ignores 404 on second delete
+
+**Prevention:**
+- For soft delete operations, always return the deleted entity with timestamp in response
+- Allows deterministic verification without requiring special include_deleted params
+- Follows pattern: DELETE response should confirm what was actually deleted
+
+---
