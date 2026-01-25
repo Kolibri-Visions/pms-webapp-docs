@@ -42359,3 +42359,163 @@ curl -sS https://admin.fewo.kolibri-visions.de/api/ops/version | jq
 - For complex component restructuring, use git diff to review exactly what divs were added/removed
 
 ---
+
+---
+
+### Property Media: 500 Failed to list property media
+
+**Symptom:** GET /api/v1/properties/{property_id}/media returns 500 Internal Server Error with message "Failed to list property media".
+
+**Error in Logs:**
+```
+column pm.mime_type does not exist
+column pm.byte_size does not exist (Hint: pm.file_size exists)
+column pm.storage_provider does not exist
+```
+
+**Root Cause:** Schema drift. Production database has older property_media table schema with different column names (e.g., `file_size` instead of `byte_size`) or missing columns (`mime_type`, `storage_provider`). This occurs when:
+1. property_media table was created manually or via older migration
+2. Migration 20260125150000_add_property_media_and_enhancements.sql hasn't been applied
+3. Migration 20260125160000_align_property_media_schema.sql (alignment fix) hasn't been applied
+
+**Expected Behavior (After Fix):** Endpoint returns 503 Service Unavailable with actionable error message "Database schema not installed or out of date. Run DB migrations." This guides users to apply migrations instead of generic 500 error.
+
+**Fix:**
+
+**Option 1: Apply Migration (Recommended)**
+
+1. **Pull latest code** on production server:
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+```
+
+2. **Apply migration** via Supabase CLI or SQL Editor:
+```bash
+# Using Supabase CLI (if configured)
+supabase db push
+
+# OR via SQL Editor in Supabase Dashboard:
+# Copy contents of supabase/migrations/20260125160000_align_property_media_schema.sql
+# Paste and execute in SQL Editor
+```
+
+3. **Verify columns exist**:
+```sql
+-- Check property_media schema
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name = 'property_media'
+ORDER BY ordinal_position;
+
+-- Should include: mime_type (text), byte_size (bigint), storage_provider (text)
+```
+
+4. **Test endpoint**:
+```bash
+# HOST-SERVER-TERMINAL
+export HOST="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<your-jwt-token>>>"
+export PROPERTY_ID="<<<property-uuid>>>"
+
+./backend/scripts/pms_property_media_list_smoke.sh
+# Expected: rc=0, HTTP 200, valid JSON array
+```
+
+**Option 2: Emergency SQL Patch (If migration fails)**
+
+If migration cannot be applied immediately, run this SQL directly in Supabase SQL Editor:
+
+```sql
+-- Add missing columns if they don't exist
+DO $$
+BEGIN
+  -- Add mime_type
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'property_media' AND column_name = 'mime_type'
+  ) THEN
+    ALTER TABLE public.property_media ADD COLUMN mime_type TEXT;
+  END IF;
+
+  -- Add byte_size
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'property_media' AND column_name = 'byte_size'
+  ) THEN
+    ALTER TABLE public.property_media ADD COLUMN byte_size BIGINT;
+  END IF;
+
+  -- Add storage_provider
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'property_media' AND column_name = 'storage_provider'
+  ) THEN
+    ALTER TABLE public.property_media ADD COLUMN storage_provider TEXT;
+  END IF;
+END $$;
+
+-- Backfill byte_size from file_size (if file_size column exists)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'property_media' AND column_name = 'file_size'
+  ) THEN
+    UPDATE public.property_media
+    SET byte_size = file_size
+    WHERE byte_size IS NULL AND file_size IS NOT NULL;
+  END IF;
+END $$;
+
+-- Set default storage_provider
+UPDATE public.property_media
+SET storage_provider = 'supabase'
+WHERE storage_provider IS NULL;
+```
+
+**Verification Commands:**
+
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Run smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<<<jwt-token>>>"
+export PROPERTY_ID="<<<property-uuid>>>"
+# Optional:
+# export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+
+./backend/scripts/pms_property_media_list_smoke.sh
+echo "rc=$?"
+
+# Expected output:
+# ✅ GET /api/v1/properties/{id}/media returned 200 OK
+# ✅ Response is valid JSON
+# ℹ Media count: N item(s)
+# ✅ All property media smoke tests passed! 🎉
+# rc=0
+```
+
+**Manual API Test:**
+```bash
+# Test with curl
+curl -X GET "$HOST/api/v1/properties/$PROPERTY_ID/media" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "x-agency-id: $AGENCY_ID" \
+  -w "\nHTTP %{http_code}\n"
+
+# Expected: HTTP 200, JSON array with media objects
+# Before fix: HTTP 500 or HTTP 503 with schema error message
+```
+
+**Prevention:**
+- Always apply migrations to production before deploying code that depends on new schema
+- Run `pms_verify_deploy.sh` + smoke scripts after deployment to catch schema drift early
+- Monitor backend logs for "column does not exist" errors (indicates schema drift)
+
+---
