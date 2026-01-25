@@ -15713,6 +15713,7 @@ echo "rc=$?"
 **Status:** ✅ IMPLEMENTED
 
 **Notes:**
+- **Hotfix (2026-01-25):** Removed invalid `property.title` and `property.status` field references from detail page that caused admin build failure. These fields don't exist in backend PropertyResponse schema (backend uses `name`, `internal_name`, and `is_active` instead). See runbook.md troubleshooting section for details.
 - Properties Backend already had full CRUD + filters (from Phase 17B), but Frontend was read-only with client-side search
 - Now Frontend has 1:1 parity with Backend capabilities (100% endpoint coverage, 100% filter coverage)
 - RBAC enforced: admin/manager (full CRUD), owner (view/edit own), staff/accountant (read-only)

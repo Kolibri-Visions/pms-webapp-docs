@@ -41786,3 +41786,60 @@ echo $JWT | cut -d'.' -f2 | base64 -d | jq '.sub'
 - To assign property to owner: `PATCH /api/v1/properties/{id}/owner` as admin/manager
 
 ---
+
+### Admin Deploy Fails: Property.title Does Not Exist (P2.20 Hotfix)
+
+**Symptom:** Coolify admin UI build fails during `next build` with TypeScript error:
+```
+./app/properties/[id]/page.tsx:562:23 Type error: Property 'title' does not exist on type 'Property'.
+```
+
+**Root Cause:** Frontend Property interface had leftover references to `property.title` and `property.status` fields that don't exist in backend PropertyResponse schema. The backend only provides:
+- `name` (public property name)
+- `internal_name` (internal name for staff)
+- `is_active` (boolean status, not a `status` string field)
+
+**Fix Strategy:**
+- Remove all references to non-existent `property.title` and `property.status` fields
+- Ensure frontend Property interface matches backend PropertyResponse schema exactly
+- Use `is_active` for status display (already rendered via getStatusDisplay() in header)
+
+**How to Debug:**
+```bash
+# Find Property interface fields
+rg -n "interface Property" frontend/app/properties/
+
+# Find invalid field usages
+rg -n "property\.(title|status)" frontend/app/properties/
+
+# Check backend schema fields
+rg -n "class PropertyResponse" backend/app/schemas/properties.py
+sed -n '402,532p' backend/app/schemas/properties.py
+```
+
+**Solution:**
+Removed the invalid conditional sections from detail page:
+```typescript
+// REMOVED - title field doesn't exist in backend
+{property.title && (
+  <div>
+    <dt>Titel</dt>
+    <dd>{property.title}</dd>
+  </div>
+)}
+
+// REMOVED - status field doesn't exist (use is_active instead)
+{property.status && (
+  <div>
+    <dt>Status</dt>
+    <dd>{property.status}</dd>
+  </div>
+)}
+```
+
+**Prevention:**
+- Always audit backend schema before adding frontend type fields
+- Run `npm run build` locally before pushing to catch TypeScript errors
+- Use ANTI-KREISREGEL: check actual code/schema first, don't guess field names
+
+---
