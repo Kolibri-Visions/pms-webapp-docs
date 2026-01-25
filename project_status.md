@@ -15466,7 +15466,28 @@ Manual UI Verification:
    - backend/docs/ops/runbook.md: Added 2 sections (P2.18.4 + P2.18.5 troubleshooting)
    - backend/docs/project_status.md: This entry
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED (Verified: 2026-01-25, commit 7bee642)
+
+**PROD Evidence (2026-01-25):**
+- **Deployment Verification:**
+  - pms_verify_deploy.sh: rc=0
+  - Backend /api/v1/ops/version: source_commit=7bee6423397b153f54fb9c52cc1148d26f8e8e22, started_at=2026-01-25T07:19:05.581849+00:00
+  - Admin /api/ops/version: source_commit=7bee6423397b153f54fb9c52cc1148d26f8e8e22, started_at=2026-01-25T07:19:41.704Z
+
+- **P2.18.4 Smoke Test (Archived-only toggle):**
+  - Script: backend/scripts/pms_season_templates_archived_only_toggle_smoke.sh
+  - Result: rc=0 (all 6 tests passed)
+  - Verified: Active template appears in default list
+  - Verified: Active template NOT in archived-only list
+  - Verified: After archive, NOT in default list
+  - Verified: After archive, appears in archived-only list
+
+- **P2.18.5 Smoke Test (Bulk delete periods):**
+  - Script: backend/scripts/pms_season_template_period_bulk_delete_smoke.sh
+  - Result: rc=0 (all 7 tests passed)
+  - Verified: Bulk delete 2 of 3 periods → 1 remains
+  - Verified: Mixed valid + non-existent IDs → partial success handled correctly
+  - Verified: All periods deleted after second bulk delete
 
 **Notes:**
 - P2.18.4: Toggle now shows ONLY archived (not active+archived) - OFF = active only, ON = archived only
@@ -15527,17 +15548,16 @@ echo "rc=$?"
 **Files Modified:**
 - backend/app/api/routes/pricing.py (import section)
 
-**Status:** ✅ HOTFIX APPLIED
+**Status:** ✅ HOTFIX APPLIED AND VERIFIED
 
-**Verification Required:**
-P2.18.4 + P2.18.5 status remains **IMPLEMENTED** (not VERIFIED) until:
-1. PROD backend starts successfully (no restart loop)
-2. /api/v1/ops/version returns 200 with correct commit hash
-3. pms_verify_deploy.sh confirms commit match
-4. pms_season_templates_archived_only_toggle_smoke.sh returns rc=0
-5. pms_season_template_period_bulk_delete_smoke.sh returns rc=0
-6. Manual UI verification of toggle + bulk delete features
+**Verification Complete (2026-01-25):**
+All verification steps passed:
+1. ✅ PROD backend started successfully (no restart loop)
+2. ✅ /api/v1/ops/version returns 200 with commit 7bee642
+3. ✅ pms_verify_deploy.sh confirms commit match (rc=0)
+4. ✅ pms_season_templates_archived_only_toggle_smoke.sh returns rc=0
+5. ✅ pms_season_template_period_bulk_delete_smoke.sh returns rc=0
 
-Once all verification steps pass, P2.18.4 + P2.18.5 can be marked as **VERIFIED**.
+**Result:** P2.18.4 + P2.18.5 marked as **VERIFIED** (see PROD Evidence section above).
 
 ---
