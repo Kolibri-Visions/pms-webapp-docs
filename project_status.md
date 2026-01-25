@@ -15710,7 +15710,15 @@ echo "rc=$?"
     - backend/scripts/README.md: Added 2 smoke script entries with usage, expected output, troubleshooting
     - backend/docs/project_status.md: This entry
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED (Verified: 2026-01-25, commit 9ee99c6)
+
+**PROD Evidence (2026-01-25):**
+- **Backend** `/api/v1/ops/version`: commit=9ee99c69be9206b6cff88144b741a380c75559c0, started_at=2026-01-25T13:42:05.350127+00:00
+- **Admin** `/api/ops/version`: commit=9ee99c69be9206b6cff88144b741a380c75559c0, started_at=2026-01-25T13:39:42.104Z
+- **Deploy Verify**: `pms_verify_deploy.sh` rc=0 (commit match confirmed)
+- **Smoke Tests**: Both smoke scripts passed with rc=0
+  - `pms_properties_crud_smoke.sh`: All 7 tests passed (includes soft delete verification via `deleted_at` in DELETE response per P2.20.1 bugfix)
+  - `pms_properties_filters_sort_smoke.sh`: All 7 tests passed (is_active, property_type, city, min_guests filters + name sorting asc/desc)
 
 **Notes:**
 - **Hotfix (2026-01-25):** Removed invalid `property.title` and `property.status` field references from detail page that caused admin build failure. These fields don't exist in backend PropertyResponse schema (backend uses `name`, `internal_name`, and `is_active` instead). See runbook.md troubleshooting section for details.
