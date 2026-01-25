@@ -41476,3 +41476,122 @@ echo "rc=$?"
 - P2.18.5: Bulk delete periods (import-time crash from this feature)
 
 ---
+
+---
+
+## P2.19 Restore Archivierte Saisonvorlagen
+
+**Overview:** Restore (unarchive) functionality for season templates.
+
+**Purpose:** Allow admin to restore archived season templates back to active state.
+
+**Architecture:**
+- **Endpoint**: `POST /season-templates/{id}/restore`
+- **Behavior**: Sets `archived_at = NULL`, `updated_at = NOW()`
+- **Validation**: Template must be archived, name conflict check (409 if active template with same name exists)
+- **Response**: 200 with full template payload (including periods)
+
+**API Endpoints:**
+
+- `POST /api/v1/pricing/season-templates/{id}/restore` - Restore archived template
+
+**Verification Commands:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# [HOST-SERVER-TERMINAL] Run restore smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export ADMIN_JWT_TOKEN="<<<manager/admin JWT>>>"
+# Optional:
+# export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+./backend/scripts/pms_season_template_restore_smoke.sh
+echo "rc=$?"
+
+# Expected output: All 6 tests pass, rc=0
+```
+
+**Common Issues:**
+
+### Restore Returns 404 (Template Not Found or Not Archived)
+
+**Symptom:** POST /season-templates/{id}/restore returns 404 with message "Saisonvorlage {id} nicht gefunden oder nicht archiviert".
+
+**Root Cause:** Template does not exist, belongs to different agency, or is not archived (archived_at IS NULL).
+
+**How to Debug:**
+```bash
+# Check if template exists and is archived
+psql $DATABASE_URL -c "SELECT id, name, archived_at FROM pricing_season_templates WHERE id = '<template_id>';"
+
+# If archived_at is NULL, template is active (cannot restore)
+# If row not found, template doesn't exist or wrong agency
+```
+
+**Solution:**
+- Verify template ID is correct
+- Ensure template is archived (archived_at IS NOT NULL)
+- Check user has access to correct agency
+
+### Restore Returns 409 (Name Conflict)
+
+**Symptom:** POST /season-templates/{id}/restore returns 409 with message "Wiederherstellen nicht möglich: Es existiert bereits eine aktive Saisonvorlage mit dem Namen '...'".
+
+**Root Cause:** Another active (non-archived) template with the same name exists in the same agency.
+
+**How to Debug:**
+```bash
+# Check for name conflicts
+psql $DATABASE_URL -c "SELECT id, name, archived_at FROM pricing_season_templates WHERE name = '<template_name>' AND archived_at IS NULL AND agency_id = '<agency_id>';"
+
+# Should return at most 1 row (the one being restored would have archived_at NOT NULL)
+```
+
+**Solution:**
+1. **Rename one of the templates**: Use PATCH /season-templates/{id} to rename either the archived template or the active one
+2. **Archive the active template first**: If you want to replace the active template, archive it before restoring the other one
+3. **Delete the active template**: If the active template is no longer needed, archive it then hard delete it
+
+### UI Shows Restore Button But Not Working
+
+**Symptom:** "Wiederherstellen" button appears in UI but clicking does nothing or shows error.
+
+**Root Cause:** Frontend API call failing or not refreshing data after restore.
+
+**How to Debug:**
+```bash
+# Check browser DevTools Network tab
+# Should see: POST /api/v1/pricing/season-templates/{id}/restore
+# Expected response: 200 with template payload
+# Check Console for JavaScript errors
+```
+
+**Solution:**
+- Verify JWT token is valid (not expired)
+- Check network request succeeds (200 status)
+- Ensure fetchTemplates() is called after successful restore
+- Hard refresh browser (Cmd+Shift+R / Ctrl+F5) if UI state is stale
+
+### Restored Template Still Shows in Archived List
+
+**Symptom:** After restore, template still appears when "Nur archivierte anzeigen" toggle is ON.
+
+**Root Cause:** Frontend not refetching template list after restore.
+
+**How to Debug:**
+```bash
+# Check API directly
+curl -X GET "$HOST/api/v1/pricing/season-templates?archived_only=true" \
+  -H "Authorization: Bearer $ADMIN_JWT_TOKEN" | jq '.[] | select(.id=="<template_id>") | {id, name, archived_at}'
+
+# If archived_at is null, backend correctly restored but frontend didn't refetch
+```
+
+**Solution:**
+- Verify handleRestoreTemplate calls fetchTemplates() after successful restore
+- Check showArchived state triggers useEffect to refetch
+- Hard refresh UI to force reload
+
+---

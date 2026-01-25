@@ -15561,3 +15561,74 @@ All verification steps passed:
 **Result:** P2.18.4 + P2.18.5 marked as **VERIFIED** (see PROD Evidence section above).
 
 ---
+
+# Restore Archivierte Saisonvorlagen (P2.19)
+
+**Implementation Date:** 2026-01-25
+
+**Scope:** Add restore (unarchive) functionality for archived season templates.
+
+**Features Implemented:**
+
+1. **Backend - Restore Endpoint**:
+   - Added `POST /season-templates/{id}/restore` endpoint
+   - Behavior: Sets `archived_at = NULL`, `updated_at = NOW()`
+   - Validation: Template must be archived (404 if not found or not archived)
+   - Name conflict check: Returns 409 if active template with same name exists
+   - Response: 200 with full template payload (including periods)
+
+2. **Frontend - Restore UI**:
+   - Added "Wiederherstellen" button for archived templates (green)
+   - Button shown when "Nur archivierte anzeigen" toggle is ON
+   - Confirmation dialog before restore action
+   - Success toast + refetch templates after restore
+   - Restored template disappears from archived-only list immediately
+
+3. **Smoke Script**:
+   - `pms_season_template_restore_smoke.sh`: 6 tests (create, archive, restore, verify lists)
+   - Tests restore workflow and list filtering correctness
+
+4. **Documentation** (DOCS SAFE MODE):
+   - backend/docs/ops/runbook.md: Added P2.19 section with curl examples, troubleshooting
+   - backend/scripts/README.md: Added restore smoke script entry
+   - backend/docs/project_status.md: This entry
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- Restore sets archived_at = NULL (template returns to active state)
+- Name conflict validation prevents duplicate active template names
+- UI shows both "Wiederherstellen" and "Endgültig löschen" for archived templates
+- Restore action only available when "Nur archivierte anzeigen" toggle is ON
+- German error messages for all validation failures
+
+**Dependencies:**
+- Season Templates domain (pricing_season_templates table)
+- Migration 20260116000000 (season templates)
+- P2.18.4 (archived-only toggle) - restore only shown in archived view
+
+**Verification Commands:**
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Run restore smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export ADMIN_JWT_TOKEN="<<<manager/admin JWT>>>"
+./backend/scripts/pms_season_template_restore_smoke.sh
+echo "rc=$?"
+
+# Manual UI verification
+# 1. Login as admin/manager
+# 2. Navigate to /pricing/seasons
+# 3. Create template and archive it
+# 4. Toggle "Nur archivierte anzeigen" ON
+# 5. Archived template should show with "Wiederherstellen" and "Endgültig löschen" buttons
+# 6. Click "Wiederherstellen" and confirm
+# 7. Verify success toast appears
+# 8. Verify template disappears from archived list
+# 9. Toggle OFF - template should now appear in active list
+```
+
+---
