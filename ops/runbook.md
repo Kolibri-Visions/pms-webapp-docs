@@ -41595,3 +41595,194 @@ curl -X GET "$HOST/api/v1/pricing/season-templates?archived_only=true" \
 - Hard refresh UI to force reload
 
 ---
+
+## P2.20 Properties CRUD, Filters, and Sorting
+
+**Overview:** Complete Properties Admin UI with full CRUD operations, server-side filters, and sorting.
+
+**Purpose:** Make Properties functionality fully production-ready with 1:1 parity between Backend API capabilities and Admin UI features.
+
+**Architecture:**
+- **Backend**: 5 fully functional REST endpoints (GET list, GET detail, POST create, PATCH update, DELETE soft-delete)
+- **Filters**: 6 query parameters (is_active, property_type, city, min_guests, owner_id, assignable_for_owner_id)
+- **Sorting**: Dynamic sort_by/sort_order parameters (name, city, max_guests, created_at, updated_at, base_price)
+- **Frontend**: Complete Admin UI with Create modal, Edit modal, Delete confirmation, Filter bar, Sortable columns
+- **RBAC**: admin/manager (full CRUD), owner (view/edit own), staff/accountant (read-only)
+
+**UI Routes:**
+- `/properties` - Properties list page with filters, sorting, pagination, Create button
+- `/properties/[id]` - Property detail page with Edit/Delete buttons
+
+**API Endpoints:**
+
+All roles:
+- `GET /api/v1/properties?limit=&offset=&sort_by=&sort_order=&is_active=&property_type=&city=&min_guests=` - List properties with filters and sorting
+- `GET /api/v1/properties/{id}` - Get single property details
+
+Admin/Manager only:
+- `POST /api/v1/properties` - Create new property (requires: name, property_type, bedrooms, beds, bathrooms, max_guests, address_line1, city, postal_code, base_price)
+- `DELETE /api/v1/properties/{id}` - Soft delete property (sets deleted_at timestamp)
+
+Admin/Manager/Owner:
+- `PATCH /api/v1/properties/{id}` - Update property (partial update, all fields optional)
+
+**Database Tables:**
+- `properties` - Main properties table with 40+ fields (capacity, location, pricing, booking rules, status, timestamps)
+
+**Migrations:**
+- None (properties table already exists from Phase 17B)
+- Updated PaginationParams schema to support optional sort_by/sort_order (P2.20)
+
+**Verification Commands:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# [HOST-SERVER-TERMINAL] Optional: Verify deploy after Coolify redeploy
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# [HOST-SERVER-TERMINAL] Run CRUD smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export ADMIN_JWT_TOKEN="<<<admin/manager JWT>>>"
+# Optional:
+# export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+./backend/scripts/pms_properties_crud_smoke.sh
+echo "rc=$?"
+
+# [HOST-SERVER-TERMINAL] Run filters/sort smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export ADMIN_JWT_TOKEN="<<<admin/manager JWT>>>"
+./backend/scripts/pms_properties_filters_sort_smoke.sh
+echo "rc=$?"
+
+# Expected output: All 7+7=14 tests pass, both rc=0
+```
+
+**Common Issues:**
+
+### Create Property Returns 400 (Missing Required Fields)
+
+**Symptom:** POST /api/v1/properties returns 400 Bad Request with validation errors.
+
+**Root Cause:** Missing required fields in request body.
+
+**Required Fields:**
+- name (string)
+- property_type (apartment/house/villa/condo/room/studio/cabin/cottage/chalet)
+- bedrooms (int >= 0)
+- beds (int >= 1)
+- bathrooms (number >= 0, can be 1.5)
+- max_guests (int > 0)
+- address_line1 (string)
+- city (string)
+- postal_code (string)
+- base_price (decimal string, e.g. "120.00")
+
+**Solution:**
+```bash
+curl -X POST "$HOST/api/v1/properties" \
+  -H "Authorization: Bearer $JWT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Test Property",
+    "property_type": "apartment",
+    "bedrooms": 2, "beds": 3, "bathrooms": 1,
+    "max_guests": 4,
+    "address_line1": "Test Street 123",
+    "city": "Berlin", "postal_code": "10115",
+    "base_price": "120.00"
+  }'
+```
+
+### Filters Return No Results
+
+**Symptom:** GET /api/v1/properties with filters returns empty array despite matching properties existing.
+
+**Root Cause:** Filter values don't match database values exactly (case-sensitive for some fields).
+
+**How to Debug:**
+```bash
+# Test each filter individually
+curl -sS "$HOST/api/v1/properties?is_active=true" -H "Authorization: Bearer $JWT" | jq '.items | length'
+curl -sS "$HOST/api/v1/properties?property_type=apartment" -H "Authorization: Bearer $JWT" | jq '.items | length'
+curl -sS "$HOST/api/v1/properties?city=Berlin" -H "Authorization: Bearer $JWT" | jq '.items | length'
+curl -sS "$HOST/api/v1/properties?min_guests=4" -H "Authorization: Bearer $JWT" | jq '.items | length'
+```
+
+**Solution:**
+- `is_active`: Must be "true" or "false" (string, not boolean)
+- `property_type`: Must be lowercase exact match (apartment, house, villa, etc.)
+- `city`: Case-insensitive partial match (Berlin, berlin, BERLIN all work)
+- `min_guests`: Numeric string (4, not "4")
+
+### Sorting Not Working
+
+**Symptom:** GET /api/v1/properties with sort_by/sort_order returns results in wrong order.
+
+**Root Cause:** Invalid sort_by field name or properties.py doesn't recognize it.
+
+**Allowed sort_by values (line 102 properties.py):**
+- name
+- created_at
+- updated_at
+- city
+- max_guests
+- base_price
+
+**How to Debug:**
+```bash
+# Test sorting by name ascending
+curl -sS "$HOST/api/v1/properties?sort_by=name&sort_order=asc&limit=5" \
+  -H "Authorization: Bearer $JWT" | jq '.items[].name'
+
+# Should return names in alphabetical order
+```
+
+**Solution:**
+- Use one of the allowed sort_by values
+- Ensure sort_order is "asc" or "desc" (lowercase)
+- If sort_by is invalid, backend falls back to default (name/asc)
+
+### Delete Property Returns 409 (Active Bookings)
+
+**Symptom:** DELETE /api/v1/properties/{id} returns 409 Conflict with message "Cannot delete property with active bookings".
+
+**Root Cause:** Property has bookings that aren't completed/cancelled.
+
+**How to Debug:**
+```bash
+# Check if property has active bookings
+psql $DATABASE_URL -c "SELECT COUNT(*) FROM bookings WHERE property_id = '<property_id>' AND status NOT IN ('cancelled', 'completed');"
+```
+
+**Solution:**
+- Cancel or complete all active bookings first
+- Or mark property as inactive instead of deleting: `PATCH /api/v1/properties/{id}` with `{"is_active": false}`
+- Soft delete preserves historical booking data
+
+### Owner Can't Edit Property
+
+**Symptom:** Owner user gets 403 Forbidden when trying to PATCH /api/v1/properties/{id}.
+
+**Root Cause:** Property is not owned by this owner (owner_id doesn't match JWT sub claim).
+
+**How to Debug:**
+```bash
+# Get property owner_id
+curl -sS "$HOST/api/v1/properties/{id}" -H "Authorization: Bearer $JWT" | jq '.owner_id'
+
+# Get JWT sub claim (user ID)
+echo $JWT | cut -d'.' -f2 | base64 -d | jq '.sub'
+
+# These must match for owner to have edit permission
+```
+
+**Solution:**
+- Verify property.owner_id matches JWT sub claim
+- If property is agency-owned (owner_id = null), only admin/manager can edit
+- To assign property to owner: `PATCH /api/v1/properties/{id}/owner` as admin/manager
+
+---

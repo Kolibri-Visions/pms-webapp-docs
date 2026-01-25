@@ -15638,3 +15638,153 @@ echo "rc=$?"
 ```
 
 ---
+
+# Properties CRUD, Filters, and Sorting (P2.20)
+
+**Implementation Date:** 2026-01-25
+
+**Scope:** Complete Properties Admin UI with full CRUD operations, server-side filters, and sorting to achieve 1:1 parity with Backend API capabilities.
+
+**Features Implemented:**
+
+1. **Backend Sorting Support**:
+   - Updated `PaginationParams` schema to include optional `sort_by` and `sort_order` fields
+   - Added sorting to GET /api/v1/properties endpoint with allowed fields: name, created_at, updated_at, city, max_guests, base_price
+   - sort_order validation (must be "asc" or "desc")
+   - Default sort: name ascending if invalid sort_by provided
+
+2. **Frontend Complete Property Interface**:
+   - Updated Property TypeScript interface to match all 40+ fields from PropertyResponse schema
+   - Includes: IDs, basic info, capacity, location, check-in/out, pricing, booking rules, tax, status, external_ids, timestamps
+   - Replaced minimal interface (7 fields) with complete schema (40+ fields)
+
+3. **Frontend Create Property**:
+   - Create button in list page header
+   - CreatePropertyModal component with comprehensive form
+   - Form sections: Basic Info, Capacity, Location (Address), Pricing
+   - All required fields: name, property_type, bedrooms, beds, bathrooms, max_guests, address_line1, city, postal_code, base_price
+   - Optional fields: internal_name, description, cleaning_fee, min_stay
+   - API call: POST /api/v1/properties with validation
+   - Success toast + refetch list on success
+   - Error handling with specific messages (401, 403, 400, 500)
+
+4. **Frontend Edit Property**:
+   - Edit and Delete buttons in detail page header
+   - Edit modal with property fields (name, internal_name, description, max_guests, base_price, cleaning_fee, min_stay, is_active)
+   - API call: PATCH /api/v1/properties/{id}
+   - Success toast + update property data on success
+   - Error handling (401, 403, validation errors)
+
+5. **Frontend Delete Property**:
+   - Delete button in detail page header
+   - Confirmation dialog with property name display
+   - API call: DELETE /api/v1/properties/{id} (soft delete)
+   - Success toast + redirect to list page
+   - Error handling (401, 403, 409 for active bookings)
+
+6. **Frontend Server-Side Filters**:
+   - Filter bar with 5 controls: Status (is_active), Property Type, City, Min. Guests, Reset button
+   - All filters applied as URLSearchParams to API
+   - Filter changes reset pagination to first page
+   - Reset filters button clears all filter values
+
+7. **Frontend Column Sorting**:
+   - Clickable table headers for sortable columns: Name, City, Capacity (max_guests), Created
+   - Visual sort indicators (↑ for asc, ↓ for desc) next to active sort column
+   - Toggle sort order on same column click
+   - New column click resets to ascending
+   - Sort state passed to API via sort_by/sort_order params
+
+8. **Frontend Table Updates**:
+   - Updated table columns to show: Name (+ internal_name subtitle), Type, City, Capacity, Status, Created
+   - Status badges for Active (green), Inactive (gray), Deleted (red)
+   - Removed client-side filtering (replaced with server-side)
+
+9. **Smoke Scripts** (created 2 new scripts):
+   - `pms_properties_crud_smoke.sh`: Tests Create, Read, Update, Delete operations (7 tests)
+   - `pms_properties_filters_sort_smoke.sh`: Tests all 6 filters and sorting (7 tests)
+   - Both scripts: PROD-safe with "-Smoke" suffix, self-contained, cleanup via trap, detailed output
+
+10. **Documentation** (DOCS SAFE MODE):
+    - backend/docs/ops/runbook.md: Added comprehensive P2.20 section (overview, endpoints, verification commands, common issues)
+    - backend/scripts/README.md: Added 2 smoke script entries with usage, expected output, troubleshooting
+    - backend/docs/project_status.md: This entry
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- Properties Backend already had full CRUD + filters (from Phase 17B), but Frontend was read-only with client-side search
+- Now Frontend has 1:1 parity with Backend capabilities (100% endpoint coverage, 100% filter coverage)
+- RBAC enforced: admin/manager (full CRUD), owner (view/edit own), staff/accountant (read-only)
+- Soft delete pattern: DELETE sets deleted_at timestamp, preserves historical data
+- Name conflict validation: Cannot delete property with active bookings (returns 409 Conflict)
+- Property ownership: properties.owner_id references owners.id (NULL = agency-owned)
+- Frontend uses modals for Create/Edit (consistent UX pattern), confirmation dialog for Delete
+- Sorting and filters improve usability for agencies with many properties
+
+**Dependencies:**
+- Properties domain (properties table from Phase 17B)
+- Owners domain (properties.owner_id FK to owners.id from O1)
+- Bookings domain (delete validation checks for active bookings)
+- Common schemas (PaginationParams updated for sorting)
+
+**Verification Commands (for VERIFIED status later):**
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Optional: Verify deploy after Coolify redeploy
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# Run CRUD smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export ADMIN_JWT_TOKEN="<<<admin/manager JWT>>>"
+./backend/scripts/pms_properties_crud_smoke.sh
+echo "rc=$?"
+
+# Run filters/sort smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export ADMIN_JWT_TOKEN="<<<admin/manager JWT>>>"
+./backend/scripts/pms_properties_filters_sort_smoke.sh
+echo "rc=$?"
+
+# Manual UI verification
+# 1. Login as admin/manager
+# 2. Navigate to /properties
+# 3. Verify table shows: Name, Type, City, Capacity, Status, Created columns
+# 4. Test filters: Status dropdown, Property Type dropdown, City input, Min Guests input
+# 5. Test sorting: Click column headers (Name, City, Capacity, Created)
+# 6. Click "Neues Objekt" button - verify Create modal opens
+# 7. Fill required fields and create property
+# 8. Click created property row - verify detail page opens
+# 9. Click "Bearbeiten" button - verify Edit modal opens with property data
+# 10. Update some fields and save - verify changes reflected
+# 11. Click "Löschen" button - verify confirmation dialog
+# 12. Confirm delete - verify redirect to list with success toast
+# Expected: All CRUD operations work, filters apply correctly, sorting changes order, UI is responsive
+```
+
+**Files Modified:**
+- backend/app/schemas/common.py (PaginationParams: added sort_by, sort_order fields + validator)
+- backend/app/api/routes/properties.py (list_properties: added sorting support with allowed_sort_fields whitelist)
+- frontend/app/properties/page.tsx (complete rewrite: added Property interface 40+ fields, Create modal, filters bar, sortable headers, updated table)
+- frontend/app/properties/[id]/page.tsx (added Property interface 40+ fields, Edit modal, Delete confirmation dialog, Edit/Delete buttons)
+- backend/scripts/pms_properties_crud_smoke.sh (new: 7 tests for CRUD operations)
+- backend/scripts/pms_properties_filters_sort_smoke.sh (new: 7 tests for filters and sorting)
+- backend/docs/ops/runbook.md (appended P2.20 section with verification commands and troubleshooting)
+- backend/scripts/README.md (appended 2 smoke script entries)
+- backend/docs/project_status.md (this entry)
+
+**Gap Analysis (Before P2.20):**
+- Backend: 5 endpoints + 6 filters (100% complete)
+- Frontend: 2 GET endpoints (40% coverage), 0 filters (0% coverage), no Create/Edit/Delete
+- Result: Frontend was severely limited, not production-ready
+
+**After P2.20:**
+- Backend: 5 endpoints + 6 filters + dynamic sorting (100%)
+- Frontend: 5 endpoints + 5 UI filters + 5 sortable columns (100% endpoint coverage, 83% filter coverage - excludes owner_id/assignable_for_owner_id as these are staff-only filters)
+- Result: Full production parity, complete Admin UI
+
+---
