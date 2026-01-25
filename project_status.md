@@ -15593,7 +15593,13 @@ All verification steps passed:
    - backend/scripts/README.md: Added restore smoke script entry
    - backend/docs/project_status.md: This entry
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED (Verified: 2026-01-25, commit 948e061)
+
+**PROD Evidence (2026-01-25):**
+- Backend API version: commit 948e0615e102da3a8559b5463712901dda7625dd, started 2026-01-25T11:26:05Z
+- Admin UI version: commit 948e0615e102da3a8559b5463712901dda7625dd, started 2026-01-25T11:24:01Z
+- Deploy verification: pms_verify_deploy.sh rc=0
+- Smoke test: pms_season_template_restore_smoke.sh rc=0
 
 **Notes:**
 - Restore sets archived_at = NULL (template returns to active state)
