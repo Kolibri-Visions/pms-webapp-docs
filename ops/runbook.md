@@ -42221,3 +42221,110 @@ git log --oneline -1
 - Query params should only be used for filters, pagination, search - not for navigation state
 
 ---
+
+### Admin Build Fails: TSX Syntax Error in Properties Detail Page (P2.21.2.1)
+
+**Symptom:** Coolify admin deploy fails with Next.js compile error:
+```
+./app/properties/[id]/page.tsx
+Expected ',', got '{'
+```
+
+Error occurs around line ~852 at `{/* Amenities Assignment Modal */}` comment.
+
+**Root Cause:** JSX leaked outside the component's return statement. When inner tabs were removed in P2.21.2 (commit f12d10a), an extra `</div>` at line 555 prematurely closed the outer return div, leaving all modals (Amenities, Delete Confirmation, Edit, Toast) outside the return statement.
+
+**TSX Structure (Before Fix - BROKEN):**
+```tsx
+return (
+  <div className="space-y-6">  // line 493 - outer div
+    {/* Header */}
+    <div>...</div>  // line 495-554
+  </div>  // line 555 - WRONG! Closes outer div too early
+
+  {/* Content */}
+  <div className="space-y-6">  // line 557 - orphaned
+    ...
+  </div>
+);  // end of return
+
+{/* Amenities Assignment Modal */}  // line 852 - OUTSIDE return!
+{showAmenitiesModal && (...)}  // JSX in non-JSX context = syntax error
+```
+
+**Fix (P2.21.2.1):**
+- Removed premature closing `</div>` at line 555
+- Kept content wrapper div at line 557
+- All modals now correctly inside outer div (after content div closes)
+
+**TSX Structure (After Fix - CORRECT):**
+```tsx
+return (
+  <div className="space-y-6">  // line 493 - outer div (stays open)
+    {/* Header */}
+    <div>...</div>  // line 495-554
+    
+    {/* Content */}
+    <div className="space-y-6">  // line 557 - content wrapper
+      ...
+    </div>  // line 850 - closes content
+    
+    {/* Amenities Assignment Modal */}  // line 852 - INSIDE outer div
+    {showAmenitiesModal && (...)}
+    {/* other modals */}
+  </div>  // closes outer div
+);
+```
+
+**Verification Steps:**
+
+Grep Proof (Modals Inside Return):
+```bash
+# Count opening/closing divs in return statement
+sed -n '492,1121p' frontend/app/properties/[id]/page.tsx | grep -c '<div'
+# Should match closing div count (balanced)
+
+# Verify modals after content but before return close
+rg -n "Amenities Assignment Modal|Delete Confirmation|Edit Modal|Toast Notification" frontend/app/properties/[id]/page.tsx
+# All should be between line 850 (content close) and ~1119 (outer close)
+
+# Verify no ?tab= query params (P2.21.2 architecture intact)
+rg '\?tab=' frontend/app/properties/[id]/page.tsx
+# Should return nothing
+
+# Verify Media tab in TOP navigation
+rg 'label.*Media' frontend/app/properties/[id]/layout.tsx
+# Should show Media tab exists
+```
+
+Deploy Verification:
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify commit
+git log --oneline -1
+# Should show: fix(admin): build fix for properties detail TSX (P2.21.2.1)
+
+# Trigger Coolify redeploy for admin
+# Monitor build logs - should succeed without TSX syntax errors
+
+# After deploy, verify frontend compiles and runs
+curl -sS https://admin.fewo.kolibri-visions.de/api/ops/version | jq
+# Check commit matches latest
+
+# Manual UI check
+# 1. Navigate to /properties/{id}
+# 2. Verify only ONE tab bar at top (no duplicate tabs)
+# 3. Verify tabs work: Überblick, Preiseinstellungen, Media
+# 4. Verify no ?tab= in URL
+```
+
+**Prevention:**
+- When removing nested conditional rendering (`{condition && <div>...</div>}`), always verify outer div structure
+- Count opening/closing tags carefully - use IDE bracket matching
+- Test TSX compilation locally before pushing: `npx tsc --noEmit` in frontend dir
+- For complex component restructuring, use git diff to review exactly what divs were added/removed
+
+---
