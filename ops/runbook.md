@@ -42520,3 +42520,226 @@ curl -X GET "$HOST/api/v1/properties/$PROPERTY_ID/media" \
 - Monitor backend logs for "column does not exist" errors (indicates schema drift)
 
 ---
+
+---
+
+## Property Media Upload
+
+**Overview:** Property media file upload feature allows admin/manager users to upload image files directly from the Admin UI instead of entering URLs.
+
+**Purpose:** Enable drag-and-drop/file picker upload of property images to Supabase Storage with automatic media record creation.
+
+**Architecture:**
+- **Storage Backend**: Supabase Storage bucket `property-media` (private bucket, exists in PROD)
+- **Storage Path**: `agencies/{agency_id}/properties/{property_id}/{uuid}.{ext}`
+- **Upload Endpoint**: POST /api/v1/properties/{id}/media/upload (multipart/form-data)
+- **RBAC**: Requires manager/admin role
+- **File Validation**: 
+  - Allowed types: image/jpeg, image/png, image/webp
+  - Max size: 10MB
+  - MIME type validation on backend
+- **Storage Module**: `backend/app/core/storage.py` (SupabaseStorage helper)
+
+**Frontend:**
+- **UI Route**: `/properties/:id/media` - Dual-mode modal (File Upload / URL)
+- **Upload Flow**: File picker → Preview → Upload to backend → Backend uploads to Supabase → Media record created
+- **Modes**: 
+  - File Upload (default): Drag-and-drop zone with preview
+  - URL (secondary): Direct URL entry (existing flow)
+
+**API Endpoints:**
+- `POST /api/v1/properties/{id}/media/upload` - Upload image file (multipart/form-data)
+- `GET /api/v1/properties/{id}/media` - List property media (includes uploaded files)
+- `DELETE /api/v1/properties/{id}/media/{media_id}` - Delete media (also deletes from Supabase Storage)
+
+**Verification Commands:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# [HOST-SERVER-TERMINAL] Optional: Verify deploy after Coolify redeploy
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_verify_deploy.sh
+
+# [HOST-SERVER-TERMINAL] Run upload smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="<<<manager/admin JWT>>>"
+# Optional:
+# export PROPERTY_ID="660e8400-e29b-41d4-a716-446655440000"
+# export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+./backend/scripts/pms_property_media_upload_smoke.sh
+echo "rc=$?"
+
+# Expected output: All 3 tests pass (upload → list → delete), rc=0
+```
+
+**Common Issues:**
+
+### Upload Returns 500 "Upload failed"
+
+**Symptom:** POST /api/v1/properties/{id}/media/upload returns 500 with error message "Upload failed (HTTP XXX): ..."
+
+**Root Cause:** Supabase Storage API call failed. Common reasons:
+- SUPABASE_SERVICE_ROLE_KEY env var not set or invalid
+- property-media bucket doesn't exist
+- Service role lacks storage permissions
+- Network/connectivity issues to Supabase
+
+**How to Debug:**
+```bash
+# Check backend env vars
+docker exec pms-backend env | grep SUPABASE
+
+# Should see:
+# SUPABASE_URL=https://<project>.supabase.co
+# SUPABASE_SERVICE_ROLE_KEY=eyJ...
+# SUPABASE_ANON_KEY=eyJ...
+
+# Test Supabase Storage API directly with service role
+SUPABASE_URL="https://<project>.supabase.co"
+SERVICE_KEY="eyJ..."
+curl -X GET "$SUPABASE_URL/storage/v1/bucket/property-media" \
+  -H "Authorization: Bearer $SERVICE_KEY" \
+  -H "apikey: $SERVICE_KEY"
+
+# Should return bucket details (200 OK)
+```
+
+**Solution:**
+- Ensure SUPABASE_SERVICE_ROLE_KEY is set in backend environment (check Coolify env vars)
+- Verify property-media bucket exists in Supabase Dashboard → Storage
+- Check service role has storage.objects.create permission
+- Restart backend after env var changes
+
+### Upload Returns 400 "Invalid file type"
+
+**Symptom:** Upload fails with 400 Bad Request, error: "Only image/jpeg, image/png, and image/webp files are allowed"
+
+**Root Cause:** User uploaded unsupported file type (e.g., GIF, BMP, TIFF, PDF)
+
+**How to Debug:**
+```bash
+# Check file MIME type in request
+# Browser DevTools → Network → Upload request → Request Headers
+# Content-Type: multipart/form-data; boundary=...
+# Form Data → file → type: image/xxx
+
+# Backend validates against: ["image/jpeg", "image/png", "image/webp"]
+```
+
+**Solution:**
+- Only upload JPG, PNG, or WebP files
+- Convert other image formats (e.g., `convert input.gif output.png` with ImageMagick)
+- If WebP needed for production, ensure browser support (all modern browsers OK)
+
+### Upload Returns 413 "Payload too large"
+
+**Symptom:** Upload fails with 413 error before reaching backend validation
+
+**Root Cause:** File exceeds proxy/server limits (backend allows 10MB, but proxy may have lower limit)
+
+**How to Debug:**
+```bash
+# Check file size
+ls -lh /path/to/image.jpg
+# If > 10MB, backend will reject with 400
+# If < 10MB but still 413, proxy limit issue
+
+# Check nginx/Coolify proxy config
+# Default nginx client_max_body_size might be 1m or 10m
+```
+
+**Solution:**
+- Compress images before upload (use tools like TinyPNG, ImageOptim)
+- Increase proxy limit if needed (Coolify → Service → nginx client_max_body_size)
+- Backend limit: 10MB (hardcoded in upload endpoint validation)
+
+### Uploaded Image URL Doesn't Load (404 or 403)
+
+**Symptom:** Upload succeeds, media appears in listing, but image URL returns 404 or 403 when accessed
+
+**Root Cause:** property-media bucket is private (requires signed URLs), but public URL was returned
+
+**How to Debug:**
+```bash
+# Check media record URL format
+curl -X GET "$HOST/api/v1/properties/$PROPERTY_ID/media" \
+  -H "Authorization: Bearer $JWT" | jq '.[0].url'
+
+# Public URL format (won't work for private bucket):
+# https://<project>.supabase.co/storage/v1/object/public/property-media/...
+
+# Signed URL format (works for private bucket):
+# https://<project>.supabase.co/storage/v1/object/sign/property-media/...?token=...
+
+# Test URL directly
+curl -I "<url from media record>"
+# 403 Forbidden → private bucket, need signed URL
+# 404 Not Found → file doesn't exist in storage
+```
+
+**Solution:**
+- Update media listing endpoint to generate signed URLs for private bucket
+- Or update storage.py to use signed URLs on upload
+- Or make property-media bucket public (if appropriate for use case)
+- For private bucket, frontend should request signed URLs from backend (not use URLs directly)
+
+### Media Upload Succeeds But Doesn't Appear in Listing
+
+**Symptom:** Upload returns 201 Created, but media doesn't show in GET /api/v1/properties/{id}/media
+
+**Root Cause:** Media record created with deleted_at timestamp or transaction not committed
+
+**How to Debug:**
+```bash
+# Check database for media record
+psql $DATABASE_URL -c "
+  SELECT id, property_id, url, deleted_at, created_at 
+  FROM property_media 
+  WHERE property_id = '$PROPERTY_ID' 
+  ORDER BY created_at DESC 
+  LIMIT 5;
+"
+
+# Check if deleted_at IS NOT NULL (soft deleted)
+# Check if record exists but missing from API response
+
+# Check backend logs for transaction errors
+docker logs pms-backend --tail 100 | grep -i "property_media\|transaction\|rollback"
+```
+
+**Solution:**
+- If deleted_at IS NOT NULL: Bug in upload endpoint, should set deleted_at = NULL
+- If transaction rollback: Check backend logs for constraint violations or errors
+- If record missing: Check agency_id scoping in listing query (media belongs to different agency)
+
+### Delete Media Fails (Storage File Remains)
+
+**Symptom:** DELETE /api/v1/properties/{id}/media/{media_id} returns 204 but file remains in Supabase Storage
+
+**Root Cause:** Storage deletion failed but database deletion succeeded (orphaned file in bucket)
+
+**How to Debug:**
+```bash
+# Check if file still exists in Supabase Storage
+# Dashboard → Storage → property-media → Browse path
+
+# Check backend logs for StorageError
+docker logs pms-backend --tail 100 | grep -i "storage\|delete"
+
+# Manually delete via Storage API
+STORAGE_PATH="agencies/<agency_id>/properties/<property_id>/<uuid>.png"
+curl -X DELETE "$SUPABASE_URL/storage/v1/object/property-media/$STORAGE_PATH" \
+  -H "Authorization: Bearer $SERVICE_KEY" \
+  -H "apikey: $SERVICE_KEY"
+```
+
+**Solution:**
+- Orphaned files don't affect functionality (database is source of truth)
+- Implement periodic cleanup job to delete orphaned storage files
+- Update delete endpoint to log storage errors but not fail transaction
+- Current implementation: storage deletion failure returns False but doesn't raise exception
+
+---
