@@ -15798,3 +15798,325 @@ echo "rc=$?"
 - Result: Full production parity, complete Admin UI
 
 ---
+
+### P2.21: Properties Nice-to-haves Pack (2026-01-25) ✅ IMPLEMENTED (NOT VERIFIED)
+
+**Status:** Implementation complete. Smoke test pending.
+
+**Scope:** Property media gallery, location coordinates, listed status tracking, bulk operations, CSV export, and enhanced amenities integration.
+
+**Implementation:**
+
+**Database:**
+- Migration `20260125150000_add_property_media_and_enhancements.sql`:
+  - `property_media` table: id, agency_id, property_id, url, mime_type, byte_size, storage_provider, storage_path, sort_order, is_cover (unique per property), created_at, updated_at, deleted_at
+  - RLS policies for multi-tenant isolation
+  - Unique constraint: one cover image per property
+  - Soft delete support
+
+**Backend:**
+- Schemas (`backend/app/schemas/properties.py`):
+  - `PropertyMediaCreate`: url (required), sort_order, is_cover, mime_type, byte_size, storage_provider, storage_path
+  - `PropertyMediaUpdate`: sort_order, is_cover
+  - `PropertyMediaResponse`: Full media data with timestamps
+  - `PropertyBulkAction`: property_ids (1-50), action (activate, deactivate, archive, restore)
+  - `PropertyBulkResponse`: requested_count, updated_count, not_found_count, failed[]
+  - Enhanced `PropertyCreate`: latitude, longitude, is_listed, amenity_ids[]
+  - Enhanced `PropertyUpdate`: latitude, longitude, is_listed
+  - Enhanced `PropertyResponse`: latitude, longitude, is_listed (derived from listed_at)
+
+- Routes (`backend/app/api/routes/properties.py`):
+  - `GET /properties/{id}/media`: List media sorted by sort_order
+  - `POST /properties/{id}/media`: Add media via URL (admin/manager)
+  - `PATCH /properties/{id}/media/{media_id}`: Update sort_order/is_cover (admin/manager)
+  - `DELETE /properties/{id}/media/{media_id}`: Soft delete media (admin/manager)
+  - `POST /properties/bulk`: Bulk actions on 1-50 properties (admin/manager)
+  - `GET /properties/export`: CSV export with filters (admin/manager)
+
+- Service (`backend/app/services/property_service.py`):
+  - `list_property_media()`: Fetch media sorted by sort_order
+  - `add_property_media()`: Add media, auto-unset previous cover if is_cover=true
+  - `update_property_media()`: Update metadata, enforce unique cover constraint
+  - `delete_property_media()`: Soft delete (set deleted_at)
+  - `bulk_property_action()`: Process activate/deactivate/archive/restore on multiple properties
+  - Enhanced `create_property()`: Handle latitude/longitude (PostGIS), auto-set listed_at when is_listed=true, assign amenities via amenity_ids
+  - Enhanced `update_property()`: Handle lat/lng updates, toggle is_listed (auto-set/clear listed_at)
+  - Enhanced `get_property()`, `list_properties()`, `delete_property()`: Return is_listed derived field
+
+**Frontend:**
+- List page (`frontend/app/properties/page.tsx`):
+  - Bulk selection: Checkboxes for all properties, "select all" header checkbox
+  - Bulk actions toolbar: Activate, Deactivate, Archive, Restore buttons (only visible when items selected)
+  - CSV export button in header
+  - "Show archived" toggle filter
+  - Enhanced Property interface: latitude?, longitude?, is_listed?
+
+- Detail page (`frontend/app/properties/[id]/page.tsx`):
+  - Media Gallery section: Grid display, upload/add URL modal, set cover button, delete button per photo, sort order display
+  - Location section: Display lat/lng coordinates, "Open in Google Maps" link if coordinates exist
+  - Listed Status section: Display is_listed status, listed_at timestamp, toggle button to list/unlist
+  - Enhanced Property interface: latitude?, longitude?, is_listed?
+
+**Testing:**
+- Smoke script: `backend/scripts/pms_properties_nice_to_haves_smoke.sh` (10 tests)
+  - Test 1: Create property with amenities, owner_id, is_listed=true, lat/lng
+  - Test 2: Verify amenities round-trip
+  - Test 3: Verify listed_at set when is_listed=true
+  - Test 4: Add media via URL
+  - Test 5: Set cover media
+  - Test 6: Bulk deactivate then activate
+  - Test 7: Archive then restore
+  - Test 8: CSV export includes property
+  - Test 9: Delete media
+  - Test 10: Toggle listed off -> listed_at null
+
+**Documentation:**
+- `backend/scripts/README.md`: Added P2.21 smoke script entry with usage, expected output, troubleshooting
+- `backend/docs/ops/runbook.md`: P2.21 section (to be added - see below)
+- `backend/docs/project_status.md`: This entry
+
+**Verification Commands:**
+
+```bash
+# 1. Apply migration
+cd backend
+alembic upgrade head  # Or supabase migration apply
+
+# 2. Verify property_media table
+psql $DATABASE_URL -c "\d property_media"
+
+# 3. Run smoke test
+./backend/scripts/pms_properties_nice_to_haves_smoke.sh
+
+# Expected: ALL TESTS PASSED ✓
+
+# 4. Test media endpoints
+TOKEN=$(./backend/scripts/get_fresh_token.sh)
+PROPERTY_ID="<uuid>"
+
+# List media
+curl "$API_BASE/api/v1/properties/$PROPERTY_ID/media" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-agency-id: $AGENCY_ID"
+
+# Add media
+curl -X POST "$API_BASE/api/v1/properties/$PROPERTY_ID/media" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-agency-id: $AGENCY_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com/test.jpg","sort_order":0}'
+
+# 5. Test bulk operations
+curl -X POST "$API_BASE/api/v1/properties/bulk" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-agency-id: $AGENCY_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"property_ids":["uuid1","uuid2"],"action":"activate"}'
+
+# 6. Test CSV export
+curl "$API_BASE/api/v1/properties/export?is_active=true" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-agency-id: $AGENCY_ID"
+
+# 7. Test location coordinates
+curl -X POST "$API_BASE/api/v1/properties" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-agency-id: $AGENCY_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Test","property_type":"apartment","latitude":52.52,"longitude":13.40,...}'
+
+# 8. Test listed toggle
+curl -X PATCH "$API_BASE/api/v1/properties/$PROPERTY_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-agency-id: $AGENCY_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"is_listed":true}'
+# Verify listed_at is set
+
+curl -X PATCH "$API_BASE/api/v1/properties/$PROPERTY_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-agency-id: $AGENCY_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"is_listed":false}'
+# Verify listed_at is null
+```
+
+**Runbook Entry (To Add):**
+See `backend/scripts/README.md` P2.21 section for full troubleshooting. Key issues:
+- Media upload fails: Check URL is not empty/whitespace
+- Multiple covers: Unique constraint allows only one cover per property
+- Bulk not_found_count: Verify properties exist, belong to agency, match action (active/deleted state)
+- CSV export empty: Remove filters, check total property count
+- listed_at not set/cleared: Verify backend auto-sets on is_listed=true, clears on is_listed=false
+
+**Integration:**
+- Amenities: Properties can be created with amenity_ids, assigned via property_amenities junction table
+- Owners: Properties display owner_id, can be assigned on create/update
+- Location: lat/lng stored in PostGIS geometry field, extracted as separate fields in API response
+
+**Known Limitations:**
+- Media upload: URL-only (no file upload endpoint yet - requires storage integration)
+- Location: Read-only display in UI (no edit inputs in detail page - enhancement required)
+- Bulk operations: Max 50 properties per request (performance limit)
+- CSV export: No pagination (limited by backend page_size=10000)
+
+---
+
+# Properties Nice-to-haves Pack (P2.21)
+
+**Implementation Date:** 2026-01-25
+
+**Scope:** Comprehensive property enhancement pack with media management, listing controls, location display, bulk operations, and CSV export.
+
+**Features Implemented:**
+
+1. **Database Migration** (`20260125150000_add_property_media_and_enhancements.sql`):
+   - Created `property_media` table: id, agency_id, property_id, url, sort_order, is_cover, mime_type, byte_size, storage_provider, storage_path, created_at, updated_at, deleted_at
+   - Unique constraint: one is_cover=true per property (WHERE deleted_at IS NULL)
+   - Enhanced properties table: latitude/longitude (DOUBLE PRECISION), is_listed derived field
+
+2. **Property Media Pydantic Schemas** (`backend/app/schemas/properties.py`):
+   - `PropertyMediaCreate`: url (required), sort_order, is_cover, mime_type, byte_size
+   - `PropertyMediaUpdate`: sort_order, is_cover (partial updates)
+   - `PropertyMediaResponse`: Full media object with all fields
+
+3. **Property Bulk Operations Schema** (`backend/app/schemas/properties.py`):
+   - `PropertyBulkAction`: property_ids (list, 1-50 items), action (activate/deactivate/archive/restore)
+   - `PropertyBulkResponse`: requested_count, updated_count, not_found_count, failed (list of errors)
+
+4. **Media API Routes** (`backend/app/api/routes/properties.py`):
+   - GET /api/v1/properties/{id}/media: List media for property (sorted by sort_order)
+   - POST /api/v1/properties/{id}/media: Add media (url, sort_order, is_cover, mime_type, byte_size)
+   - PATCH /api/v1/properties/{id}/media/{media_id}: Update media (is_cover, sort_order)
+   - DELETE /api/v1/properties/{id}/media/{media_id}: Soft delete media (sets deleted_at)
+
+5. **Bulk Operations API Route** (`backend/app/api/routes/properties.py`):
+   - POST /api/v1/properties/bulk: Bulk action on properties
+     - Actions: activate (is_active=true), deactivate (is_active=false), archive (deleted_at=NOW), restore (deleted_at=NULL)
+     - Returns summary: requested_count, updated_count, not_found_count, failed[]
+     - RBAC: Manager/Admin only (via require_roles)
+
+6. **CSV Export API Route** (`backend/app/api/routes/properties.py`):
+   - GET /api/v1/properties/export: CSV export with current filters applied
+     - Streaming response with Content-Disposition: attachment
+     - Filename: properties_export_{timestamp}.csv
+     - Includes all 40+ property fields
+     - Respects all query params (is_active, property_type, city, owner_id, etc.)
+
+7. **Listing Toggle** (`backend/app/api/routes/properties.py`, `backend/app/services/property_service.py`):
+   - Enhanced PATCH /api/v1/properties/{id} to accept is_listed field
+   - Service layer auto-sets listed_at = NOW() when is_listed=true
+   - Service layer clears listed_at = NULL when is_listed=false
+   - Response includes is_listed derived field: (listed_at IS NOT NULL) as is_listed
+
+8. **Service Layer** (`backend/app/services/property_service.py`):
+   - `list_property_media()`: Query property_media with agency + property scoping, filter deleted
+   - `add_property_media()`: Insert media with agency_id, property_id, url, sort_order, is_cover
+   - `update_property_media()`: Update sort_order or is_cover (atomic cover change: unset previous, set new)
+   - `delete_property_media()`: Soft delete (set deleted_at)
+   - `bulk_property_action()`: Execute bulk operations with transaction safety
+   - Enhanced `create_property()`: Accept latitude, longitude, is_listed (auto-set listed_at)
+   - Enhanced `update_property()`: Handle is_listed field to set/clear listed_at
+   - Enhanced property queries: Add (listed_at IS NOT NULL) as is_listed derived field
+
+9. **Frontend List Page Enhancements** (`frontend/app/properties/page.tsx`):
+   - Bulk selection: Checkboxes for multi-select, selectedIds state
+   - Bulk actions toolbar: Aktivieren, Deaktivieren, Archivieren, Wiederherstellen buttons
+   - Show archived toggle: Checkbox to include/exclude deleted properties
+   - CSV Export button: Downloads current filtered results as CSV
+   - Updated Property interface: latitude, longitude, is_listed fields
+
+10. **Frontend Detail Page Tabbed UI** (`frontend/app/properties/[id]/page.tsx`):
+    - **Tab Navigation**: 3 tabs with URL query param support (?tab=overview/pricing/media)
+    - **Übersicht Tab**: 
+      - Owner reference (link to /owners/{id})
+      - Listing status toggle (is_listed true/false, shows listed_at timestamp)
+      - General info cards: Objektinformationen, Adresse, Kapazität, Zeiten & Preise, IDs, Zeitstempel
+      - Location section: latitude/longitude display, "In Google Maps öffnen" link
+      - Amenities section: Assigned amenities with icon/name/category, "Ausstattung zuweisen" button
+    - **Preiseinstellungen Tab**:
+      - Links to existing pricing pages: Rate Plans, Season Templates, Quote Calculator
+      - Each link pre-filters by current property_id
+    - **Media Tab**:
+      - Photo gallery grid (2x2 on mobile, 3x3 on tablet, 4x4 on desktop)
+      - "Bild hinzufügen" button (opens modal for URL input)
+      - Hover actions: "Als Titelbild" (set cover), "Löschen" (soft delete)
+      - Cover badge: Shows "Titelbild" on current cover image
+      - Empty state: "Keine Bilder vorhanden" with "Erstes Bild hinzufügen" button
+    - Updated Property interface: latitude, longitude, is_listed fields
+
+11. **Smoke Script** (`backend/scripts/pms_properties_nice_to_haves_smoke.sh`):
+    - TEST 1: Create property with lat/lng + is_listed=true (verify listed_at set)
+    - TEST 2: Add media via URL (verify property_media insert)
+    - TEST 3: List media (verify sort_order)
+    - TEST 4: Set cover media (verify is_cover=true, previous cover unset)
+    - TEST 5: Bulk deactivate (verify is_active=false)
+    - TEST 6: Bulk activate (verify is_active=true)
+    - TEST 7: Bulk archive (verify deleted_at set)
+    - TEST 8: Bulk restore (verify deleted_at=NULL)
+    - TEST 9: CSV export includes property (verify filename, headers, row count)
+    - TEST 10: Delete media (verify soft delete)
+
+12. **Documentation** (add-only):
+    - backend/docs/ops/runbook.md: "P2.21 Properties Nice-to-haves Pack" section with architecture, endpoints, troubleshooting
+    - backend/scripts/README.md: "Properties Nice-to-haves Pack Smoke Test" entry (already added by background agent)
+    - backend/docs/project_status.md: This entry
+
+**Status:** ✅ IMPLEMENTED
+
+**Notes:**
+- Media upload is URL-based (no file upload/storage provider integration in MVP)
+- Bulk operations support up to 50 properties at once (validation limit)
+- CSV export streams results (no row limit, memory-efficient)
+- Detail page tabs use URL query params for deep linking (/properties/{id}?tab=media)
+- is_listed is a derived field (computed from listed_at IS NOT NULL), not stored in DB
+- Property media uses soft delete (deleted_at timestamp, not hard delete)
+- Cover image constraint ensures max 1 cover per property (unique partial index)
+- AUDIT ONLY: Amenities and Owner Linking already existed (Phase 17B), now integrated in Übersicht tab
+
+**Dependencies:**
+- Amenities domain (property_amenities junction table for assignment)
+- Owners domain (properties.owner_id FK)
+- Rate Plans, Season Templates, Quote Calculator pages (linked from Preiseinstellungen tab)
+- Migration 20260125150000 (property_media table + latitude/longitude fields)
+
+**Verification Commands (for VERIFIED status later):**
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Run smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export ADMIN_JWT_TOKEN="<<<admin JWT>>>"
+./backend/scripts/pms_properties_nice_to_haves_smoke.sh
+echo "rc=$?"
+
+# Expected: All 10 tests pass, rc=0
+
+# Manual UI verification
+# 1. Navigate to /properties
+# 2. Select multiple properties via checkboxes
+# 3. Test bulk actions: Aktivieren, Deaktivieren, Archivieren, Wiederherstellen
+# 4. Click "Exportieren" button - verify CSV download with correct data
+# 5. Toggle "Archivierte anzeigen" - verify archived properties show/hide
+# 6. Click property row - verify detail page opens with 3 tabs
+# 7. Test Übersicht tab: verify owner link, listing toggle, location, amenities
+# 8. Test Preiseinstellungen tab: verify links to pricing pages work
+# 9. Test Media tab: add media via URL, set cover, delete media
+# 10. Verify tab state persists in URL (?tab=media) and on refresh
+```
+
+**Files Modified/Created:**
+- supabase/migrations/20260125150000_add_property_media_and_enhancements.sql (NEW)
+- backend/app/schemas/properties.py (PropertyMediaCreate/Update/Response, PropertyBulkAction/Response, enhanced PropertyCreate/Update/Response with latitude/longitude/is_listed)
+- backend/app/api/routes/properties.py (media endpoints, bulk endpoint, export endpoint, enhanced PATCH for is_listed)
+- backend/app/services/property_service.py (media CRUD methods, bulk_property_action, enhanced create/update for is_listed/lat/lng)
+- frontend/app/properties/page.tsx (bulk selection, actions toolbar, show archived toggle, export button)
+- frontend/app/properties/[id]/page.tsx (complete rewrite: 3-tab UI with Übersicht/Preiseinstellungen/Media, URL query param support)
+- backend/scripts/pms_properties_nice_to_haves_smoke.sh (NEW - 10 tests)
+- backend/docs/ops/runbook.md (P2.21 section appended)
+- backend/scripts/README.md (already had P2.21 smoke script entry from background agent)
+- backend/docs/project_status.md (this entry)
+
+---

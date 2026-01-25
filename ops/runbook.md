@@ -41908,3 +41908,249 @@ psql $DATABASE_URL -c "SELECT id, deleted_at, is_active FROM properties WHERE id
 - Follows pattern: DELETE response should confirm what was actually deleted
 
 ---
+
+## P2.21 Properties Nice-to-haves Pack
+
+**Overview:** Comprehensive enhancement pack for properties including media management, listing status, location display, bulk operations, and CSV export.
+
+**Purpose:** Provide complete property management capabilities with gallery uploads, public listing controls, batch operations for efficiency, and data export functionality.
+
+**Architecture:**
+- **Database**: `property_media` table for photos/videos with agency scoping, soft delete, cover image constraint
+- **Backend**: Media CRUD endpoints, bulk action endpoint (activate/deactivate/archive/restore), CSV streaming export
+- **Frontend**: 3-tab detail UI (Übersicht, Preiseinstellungen, Media), bulk selection on list page, export button
+- **Derived Fields**: `is_listed` computed from `listed_at IS NOT NULL`
+- **RBAC**: Manager/Admin for destructive operations (archive, restore, delete media)
+
+**UI Routes:**
+- `/properties` - List page with bulk actions and export (P2.20 + P2.21 enhancements)
+- `/properties/{id}?tab=overview` - Overview tab (general info, owner, listing status, location, amenities)
+- `/properties/{id}?tab=pricing` - Pricing tab (links to rate plans, season templates, quote calculator)
+- `/properties/{id}?tab=media` - Media tab (photo gallery, upload, set cover, delete)
+
+**API Endpoints:**
+
+Media Management:
+- `GET /api/v1/properties/{id}/media` - List property media (sorted by sort_order)
+- `POST /api/v1/properties/{id}/media` - Add media (url, sort_order, is_cover, mime_type, byte_size)
+- `PATCH /api/v1/properties/{id}/media/{media_id}` - Update media (is_cover, sort_order)
+- `DELETE /api/v1/properties/{id}/media/{media_id}` - Soft delete media (sets deleted_at)
+
+Bulk Operations:
+- `POST /api/v1/properties/bulk` - Bulk action on properties
+  - Actions: "activate" (is_active=true), "deactivate" (is_active=false), "archive" (deleted_at=NOW), "restore" (deleted_at=NULL)
+  - Request: `{"property_ids": ["uuid1", "uuid2"], "action": "activate"}`
+  - Response: `{"requested_count": 2, "updated_count": 2, "not_found_count": 0, "failed": []}`
+
+Export:
+- `GET /api/v1/properties/export` - CSV export with current filters (respects all query params)
+  - Streaming response with Content-Disposition: attachment
+  - Includes all property fields (40+ columns)
+
+Listing Toggle (via PATCH /api/v1/properties/{id}):
+- `{"is_listed": true}` - Sets listed_at = NOW() (public listing)
+- `{"is_listed": false}` - Sets listed_at = NULL (unlisted)
+
+**Database Tables:**
+
+property_media:
+```sql
+CREATE TABLE property_media (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agency_id UUID NOT NULL REFERENCES agencies(id),
+  property_id UUID NOT NULL REFERENCES properties(id),
+  url TEXT NOT NULL,
+  sort_order INTEGER DEFAULT 0,
+  is_cover BOOLEAN DEFAULT false,
+  mime_type TEXT,
+  byte_size BIGINT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  deleted_at TIMESTAMPTZ
+);
+-- Unique cover constraint: only one is_cover=true per property (WHERE deleted_at IS NULL)
+```
+
+properties (enhanced fields):
+- `latitude DOUBLE PRECISION` - extracted from location geometry (ST_Y)
+- `longitude DOUBLE PRECISION` - extracted from location geometry (ST_X)
+- `is_listed BOOLEAN` - derived field (listed_at IS NOT NULL)
+- `listed_at TIMESTAMPTZ` - timestamp when property was listed publicly
+
+**Migration:** `20260125150000_add_property_media_and_enhancements.sql`
+
+**Verification Commands:**
+
+```bash
+# [HOST-SERVER-TERMINAL] Pull latest code
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# [HOST-SERVER-TERMINAL] Run P2.21 smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export ADMIN_JWT_TOKEN="<<<admin JWT>>>"
+# Optional:
+# export AGENCY_ID="ffd0123a-10b6-40cd-8ad5-66eee9757ab7"
+./backend/scripts/pms_properties_nice_to_haves_smoke.sh
+echo "rc=$?"
+
+# Expected output: All 10 tests pass, rc=0
+```
+
+**Smoke Test Coverage (pms_properties_nice_to_haves_smoke.sh):**
+1. **Create property** - POST with lat/lng
+2. **Add media** - POST /media with URL
+3. **List media** - GET /media returns added media
+4. **Set cover** - PATCH /media/{id} is_cover=true
+5. **List toggle** - PATCH property is_listed=true, verify listed_at set
+6. **Bulk activate** - POST /bulk action=activate
+7. **Bulk archive** - POST /bulk action=archive, verify deleted_at set
+8. **Bulk restore** - POST /bulk action=restore, verify deleted_at=NULL
+9. **Export CSV** - GET /export returns CSV with property
+10. **Cleanup** - Delete media and property
+
+**Common Issues:**
+
+### Media Upload Returns 400 (URL Required)
+
+**Symptom:** POST /api/v1/properties/{id}/media returns 400 with "Field required" for url.
+
+**Root Cause:** Request body missing `url` field or url is empty string.
+
+**How to Debug:**
+```bash
+# Test media creation
+curl -X POST "$HOST/api/v1/properties/$PROPERTY_ID/media" \
+  -H "Authorization: Bearer $ADMIN_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com/image.jpg", "sort_order": 0}'
+
+# Should return 201 with media object
+```
+
+**Solution:**
+- Ensure request includes `{"url": "https://...", ...}`
+- URL must be valid HTTP/HTTPS string
+- Optional fields: sort_order (default 0), is_cover (default false), mime_type, byte_size
+
+### Bulk Action Updates 0 Properties
+
+**Symptom:** POST /api/v1/properties/bulk returns `{"updated_count": 0, "not_found_count": N}`.
+
+**Root Cause:** Property IDs do not exist in agency or are already in target state.
+
+**How to Debug:**
+```bash
+# Check property exists and belongs to agency
+psql $DATABASE_URL -c "SELECT id, deleted_at, is_active FROM properties WHERE id IN ('uuid1', 'uuid2');"
+
+# Verify bulk request
+curl -X POST "$HOST/api/v1/properties/bulk" \
+  -H "Authorization: Bearer $ADMIN_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{"property_ids": ["uuid1", "uuid2"], "action": "activate"}' | jq
+
+# Check response.updated_count and response.failed for error details
+```
+
+**Solution:**
+- Verify property IDs exist: GET /api/v1/properties?limit=100
+- Check agency_id matches JWT claim or x-agency-id header
+- For "activate": properties must have deleted_at IS NULL
+- For "archive": properties must have deleted_at IS NULL (can't archive twice)
+- For "restore": properties must have deleted_at IS NOT NULL
+
+### Export CSV Returns Empty File
+
+**Symptom:** GET /api/v1/properties/export downloads CSV with headers only, no rows.
+
+**Root Cause:** Query filters exclude all properties (e.g., owner_id not found, deleted properties hidden).
+
+**How to Debug:**
+```bash
+# Test export with no filters
+curl -X GET "$HOST/api/v1/properties/export" \
+  -H "Authorization: Bearer $ADMIN_JWT" > /tmp/export.csv
+
+# Check row count (should be > 1 if properties exist)
+wc -l /tmp/export.csv
+
+# Compare with list API
+curl "$HOST/api/v1/properties?limit=100" \
+  -H "Authorization: Bearer $ADMIN_JWT" | jq '.items | length'
+```
+
+**Solution:**
+- Export uses same filters as list endpoint
+- Check query params: `?owner_id=`, `?is_active=`, `?property_type=`, etc.
+- Default: excludes deleted properties (deleted_at IS NULL)
+- To include archived: backend does not support include_deleted param (archived properties never exported)
+
+### Cover Image Constraint Violation
+
+**Symptom:** PATCH /api/v1/properties/{id}/media/{media_id} with is_cover=true returns 409 Conflict.
+
+**Root Cause:** Another media item already has is_cover=true for this property.
+
+**How to Debug:**
+```bash
+# Check existing cover
+psql $DATABASE_URL -c "SELECT id, url, is_cover FROM property_media WHERE property_id = '$PROPERTY_ID' AND deleted_at IS NULL;"
+
+# Unique constraint ensures max 1 is_cover=true per property
+```
+
+**Solution:**
+- Backend automatically unsets previous cover when setting new one (should not raise 409)
+- If 409 occurs, check service layer property_service.py update_property_media method
+- Expected behavior: Previous cover gets is_cover=false, new media gets is_cover=true (atomic transaction)
+
+### Listed Toggle Does Not Update listed_at
+
+**Symptom:** PATCH /api/v1/properties/{id} with `{"is_listed": true}` returns 200 but listed_at remains NULL.
+
+**Root Cause:** Service layer not handling is_listed field to set/clear listed_at.
+
+**How to Debug:**
+```bash
+# Test listing toggle
+BEFORE=$(curl -sS "$HOST/api/v1/properties/$PROPERTY_ID" -H "Authorization: Bearer $ADMIN_JWT" | jq -r '.listed_at')
+echo "Before: $BEFORE"
+
+curl -X PATCH "$HOST/api/v1/properties/$PROPERTY_ID" \
+  -H "Authorization: Bearer $ADMIN_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{"is_listed": true}'
+
+AFTER=$(curl -sS "$HOST/api/v1/properties/$PROPERTY_ID" -H "Authorization: Bearer $ADMIN_JWT" | jq -r '.listed_at')
+echo "After: $AFTER"
+
+# After should be ISO timestamp, not null
+```
+
+**Solution:**
+- Verify property_service.py update_property method handles is_listed field
+- Expected SQL: `SET listed_at = NOW()` when is_listed=true, `SET listed_at = NULL` when is_listed=false
+- Check property response includes `is_listed` derived field: `(listed_at IS NOT NULL) as is_listed`
+
+### Frontend Detail Page Tabs Not Working
+
+**Symptom:** Clicking tabs on /properties/{id} does not change content, URL does not update.
+
+**Root Cause:** useSearchParams or router.push not working correctly.
+
+**How to Debug:**
+```bash
+# Check browser DevTools Network tab
+# URL should update to /properties/{id}?tab=pricing when clicking Preiseinstellungen
+
+# Verify query param in URL bar matches displayed content
+```
+
+**Solution:**
+- Ensure Next.js app router is used (not pages router)
+- Check imports: `import { useSearchParams, useRouter } from "next/navigation"`
+- Verify handleTabChange calls `router.push(\`/properties/\${propertyId}?tab=\${tab}\`)`
+- Hard refresh page (Cmd+Shift+R / Ctrl+F5) to clear Next.js cache
+
+---
