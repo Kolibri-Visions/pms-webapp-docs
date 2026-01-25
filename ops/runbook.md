@@ -42154,3 +42154,70 @@ echo "After: $AFTER"
 - Hard refresh page (Cmd+Shift+R / Ctrl+F5) to clear Next.js cache
 
 ---
+
+### CRUD Smoke Test Fails: Duplicate Property Tabs (P2.21.2 Bug)
+
+**Symptom:** Property detail page shows TWO sets of tabs:
+1. TOP tabs (correct): "Überblick | Preiseinstellungen"
+2. INNER tabs (within page content): "Übersicht | Preiseinstellungen | Media"
+
+Users see duplicate tab navigation. Clicking inner tabs changes URL query params (?tab=overview/pricing/media) but content stays within overview page.
+
+**Root Cause (d4bb088):** P2.21 implementation added inner tabs with ?tab= query params inside the overview page, but the correct architecture requires TOP-level tabs in layout.tsx with separate routes for each tab.
+
+**Fix (P2.21.2):**
+- Extended TOP navigation (layout.tsx) to include "Media" tab → /properties/{id}/media
+- Created dedicated media/page.tsx with media gallery UI (add, set cover, delete)
+- Removed INNER tab navigation and conditional rendering from overview page.tsx
+- Removed ?tab= query param logic (useSearchParams, currentTab state, handleTabChange)
+- Removed pricing tab content (links to /rate-plans exist as separate route)
+- Removed media tab content (now in media/page.tsx)
+- Kept overview content: listing toggle, location, basic info cards, amenities
+
+**Architecture (After Fix):**
+- /properties/{id} → Overview page (general info, owner, listing, location, amenities)
+- /properties/{id}/rate-plans → Pricing settings (existing route)
+- /properties/{id}/media → Media gallery (new route with dedicated page)
+
+**Verification Steps:**
+
+UI Verification:
+1. Navigate to /properties/{id}
+2. Verify only ONE tab bar at top: "Überblick | Preiseinstellungen | Media"
+3. Verify NO inner tabs within overview content
+4. Verify "Überblick" tab shows: owner reference, listing toggle, location, basic info, amenities
+5. Click "Preiseinstellungen" tab → redirects to /properties/{id}/rate-plans
+6. Click "Media" tab → redirects to /properties/{id}/media
+7. Verify media page shows gallery with add/set cover/delete functionality
+8. Verify URL does NOT contain ?tab= query params
+
+Deploy Verification:
+```bash
+# HOST-SERVER-TERMINAL
+cd /data/repos/pms-webapp
+git fetch origin main && git reset --hard origin/main
+
+# Verify commit includes fix
+git log --oneline -1
+# Should show: fix(admin): remove duplicate property tabs + add media top tab (P2.21.2)
+
+# Redeploy via Coolify (trigger redeploy for frontend + backend)
+
+# Manual UI verification after deploy
+# 1. Login as admin/manager
+# 2. Navigate to /properties
+# 3. Click any property row → should open /properties/{id}
+# 4. Verify only ONE tab bar (no duplicate tabs)
+# 5. Verify "Überblick" tab active by default
+# 6. Click "Preiseinstellungen" → should route to /properties/{id}/rate-plans
+# 7. Click "Media" → should route to /properties/{id}/media
+# 8. Verify no ?tab= in URL
+```
+
+**Prevention:**
+- For multi-section detail pages, always use top-level tabs in layout.tsx with separate routes
+- Never implement tabs with query params (?tab=) inside page content
+- Each tab should be a separate route (/ for overview, /rate-plans, /media, etc.)
+- Query params should only be used for filters, pagination, search - not for navigation state
+
+---

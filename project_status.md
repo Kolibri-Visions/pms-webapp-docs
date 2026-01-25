@@ -16065,10 +16065,11 @@ See `backend/scripts/README.md` P2.21 section for full troubleshooting. Key issu
 **Status:** ✅ IMPLEMENTED
 
 **Notes:**
+- **BUGFIX P2.21.2 (2026-01-25)**: Fixed duplicate tabs bug from d4bb088. Removed inner ?tab= navigation, created dedicated /media route. TOP tabs now: Überblick (/properties/{id}), Preiseinstellungen (/properties/{id}/rate-plans), Media (/properties/{id}/media). See runbook.md for verification.
 - Media upload is URL-based (no file upload/storage provider integration in MVP)
 - Bulk operations support up to 50 properties at once (validation limit)
 - CSV export streams results (no row limit, memory-efficient)
-- Detail page tabs use URL query params for deep linking (/properties/{id}?tab=media)
+- Detail page uses TOP-level tabs in layout.tsx (Überblick, Preiseinstellungen, Media) with separate routes
 - is_listed is a derived field (computed from listed_at IS NOT NULL), not stored in DB
 - Property media uses soft delete (deleted_at timestamp, not hard delete)
 - Cover image constraint ensures max 1 cover per property (unique partial index)
