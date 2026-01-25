@@ -16062,12 +16062,29 @@ See `backend/scripts/README.md` P2.21 section for full troubleshooting. Key issu
     - backend/scripts/README.md: "Properties Nice-to-haves Pack Smoke Test" entry (already added by background agent)
     - backend/docs/project_status.md: This entry
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
 
 **Notes:**
 - **BUGFIX P2.21.2 (2026-01-25)**: Fixed duplicate tabs bug from d4bb088. Removed inner ?tab= navigation, created dedicated /media route. TOP tabs now: Überblick (/properties/{id}), Preiseinstellungen (/properties/{id}/rate-plans), Media (/properties/{id}/media). See runbook.md for verification.
 - **BUGFIX P2.21.2.1 (2026-01-25)**: Fixed admin build TSX syntax error from f12d10a. Removed extra closing div at line 849 (8-space indent) that had no matching opening div, causing OUTER return div to close prematurely and leaving modals outside JSX tree. Build now succeeds. Enables deployment of P2.21.2.
-- **BUGFIX P2.21.3 (2026-01-25)**: Fixed property media listing 500 error from schema drift (missing columns: mime_type, byte_size, storage_provider). Added migration 20260125160000_align_property_media_schema.sql to add missing columns and backfill byte_size from file_size. Enhanced error handling to return 503 with actionable message "Database schema not installed or out of date. Run DB migrations." Added smoke script pms_property_media_list_smoke.sh for PROD validation. See runbook for troubleshooting.
+- **BUGFIX P2.21.3 (2026-01-25)**: Fixed property media listing 500 error from schema drift (missing columns: mime_type, byte_size, storage_provider, deleted_at). Added migration 20260125160000_align_property_media_schema.sql to add missing columns, backfill byte_size from file_size, and create partial index on property_id WHERE deleted_at IS NULL. Enhanced error handling to return 503 with actionable message "Database schema not installed or out of date. Run DB migrations." Added smoke script pms_property_media_list_smoke.sh for PROD validation. VERIFIED in production (see evidence below).
+
+**Production Evidence (P2.21.3 VERIFIED):**
+```
+API domain: https://api.fewo.kolibri-visions.de
+/api/v1/ops/version:
+  source_commit: 36be4848c45e9750c38acc77d450bea61cdce988
+  started_at: 2026-01-25T19:18:04.705508+00:00
+
+pms_verify_deploy.sh: rc=0 (timestamp: 2026-01-25T19:42Z)
+pms_property_media_list_smoke.sh: rc=0 (HTTP 200, JSON array)
+
+Deployment verified:
+- Property media listing endpoint operational (GET /api/v1/properties/{id}/media)
+- Schema drift detection working (503 before migration, 200 after)
+- Migration 20260125160000 applied successfully (deleted_at column added in PROD hotfix, now durable in migration)
+- Smoke script validates endpoint returns valid JSON with media items
+```
 - Media upload is URL-based (no file upload/storage provider integration in MVP)
 - Bulk operations support up to 50 properties at once (validation limit)
 - CSV export streams results (no row limit, memory-efficient)

@@ -42371,9 +42371,10 @@ curl -sS https://admin.fewo.kolibri-visions.de/api/ops/version | jq
 column pm.mime_type does not exist
 column pm.byte_size does not exist (Hint: pm.file_size exists)
 column pm.storage_provider does not exist
+column pm.deleted_at does not exist
 ```
 
-**Root Cause:** Schema drift. Production database has older property_media table schema with different column names (e.g., `file_size` instead of `byte_size`) or missing columns (`mime_type`, `storage_provider`). This occurs when:
+**Root Cause:** Schema drift. Production database has older property_media table schema with different column names (e.g., `file_size` instead of `byte_size`) or missing columns (`mime_type`, `storage_provider`, `deleted_at`). This occurs when:
 1. property_media table was created manually or via older migration
 2. Migration 20260125150000_add_property_media_and_enhancements.sql hasn't been applied
 3. Migration 20260125160000_align_property_media_schema.sql (alignment fix) hasn't been applied
