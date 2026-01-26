@@ -42984,3 +42984,70 @@ MANAGER_JWT_TOKEN="..." \
 ```
 
 ---
+
+### Admin UI Thumbnails Show "?" (Cached Signed URLs)
+
+**Symptom:** Admin UI at https://admin.fewo.kolibri-visions.de shows "?" placeholders for media thumbnails even though backend returns correct signed URLs. curl -I on display_url returns HTTP 200 and Content-Type: image/*, but browser shows broken images.
+
+**Root Cause:** Browser or Next.js caching keeps expired signed URLs (1-hour TTL). Once an image fails to load, the old behavior permanently replaced `<img src>` with a placeholder SVG, preventing recovery even after refetch.
+
+**How to Debug:**
+```bash
+# Verify backend returns correct signed URLs
+curl -sS -H "Authorization: Bearer $JWT_TOKEN" \
+  "$HOST/api/v1/properties/$PROPERTY_ID/media" | jq '.[0].display_url'
+
+# Verify display_url is accessible
+DISPLAY_URL=$(curl -sS -H "Authorization: Bearer $JWT_TOKEN" \
+  "$HOST/api/v1/properties/$PROPERTY_ID/media" | jq -r '.[0].display_url')
+curl -I "$DISPLAY_URL"
+
+# Should return HTTP 200 with Content-Type: image/*
+# If not, backend normalization issue (see "401 Basic realm=kong" section above)
+
+# If backend works but UI still shows "?":
+# 1. Open browser DevTools (F12) → Network tab
+# 2. Hard reload (Cmd+Shift+R / Ctrl+F5)
+# 3. Check image requests - should be HTTP 200, NOT 304 (cached)
+# 4. If still 304 or failing, clear browser cache + reload
+```
+
+**Solution (Applied in P2.21.4.4):**
+- Frontend: Media fetch now uses `cache: "no-store"` + Cache-Control: no-store header + cache-bust query param `?cb=Date.now()`
+- Frontend: Image onError handler auto-retries once by refetching media (gets fresh signed URLs), then shows placeholder with "Neu laden" button
+- Frontend: Cover image (Überblick tab) has same retry logic
+- API client: GET method accepts `noCache` parameter to force cache: "no-store"
+
+**Production Verification:**
+```bash
+# Admin UI:
+# 1. Login to https://admin.fewo.kolibri-visions.de
+# 2. Navigate to /properties/{id}/media
+# 3. Hard reload (Cmd+Shift+R / Ctrl+F5)
+# 4. Thumbnails should load (no "?" placeholders)
+# 5. Open DevTools → Network tab
+# 6. Refresh page → image requests should be HTTP 200 (NOT 304 cached)
+# 7. Check request URL includes ?cb= timestamp parameter
+# 8. Check response headers: no Cache-Control: max-age (should be no-store or absent)
+
+# If image fails to load:
+# - Wait 1-2 seconds → should auto-retry (refetch media)
+# - If still broken, click "Neu laden" button on thumbnail
+# - Should refetch and load image
+
+# Cover image (Überblick tab):
+# 1. Navigate to /properties/{id} (Überblick tab)
+# 2. Cover image should load correctly
+# 3. If broken, should auto-retry once
+```
+
+**Manual Workaround (if fix not deployed):**
+- Hard reload (Cmd+Shift+R / Ctrl+F5) to clear cache
+- If still broken, clear browser cache completely
+- Thumbnails will work for 1 hour (signed URL TTL), then need reload
+
+**Related Issues:**
+- If signed URLs return 401 Basic realm="kong", see "Media Thumbnails Broken / 401 Basic realm=kong" section above
+- If cover toggle returns 500, see "Cover Toggle Returns 500 / Transactional Fix" section above
+
+---
