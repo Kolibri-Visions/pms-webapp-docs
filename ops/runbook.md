@@ -43875,3 +43875,81 @@ grep -n "</Card>" app/properties/[id]/page.tsx
 - TypeScript type errors in component props
 
 ---
+
+### Media Gallery Design Issues (P2.21.4.7y)
+
+**Overview:** LuxeStay design system applied to property media gallery with responsive grid, hover actions, and lightbox.
+
+**Common Issues:**
+
+1. **Lightbox not opening:**
+   - Check browser console for JavaScript errors
+   - Verify `data-testid="media-lightbox"` exists on grid container
+   - Ensure media items have onClick handlers
+   - Check if media array is populated: `console.log(media.length)`
+
+2. **Keyboard navigation not working:**
+   - Verify lightbox is open (lightboxIndex !== null)
+   - Check browser DevTools for event listener conflicts
+   - Test with different keyboard: Arrow Left/Right should navigate, Escape should close
+
+3. **Cover badge not showing:**
+   - Check if media item has `is_cover: true` property
+   - Verify gold star SVG renders: `data-testid="cover-badge-{id}"`
+   - Check CSS z-index layering (badge should be above image)
+
+4. **Hover actions not appearing:**
+   - Ensure mouse hover on thumbnail (not in gap between items)
+   - Check `group` and `group-hover:` classes work together
+   - Verify overlay div is not hidden by parent overflow
+
+5. **Upload button not visible:**
+   - Check if user has manager/admin role (required for upload)
+   - Verify gold button renders in header section
+   - Check CSS: `luxe-button-primary` class should apply gold background
+
+6. **Grid layout broken:**
+   - Check responsive breakpoints: 2 cols (mobile), 3 cols (md), 4 cols (lg)
+   - Verify Tailwind CSS classes compiled correctly
+   - Clear browser cache and hard refresh (Cmd+Shift+R)
+
+7. **Breadcrumb navigation incorrect:**
+   - Verify property name fetched correctly: `property?.name`
+   - Check Link hrefs: `/properties` and `/properties/{id}`
+   - Ensure ChevronRight icons render between breadcrumb items
+
+**Verification Commands:**
+
+```bash
+# Check media page compiles
+cd frontend
+npx tsc --noEmit --jsx preserve "app/properties/[id]/media/page.tsx"
+
+# Verify all smoke test hooks present
+rg 'data-testid="(media-lightbox|lightbox-prev|lightbox-next)"' app/properties/[id]/media/page.tsx
+
+# Build and check bundle size
+npm run build | grep "properties/\[id\]/media"
+# Expected: ~7-8 kB (within normal range)
+```
+
+**Manual UI Verification:**
+1. Navigate to `/properties/{id}/media` in admin UI
+2. Verify breadcrumb: Properties > {property_name} > Media
+3. Verify tabs visible: General, Amenities, Media (active), Rates, Availability, Reviews
+4. Verify gold "Upload Image" button top right
+5. Hover over thumbnail → verify overlay with "Set as Cover" and "Delete" buttons appears
+6. Click thumbnail → lightbox opens with image
+7. Press Arrow Right → next image loads
+8. Press Arrow Left → previous image loads
+9. Press Escape → lightbox closes
+10. Verify cover image has gold star badge in top-left corner
+11. Verify footer shows "X images uploaded (Max 20)" and "Supported formats: JPG, PNG, WEBP"
+
+**Design System Reference:**
+- Primary (Navy): `#0F1F3A` → `luxe-primary`
+- Accent (Gold): `#C9A24D` → `luxe-accent`
+- Background (Cream): `#F2EFEA` → `luxe-surface`
+- Text Muted (Gray): `#7A7D85` → `luxe-text-muted`
+
+---
