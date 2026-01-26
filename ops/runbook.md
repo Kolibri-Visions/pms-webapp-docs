@@ -43150,3 +43150,81 @@ grep "Failed to delete storage file" /var/log/backend.log
 - If persists, check frontend deployment is up-to-date
 
 ---
+
+---
+
+### Admin UI: Media Lightbox Thumbnails Not Clickable (P2.21.4.6)
+
+**Symptom:** Thumbnails in Admin UI media gallery show hover overlay with action buttons, but clicking the thumbnail itself does not open the lightbox modal. Lightbox only opens when clicking outside the overlay area.
+
+**Root Cause:** CSS pointer-events issue. The hover overlay (`absolute inset-0`) covers the entire thumbnail including the image, blocking the image's `onClick` handler. The overlay has no `pointer-events: none` CSS, so it intercepts all clicks.
+
+**How It's Fixed (P2.21.4.6):**
+- Overlay div: Added `pointer-events-none` class (overlay doesn't block clicks)
+- Action buttons ("Als Titelbild", "Löschen"): Added `pointer-events-auto` class (buttons still clickable)
+- Result: Clicking anywhere on thumbnail (including overlay area) triggers lightbox
+
+**Verification:**
+```bash
+# HOST-SERVER-TERMINAL
+# UI smoke test validates lightbox testid exists
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="..."
+export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
+./backend/scripts/pms_admin_ui_overview_media_smoke.sh
+echo "rc=$?"
+
+# Manual verification:
+# 1. Navigate to /properties/{id}/media
+# 2. Click thumbnail image (anywhere, including hover area)
+# 3. Lightbox modal should open immediately
+# 4. Verify action buttons still work (Als Titelbild/Löschen)
+```
+
+---
+
+### Admin UI: Overview Page Redesign (P2.21.4.6)
+
+**Overview:** Improved property overview page layout for better UX - "stylish, inviting, summary character".
+
+**Changes Implemented:**
+1. **Hero Summary Section**: Combined cover image + key facts in single card
+   - Left: Compact cover preview (aspect-video, max-w 400px, object-contain)
+   - Right: Quick facts (status, listed, guests, bedrooms, base price, min stay)
+   - Quick actions: Medien verwalten, Listen/Unlisten, Eigentümer anzeigen
+2. **Organized Content Cards**: Added emoji icons to section headers
+   - 📋 Objektinformationen (includes description, property type)
+   - 📍 Adresse & Lage
+   - 🛏️ Kapazität
+   - 💰 Zeiten & Preise
+   - 🔑 IDs und Referenzen (less prominent: opacity-75, smaller text)
+   - ⏱️ Zeitstempel (less prominent: opacity-75, smaller text)
+   - 🗺️ Koordinaten & Karte
+   - ⭐ Ausstattung
+3. **Edit Mode**: Added data-testid for automation (`overview-edit-toggle`, `edit-modal-overlay`)
+
+**Verification:**
+```bash
+# HOST-SERVER-TERMINAL
+# UI smoke test validates overview testids
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="..."
+export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
+./backend/scripts/pms_admin_ui_overview_media_smoke.sh
+# Expected: rc=0, 3/3 tests passed
+
+# Manual verification:
+# 1. Navigate to /properties/{id}
+# 2. Verify Hero Summary section appears FIRST (cover left + facts right)
+# 3. Verify all emoji icons render correctly
+# 4. Click "Bearbeiten" button → modal opens with all editable fields
+# 5. Edit any field → click "Speichern" → changes persist
+# 6. Edit again → click "Abbrechen" → changes reverted (no API call)
+```
+
+**Troubleshooting:**
+- **Cover image not showing**: Check media endpoint returns is_cover=true item, see "Media Thumbnails Broken" section
+- **Edit modal fields empty**: Check property data loaded, ensure editData state initialized correctly
+- **Hero section layout broken on mobile**: Check responsive grid: `grid-cols-1 lg:grid-cols-[400px_1fr]` collapses to single column on small screens
+
+---
