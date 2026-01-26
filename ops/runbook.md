@@ -42743,3 +42743,52 @@ curl -X DELETE "$SUPABASE_URL/storage/v1/object/property-media/$STORAGE_PATH" \
 - Current implementation: storage deletion failure returns False but doesn't raise exception
 
 ---
+
+### Media Thumbnails Broken / HTTP 400 on /object/public URLs
+
+**Symptom:** Media gallery shows broken images or HTTP 400 errors. Browser console shows errors loading thumbnails from URLs like `https://sb-pms.kolibri-visions.de/storage/v1/object/public/property-media/...`
+
+**Root Cause:** The property-media bucket is PRIVATE, not public. Public URLs (`/object/public/...`) return HTTP 400 for private buckets. The API must return signed URLs via `display_url` field.
+
+**How to Debug:**
+```bash
+# Check if media listing returns display_url
+curl -X GET "$HOST/api/v1/properties/$PROPERTY_ID/media" \
+  -H "Authorization: Bearer $JWT" | jq '.[0] | {url, display_url, storage_provider, storage_path}'
+
+# Expected output:
+# {
+#   "url": "https://...supabase.co/storage/v1/object/public/property-media/...",
+#   "display_url": "https://...supabase.co/storage/v1/object/sign/property-media/...?token=...",
+#   "storage_provider": "supabase",
+#   "storage_path": "agencies/.../properties/.../uuid.png"
+# }
+
+# If display_url is null:
+# - Check backend has app/core/storage.py with get_signed_url() method
+# - Check property_service.py list_property_media() generates signed URLs
+# - Check SUPABASE_SERVICE_ROLE_KEY env var is set
+
+# Test signed URL accessibility
+SIGNED_URL="<display_url from above>"
+curl -k -I "$SIGNED_URL"
+# Should return HTTP 200 with Content-Type: image/*
+```
+
+**Solution:**
+- Backend: Ensure `list_property_media()` generates signed URLs for storage_provider="supabase"
+- Backend: Ensure `add_property_media()` and `update_property_media()` also return display_url
+- Frontend: Use `display_url || signed_url || url` for image src (fallback chain)
+- Required env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+- Bucket must exist: property-media (can be private or public, but private requires signed URLs)
+
+**Production Verification:**
+```bash
+# Run updated smoke script with display_url validation
+HOST="https://api.fewo.kolibri-visions.de" \
+MANAGER_JWT_TOKEN="..." \
+./backend/scripts/pms_property_media_upload_smoke.sh
+
+# Test 2.5 should PASS (validates display_url is retrievable)
+```
+
