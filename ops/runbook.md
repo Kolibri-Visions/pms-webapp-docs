@@ -43206,12 +43206,12 @@ echo "rc=$?"
 **Verification:**
 ```bash
 # HOST-SERVER-TERMINAL
-# UI smoke test validates overview testids
+# UI smoke test validates overview testids (P2.21.4.6 + P2.21.4.7)
 export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
 export MANAGER_JWT_TOKEN="..."
 export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
 ./backend/scripts/pms_admin_ui_overview_media_smoke.sh
-# Expected: rc=0, 3/3 tests passed
+# Expected: rc=0, 6/6 tests passed (includes P2.21.4.7 lightbox nav, coords editing)
 
 # Manual verification:
 # 1. Navigate to /properties/{id}
@@ -43226,5 +43226,181 @@ export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
 - **Cover image not showing**: Check media endpoint returns is_cover=true item, see "Media Thumbnails Broken" section
 - **Edit modal fields empty**: Check property data loaded, ensure editData state initialized correctly
 - **Hero section layout broken on mobile**: Check responsive grid: `grid-cols-1 lg:grid-cols-[400px_1fr]` collapses to single column on small screens
+
+---
+
+## Admin UI Polish: Lightbox Navigation + Overview Reordering + Coordinates Editing (P2.21.4.7)
+
+**Overview:** Polish improvements for Admin UI property pages - lightbox navigation, card reordering, and editable coordinates.
+
+**Changes Implemented:**
+
+1. **Lightbox Prev/Next Navigation** (media/page.tsx):
+   - Left/right arrow controls (‹ and ›) inside lightbox modal
+   - Keyboard support: ArrowLeft/ArrowRight to navigate, ESC to close
+   - Wrap-around navigation: next from last → first, prev from first → last
+   - Arrows hidden when 0-1 images
+   - Index indicator: "2 / 5" shown when multiple images
+   - Implementation: lightboxIndex state, openLightbox/goToPrevious/goToNext functions, keyboard event listener
+   - data-testids: lightbox-prev, lightbox-next, lightbox-index
+
+2. **Overview Card Reordering** (properties/[id]/page.tsx):
+   - Moved ⭐ Ausstattung card UP (after Zeiten & Preise, before IDs)
+   - Moved 🗺️ Koordinaten & Karte card UP (directly under Ausstattung)
+   - Final order: Hero → Objektinformationen → Adresse → Kapazität → Zeiten & Preise → **Ausstattung** → **Koordinaten & Karte** → IDs → Zeitstempel
+   - Goal: Feature-rich content (amenities, map) visible before technical IDs/timestamps
+
+3. **Coordinates Editing** (properties/[id]/page.tsx):
+   - Added Breitengrad (latitude) and Längengrad (longitude) inputs to edit modal
+   - Validation: lat -90 to 90, lng -180 to 180, step 0.000001, empty allowed → saves as null
+   - data-testids: edit-lat, edit-lng (edit modal), overview-lat, overview-lng (coordinate display)
+   - Backend: PropertyUpdate schema already supports latitude/longitude (ge=-90, le=90, ge=-180, le=180)
+   - Saves via existing PATCH /api/v1/properties/{id} endpoint
+   - Updated handleStartEdit to include lat/lng in editData initialization
+
+**Verification:**
+```bash
+# HOST-SERVER-TERMINAL
+# UI smoke test validates new testids
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="..."
+export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
+./backend/scripts/pms_admin_ui_overview_media_smoke.sh
+# Expected: rc=0, 6/6 tests passed (includes lightbox-prev/next, overview-lat/lng, edit-lat/lng)
+
+# Manual verification - Lightbox Navigation:
+# 1. Navigate to /properties/{id}/media
+# 2. Click any thumbnail → lightbox opens
+# 3. Click right arrow (›) → next image shows, index updates (e.g., 2/5 → 3/5)
+# 4. Click left arrow (‹) → previous image shows
+# 5. Press ArrowRight on keyboard → next image (same as clicking arrow)
+# 6. Press ArrowLeft on keyboard → previous image
+# 7. When on last image, click right arrow → wraps to first image
+# 8. When on first image, click left arrow → wraps to last image
+# 9. Press ESC → lightbox closes
+# 10. If only 1 image: arrows not shown
+
+# Manual verification - Card Order:
+# 1. Navigate to /properties/{id}
+# 2. Scroll down past Hero section
+# 3. Verify card order: Zeiten & Preise → **Ausstattung** → **Koordinaten & Karte** → IDs → Zeitstempel
+# 4. Ausstattung should appear before IDs (not after Koordinaten as before)
+
+# Manual verification - Coordinates Editing:
+# 1. Navigate to /properties/{id}
+# 2. Click "Bearbeiten" button → edit modal opens
+# 3. Scroll to Breitengrad and Längengrad inputs (near bottom, before "Objekt ist aktiv")
+# 4. Enter latitude: 48.137154 (Munich)
+# 5. Enter longitude: 11.576124 (Munich)
+# 6. Click "Speichern" → modal closes, coordinates updated
+# 7. Scroll to 🗺️ Koordinaten & Karte card → verify lat/lng display shows new values
+# 8. Click "In Google Maps öffnen" → opens Munich location
+# 9. Edit again → clear lat/lng inputs (empty) → Save → coordinates become null (show "—")
+```
+
+**Troubleshooting:**
+
+### Lightbox Arrows Not Working
+**Symptom:** Left/right arrows in lightbox don't navigate or don't appear.
+
+**Possible Causes:**
+1. Only 0-1 media items: Arrows intentionally hidden when `media.length <= 1`
+2. JavaScript error in navigation functions
+3. Browser console shows React error
+
+**How to Debug:**
+```bash
+# Check browser console for errors
+# Open DevTools → Console tab
+# Click thumbnail → lightbox opens
+# Look for errors like "Cannot read property 'id' of undefined"
+
+# Verify media array populated
+# DevTools → Components tab → find PropertyMediaPage component
+# Check state.media array length
+# If length > 1, arrows should be visible
+```
+
+**Solution:**
+- If media.length > 1 but arrows missing: Check media/page.tsx line ~570-590 for conditional render `{media.length > 1 && ...}`
+- If navigation broken: Check goToPrevious/goToNext functions (lines ~40-60) for index calculation errors
+- If keyboard broken: Check useEffect keyboard listener (lines ~65-85) for event handler issues
+
+### Card Order Wrong
+**Symptom:** Ausstattung or Koordinaten cards appear in wrong position (e.g., after IDs instead of before).
+
+**Possible Causes:**
+1. Old frontend build cached by browser
+2. Code not deployed to production
+3. JSX structure changed by other developer
+
+**How to Debug:**
+```bash
+# Check deployed frontend commit
+curl -sS https://admin.fewo.kolibri-visions.de/api/ops/version | jq '.source_commit'
+# Compare with local git log
+
+# Hard refresh browser
+# Cmd+Shift+R (Mac) or Ctrl+F5 (Windows)
+
+# View page source (Cmd+U) and search for "Ausstattung"
+# Should appear BEFORE "IDs und Referenzen" in HTML order
+```
+
+**Solution:**
+- Hard refresh browser to clear cached JS bundle
+- If still wrong: Redeploy frontend via Coolify
+- Verify properties/[id]/page.tsx lines ~867-992 have correct card order
+
+### Coordinate Inputs Not Saving
+**Symptom:** Edit lat/lng, click "Speichern", but coordinates don't update on overview page.
+
+**Possible Causes:**
+1. Validation error: lat out of -90..90 or lng out of -180..180
+2. Backend rejects update (PATCH endpoint error)
+3. Frontend doesn't include lat/lng in PATCH payload
+
+**How to Debug:**
+```bash
+# Open DevTools → Network tab
+# Click "Bearbeiten" → enter lat/lng → click "Speichern"
+# Find PATCH request to /api/v1/properties/{id}
+# Check Request Payload for latitude/longitude fields
+# Check Response: if 422, see validation error details
+
+# Backend logs (if PATCH returns 500)
+docker logs pms-backend-api | grep "PATCH /api/v1/properties"
+```
+
+**Solution:**
+- If validation error: Ensure lat -90..90, lng -180..180, use decimal format (not 48° 8' 17")
+- If payload missing lat/lng: Check handleSaveEdit function includes editData with lat/lng
+- If backend error: Check PropertyUpdate schema in schemas/properties.py allows latitude/longitude
+
+### data-testid Not Found in Smoke Script
+**Symptom:** pms_admin_ui_overview_media_smoke.sh fails Test 4, 5, or 6 with "testid not found".
+
+**Possible Causes:**
+1. Frontend not deployed (old build)
+2. HTML structure changed (data-testid attribute removed or renamed)
+3. Edit modal not rendered in initial page load (lightbox only appears on click)
+
+**How to Debug:**
+```bash
+# Fetch page HTML and search for testid
+curl -sS "https://admin.fewo.kolibri-visions.de/properties/23dd8fda-59ae-4b2f-8489-7a90f5d46c66" | grep -i "lightbox-prev"
+
+# Expected: should find data-testid="lightbox-prev" (even though not visible initially)
+# If not found: frontend not deployed or code changed
+
+# Check media page for lightbox nav
+curl -sS "https://admin.fewo.kolibri-visions.de/properties/23dd8fda-59ae-4b2f-8489-7a90f5d46c66/media" | grep -c "lightbox-prev"
+# Expected: 1 (lightbox modal rendered but hidden until clicked)
+```
+
+**Solution:**
+- Redeploy frontend via Coolify
+- Hard refresh browser and test manually before running smoke script
+- If testid changed: Update smoke script to match new testid name
 
 ---
