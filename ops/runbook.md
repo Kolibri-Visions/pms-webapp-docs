@@ -43633,3 +43633,87 @@ export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
 - Without smoke headers, normal auth flow applies (redirect to /login)
 
 ---
+
+### Admin UI Smoke Test Requires Playwright for DOM Validation (P2.21.4.7d)
+
+**Problem:** Previous smoke script used `curl + grep` to validate HTML for data-testids, but this fails because:
+- Property overview page (`frontend/app/properties/[id]/page.tsx`) has `"use client"` directive
+- Media page (`frontend/app/properties/[id]/media/page.tsx`) has `"use client"` directive
+- Client components render testids via React hydration on the client side
+- Server HTML (`curl` response) doesn't include hydrated DOM elements
+- Result: `grep` finds 0 matches for `data-testid="overview-cover"` etc.
+
+**Solution (P2.21.4.7d):** Replace curl+grep with Playwright running in Docker container.
+
+**How It Works:**
+1. Bash script creates temporary Playwright JS file via heredoc
+2. Runs Docker container: `mcr.microsoft.com/playwright:v1.48.0-jammy`
+3. Playwright launches headless Chromium with smoke auth headers
+4. Navigates to property pages, waits for client-side DOM hydration
+5. Validates `data-testid` selectors exist in rendered DOM
+6. Returns exit code 0 (pass) or >0 (fail count)
+
+**Required Dependencies:**
+- Docker installed and daemon running on host
+- Internet access to pull Playwright Docker image (first run only)
+- No node/npm required on host (Playwright runs in container)
+
+**Verification:**
+```bash
+# HOST-SERVER-TERMINAL
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="..."
+export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
+./backend/scripts/pms_admin_ui_overview_media_smoke.sh
+
+# Expected output:
+# ℹ Starting Admin UI Playwright smoke test...
+# ℹ Running Playwright tests in Docker container...
+# Test 1: Overview page contains cover section...
+# ✓ Smoke bypass activated: x-pms-smoke-auth: ok
+# ✅ Test 1 PASSED: Found data-testid="overview-cover" in DOM
+# ...
+# Test Results: 5/5 passed
+# ✅ All Admin UI smoke tests passed! 🎉
+```
+
+**Common Issues:**
+
+1. **Docker not found:**
+   ```
+   ❌ ERROR: docker command not found
+   ```
+   Solution: Install Docker Desktop or Docker Engine and ensure daemon is running.
+
+2. **Playwright image pull fails:**
+   ```
+   Error: Unable to find image 'mcr.microsoft.com/playwright:v1.48.0-jammy' locally
+   ```
+   Solution: Ensure internet connection and Docker registry access. Image is ~1.5GB on first pull.
+
+3. **HTTP 307 redirect to /login:**
+   - Smoke auth bypass not working - check MANAGER_JWT_TOKEN is valid (not expired)
+   - Check deployed code includes P2.21.4.7c middleware + auth helper fixes
+   - Verify `x-pms-smoke-auth: ok` header missing in Playwright output
+
+4. **Timeout waiting for selector:**
+   ```
+   ❌ Test 1 FAILED: data-testid="overview-cover" not found in DOM
+   Error: Timeout 10000ms exceeded
+   ```
+   - Page loaded but testid missing: Check frontend deployment includes testids
+   - Page didn't load: Check PROPERTY_ID exists and is accessible
+   - Network issue: Check admin.fewo.kolibri-visions.de is reachable from Docker container
+
+5. **No media thumbnails found (not a failure):**
+   ```
+   ⚠️  No media thumbnails found (property may have no media)
+   ✅ Test 4 PASSED: Media page loaded, no media to test
+   ```
+   This is expected if the test property has no uploaded media. Test still passes.
+
+**Comparison to Previous Approach:**
+- **P2.21.4.7a-c**: `curl + grep` HTML for testids → fails (testids not in server HTML)
+- **P2.21.4.7d**: Playwright → waits for client hydration → finds testids in DOM → passes
+
+---
