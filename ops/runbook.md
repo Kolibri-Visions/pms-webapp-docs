@@ -43827,3 +43827,51 @@ docker volume rm pms_playwright_smoke_node_modules pms_playwright_smoke_npm_cach
 ```
 
 ---
+
+### Next Build Failed: TSX Syntax Error After Style Migration (P2.21.4.7x)
+
+**Symptom:** Coolify deploy fails at `npm run build` with TypeScript/TSX syntax error:
+```
+./app/properties/[id]/page.tsx
+Error: Unexpected token `div`. Expected jsx identifier
+```
+Or similar JSX parsing errors in client components.
+
+**Root Cause:** Unclosed JSX elements (like `<Card>`, `<div>`) cause the TypeScript parser to become confused, leading to syntax errors at seemingly unrelated lines. After migrating to new component libraries (like LuxeStay), missing closing tags are a common issue.
+
+**How to Debug:**
+```bash
+# Run TypeScript compiler directly to get clearer error messages
+cd frontend
+npx tsc --noEmit --jsx preserve "app/properties/[id]/page.tsx"
+
+# Look for errors like:
+# "JSX element 'Card' has no corresponding closing tag"
+
+# Check for missing closing tags
+grep -n "<Card" app/properties/[id]/page.tsx
+grep -n "</Card>" app/properties/[id]/page.tsx
+# If opening tags > closing tags, you have an unclosed element
+```
+
+**Solution:**
+1. Identify the unclosed JSX element from TypeScript error output
+2. Trace through the component structure to find where it should close
+3. Replace incorrect closing tag (e.g., `</div>`) with correct tag (e.g., `</Card>`)
+4. Verify build: `npm run build`
+
+**Common Patterns:**
+- Component refactors that replace `<div>` wrappers with custom components
+- Copy-paste errors where closing tags don't match opening tags
+- Nested components where inner closing tags accidentally close outer components
+
+**Prevention:**
+- Use IDE with JSX bracket matching
+- Run `npm run build` locally before committing style changes
+- Use TypeScript strict mode to catch JSX errors early
+
+**Related Issues:**
+- Missing utility imports (e.g., `cn` function for className merging)
+- TypeScript type errors in component props
+
+---
