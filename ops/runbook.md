@@ -43573,3 +43573,63 @@ export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
    - To fix: Redeploy backend/admin via Coolify to match local git HEAD
 
 ---
+
+### Admin UI Smoke Bypass Returns 307 Despite Middleware Activation (P2.21.4.7c)
+
+**Symptom:** After deploying P2.21.4.7b, curl requests with smoke headers return HTTP 307 redirect to /login, BUT response includes `x-pms-smoke-auth: ok` header. This proves middleware is running and validating the JWT, but the server component still redirects in the same request.
+
+**Root Cause:** P2.21.4.7b attempted to inject `sb-access-token` cookie into REQUEST headers (line 90 of middleware.ts), but this doesn't work because:
+- Supabase SSR client reads cookies via Next.js `cookies()` helper
+- Manually setting the `cookie` header doesn't affect how `cookies()` reads cookies
+- `getAuthenticatedUser()` calls `supabase.auth.getSession()` which depends on cookies
+- Session not found → redirect to /login in same request
+
+**Solution (P2.21.4.7c):** Use internal request headers instead of cookie injection:
+
+1. **Middleware** (frontend/middleware.ts):
+   - After JWT validation succeeds, set internal REQUEST headers:
+     - `x-pms-smoke-auth: ok` (signals smoke mode to server components)
+     - `x-pms-smoke-token: <JWT>` (passes token for server-side validation)
+   - These headers are INTERNAL to the request and NOT echoed in response headers
+   - Response header `x-pms-smoke-auth: ok` is still set for debugging
+
+2. **Auth Helper** (frontend/app/lib/server-auth.ts):
+   - Check for `x-pms-smoke-auth === 'ok'` and `x-pms-smoke-token` headers
+   - If present: Create minimal Supabase client with token in Authorization header
+   - Call `supabase.auth.getUser(token)` directly (token-based, not session-based)
+   - If user valid: Continue with normal auth flow (no redirect)
+   - If user invalid: Fall back to redirect
+
+**Key Difference from P2.21.4.7b:**
+- **P2.21.4.7b**: Injected cookie into request headers → Supabase client didn't see it → still 307
+- **P2.21.4.7c**: Pass internal headers + use token-based `getUser()` → bypasses session check → 200 OK
+
+**How to Verify:**
+```bash
+# Test smoke bypass with curl
+curl -I https://admin.fewo.kolibri-visions.de/properties/23dd8fda-59ae-4b2f-8489-7a90f5d46c66 \
+  -H "Authorization: Bearer $MANAGER_JWT_TOKEN" \
+  -H "x-pms-smoke: 1" \
+  -H "Cache-Control: no-cache"
+
+# P2.21.4.7b (broken): HTTP/2 307 + x-pms-smoke-auth: ok
+# P2.21.4.7c (fixed): HTTP/2 200 + x-pms-smoke-auth: ok
+
+# Run smoke script
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="..."
+export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
+./backend/scripts/pms_admin_ui_overview_media_smoke.sh
+
+# Expected: rc=0, 6/6 tests passed
+# Expected: "ℹ Smoke bypass activated: x-pms-smoke-auth: ok" messages
+```
+
+**Security Notes:**
+- `x-pms-smoke-token` header is INTERNAL (request only) and never echoed in response
+- Bypass only activates when BOTH headers present: `x-pms-smoke: 1` AND `Authorization: Bearer <JWT>`
+- JWT is still validated against Supabase `/auth/v1/user` in middleware
+- Only works for GET/HEAD on `/properties/*` routes
+- Without smoke headers, normal auth flow applies (redirect to /login)
+
+---
