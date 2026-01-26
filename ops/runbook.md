@@ -43051,3 +43051,102 @@ curl -I "$DISPLAY_URL"
 - If cover toggle returns 500, see "Cover Toggle Returns 500 / Transactional Fix" section above
 
 ---
+
+### Media Delete Removes Storage Object (P2.21.4.5)
+
+**Overview:** DELETE /api/v1/properties/{id}/media/{media_id} now deletes BOTH the database record (soft delete) AND the Supabase Storage object from the property-media bucket.
+
+**Behavior:**
+- Fetches media record to get storage_provider and storage_path
+- If storage_provider == "supabase": Deletes file from Supabase Storage using storage_path
+- Then soft deletes DB record (sets deleted_at)
+- Storage deletion is idempotent: If file already deleted/missing → treat as success
+- If storage deletion fails due to auth/config → returns HTTP 409 Conflict with actionable message
+
+**How to Debug:**
+```bash
+# Verify media is deleted from DB
+psql $DATABASE_URL -c "SELECT id, deleted_at FROM property_media WHERE id = '$MEDIA_ID';"
+# Should show deleted_at is NOT NULL
+
+# Verify storage file is not accessible
+# (Use display_url from media listing before deletion)
+curl -I "$DISPLAY_URL"
+# Should return HTTP 400/404/410 (NOT 200/206)
+```
+
+**Troubleshooting:**
+
+**Issue: Delete returns 409 "Failed to delete media file from storage"**
+
+**Cause:** Supabase Storage deletion failed (auth error, network, bucket not found).
+
+**Solution:**
+```bash
+# Check backend env vars
+# SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY must be set
+# Service role key must have storage delete permissions
+
+# Check backend logs for specific error
+grep "Failed to delete storage file" /var/log/backend.log
+
+# If file was already deleted manually:
+# Re-delete via UI → should succeed (idempotent)
+
+# If auth issue:
+# Verify SUPABASE_SERVICE_ROLE_KEY is correct service role key (not anon key)
+# Restart backend after fixing env vars
+```
+
+**Issue: Delete succeeds but file still accessible**
+
+**Cause:** Eventual consistency lag or CDN caching.
+
+**Solution:**
+- Wait 1-2 minutes, retry accessing display_url
+- Expected: HTTP 404/410 after lag
+- If still HTTP 200 after 5 min → storage deletion did not work, check backend logs
+
+---
+
+### Admin Lightbox / Thumbnail Enlarge (P2.21.4.5)
+
+**Overview:** Media gallery thumbnails in Admin UI (/properties/{id}/media) are now clickable. Clicking a thumbnail opens a lightbox modal with the image enlarged.
+
+**Features:**
+- Click thumbnail → Modal with full-size image (max 85vh)
+- "Öffnen in neuem Tab" button → Opens image URL in new browser tab
+- "Schließen" button or click outside modal → Closes lightbox
+- Uses same signed URL + retry logic as thumbnails
+
+**How to Use:**
+```
+# Admin UI:
+1. Navigate to /properties/{id}/media
+2. Click any thumbnail image
+3. Lightbox modal opens with enlarged image
+4. Click "Schließen" or press Esc (browser native) to close
+5. Click "Öffnen in neuem Tab" to open image in new tab
+```
+
+**Troubleshooting:**
+
+**Issue: Lightbox shows "?" placeholder**
+
+**Cause:** Same as thumbnail issue - expired signed URL or caching.
+
+**Solution:**
+- Close lightbox, hard reload page (Cmd+Shift+R)
+- Click thumbnail again → lightbox should load image
+- If still broken, see "Admin UI Thumbnails Show '?'" section above
+
+**Issue: Clicking thumbnail doesn't open lightbox**
+
+**Cause:** JavaScript error or modal state issue.
+
+**Solution:**
+- Open browser console (F12) → Check for errors
+- Hard reload page (Cmd+Shift+R)
+- If persists, check frontend deployment is up-to-date
+
+---
