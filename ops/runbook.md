@@ -43953,3 +43953,71 @@ npm run build | grep "properties/\[id\]/media"
 - Text Muted (Gray): `#7A7D85` → `luxe-text-muted`
 
 ---
+
+### Admin UI Property Pages: Tabs Duplication / i18n / Lightbox (P2.21.4.7g)
+
+**Overview:** Hotfix for regressions after P2.21.4.7y LuxeStay redesign - duplicate tabs, mixed language, broken lightbox.
+
+**Common Issues:**
+
+1. **Duplicate Tabs Showing:**
+   - Symptom: Two tab bars visible on property pages (top: "Überblick / Preiseinstellungen / Media", bottom: "General / Amenities / Media / Rates / Availability / Reviews")
+   - Root cause: P2.21.4.7y added inline tab nav in media page content, duplicating layout.tsx tabs
+   - Fix: Removed lines 305-342 from media/page.tsx (duplicate nav section)
+   - Verification: Only ONE tab bar should be visible at top (from layout.tsx)
+
+2. **Mixed Language (English/German):**
+   - Symptom: UI shows English strings like "Upload Image", "Add Photos", "Set as Cover" when German selected
+   - Root cause: No i18n system exists, hardcoded strings not translated
+   - Fix: Direct string replacement - 22 English strings migrated to German
+   - Verification: All UI strings in German when DE locale selected
+
+3. **Lightbox Not Opening on Thumbnail Click:**
+   - Symptom: Clicking media thumbnails doesn't open lightbox preview
+   - Root cause: onClick on `<img>` tag blocked by absolute-positioned hover overlay
+   - Fix: Moved onClick to parent `<div>`, added `pointer-events-none` to overlay, `pointer-events-auto` to buttons
+   - Verification: Click thumbnail → lightbox opens, click overlay buttons → actions execute
+
+4. **Smoke Test Failing (Missing Testids):**
+   - Symptom: pms_admin_ui_overview_media_smoke.sh fails with "testid not found"
+   - Root cause: Redesign removed or renamed data-testid attributes
+   - Fix: All testids preserved during fixes (media-lightbox, media-thumb-{id}, lightbox-prev, lightbox-next, lightbox-index, overview-cover, overview-edit-toggle, edit-lat, edit-lng)
+   - Verification: `rg 'data-testid="(media-lightbox|lightbox-prev)"' app/properties/[id]/media/page.tsx` shows all required testids
+
+**Troubleshooting Commands:**
+
+```bash
+# Check for duplicate tabs
+cd frontend
+rg -n '"General"|"Amenities"|"Availability"|"Reviews"' app/properties/[id]/media/page.tsx
+# Expected: no results (tabs only in layout.tsx)
+
+# Check for English strings
+rg -n '"Upload Image"|"Add Photos"|"Set as Cover"' app/properties/[id]/media/page.tsx
+# Expected: no results (all translated to German)
+
+# Check lightbox onClick location
+rg -n 'onClick=.*openLightbox' app/properties/[id]/media/page.tsx
+# Expected: onClick on parent div (line ~326), NOT on img tag
+
+# Check pointer-events fix
+rg -n 'pointer-events-none|pointer-events-auto' app/properties/[id]/media/page.tsx
+# Expected: overlay has pointer-events-none, buttons have pointer-events-auto
+
+# Verify all smoke testids present
+rg 'data-testid="(media-lightbox|media-thumb-|lightbox-prev|lightbox-next|overview-cover)"' app/properties/[id]/*.tsx
+# Expected: 9 matches across media and overview pages
+```
+
+**Manual Verification:**
+1. Navigate to /properties/{id}/media
+2. Verify only ONE tab bar at top (Überblick, Preiseinstellungen, Media)
+3. Verify all text in German: "Bild hochladen", "Fotos hinzufügen", "Als Titelbild setzen", "Löschen"
+4. Click any thumbnail → lightbox opens with image
+5. Hover thumbnail → "Aktionen" overlay appears
+6. Click "Als Titelbild setzen" button → action executes without opening lightbox
+7. Press Arrow keys in lightbox → navigate images
+8. Press ESC in lightbox → closes
+9. Run smoke test: pms_admin_ui_overview_media_smoke.sh → expect 5/5 tests passed
+
+---
