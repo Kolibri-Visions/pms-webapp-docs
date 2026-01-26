@@ -43404,3 +43404,83 @@ curl -sS "https://admin.fewo.kolibri-visions.de/properties/23dd8fda-59ae-4b2f-84
 - If testid changed: Update smoke script to match new testid name
 
 ---
+
+---
+
+### Admin UI Smoke Script Gets 307 Redirect to /login (P2.21.4.7a)
+
+**Symptom:** When running `pms_admin_ui_overview_media_smoke.sh`, curl requests to admin pages return HTTP 307 redirects to /login, so HTML doesn't contain expected data-testids and all tests fail 0/6.
+
+**Root Cause:** Admin UI pages require authentication via Supabase session cookies (server-side). The layout component calls `getAuthenticatedUser()` which redirects to /login when no valid session is found. Smoke scripts using curl cannot maintain browser session cookies, causing auth failures.
+
+**Solution (P2.21.4.7a):** Narrow smoke auth bypass in Next.js middleware:
+
+1. **Middleware Logic** (frontend/middleware.ts):
+   - Checks for BOTH headers: `x-pms-smoke: 1` AND `Authorization: Bearer <JWT>`
+   - Only for GET/HEAD requests on `/properties/*` routes
+   - Validates JWT online against Supabase `/auth/v1/user` endpoint (using anon key)
+   - If validation succeeds: Injects JWT as Supabase session cookie (`sb-access-token`)
+   - If validation fails: Falls through to normal redirect-to-login behavior
+
+2. **Security Constraints**:
+   - No bypass without BOTH headers
+   - No bypass for POST/PUT/PATCH/DELETE methods
+   - Only `/properties/*` routes (no other admin pages)
+   - Token must be validated online (not just decoded)
+   - If Supabase URL/anon key missing from env: bypass is disabled
+
+3. **Smoke Script Updates** (pms_admin_ui_overview_media_smoke.sh):
+   - Sends `Authorization: Bearer $MANAGER_JWT_TOKEN` header
+   - Sends `x-pms-smoke: 1` header
+   - Sends `Cache-Control: no-cache` header
+   - Checks HTTP status before grepping HTML:
+     - If not 200: Shows status, redirect location, first 40 lines of HTML, then fails
+     - If 200: Proceeds to grep for data-testids
+
+**How to Debug:**
+
+```bash
+# Test middleware bypass manually
+export JWT_TOKEN="your-manager-jwt-token"
+curl -I https://admin.fewo.kolibri-visions.de/properties/23dd8fda-59ae-4b2f-8489-7a90f5d46c66 \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "x-pms-smoke: 1"
+
+# Expected: HTTP/2 200 (with Set-Cookie: sb-access-token=...)
+# NOT: HTTP/2 307 location: /login
+
+# If still 307, check middleware logs:
+docker logs pms-frontend | grep "Smoke auth"
+
+# Verify JWT is valid:
+curl -X GET "https://sb-pms.kolibri-visions.de/auth/v1/user" \
+  -H "apikey: YOUR_SUPABASE_ANON_KEY" \
+  -H "Authorization: Bearer $JWT_TOKEN"
+# Should return 200 with user object
+```
+
+**Troubleshooting:**
+
+1. **Still getting 307 despite headers:**
+   - Check JWT is valid: `curl /auth/v1/user` as shown above
+   - Check JWT not expired: Decode with `jwt.io` and verify `exp` claim
+   - Check NEXT_PUBLIC_SB_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY set in frontend env
+   - Check middleware code deployed: `curl /api/ops/version` and verify commit hash
+
+2. **Smoke script fails with HTTP 500:**
+   - Check middleware validation error in logs: `docker logs pms-frontend`
+   - Supabase /auth/v1/user endpoint might be down or rate-limited
+
+3. **Bypass works but getAuthenticatedUser still fails:**
+   - Cookie injection might not be working
+   - Check cookie secure flag matches protocol (httpOnly + secure for HTTPS)
+   - Check maxAge not too short (currently 1 hour = 3600s)
+
+**Expected Behavior After Fix:**
+- Smoke script: `./pms_admin_ui_overview_media_smoke.sh` returns 6/6 tests passed (rc=0)
+- No 307 redirects to /login
+- HTML contains expected data-testids
+- Bypass only works with valid JWT + x-pms-smoke header
+- Normal browser users still require proper login (no security degradation)
+
+---
