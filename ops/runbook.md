@@ -43717,3 +43717,61 @@ export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
 - **P2.21.4.7d**: Playwright → waits for client hydration → finds testids in DOM → passes
 
 ---
+
+### Admin UI Smoke Script: Playwright Package Installation (P2.21.4.7e)
+
+**Note:** The Playwright Docker image (`mcr.microsoft.com/playwright:v1.48.0-jammy`) includes browsers but not the Node.js playwright npm package. The smoke script automatically installs it inside the container on first run using cached Docker volumes.
+
+**How It Works:**
+- Script creates a `package.json` with `"playwright": "1.48.0"` dependency
+- Docker volumes cache `node_modules` and npm cache between runs:
+  - `pms_playwright_smoke_node_modules:/work/node_modules`
+  - `pms_playwright_smoke_npm_cache:/root/.npm`
+- On first run: `npm install` runs inside container (takes ~30-60 seconds)
+- Subsequent runs: Skip npm install (node_modules already cached)
+- Sets `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` (browsers already in image)
+- Sets `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright` (use pre-installed browsers)
+
+**First Run Behavior:**
+```bash
+$ ./backend/scripts/pms_admin_ui_overview_media_smoke.sh
+ℹ Starting Admin UI Playwright smoke test...
+ℹ Running Playwright tests in Docker container...
+ℹ Installing Playwright npm package (cached volumes, first run only)...
+# (npm install output - takes ~30-60 seconds)
+Test 1: Overview page contains cover section...
+...
+```
+
+**Subsequent Runs:**
+```bash
+$ ./backend/scripts/pms_admin_ui_overview_media_smoke.sh
+ℹ Starting Admin UI Playwright smoke test...
+ℹ Running Playwright tests in Docker container...
+# (no npm install, uses cached node_modules)
+Test 1: Overview page contains cover section...
+...
+```
+
+**Troubleshooting:**
+
+1. **npm install fails:**
+   - Script shows last 50 lines of npm output and exits rc=1
+   - Check internet connection and npm registry access
+   - Try clearing volumes and re-running (see below)
+
+2. **Corrupted cached volumes:**
+   ```bash
+   # Clear cached volumes and force fresh install
+   docker volume rm pms_playwright_smoke_node_modules pms_playwright_smoke_npm_cache
+   
+   # Re-run script (will reinstall on next run)
+   ./backend/scripts/pms_admin_ui_overview_media_smoke.sh
+   ```
+
+3. **playwright package not found after install:**
+   - Script shows `ls -la node_modules/` output
+   - Usually indicates npm install incomplete or corrupted
+   - Solution: Clear volumes (see above)
+
+---
