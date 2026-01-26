@@ -43775,3 +43775,55 @@ Test 1: Overview page contains cover section...
    - Solution: Clear volumes (see above)
 
 ---
+
+### Admin UI Smoke Script: Docker Mount rc=125 Error (P2.21.4.7f)
+
+**Symptom:** Smoke script fails with Docker exit code 125 and error message:
+```
+docker: Error response from daemon: failed to create shim task: OCI runtime create failed: 
+runc create failed: unable to start container process: error during container init: 
+error mounting "/var/lib/docker/volumes/pms_playwright_smoke_node_modules/_data" 
+to rootfs at "/work/node_modules": mkdir /work/node_modules: read-only file system
+```
+
+**Root Cause:** Docker cannot create volume mountpoints (like `/work/node_modules`) under a parent directory that is mounted read-only. When the bind mount `-v "$TEMP_DIR:/work:ro"` uses the `:ro` flag, Docker cannot create the mountpoint for the volume `-v pms_playwright_smoke_node_modules:/work/node_modules`.
+
+**How It's Fixed (P2.21.4.7f):**
+The bind mount was changed from read-only to read-write:
+- Before: `-v "$TEMP_DIR:/work:ro"`
+- After: `-v "$TEMP_DIR:/work"` (default is read-write)
+
+This allows Docker to create the `/work/node_modules` directory as a mountpoint for the volume.
+
+**Security Note:**
+The temp directory contains only `smoke.js` and `package.json`. These files are not modified by the bash script inside the container. The read-write mount is necessary only for Docker to create volume mountpoints, not for the script to modify files.
+
+**Troubleshooting:**
+
+1. **Script still fails with rc=125:**
+   - Check the docker run command in the smoke script
+   - Verify the bind mount does NOT have `:ro` flag: `rg '\-v.*TEMP_DIR.*work' backend/scripts/pms_admin_ui_overview_media_smoke.sh`
+   - Expected: `-v "$TEMP_DIR:/work"` (no `:ro`)
+   - NOT expected: `-v "$TEMP_DIR:/work:ro"`
+
+2. **Volume mountpoints don't persist:**
+   - Named volumes persist across runs: `docker volume ls | grep pms_playwright_smoke`
+   - If volumes are missing, they will be recreated on next run (npm install happens again)
+
+3. **Permission denied errors:**
+   - Check Docker daemon has permission to create volumes
+   - On Linux: Ensure user is in docker group or run with sudo
+
+**Verification:**
+```bash
+# Clear volumes to test fresh mount
+docker volume rm pms_playwright_smoke_node_modules pms_playwright_smoke_npm_cache 2>/dev/null || true
+
+# Run smoke script
+./backend/scripts/pms_admin_ui_overview_media_smoke.sh
+
+# Expected: rc=0, 5/5 tests passed
+# NOT expected: rc=125 with "read-only file system" error
+```
+
+---
