@@ -42870,3 +42870,117 @@ psql $DATABASE_URL -c "\d+ property_media" | grep -A2 "idx_property_media_unique
 **Fixed In:** P2.21.4.2 (2026-01-26)
 
 ---
+
+### Media Thumbnails Broken / 401 Basic realm=kong / Missing /storage/v1
+
+**Symptom:** Media gallery shows broken images (question marks). Browser console shows HTTP 401 errors when loading thumbnails. Error response: `401 Basic realm="kong"`. URLs look like `https://sb-pms.kolibri-visions.de/object/sign/property-media/...?token=...` (missing `/storage/v1` prefix).
+
+**Root Cause:** Self-hosted Supabase (via Kong gateway) returns signed URL paths starting with `/object/sign/...` instead of `/storage/v1/object/sign/...`. The backend must normalize these paths to include the correct `/storage/v1` prefix for Kong routing.
+
+**How to Debug:**
+```bash
+# Check display_url returned by media listing API
+curl -sS -H "Authorization: Bearer $JWT_TOKEN" \
+  "$HOST/api/v1/properties/$PROPERTY_ID/media" | jq '.[0].display_url'
+
+# Expected (correct): https://sb-pms.kolibri-visions.de/storage/v1/object/sign/property-media/...?token=...
+# Broken (missing prefix): https://sb-pms.kolibri-visions.de/object/sign/property-media/...?token=...
+
+# Test if display_url is accessible
+DISPLAY_URL=$(curl -sS -H "Authorization: Bearer $JWT_TOKEN" \
+  "$HOST/api/v1/properties/$PROPERTY_ID/media" | jq -r '.[0].display_url')
+curl -I "$DISPLAY_URL"
+
+# Should return HTTP 200/206 with Content-Type: image/*
+# NOT 401 Basic realm="kong"
+```
+
+**Solution:**
+- Backend: Ensure `storage.py` includes `_normalize_storage_url()` helper that handles:
+  - Paths starting with `/object/...` → prefix with `/storage/v1`
+  - Paths starting with `/storage/v1/...` → no change
+  - Absolute URLs → no change
+- Verify `get_signed_url()` calls `_normalize_storage_url()` before returning
+- All `list_property_media()`, `add_property_media()`, `update_property_media()` use `storage.get_signed_url()` for Supabase files
+
+**Production Verification:**
+```bash
+# Run smoke script with display_url validation (Test 2.5)
+HOST="https://api.fewo.kolibri-visions.de" \
+MANAGER_JWT_TOKEN="..." \
+./backend/scripts/pms_property_media_upload_smoke.sh
+
+# Test 2.5 should PASS (validates display_url is HTTP 200/206 with image/* content-type)
+# Admin UI should show real thumbnails (no "?" placeholders)
+```
+
+---
+
+### Cover Toggle Returns 500 / Unique Constraint Violation (Transactional Fix)
+
+**Symptom:** PATCH `/api/v1/properties/{id}/media/{media_id}` with `{"is_cover": true}` returns HTTP 500. Backend logs show:
+```
+duplicate key value violates unique constraint "idx_property_media_unique_cover"
+Detail: Key (property_id, is_cover) where is_cover=true AND deleted_at IS NULL already exists.
+```
+
+**Root Cause:** The unique partial index `idx_property_media_unique_cover` ensures only ONE cover per property (WHERE is_cover=true AND deleted_at IS NULL). If the "clear all covers" UPDATE and "set new cover" UPDATE are not in the same transaction, a race condition or incomplete clear can violate the constraint.
+
+**How to Debug:**
+```bash
+# Check how many covers exist for a property (including soft-deleted)
+psql $DATABASE_URL -c "
+SELECT id, is_cover, deleted_at
+FROM property_media
+WHERE property_id = '$PROPERTY_ID'
+ORDER BY is_cover DESC, deleted_at NULLS FIRST;
+"
+
+# Should show at most 1 row with is_cover=true AND deleted_at IS NULL
+
+# Try setting cover via PATCH
+curl -X PATCH "$HOST/api/v1/properties/$PROPERTY_ID/media/$MEDIA_ID" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"is_cover": true}'
+
+# Should return HTTP 200 with updated media object
+# NOT 500 with unique constraint violation
+```
+
+**Solution:**
+- Backend: Wrap cover toggle in explicit transaction in `property_service.py`:
+  ```python
+  if media_data.get("is_cover"):
+      async with self.db.transaction():
+          # Step 1: Clear ALL covers (including soft-deleted)
+          await self.db.execute(
+              "UPDATE property_media SET is_cover=false WHERE property_id=$1",
+              property_id
+          )
+          # Step 2: Set this media as cover (INSERT or UPDATE)
+          row = await self.db.fetchrow(query, *params)
+  ```
+- Apply same fix to both `add_property_media()` (INSERT) and `update_property_media()` (UPDATE)
+- Clear query must NOT filter by `id` or `deleted_at` (clears even the row being updated + soft-deleted covers)
+
+**Production Verification:**
+```bash
+# Run smoke script with cover toggle test (Test 2.7)
+HOST="https://api.fewo.kolibri-visions.de" \
+MANAGER_JWT_TOKEN="..." \
+./backend/scripts/pms_property_media_upload_smoke.sh
+
+# Test 2.7 should PASS:
+#   - Set media 1 as cover → success
+#   - Set media 2 as cover → success
+#   - Verify only media 2 is cover (count=1, id=media_2)
+
+# Manual test in Admin UI:
+# 1. Go to /properties/{id}/media
+# 2. Click "Als Titelbild" on image A → should work (no 500)
+# 3. Click "Als Titelbild" on image B → should work (no 500)
+# 4. Verify only ONE "Titelbild" badge shows (on image B)
+```
+
+---
