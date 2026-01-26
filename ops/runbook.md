@@ -43484,3 +43484,92 @@ curl -X GET "https://sb-pms.kolibri-visions.de/auth/v1/user" \
 - Normal browser users still require proper login (no security degradation)
 
 ---
+
+### Admin UI Smoke Bypass Still Returns 307 After P2.21.4.7a (P2.21.4.7b)
+
+**Symptom:** After implementing P2.21.4.7a smoke auth bypass, curl requests with `x-pms-smoke: 1` and `Authorization: Bearer <JWT>` headers still return HTTP 307 redirects to /login. Smoke script fails 0/6 tests.
+
+**Root Cause:** P2.21.4.7a set `sb-access-token` cookie only on the RESPONSE via `response.cookies.set()`. The server component `getAuthenticatedUser()` in layout runs DURING the same request and cannot see response cookies - it can only see REQUEST cookies. Therefore, the redirect still happens.
+
+**Solution (P2.21.4.7b):** Inject the validated JWT token as a cookie into the DOWNSTREAM REQUEST headers, not just the response. This allows server components to see the cookie immediately during the same request.
+
+**Implementation:**
+```typescript
+// After JWT validation succeeds (middleware.ts lines ~79-107):
+if (userResponse.ok) {
+  // Clone request headers and inject cookie
+  const h = new Headers(request.headers);
+  const existingCookies = request.headers.get('cookie') ?? '';
+  const cookieValue = `sb-access-token=${token}`;
+  const mergedCookies = existingCookies
+    ? `${existingCookies}; ${cookieValue}`
+    : cookieValue;
+  h.set('cookie', mergedCookies);
+  h.set('x-pathname', pathname);
+
+  const response = NextResponse.next({
+    request: { headers: h }, // Use modified headers with cookie
+  });
+
+  // Also set cookie on response for completeness
+  response.cookies.set('sb-access-token', token, {...});
+  
+  // Debug header to confirm bypass activated
+  response.headers.set('x-pms-smoke-auth', 'ok');
+
+  return response;
+}
+```
+
+**Key Difference from P2.21.4.7a:**
+- **P2.21.4.7a**: Only set cookie on RESPONSE → server components can't see it → still 307
+- **P2.21.4.7b**: Inject cookie into REQUEST headers → server components see it → 200 OK
+
+**How to Debug:**
+```bash
+# Test smoke bypass with headers
+curl -I https://admin.fewo.kolibri-visions.de/properties/23dd8fda-59ae-4b2f-8489-7a90f5d46c66 \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "x-pms-smoke: 1"
+
+# P2.21.4.7a (broken): Returns HTTP/1.1 307 Temporary Redirect
+# P2.21.4.7b (fixed): Returns HTTP/1.1 200 OK
+
+# Check for debug header
+curl -I https://admin.fewo.kolibri-visions.de/properties/23dd8fda-59ae-4b2f-8489-7a90f5d46c66 \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "x-pms-smoke: 1" | grep -i "x-pms-smoke-auth"
+
+# Should output: x-pms-smoke-auth: ok
+```
+
+**Verification:**
+```bash
+# HOST-SERVER-TERMINAL
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="..."
+export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
+./backend/scripts/pms_admin_ui_overview_media_smoke.sh
+
+# Expected output: 6/6 tests passed, all ✅
+# Expected: "ℹ Smoke bypass activated: x-pms-smoke-auth: ok" messages
+```
+
+**Common Issues:**
+
+1. **Still getting 307 despite P2.21.4.7b:**
+   - Check JWT is valid (not expired): Decode JWT and check `exp` claim
+   - Check Supabase env vars in middleware: `NEXT_PUBLIC_SB_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` must be set
+   - Check middleware matcher: Must include `/properties/*` routes
+   - Check request method: Only GET/HEAD allowed, not POST/PUT/DELETE
+
+2. **x-pms-smoke-auth header not present:**
+   - Middleware bypass not activated - check BOTH headers present: `x-pms-smoke: 1` AND `Authorization: Bearer <token>`
+   - JWT validation failed - check token against Supabase: `curl https://<supabase-url>/auth/v1/user -H "apikey: <anon-key>" -H "Authorization: Bearer <token>"`
+
+3. **Deploy verification fails with commit mismatch:**
+   - After P2.21.4.7b, `pms_verify_deploy.sh` is STRICT: auto-detects git HEAD and fails (rc=3) if deployed backend/admin commits don't match
+   - To bypass strict mode: unset EXPECT_COMMIT env var before running script
+   - To fix: Redeploy backend/admin via Coolify to match local git HEAD
+
+---
