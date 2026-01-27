@@ -44419,3 +44419,109 @@ export BOOKING_ID="550e8400-e29b-41d4-a716-446655440000"
 - **x-pms-smoke-auth header present but still fails:** Different issue - check JWT expiry, Supabase env vars (NEXT_PUBLIC_SB_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY), or network issues.
 
 ---
+
+### Booking Details Smoke: Preflight Silent Fail (P2.21.4.7l)
+
+**Symptom:** `pms_admin_ui_booking_details_smoke.sh` exits with ui_rc=1 immediately after "ℹ Checking smoke bypass activation..." without printing any error message. Manual curl to the same URL shows `x-pms-smoke-auth: ok` header, proving smoke bypass is working.
+
+**Root Cause (P2.21.4.7k preflight):** Brittle header parsing with multiple issues:
+- Used `curl -I -L` in command substitution instead of temp file → fragile
+- Multiple `grep` commands in pipelines with `set -euo pipefail` → exit on grep fail (no match)
+- CRLF line endings from curl not normalized → header extraction fails
+- No diagnostic output on failure paths → silent exit
+
+**How It's Fixed (P2.21.4.7l):**
+
+1. **Temp File + CRLF Normalization:**
+   - Use `curl -D tempfile` to write headers to file
+   - Normalize CRLF → LF with `tr -d '\r'`
+   - All parsing done on normalized file
+
+2. **Robust Parsing with awk:**
+   - Replace brittle `grep | cut` with `awk` using `IGNORECASE=1`
+   - All awk commands use `|| true` to prevent pipeline exits
+   - Extract status: `awk '/^HTTP\// {print $2; exit}' headers`
+   - Extract x-pms-smoke-auth: `awk 'BEGIN{IGNORECASE=1} /^x-pms-smoke-auth:/ ...'`
+   - Extract cookie names (not values): `awk 'BEGIN{IGNORECASE=1} /^set-cookie:/ {sub(/=.*/, ""); print}'`
+
+3. **Comprehensive Diagnostics:**
+   - On any failure path, print:
+     - URL tested
+     - HTTP status code
+     - Location header (if redirect)
+     - x-pms-smoke-auth header value
+     - Cookie names (comma-separated, no values)
+     - First 40 lines of headers for debugging
+   - Never prints JWT token values
+
+4. **Optional Features:**
+   - `PMS_SMOKE_SKIP_PREFLIGHT=1` env var to bypass preflight (emergencies only)
+   - Auto-derive `BOOKING_ID` if empty (fetches first booking from API)
+
+**Verification:**
+```bash
+# HOST-SERVER-TERMINAL
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="..."
+export BOOKING_ID="550e8400-e29b-41d4-a716-446655440000"
+
+# Should pass preflight with diagnostics
+./backend/scripts/pms_admin_ui_booking_details_smoke.sh
+# Expected output:
+# ℹ Checking smoke bypass activation...
+# ✅ Smoke bypass active: x-pms-smoke-auth: ok
+# ℹ Running Playwright tests in Docker container...
+# ...
+# ✅ All Admin UI Booking Details smoke tests passed! 🎉
+
+# If preflight fails, you'll see full diagnostics:
+# ❌ ERROR: Preflight detected smoke bypass NOT active
+#    URL: https://admin.fewo.kolibri-visions.de/bookings/...
+#    Status: 307
+#    Location: /login
+#    x-pms-smoke-auth: <missing>
+#    Cookie names: 
+#    First 40 header lines:
+#    ...
+```
+
+**Debug Commands:**
+
+```bash
+# Test preflight manually with same headers
+BOOKING_ID="550e8400-e29b-41d4-a716-446655440000"
+ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+BOOKING_URL="${ADMIN_BASE_URL}/bookings/${BOOKING_ID}"
+
+# Dump headers to file
+curl -k -sS -D /tmp/preflight_headers.txt -o /dev/null \
+  -H "Authorization: Bearer $MANAGER_JWT_TOKEN" \
+  -H "x-pms-smoke: 1" \
+  -H "Cache-Control: no-cache" \
+  "$BOOKING_URL"
+
+# Normalize CRLF
+tr -d '\r' < /tmp/preflight_headers.txt > /tmp/preflight_headers_norm.txt
+
+# Extract status
+awk '/^HTTP\// {print $2; exit}' /tmp/preflight_headers_norm.txt
+# Expected: 200
+
+# Extract x-pms-smoke-auth header
+awk 'BEGIN{IGNORECASE=1} /^x-pms-smoke-auth:/ {sub(/^x-pms-smoke-auth:[[:space:]]*/, ""); print; exit}' /tmp/preflight_headers_norm.txt
+# Expected: ok
+
+# Extract cookie names
+awk 'BEGIN{IGNORECASE=1} /^set-cookie:/ {sub(/^set-cookie:[[:space:]]*/, ""); sub(/=.*/, ""); print}' /tmp/preflight_headers_norm.txt
+# Expected: pms_smoke, pms_smoke_token, sb-access-token (one per line)
+```
+
+**Common Issues:**
+
+- **Still failing after P2.21.4.7l fix:** Check script deployed correctly. Verify preflight code includes `mktemp` and `tr -d '\r'`: `rg -n 'mktemp.*pms_booking_smoke_headers|tr -d' backend/scripts/pms_admin_ui_booking_details_smoke.sh`
+
+- **Auto-derive BOOKING_ID fails:** Requires `API_BASE_URL` env var (backend API, not admin UI). If not set or API unreachable, provide `BOOKING_ID` explicitly.
+
+- **Skip preflight for emergency deploy:** Set `PMS_SMOKE_SKIP_PREFLIGHT=1` to bypass preflight. Use only when middleware is known working but preflight has issues.
+
+---
