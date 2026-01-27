@@ -44525,3 +44525,58 @@ awk 'BEGIN{IGNORECASE=1} /^set-cookie:/ {sub(/^set-cookie:[[:space:]]*/, ""); su
 - **Skip preflight for emergency deploy:** Set `PMS_SMOKE_SKIP_PREFLIGHT=1` to bypass preflight. Use only when middleware is known working but preflight has issues.
 
 ---
+
+### Booking Details Smoke: Action Buttons Status-Conditional (P2.21.4.7m)
+
+**Symptom:** `pms_admin_ui_booking_details_smoke.sh` Test 5 fails with "action buttons not found" even though smoke bypass is working. Debug artifacts show some action buttons missing from DOM (e.g., action-cancel absent).
+
+**Root Cause:** Action buttons are conditionally rendered based on booking status in the UI:
+- **action-invoice**: ALWAYS present (all statuses)
+- **action-cancel**: Hidden for "cancelled", "declined", "checked_out" statuses
+- **action-confirm**: Only shown for "inquiry", "pending" statuses
+
+Previous smoke test (P2.21.4.7k/l) expected ALL buttons to exist, causing failures when testing cancelled bookings.
+
+**How It's Fixed (P2.21.4.7m):**
+
+Smoke Test 5 is now status-aware:
+1. Always asserts `action-invoice` exists (required for all bookings)
+2. Reads status from `booking-status-pill` testid
+3. If status is "Storniert" (cancelled), "Abgelehnt" (declined), or "Ausgecheckt" (checked_out):
+   - Does NOT require cancel/confirm buttons (pass)
+4. Otherwise (active bookings):
+   - Requires AT LEAST ONE of `action-cancel` or `action-confirm`
+
+**Auto-Selection Enhancement:**
+When `BOOKING_ID` is not provided and `API_BASE_URL` is set, the script now:
+- Fetches up to 50 bookings from API
+- Prefers a booking that is NOT in "cancelled", "declined", or "checked_out" status
+- Falls back to any booking if no active ones found
+
+**Verification:**
+```bash
+# HOST-SERVER-TERMINAL
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="..."
+
+# Let script auto-select a non-cancelled booking
+unset BOOKING_ID
+./backend/scripts/pms_admin_ui_booking_details_smoke.sh
+# Expected: Auto-derives non-cancelled booking, Test 5 passes
+
+# Or explicitly test a cancelled booking
+export BOOKING_ID="<uuid-of-cancelled-booking>"
+./backend/scripts/pms_admin_ui_booking_details_smoke.sh
+# Expected: Test 5 passes (status-aware, doesn't require cancel/confirm)
+```
+
+**Common Issues:**
+
+- **Test 5 fails for active booking but no buttons:** Check frontend deployment includes action buttons with correct testids. Verify `canCancel()` and `canConfirm()` logic in `frontend/app/bookings/[id]/page.tsx`.
+
+- **Auto-select always picks cancelled booking:** API endpoint may only return cancelled bookings. Check `GET /api/v1/bookings?limit=50` returns active bookings. Manually set `BOOKING_ID` to an active booking UUID.
+
+- **Status pill text doesn't match:** German labels changed in UI. Check `getStatusLabel()` function in booking page. Update smoke script finished statuses list if needed.
+
+---
