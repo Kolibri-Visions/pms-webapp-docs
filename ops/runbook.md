@@ -44223,3 +44223,149 @@ export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
    - Verify frontend deployment includes media page with data-testid="media-lightbox"
 
 ---
+
+## Admin UI Booking Details Redesign (Stitch Referenz)
+
+**Overview:** Complete redesign of booking details page following Stitch reference layout with LuxeStay components and German language.
+
+**Changes Implemented:**
+
+1. **Layout Architecture** (frontend/app/bookings/[id]/page.tsx):
+   - Breadcrumb navigation: Buchungen > Buchungs-Nummer
+   - Header section: Booking number + status pill + action buttons (right-aligned)
+   - Two-column layout: Left (guest info, property details, stay dates), Right (payment details, booked via, activity log)
+   - All cards use LuxeStay Card component with icons
+
+2. **German Language:**
+   - All labels, buttons, status texts in German
+   - Status translations: confirmed → Bestätigt, cancelled → Storniert, etc.
+   - Inline translations (no i18n infrastructure)
+
+3. **Data Integration:**
+   - Guest data fetched: /api/v1/guests/{guest_id}
+   - Property data fetched: /api/v1/properties/{property_id}
+   - Graceful fallbacks when data unavailable
+
+4. **Action Buttons:**
+   - Rechnung herunterladen (Download invoice) - gold variant
+   - Stornieren (Cancel) - danger variant
+   - Bestätigen (Confirm) - primary variant
+   - All buttons have data-testid attributes
+
+**Verification Commands:**
+
+```bash
+# HOST-SERVER-TERMINAL
+# Run booking details smoke test
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="..."
+export BOOKING_ID="550e8400-e29b-41d4-a716-446655440000"
+./backend/scripts/pms_admin_ui_booking_details_smoke.sh
+# Expected: rc=0, 5/5 tests passed
+
+# Manual verification:
+# 1. Navigate to /bookings/{id} in admin UI
+# 2. Verify breadcrumb: Buchungen > Buchungs-Nummer
+# 3. Verify status pill shows German status (e.g., "Bestätigt")
+# 4. Verify left column: Gast, Objekt, Aufenthaltsdaten cards
+# 5. Verify right column: Zahlungsdetails, Gebucht über, Aktivitätsprotokoll cards
+# 6. Verify action buttons: Rechnung herunterladen, Stornieren, Bestätigen
+# 7. Test confirm/cancel actions work
+```
+
+**Common Issues:**
+
+### Booking Details Page Shows "Session abgelaufen"
+
+**Symptom:** Page renders login error instead of booking details.
+
+**Root Cause:** Client-side smoke auth bypass not working. Cookie pms_smoke_token missing or JWT expired.
+
+**How to Debug:**
+```bash
+# Check JWT expiry
+echo $MANAGER_JWT_TOKEN | cut -d'.' -f2 | base64 -d | jq '.exp'
+# Compare with current timestamp: date +%s
+
+# Check if smoke bypass activated (should see x-pms-smoke-auth: ok header)
+curl -I https://admin.fewo.kolibri-visions.de/bookings/{id} \
+  -H "Authorization: Bearer $MANAGER_JWT_TOKEN" \
+  -H "x-pms-smoke: 1"
+```
+
+**Solution:**
+- Refresh JWT token if expired
+- Verify frontend middleware deployed (P2.21.4.7j pms_smoke_token cookie)
+- Check browser DevTools → Application → Cookies for pms_smoke and pms_smoke_token
+
+### Guest or Property Data Missing (Shows "Keine Informationen verfügbar")
+
+**Symptom:** Guest card or Property card shows fallback message instead of data.
+
+**Root Cause:** Guest or property API fetch failed or returned 404.
+
+**How to Debug:**
+```bash
+# Check if guest exists
+GUEST_ID=$(curl -sS "https://api.fewo.kolibri-visions.de/api/v1/bookings/{booking_id}" \
+  -H "Authorization: Bearer $JWT" | jq -r '.guest_id')
+curl -sS "https://api.fewo.kolibri-visions.de/api/v1/guests/$GUEST_ID" \
+  -H "Authorization: Bearer $JWT"
+
+# Check if property exists
+PROPERTY_ID=$(curl -sS "https://api.fewo.kolibri-visions.de/api/v1/bookings/{booking_id}" \
+  -H "Authorization: Bearer $JWT" | jq -r '.property_id')
+curl -sS "https://api.fewo.kolibri-visions.de/api/v1/properties/$PROPERTY_ID" \
+  -H "Authorization: Bearer $JWT"
+```
+
+**Solution:**
+- Verify booking has valid guest_id and property_id references
+- Create guest/property records if missing
+- Check RBAC permissions for guest/property endpoints
+
+### Action Buttons Not Working (No Response on Click)
+
+**Symptom:** Clicking Bestätigen or Stornieren buttons does nothing.
+
+**Root Cause:** API endpoints return error or booking status doesn't allow action.
+
+**How to Debug:**
+```bash
+# Check browser console for API errors (F12 → Console)
+# Look for 422 validation errors or 400 bad requests
+
+# Check if booking status allows confirmation
+# Only "requested", "under_review", "pending" can be confirmed
+# Only "confirmed", "pending" can be cancelled
+```
+
+**Solution:**
+- Verify booking status allows the action (see status mapping above)
+- Check API logs for validation errors
+- Verify JWT has correct role (manager/admin required)
+
+### Smoke Test Fails: "booking-title not found"
+
+**Symptom:** Playwright smoke test fails on Test 1 with timeout waiting for booking-title.
+
+**Root Cause:** Page didn't render correctly or smoke auth bypass failed.
+
+**How to Debug:**
+```bash
+# Check debug artifacts in /tmp/smoke_test1_*.png and /tmp/smoke_test1_*.html
+# Look for "Session abgelaufen" in HTML (auth issue)
+# Check if booking-title testid exists in HTML dump
+
+# Verify testid in deployed code
+curl -sS "https://admin.fewo.kolibri-visions.de/bookings/{id}" \
+  -H "Authorization: Bearer $JWT" -H "x-pms-smoke: 1" | grep -c 'data-testid="booking-title"'
+# Expected: 1
+```
+
+**Solution:**
+- If 0: Frontend not deployed or testid removed
+- If auth error: Follow "Session abgelaufen" troubleshooting above
+- Hard refresh browser (Cmd+Shift+R) to clear cached JS bundle
+
+---
