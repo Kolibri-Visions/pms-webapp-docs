@@ -44369,3 +44369,53 @@ curl -sS "https://admin.fewo.kolibri-visions.de/bookings/{id}" \
 - Hard refresh browser (Cmd+Shift+R) to clear cached JS bundle
 
 ---
+
+### Booking Details Smoke: Redirect to /login (x-pms-smoke-auth missing) - P2.21.4.7k
+
+**Symptom:** `pms_admin_ui_booking_details_smoke.sh` fails with HTTP 307 redirect to /login. Preflight check shows "Smoke bypass not active for /bookings/* routes".
+
+**Root Cause:** frontend/middleware.ts smoke auth allowlist (line ~58) only includes `/properties/*` routes, not `/bookings/*`. When smoke script requests `/bookings/{id}` with smoke headers, middleware doesn't recognize it and falls through to normal auth flow which redirects to /login.
+
+**How It's Fixed (P2.21.4.7k):**
+Middleware condition extended to include both `/properties/*` and `/bookings/*`:
+```typescript
+// Before (P2.21.4.7a):
+pathname.startsWith('/properties/') &&
+
+// After (P2.21.4.7k):
+(pathname.startsWith('/properties/') || pathname.startsWith('/bookings/')) &&
+```
+
+Security constraints remain unchanged:
+- Requires BOTH headers: `Authorization: Bearer <jwt>` AND `x-pms-smoke: 1`
+- Only GET/HEAD methods
+- JWT validated against Supabase /auth/v1/user before setting cookies
+- Cookies set: `pms_smoke=1`, `pms_smoke_token=<jwt>` (both non-httpOnly, 5-min TTL)
+- Response header: `x-pms-smoke-auth: ok` when bypass active
+
+**Preflight Check (Added in P2.21.4.7k):**
+Booking smoke script now includes lightweight preflight HEAD request before running Playwright:
+- Checks for HTTP 307/302 to /login → fails fast with actionable error
+- Checks for x-pms-smoke-auth: ok header → warns if missing
+- Prevents wasting time on Playwright tests when bypass not working
+
+**Verification:**
+```bash
+# HOST-SERVER-TERMINAL
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="..."
+export BOOKING_ID="550e8400-e29b-41d4-a716-446655440000"
+
+# Should pass preflight and all tests
+./backend/scripts/pms_admin_ui_booking_details_smoke.sh
+# Expected: "✅ Smoke bypass active: x-pms-smoke-auth: ok"
+# Expected: rc=0, 5/5 tests passed
+```
+
+**Common Issues:**
+
+- **Still getting 307 redirect after fix:** Frontend not deployed. Verify commit includes P2.21.4.7k fix: `git log -1 --oneline | grep P2.21.4.7k`. Redeploy frontend via Coolify.
+
+- **x-pms-smoke-auth header present but still fails:** Different issue - check JWT expiry, Supabase env vars (NEXT_PUBLIC_SB_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY), or network issues.
+
+---
