@@ -44727,3 +44727,163 @@ curl -sS "https://admin.fewo.kolibri-visions.de/_next/static/..." # check JS bun
 - Hard refresh browser to clear cached components
 
 ---
+
+## Admin UI Properties List: Functional Fixes & Polish (P2.21.4.7n)
+
+**Overview:** Functional improvements and bug fixes for /properties list page following Admin UI Richtdesign deployment.
+
+**Changes Implemented:**
+
+1. **Search Functionality** (backend + frontend):
+   - Backend: Added `search` parameter to PropertyFilter schema (backend/app/schemas/properties.py)
+   - Backend: Implemented ILIKE search across name, internal_name, address_line1, city fields (backend/app/services/property_service.py)
+   - Frontend: Search input now sends query to backend and filters results
+
+2. **Cover Image Thumbnails** (frontend):
+   - Fetches cover images from `/api/v1/properties/{id}/media` endpoint
+   - Displays `is_cover: true` image in thumbnail column
+   - Falls back to emoji placeholder if no cover image
+   - Uses display_url > signed_url > url priority
+
+3. **Removed Redundant Filter Button** (frontend):
+   - Top "Filter" button removed (filter panel already accessible below)
+
+4. **Actions Menu Differentiation** (frontend):
+   - **Anzeigen**: Opens property detail in view mode (no change)
+   - **Bearbeiten**: Opens property detail in edit mode (`?edit=1` query parameter)
+   - **Archivieren**: Sets `is_active: false` via PATCH endpoint
+   - **Löschen**: Soft delete via DELETE endpoint (sets `deleted_at`) with confirmation dialog
+
+5. **Neues Objekt Modal Polish** (frontend):
+   - Applied LuxeStay design system colors throughout
+   - Updated typography (font-heading for headings, luxe-text-muted for labels)
+   - Improved spacing (gap-5 between fields, space-y-8 between sections)
+   - Enhanced input styling (border-bo-border, focus ring transitions)
+   - Better error message styling (left border accent)
+   - Polished footer buttons (improved padding and shadows)
+
+**Verification Commands:**
+
+```bash
+# HOST-SERVER-TERMINAL
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="..."
+
+# Run properties list smoke test
+./backend/scripts/pms_admin_ui_properties_list_smoke.sh
+# Expected: rc=0, 6/6 tests passed
+
+# Manual verification:
+# 1. Navigate to /properties
+# 2. Test search: Enter text in search box, verify results filter
+# 3. Verify thumbnails show cover images (not just emojis)
+# 4. Test "Bearbeiten" action: Opens detail page with ?edit=1
+# 5. Test "Archivieren": Property status changes to "Inaktiv"
+# 6. Test "Löschen": Confirmation dialog, then property marked deleted
+# 7. Test "Neues Objekt" modal: Verify polished styling with LuxeStay colors
+```
+
+**Common Issues:**
+
+### Search Returns No Results Despite Properties Existing
+
+**Symptom:** Search input works but returns empty list even with valid search terms.
+
+**Root Cause:** Backend search filter not deployed or database query incorrect.
+
+**How to Debug:**
+```bash
+# Test backend search directly
+curl -sS "https://api.fewo.kolibri-visions.de/api/v1/properties?search=berlin&limit=10" \
+  -H "Authorization: Bearer $JWT" | jq '.items | length'
+# Expected: > 0 if properties match search term
+
+# Check backend logs for SQL errors
+docker logs pms-backend-api | grep "list_properties"
+```
+
+**Solution:**
+- Verify PropertyFilter schema includes `search` field (backend/app/schemas/properties.py)
+- Verify PropertyService implements ILIKE search (backend/app/services/property_service.py)
+- Redeploy backend if changes not deployed
+
+### Cover Images Not Displaying (Still Shows Emoji)
+
+**Symptom:** Properties list shows placeholder emoji instead of cover images despite images being uploaded.
+
+**Root Cause:** Cover images not set (`is_cover: false` on all media) or media API failing.
+
+**How to Debug:**
+```bash
+# Check if property has cover image
+PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
+curl -sS "https://api.fewo.kolibri-visions.de/api/v1/properties/$PROPERTY_ID/media" \
+  -H "Authorization: Bearer $JWT" | jq '.[] | select(.is_cover == true)'
+# Expected: One media item with is_cover: true
+
+# Check browser DevTools console for fetch errors
+```
+
+**Solution:**
+- Set one media item as cover in Media tab (click "Als Titelbild setzen")
+- Verify media API returns display_url or signed_url
+- Check network tab for failed requests to /api/v1/properties/{id}/media
+
+### Archivieren Action Shows Error Toast
+
+**Symptom:** Clicking "Archivieren" shows "Fehler beim Archivieren" toast.
+
+**Root Cause:** Backend PATCH endpoint failing or user lacks permissions.
+
+**How to Debug:**
+```bash
+# Test PATCH endpoint directly
+curl -X PATCH "https://api.fewo.kolibri-visions.de/api/v1/properties/$PROPERTY_ID" \
+  -H "Authorization: Bearer $JWT" \
+  -H "Content-Type: application/json" \
+  -d '{"is_active": false}'
+# Expected: 200 OK with updated property
+
+# Check backend logs
+docker logs pms-backend-api | grep "PATCH /api/v1/properties"
+```
+
+**Solution:**
+- Verify user has manager/admin role
+- Check PropertyUpdate schema allows `is_active` field
+- Verify backend deployed with PATCH endpoint
+
+### Löschen Action Doesn't Remove Property
+
+**Symptom:** Confirmation dialog appears, but property still visible in list after deletion.
+
+**Root Cause:** DELETE endpoint soft-deletes but frontend filter doesn't exclude deleted properties.
+
+**How to Debug:**
+```bash
+# Check if property is soft-deleted
+curl -sS "https://api.fewo.kolibri-visions.de/api/v1/properties/$PROPERTY_ID" \
+  -H "Authorization: Bearer $JWT" | jq '.deleted_at'
+# Expected: Non-null timestamp
+
+# Check frontend filter
+# Frontend should refetch properties after delete, which excludes deleted by default
+```
+
+**Solution:**
+- Verify DELETE endpoint sets `deleted_at` timestamp
+- Verify frontend calls `fetchProperties()` after successful delete
+- Hard refresh browser (Cmd+Shift+R) to clear cache
+
+### Bearbeiten Opens View Mode (Not Edit Mode)
+
+**Symptom:** Clicking "Bearbeiten" opens property detail page but in view mode, not edit mode.
+
+**Root Cause:** Detail page doesn't detect `?edit=1` query parameter yet (separate implementation needed).
+
+**Note:** P2.21.4.7n adds the query parameter to the link. The detail page must be updated separately to detect this parameter and auto-enable edit mode on mount.
+
+**Temporary Workaround:**
+- Users can click "Bearbeiten" toggle button manually in detail page
+
+---
