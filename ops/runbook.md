@@ -44161,3 +44161,65 @@ export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
      ```
 
 ---
+
+### Admin UI Smoke Test: HttpOnly Cookie Limitation (P2.21.4.7j)
+
+**Symptom:** Playwright smoke script fails on Overview page despite x-pms-smoke-auth: ok header. Page renders "Objekte" list with 0 data-testid elements. Title shows "PMS Channel Sync Console" instead of property details.
+
+**Root Cause:** Client-side AuthProvider cannot read JWT from `sb-access-token` cookie because it's httpOnly: true. JavaScript document.cookie cannot access httpOnly cookies for security reasons. When client auth fails, page renders the wrong view (properties list instead of property detail).
+
+**How It's Fixed (P2.21.4.7j):**
+
+1. **Middleware** (`frontend/middleware.ts`):
+   - Added `pms_smoke_token` cookie (non-httpOnly) for client-side JWT access
+   - Cookie configuration:
+     - Path: /
+     - httpOnly: false (client JS can read)
+     - Secure: true (HTTPS only, except localhost)
+     - SameSite: Lax
+     - Max-Age: 300 (5 minutes - short-lived for security)
+   - Only set when: x-pms-smoke: 1 AND valid Authorization header AND GET/HEAD on /properties/*
+
+2. **AuthProvider** (`frontend/app/lib/auth-context.tsx`):
+   - Changed from reading `sb-access-token` (httpOnly) to reading `pms_smoke_token` (non-httpOnly)
+   - When pms_smoke=1 and pms_smoke_token exists, uses token directly
+   - Never logs token value
+
+3. **Smoke Script Hardening** (`backend/scripts/pms_admin_ui_overview_media_smoke.sh`):
+   - Debug artifacts now include cookie NAMES (not values) for auth troubleshooting
+   - Media test ALWAYS asserts `[data-testid="media-lightbox"]` exists, even if 0 thumbnails
+   - Catches "wrong page loaded" issues earlier with better diagnostics
+
+**Security Notes:**
+- `pms_smoke_token` is only set in smoke mode (requires both x-pms-smoke: 1 header AND valid JWT)
+- Cookie limited to 5-minute TTL (shorter than main token's 1 hour)
+- Only for GET/HEAD requests on /properties/* routes
+- Token never logged in server responses, screenshots, or HTML dumps
+- Middleware validates JWT against Supabase /auth/v1/user before setting any smoke cookies
+
+**Verification:**
+```bash
+# HOST-SERVER-TERMINAL
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="..."
+export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
+./backend/scripts/pms_admin_ui_overview_media_smoke.sh
+
+# Expected: rc=0, 5/5 tests passed
+# Overview tests find data-testid elements (not "Objekte" page)
+# Media test asserts lightbox wrapper exists
+```
+
+**Common Issues:**
+
+1. **Still seeing "Objekte" page with 0 testids:**
+   - Check cookie names in debug artifacts: should include "pms_smoke" and "pms_smoke_token"
+   - If pms_smoke_token missing: middleware not deployed or JWT validation failed
+   - If both present but still fails: check browser console for JS errors
+
+2. **"media-lightbox not found" error:**
+   - Media page didn't load correctly or structure changed
+   - Check screenshot artifact: should show media gallery grid
+   - Verify frontend deployment includes media page with data-testid="media-lightbox"
+
+---
