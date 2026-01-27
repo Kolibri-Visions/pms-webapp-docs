@@ -44021,3 +44021,85 @@ rg 'data-testid="(media-lightbox|media-thumb-|lightbox-prev|lightbox-next|overvi
 9. Run smoke test: pms_admin_ui_overview_media_smoke.sh → expect 5/5 tests passed
 
 ---
+
+### Admin UI Smoke Test: Overview Testids Not Found (P2.21.4.7h)
+
+**Symptom:** Playwright smoke script fails on Overview page tests:
+```
+❌ Test 1 FAILED: data-testid="overview-cover" not found in DOM
+❌ Test 2 FAILED: data-testid="overview-edit-toggle" not found in DOM
+❌ Test 3 FAILED: Could not find coordinate inputs in edit modal
+```
+
+Despite smoke bypass header being present (`x-pms-smoke-auth: ok`), indicating server-side middleware bypass is working.
+
+**Root Cause:** Client-side AuthProvider uses `supabase.auth.getSession()` which doesn't recognize manually-set `sb-access-token` cookie from middleware smoke bypass. When `accessToken` is null, the page renders "Session abgelaufen" error screen instead of the property overview content, so testids are not in the DOM.
+
+**How It's Fixed (P2.21.4.7h):**
+
+1. **Middleware** (`frontend/middleware.ts` lines 105-113):
+   - Sets non-httpOnly `pms_smoke=1` cookie alongside `sb-access-token` cookie
+   - Client JavaScript can read this cookie to detect smoke mode
+   - Cookie has shorter expiry (5 minutes) than token (1 hour)
+
+2. **AuthProvider** (`frontend/app/lib/auth-context.tsx` lines 22-41):
+   - On mount, checks for `pms_smoke=1` cookie
+   - If present, reads `sb-access-token` directly from cookie instead of calling `supabase.auth.getSession()`
+   - Sets mock user for smoke mode: `{ id: 'smoke-user', email: 'smoke@test.local' }`
+   - Bypasses normal Supabase session flow entirely
+
+3. **Debug Artifacts** (Smoke Script lines 114-160):
+   - On any failed selector wait, captures:
+     - Current URL and document title
+     - First visible `<h1>` text
+     - DOM signature: total count of `[data-testid]` elements + first 30 testids
+     - Full-page screenshot saved to `/tmp/smoke_testX_timestamp.png`
+     - HTML dump saved to `/tmp/smoke_testX_timestamp.html`
+
+**Verification Commands:**
+
+```bash
+# HOST-SERVER-TERMINAL
+# Verify middleware sets pms_smoke cookie
+curl -I "https://admin.fewo.kolibri-visions.de/properties/23dd8fda-59ae-4b2f-8489-7a90f5d46c66" \
+  -H "Authorization: Bearer $JWT" \
+  -H "x-pms-smoke: 1" | grep -i "set-cookie"
+
+# Expected: Two cookies set
+# set-cookie: sb-access-token=...; Path=/; HttpOnly; ...
+# set-cookie: pms_smoke=1; Path=/; SameSite=Lax; Max-Age=300
+
+# Run smoke test with debug artifacts
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="..."
+export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
+./backend/scripts/pms_admin_ui_overview_media_smoke.sh
+
+# Expected: rc=0, 5/5 tests passed
+# If failed: Check /tmp/smoke_test*_*.png and /tmp/smoke_test*_*.html for debug artifacts
+```
+
+**Common Issues:**
+
+1. **Test fails but no debug artifacts:**
+   - Check Docker volume mounts allow writing to `/tmp`
+   - Verify Playwright has fs write permissions inside container
+   - Check stderr output for "Failed to capture debug artifacts" errors
+
+2. **pms_smoke cookie not set:**
+   - Verify middleware P2.21.4.7h code deployed to PROD
+   - Check `x-pms-smoke: 1` header is sent by smoke script
+   - Hard refresh browser and test manually (should see cookie in DevTools)
+
+3. **Client still shows "Session abgelaufen":**
+   - Verify AuthProvider P2.21.4.7h code deployed to PROD
+   - Check browser DevTools → Application → Cookies for both `pms_smoke` and `sb-access-token`
+   - If `pms_smoke` missing: middleware not setting cookie
+   - If `sb-access-token` missing: server-side bypass not working (see P2.21.4.7c)
+
+4. **Debug artifacts show 0 testids:**
+   - Page loaded error screen instead of property overview
+   - Check "First H1" in debug output - should be property name, not "Session abgelaufen"
+   - Indicates client auth bypass not working
+
+---
