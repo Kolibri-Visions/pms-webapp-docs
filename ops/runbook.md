@@ -44103,3 +44103,61 @@ export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
    - Indicates client auth bypass not working
 
 ---
+
+### Admin UI Smoke Script: smoke.js SyntaxError (P2.21.4.7i)
+
+**Symptom:** Smoke script fails immediately with Node.js syntax error before tests run:
+```
+SyntaxError: Invalid or unexpected token
+at /work/smoke.js:72
+const screenshotPath = \`/tmp/smoke_${testName}_${timestamp}.png\`;
+Node.js v20.18.0
+```
+
+**Root Cause:** The bash heredoc that generates smoke.js accidentally escaped backticks as `\`` in JavaScript template literals. These escaped backticks are invalid tokens outside strings in JavaScript.
+
+**How It's Fixed (P2.21.4.7i):**
+
+1. **Removed Template Literals** (smoke script lines 148-149):
+   - Changed from: `const screenshotPath = \`/tmp/smoke_${testName}_${timestamp}.png\`;`
+   - Changed to: `const screenshotPath = '/tmp/smoke_' + testName + '_' + timestamp + '.png';`
+   - Uses string concatenation instead of template literals
+   - Avoids heredoc quoting issues entirely
+
+2. **Added Preflight Syntax Check** (smoke script lines 347-353):
+   - Runs `node --check smoke.js` before executing tests
+   - If syntax error found, displays smoke.js lines 60-90 with line numbers
+   - Prevents cryptic Playwright failures from bad JS syntax
+
+**Verification:**
+```bash
+# HOST-SERVER-TERMINAL
+# Clear Docker volumes to get fresh smoke.js generation
+docker volume rm pms_playwright_smoke_node_modules pms_playwright_smoke_npm_cache 2>/dev/null || true
+
+# Run smoke test
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="..."
+export PROPERTY_ID="23dd8fda-59ae-4b2f-8489-7a90f5d46c66"
+./backend/scripts/pms_admin_ui_overview_media_smoke.sh
+
+# Expected: No SyntaxError, tests execute normally
+# NOT expected: "Invalid or unexpected token" errors
+```
+
+**Troubleshooting:**
+
+1. **Still getting SyntaxError after fix:**
+   - Check heredoc in smoke script hasn't been corrupted
+   - Verify no backticks remain: `grep -n '\\` backend/scripts/pms_admin_ui_overview_media_smoke.sh`
+   - Should only find backticks in PLAYWRIGHT_EOF closing tag and bash substitutions
+
+2. **node --check fails but error location unclear:**
+   - The preflight check shows lines 60-90 by default
+   - If error is outside this range, manually inspect smoke.js:
+     ```bash
+     # Inside Docker container (adjust docker run command to drop into shell)
+     cat -n /work/smoke.js | less
+     ```
+
+---
