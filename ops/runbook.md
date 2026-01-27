@@ -44580,3 +44580,150 @@ export BOOKING_ID="<uuid-of-cancelled-booking>"
 - **Status pill text doesn't match:** German labels changed in UI. Check `getStatusLabel()` function in booking page. Update smoke script finished statuses list if needed.
 
 ---
+
+## Admin UI Richtdesign: Properties List & Amenities Smoke Tests
+
+**Overview:** Smoke tests for Admin UI Richtdesign redesign - properties list page and amenities page with LuxeStay design system.
+
+**Changes Implemented:**
+
+1. **Properties List Page** (frontend/app/properties/page.tsx):
+   - Redesigned with LuxeStay components
+   - Table layout with image thumbnails, type pills, capacity icons, status pills
+   - Action menus per row
+   - Required testids: properties-title, properties-search, properties-new-button, property-row, property-status-pill, property-actions
+
+2. **Amenities Page** (frontend/app/amenities/page.tsx):
+   - Redesigned with grouped/collapsible sections by category
+   - Search input, toggle switches, action menus
+   - Required testids: amenities-title, amenities-search, amenities-new-button, amenities-section-*, amenity-row, amenity-toggle, amenity-actions
+
+3. **Sidebar Navigation** (frontend/app/components/AdminShell.tsx):
+   - Removed unwanted line artifacts on hover/active states
+   - Reduced vertical spacing between menu items
+   - Simplified icon containers (smaller size, no shadows)
+
+4. **Middleware Allowlist** (frontend/middleware.ts):
+   - Extended smoke bypass to include /properties (exact match) and /amenities routes
+
+**Verification Commands:**
+
+```bash
+# HOST-SERVER-TERMINAL
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="..."
+
+# Run properties list smoke test
+./backend/scripts/pms_admin_ui_properties_list_smoke.sh
+# Expected: rc=0, 6/6 tests passed
+
+# Run amenities smoke test
+./backend/scripts/pms_admin_ui_amenities_smoke.sh
+# Expected: rc=0, 7/7 tests passed
+
+# Manual verification:
+# 1. Navigate to /properties - verify title, search, new button, table layout
+# 2. Navigate to /amenities - verify title, search, grouped sections, toggles
+# 3. Check sidebar navigation - no artifacts on hover, reduced spacing
+```
+
+**Common Issues:**
+
+### Properties List Smoke: property-row not found
+
+**Symptom:** Test 4 fails with "No property rows found" despite properties existing in database.
+
+**Root Cause:** Frontend not deployed or testid attribute missing from property rows.
+
+**How to Debug:**
+```bash
+# Check if properties API returns data
+curl -sS "https://api.fewo.kolibri-visions.de/api/v1/properties?limit=10" \
+  -H "Authorization: Bearer $JWT" | jq '.items | length'
+# Expected: > 0
+
+# Check debug artifacts
+ls -lah /tmp/smoke_test4_*
+# Screenshot should show property table or empty state
+```
+
+**Solution:**
+- If API returns data but UI shows empty: Check frontend deployment includes property-row testids
+- If API returns 0: Create test properties via admin UI
+- Hard refresh browser (Cmd+Shift+R) to clear cached JS bundle
+
+### Amenities Smoke: amenities-section-* not found
+
+**Symptom:** Test 4 fails with "No category sections found" despite amenities existing.
+
+**Root Cause:** Category grouping not working or testid attribute missing from section headers.
+
+**How to Debug:**
+```bash
+# Check if amenities API returns data
+curl -sS "https://api.fewo.kolibri-visions.de/api/v1/amenities?limit=50" \
+  -H "Authorization: Bearer $JWT" | jq 'group_by(.category) | length'
+# Expected: > 0
+
+# Check debug artifacts screenshot
+# Should show collapsible category sections or empty state
+```
+
+**Solution:**
+- Verify frontend deployment includes amenities-section-{category} testids
+- Check category grouping logic in amenities page component
+- Create test amenities in multiple categories if database empty
+
+### Smoke Bypass Not Active for /amenities or /properties
+
+**Symptom:** Smoke tests fail with HTTP 307 redirect to /login despite x-pms-smoke header.
+
+**Root Cause:** Middleware allowlist missing /amenities or exact /properties route.
+
+**How to Debug:**
+```bash
+# Test middleware allowlist manually
+curl -I "https://admin.fewo.kolibri-visions.de/properties" \
+  -H "Authorization: Bearer $JWT" \
+  -H "x-pms-smoke: 1"
+# Expected: HTTP 200, x-pms-smoke-auth: ok header
+
+curl -I "https://admin.fewo.kolibri-visions.de/amenities" \
+  -H "Authorization: Bearer $JWT" \
+  -H "x-pms-smoke: 1"
+# Expected: HTTP 200, x-pms-smoke-auth: ok header
+```
+
+**Solution:**
+- Verify middleware.ts line 58 includes:
+  ```typescript
+  (pathname === '/properties' || pathname.startsWith('/properties/') || 
+   pathname === '/amenities' || pathname.startsWith('/bookings/'))
+  ```
+- Redeploy frontend if middleware not updated
+- Check JWT not expired: `echo $JWT | cut -d. -f2 | base64 -d | jq .exp`
+
+### Sidebar Navigation Still Shows Artifacts
+
+**Symptom:** Unwanted lines or shadows visible on hover/active states in sidebar.
+
+**Root Cause:** AdminShell.tsx not deployed with simplified styling.
+
+**How to Debug:**
+```bash
+# Check deployed code includes simplified icon container
+curl -sS "https://admin.fewo.kolibri-visions.de/_next/static/..." # check JS bundle
+
+# Manual verification in browser DevTools
+# Inspect nav item icon container
+# Should have: w-8 h-8 (not w-9 h-9), no shadow classes
+```
+
+**Solution:**
+- Verify AdminShell.tsx changes deployed
+- Check icon container: `w-8 h-8` (not `w-9 h-9`)
+- Check no `shadow-*` classes on icon container
+- Check nav group spacing: `space-y-3` (not `space-y-5`)
+- Hard refresh browser to clear cached components
+
+---
