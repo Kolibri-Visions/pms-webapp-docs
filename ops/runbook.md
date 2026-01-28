@@ -45419,3 +45419,103 @@ rg -n 'style=\{\{backgroundColor.*F2EFEA' frontend/app/properties/page.tsx
 - Smoke script counts `data-testid="property-row"` which won't exist if filtered out
 
 ---
+
+## Admin UI Properties List: Count Label + Dropdown Clipping + Actions Rework (P2.21.4.7s)
+
+**Overview:** Final polish for properties list page after P2.21.4.7r deployment - fixed count label inaccuracy, dropdown clipping, and action differentiation by archived status.
+
+**Changes Implemented:**
+
+1. **Count Label Fix** (frontend/app/properties/page.tsx):
+   - Added data-testid="properties-count" for testing
+   - Changed from properties.length to filteredProperties.length
+   - Now reflects visible rows after search + archived filters applied
+   - German pluralization: "X Objekt gefunden" / "X Objekte gefunden"
+
+2. **Portal-Based Dropdown Rendering** (frontend/app/properties/page.tsx):
+   - Moved dropdown from overflow-hidden parent to document.body via createPortal
+   - Added dynamic data-testid per property: property-actions-${property.id}
+   - Fixed positioning using unique testid selector for clicked button
+   - Prevents visual clipping while maintaining positioning relative to trigger button
+
+3. **Action Differentiation by Status** (frontend/app/properties/page.tsx):
+   - Active properties (is_active: true): "Bearbeiten" + "Archivieren"
+   - Archived properties (is_active: false): "Bearbeiten" + "Wiederherstellen" + "Endgültig löschen"
+
+4. **Archived View Toggle** (frontend/app/properties/page.tsx):
+   - Added filter control: Aktiv (default) | Archiviert | Alle
+   - Integrated with existing client-side filtering (search + archived)
+   - Styled with LuxeStay design system (bg-luxe-gold for active state)
+
+**Verification Commands:**
+
+Manual verification:
+1. Navigate to /properties
+2. Verify count shows X Objekte gefunden matching visible rows
+3. Search for property - count updates to match filtered results
+4. Click archived toggle - count updates to match archived/active rows
+5. Click actions menu - dropdown appears without clipping
+6. For active property: verify Bearbeiten + Archivieren actions
+7. Click Archivieren - property moves to archived view with toast
+8. Switch to archived view - verify property shows with Wiederherstellen + Endgültig löschen
+
+**Common Issues:**
+
+### Count Label Still Shows Total Count (Not Filtered Count)
+
+**Symptom:** Count label shows "16 Objekte gefunden" but only 1-2 rows visible after search.
+
+**Root Cause:** Frontend not deployed with P2.21.4.7s count label fix.
+
+**Solution:**
+- Verify P2.21.4.7s changes deployed
+- Hard refresh browser to clear cached JS bundle
+- Check filteredProperties useMemo includes both search and archivedView filters
+
+### Actions Dropdown Still Clipped by Parent
+
+**Symptom:** Clicking actions menu shows dropdown but it's cut off at bottom.
+
+**Root Cause:** Portal not rendering or positioning logic incorrect.
+
+**Solution:**
+- Verify createPortal rendering to document.body
+- Verify positioning uses querySelector with unique testid per property
+- Check z-index (dropdown should use z-50)
+- Hard refresh browser to clear cached components
+
+### Archived Properties Still Show Archivieren Action
+
+**Symptom:** Archived properties show "Archivieren" instead of "Wiederherstellen".
+
+**Root Cause:** Action menu not checking property.is_active status.
+
+**Solution:**
+- Verify conditional rendering based on property.is_active
+- Active properties: Bearbeiten + Archivieren
+- Archived properties: Bearbeiten + Wiederherstellen + Endgültig löschen
+- Check handleArchive/handleRestore handlers wired correctly
+
+### Smoke Test 6 Fails with property-actions not found
+
+**Symptom:** Test 6 fails with data-testid property-actions not found in DOM.
+
+**Root Cause:** Smoke script not updated to use prefix selector for dynamic testids.
+
+**Solution:**
+- Verify smoke script updated with P2.21.4.7s changes (prefix selector)
+- Verify frontend generates unique testid per property
+- Clear Docker volumes if needed
+
+### Archived Toggle Doesn't Filter Results
+
+**Symptom:** Clicking Archiviert or Alle doesn't change visible rows.
+
+**Root Cause:** filteredProperties useMemo not including archivedView filter.
+
+**Solution:**
+- Verify useMemo dependencies include properties, searchQuery, archivedView
+- Check filter logic correctly maps archivedView to is_active
+- Verify archivedView state updates on toggle click
+
+---
