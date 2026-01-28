@@ -44887,3 +44887,157 @@ curl -sS "https://api.fewo.kolibri-visions.de/api/v1/properties/$PROPERTY_ID" \
 - Users can click "Bearbeiten" toggle button manually in detail page
 
 ---
+
+## Admin UI Properties List: UX Fixes \(P2.21.4.7o\)
+
+**Overview:** Functional fixes for properties list page after commit bd5008d - modal styling, export 404, search/filter caching issues.
+
+**Changes Implemented:**
+
+1. **"Neues Objekt" Modal Testids** \(frontend/app/properties/page.tsx\):
+   - Added data-testid="new-property-open" to modal open button
+   - Added data-testid="new-property-modal" to modal container
+   - Added data-testid="new-property-name" to name input
+   - Added data-testid="new-property-submit" to submit button
+
+2. **Export Button 404 Fix** \(frontend/app/properties/page.tsx\):
+   - Fixed handleExport function to use getApiBase\(\) for full API URL
+   - Changed from relative `/api/v1/properties/export` to `${getApiBase()}/api/v1/properties/export`
+   - Backend route exists at correct path, frontend just needed full URL
+
+3. **Search/Filter Caching Fix** \(frontend/app/properties/page.tsx\):
+   - Added noCache=true parameter to apiClient.get\(\) in fetchProperties
+   - Prevents browser/CDN from serving stale filter results
+
+**Verification Commands:**
+
+```bash
+# HOST-SERVER-TERMINAL
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="..."
+
+# Run updated properties list smoke test
+./backend/scripts/pms_admin_ui_properties_list_smoke.sh
+# Expected: rc=0, 9/9 tests passed
+
+# Manual verification:
+# 1. Navigate to /properties
+# 2. Click "+ Neues Objekt" - verify modal opens with proper styling
+# 3. Test search - type text, verify results filter correctly
+# 4. Click Export button - verify CSV downloads \(no 404\)
+```
+
+**Common Issues:**
+
+### Modal Opens But Looks Broken \(Transparent/Unstyled\)
+
+**Symptom:** Clicking "+ Neues Objekt" opens modal but it has no background color or proper styling.
+
+**Root Cause:** Frontend CSS not deployed or modal container missing LuxeStay classes.
+
+**How to Debug:**
+```bash
+# Check if modal has proper classes
+# DevTools → Elements → search for data-testid="new-property-modal"
+# Should have: bg-luxe-surface rounded-xl shadow-bo-xl max-w-4xl
+
+# Check deployed code
+curl -sS "https://admin.fewo.kolibri-visions.de/_next/static/..." # check JS bundle
+```
+
+**Solution:**
+- Verify P2.21.4.7n styling changes deployed \(modal already styled, just needed testids\)
+- Hard refresh browser \(Cmd+Shift+R\)
+- Check browser console for CSS loading errors
+
+### Export Button Returns 404
+
+**Symptom:** Clicking Export button shows "Fehler beim Export" toast, network tab shows 404 on `/api/v1/properties/export`.
+
+**Root Cause:** Frontend using relative URL which Next.js doesn't proxy. Solution in P2.21.4.7o uses getApiBase\(\) for full URL.
+
+**How to Debug:**
+```bash
+# Check if backend route exists
+curl -sS "https://api.fewo.kolibri-visions.de/api/v1/properties/export" \
+  -H "Authorization: Bearer $JWT"
+# Expected: CSV download
+
+# Check frontend code
+rg "getApiBase.*export" frontend/app/properties/page.tsx
+# Should show: ${getApiBase()}/api/v1/properties/export
+```
+
+**Solution:**
+- Verify P2.21.4.7o changes deployed \(getApiBase import + usage in handleExport\)
+- Verify NEXT_PUBLIC_API_BASE env var set correctly
+- Check browser console for full error URL
+
+### Search Doesn't Filter Results
+
+**Symptom:** Typing in search box doesn't filter the property list.
+
+**Root Cause:** Browser/CDN caching GET responses. Solution adds noCache=true parameter.
+
+**How to Debug:**
+```bash
+# Check network tab in DevTools
+# Search for "berlin"
+# Should see new GET request to /api/v1/properties?search=berlin
+# Check if Cache-Control: no-store header present
+
+# Check frontend code
+rg "apiClient.get.*noCache.*true" frontend/app/properties/page.tsx
+# Should show: apiClient.get(..., accessToken, undefined, true)
+```
+
+**Solution:**
+- Verify P2.21.4.7o noCache parameter deployed
+- Clear browser cache
+- Check backend returns fresh results \(not cached 200\)
+
+### Smoke Test Fails on Test 7 \(Modal Background\)
+
+**Symptom:** pms_admin_ui_properties_list_smoke.sh Test 7 fails with "Modal background is transparent".
+
+**Root Cause:** Modal container doesn't have bg-luxe-surface class or CSS not loaded.
+
+**How to Debug:**
+```bash
+# Check debug artifacts
+ls -lah /tmp/smoke_test7_*.png
+# Screenshot should show modal with proper white/cream background
+
+# Manual test in browser
+# Open /properties, click "+ Neues Objekt"
+# Inspect modal element, check backgroundColor computed style
+```
+
+**Solution:**
+- Verify modal has data-testid="new-property-modal" AND bg-luxe-surface class
+- Redeploy frontend if P2.21.4.7n + P2.21.4.7o changes not deployed
+- Check Tailwind CSS compiled correctly
+
+### Smoke Test Fails on Test 8 \(Search Doesn't Reduce Results\)
+
+**Symptom:** Test 8 shows "Search did not reduce results" despite typing search query.
+
+**Root Cause:** Search not wired to backend, debounce timing too short, or caching issue.
+
+**How to Debug:**
+```bash
+# Check if search query sent to backend
+# DevTools → Network tab → filter XHR/Fetch
+# Type in search box, wait 1.5s
+# Should see: GET /api/v1/properties?search=zzz_nonexistent_property_xyz
+
+# Check backend logs
+docker logs pms-backend-api | grep "search="
+```
+
+**Solution:**
+- Verify search param wired in fetchProperties \(debouncedSearchQuery appended to params\)
+- Verify backend PropertyFilter schema has search field
+- Increase debounce timeout if network slow
+
+---
