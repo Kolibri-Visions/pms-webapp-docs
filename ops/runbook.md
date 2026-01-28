@@ -45315,3 +45315,107 @@ rg -n "data-testid=\"new-property-backdrop\".*onClick" frontend/app/properties/p
 - Check browser console for JavaScript errors when clicking backdrop
 
 ---
+
+## Admin UI Properties List: Search DOM Filtering + Modal Card BG (P2.21.4.7r)
+
+**Overview:** Fixed remaining smoke test issues after P2.21.4.7q deployment (commit c40eaf3) - search not reducing DOM rows and modal card transparency warning.
+
+**Changes Implemented:**
+
+1. **Client-Side Search Filtering** (frontend/app/properties/page.tsx):
+   - Added filter wrapper before map() at line 591
+   - Filters properties array based on searchQuery state
+   - Case-insensitive matching on: name, internal_name, city, address_line1
+   - Unmatched properties removed from DOM (not CSS hidden)
+   - Playwright sees reduced row count immediately
+
+2. **Modal Card Explicit Background** (frontend/app/properties/page.tsx):
+   - Added inline style `style={{backgroundColor: '#F2EFEA'}}` at line 907
+   - Provides fallback if bg-luxe-surface class doesn't compute
+   - Matches LuxeStay design system color exactly
+   - Prevents transparent background in Playwright checks
+
+**Verification Commands:**
+
+```bash
+# HOST-SERVER-TERMINAL
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="..."
+
+# Run properties list smoke test
+./backend/scripts/pms_admin_ui_properties_list_smoke.sh
+# Expected: rc=0, 9/9 tests passed
+# Test 8 must pass: row count decreases with search
+# Test 7 must pass: no modal transparency warnings
+
+# Manual verification:
+# 1. Navigate to /properties
+# 2. Type "SMOKE-P1" in search box
+# 3. Verify table shows fewer/zero rows immediately (no delay)
+# 4. Click "+ Neues Objekt"
+# 5. Verify modal has cream background (not transparent)
+```
+
+**Common Issues:**
+
+### Search Still Doesn't Reduce Rows (Test 8 Fails)
+
+**Symptom:** Test 8 fails with "Search did not reduce results" despite typing search query.
+
+**Root Cause:** Frontend not deployed with P2.21.4.7r client-side filter changes.
+
+**How to Debug:**
+```bash
+# Check if filter code deployed
+rg -n "P2.21.4.7r.*Client-side filtering" frontend/app/properties/page.tsx
+# Expected: line 591 comment present
+
+# Check filter logic exists
+sed -n '590,605p' frontend/app/properties/page.tsx | grep -c "filter(property"
+# Expected: 1
+
+# Manual UI test
+# Type in search box, verify table rows update immediately without delay
+```
+
+**Solution:**
+- Verify P2.21.4.7r changes deployed (git log shows commit)
+- Hard refresh browser (Cmd+Shift+R) to clear cached JS bundle
+- Check browser console for JavaScript errors
+
+### Modal Card Still Shows Transparent Warning (Test 7)
+
+**Symptom:** Test 7 passes but logs warning "Modal card background is transparent".
+
+**Root Cause:** Inline style not deployed or CSS loading timing issue persists.
+
+**How to Debug:**
+```bash
+# Check if inline style deployed
+rg -n 'style=\{\{backgroundColor.*F2EFEA' frontend/app/properties/page.tsx
+# Expected: line 907 with inline style
+
+# Check computed style in browser
+# DevTools → Elements → find data-testid="new-property-modal"
+# Check backgroundColor computed style, should be rgb(242, 239, 234)
+```
+
+**Solution:**
+- Verify P2.21.4.7r frontend deployment
+- Inline style should override any timing issues
+- Check browser DevTools for CSS conflicts
+
+### Rows Hidden But Still Counted (CSS vs DOM)
+
+**Symptom:** Search query entered, but Playwright still counts all rows.
+
+**Root Cause:** If using CSS `display: none` instead of removing from DOM, Playwright may still count hidden elements.
+
+**Note:** P2.21.4.7r uses `.filter()` which removes elements from DOM, not CSS hiding. This issue should NOT occur with correct implementation.
+
+**Solution:**
+- Verify filter wrapper uses `.filter()` not CSS classes
+- Check `properties.filter(...).map()` pattern at line 592-601
+- Smoke script counts `data-testid="property-row"` which won't exist if filtered out
+
+---
