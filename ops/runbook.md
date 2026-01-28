@@ -45817,3 +45817,55 @@ except Exception as e:
   - list_batches, get_batch_status, preview_purge, purge_sync_logs
 
 ---
+
+## Security: Token Logging Audit (SEC-P0b)
+
+### How to Detect Token Leaks in Logs
+
+Search for potential token logging patterns:
+
+```bash
+# Search for token variables in log statements
+rg -n 'logger\.[a-z]+\(.*\{.*token' backend/app/
+
+# Search for Authorization header logging
+rg -n 'logger.*Authorization' backend/app/
+
+# Search for Bearer token logging
+rg -n 'logger.*Bearer' backend/app/
+
+# Search for credential-like logging
+rg -n 'logger.*(password|secret|credential|api_key)' backend/app/ -i
+```
+
+### Safe Logging Patterns (Verified SEC-P0b)
+
+The following are SAFE to log:
+- JWT config values (issuer, audience) - these are public claim requirements
+- User IDs and agency IDs (UUIDs) - these are identifiers, not secrets
+- PyJWT exception messages - these contain error descriptions, not tokens
+  - `ExpiredSignatureError`: "Signature has expired"
+  - `InvalidAudienceError`: "Invalid audience"
+  - `JWTError`: "Invalid header" / "Not enough segments"
+
+### Unsafe Patterns to Avoid
+
+Never log:
+- Raw `token` variable from `credentials.credentials`
+- `request.headers.get("Authorization")` without masking
+- `access_token` or `refresh_token` values
+- Full `Bearer <token>` strings
+
+### Masking Format (if needed)
+
+If token logging is ever required for debugging:
+
+```python
+def mask_token(token: str) -> str:
+    """Mask token for safe logging: 'eyJ...xyz' -> 'eyJ...xyz (len=123)'"""
+    if not token or len(token) < 10:
+        return "[empty/short]"
+    return f"{token[:3]}...{token[-3:]} (len={len(token)})"
+```
+
+---
