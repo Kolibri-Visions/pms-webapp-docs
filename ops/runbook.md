@@ -4,7 +4,31 @@
 
 **Audience**: Ops engineers, DevOps, on-call responders.
 
-**Last Updated**: 2025-12-26
+**Last Updated**: 2026-01-28
+
+---
+
+## RUNBOOK INDEX
+
+> **RULE**: New content goes into `backend/docs/ops/runbook/*.md` chapter files only.
+> This legacy file is kept for reference but should not grow further.
+
+### Modular Chapters (New Content Here)
+
+| Chapter | Description |
+|---------|-------------|
+| [00-golden-paths.md](./runbook/00-golden-paths.md) | Quick-reference happy-path procedures |
+| [01-deployment.md](./runbook/01-deployment.md) | Deployment, rollback, environments |
+| [02-database.md](./runbook/02-database.md) | Database connectivity, migrations |
+| [03-auth.md](./runbook/03-auth.md) | Authentication, authorization, JWT |
+| [04-channel-manager.md](./runbook/04-channel-manager.md) | Channel integrations, sync ops |
+
+### Golden Paths (Most Common Operations)
+
+1. **Deploy** → Merge to main → Coolify auto-deploys → Run `pms_verify_deploy.sh`
+2. **Rollback** → Coolify → Select previous → Click Rollback
+3. **Health Check** → `curl /health` + `curl /health/ready`
+4. **Smoke Test** → Export env vars → Run `pms_verify_deploy.sh`
 
 ---
 
