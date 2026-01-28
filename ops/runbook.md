@@ -45741,3 +45741,35 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 ```
 
 ---
+
+## Smoke Script: Avoid Stdout Parsing for curl Headers (P2.21.4.8d)
+
+### Problem
+
+Parsing HTTP headers from stdout (e.g., `curl -I | grep`) is unreliable:
+- `curl -I` sends HEAD request, which may return different headers than GET
+- Pipeline can fail with `set -e` if grep finds no match
+- Content-type header may appear multiple times
+
+### Solution
+
+Always use `curl -D "$hdr_file" -o "$body_file"` to dump headers to a file:
+
+```bash
+hdr_file=$(mktemp)
+csv_file=$(mktemp)
+
+http_code=$(curl -sS \
+  -D "$hdr_file" \
+  -o "$csv_file" \
+  -w "%{http_code}" \
+  -H "Authorization: Bearer $TOKEN" \
+  "$URL")
+
+# Parse content-type from file (case-insensitive, last occurrence)
+content_type=$(tr -d '\r' < "$hdr_file" | awk 'BEGIN{IGNORECASE=1} /^content-type:/ {gsub(/^content-type:[ \t]*/, ""); ct=$0} END{print ct}')
+```
+
+This ensures headers come from the same request as the body.
+
+---
