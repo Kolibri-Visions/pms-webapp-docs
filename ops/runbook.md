@@ -45041,3 +45041,161 @@ docker logs pms-backend-api | grep "search="
 - Increase debounce timeout if network slow
 
 ---
+
+## Admin UI Properties List: Export/Search/Smoke Fixes (P2.21.4.7p)
+
+**Overview:** Production fixes for properties list page after commit 5c152f0 - export API 422 error, search not filtering, smoke script failures.
+
+**Changes Implemented:**
+
+1. **Export API Route Collision Fix** (backend/app/api/routes/properties.py):
+   - Root cause: `/properties/export` route declared AFTER `/{property_id}` parameterized route
+   - FastAPI matched "export" as UUID parameter causing HTTP 422 validation error
+   - Fix: Removed duplicate export function that was incorrectly placed after parameterized route
+   - Export route now correctly declared BEFORE `/{property_id}` route (done in P2.21.4.7n)
+
+2. **Export Search Parameter Fix** (frontend/app/properties/page.tsx):
+   - Export handler was missing `debouncedSearchQuery` parameter
+   - CSV export didn't respect active search filter
+   - Fix: Added search parameter to export handler params collection
+
+3. **Smoke Script Variable Scope Fix** (backend/scripts/pms_admin_ui_properties_list_smoke.sh):
+   - `captureDebugArtifacts` function referenced `page` and `context` variables outside its scope
+   - Caused "page is not defined" error when debug artifacts triggered
+   - Fix: Updated function signature to accept `page, context, testName` parameters
+   - Updated all 15+ call sites to pass page and context explicitly
+
+**Verification Commands:**
+
+```bash
+# HOST-SERVER-TERMINAL
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="..."
+
+# Test export API directly
+curl -X GET "https://api.fewo.kolibri-visions.de/api/v1/properties/export?search=berlin" \
+  -H "Authorization: Bearer $JWT"
+# Expected: CSV download with filtered results, NOT HTTP 422
+
+# Run updated smoke test
+./backend/scripts/pms_admin_ui_properties_list_smoke.sh
+# Expected: rc=0, 9/9 tests passed, no "page is not defined" errors
+```
+
+**Common Issues:**
+
+### Export API Returns HTTP 422 "validation error for path parameter property_id"
+
+**Symptom:** GET /api/v1/properties/export returns HTTP 422 with message "validation error for path parameter property_id: Input should be a valid UUID".
+
+**Root Cause (Pre-P2.21.4.7p):** Export route `/properties/export` was declared AFTER the parameterized route `/{property_id}`. FastAPI matched the literal string "export" against the UUID pattern first, causing validation error.
+
+**How to Debug:**
+```bash
+# Test export endpoint
+curl -I "https://api.fewo.kolibri-visions.de/api/v1/properties/export" \
+  -H "Authorization: Bearer $JWT"
+
+# If 422: Check route ordering in properties.py
+rg -n "@router.get.*export" backend/app/api/routes/properties.py
+rg -n "@router.get.*property_id.*UUID" backend/app/api/routes/properties.py
+
+# Export route line number MUST be LESS than property_id route line number
+```
+
+**Solution:**
+- Verify P2.21.4.7n + P2.21.4.7p changes deployed
+- Export route should be declared before any `/{property_id}` routes
+- Check for duplicate export function definitions (P2.21.4.7p removed duplicate)
+
+### Export CSV Doesn't Respect Active Search Filter
+
+**Symptom:** User types search query, clicks Export button, but CSV contains all properties (not filtered).
+
+**Root Cause (Pre-P2.21.4.7p):** Export handler in frontend didn't pass `debouncedSearchQuery` to API params.
+
+**How to Debug:**
+```bash
+# Check network tab in browser DevTools
+# Filter by "export" request
+# Check Request URL query parameters
+# Should include: ?search=<query> if search box has text
+
+# Check frontend code
+rg "debouncedSearchQuery.*export" frontend/app/properties/page.tsx
+# Should show: if (debouncedSearchQuery) params.append("search", debouncedSearchQuery);
+```
+
+**Solution:**
+- Verify P2.21.4.7p frontend changes deployed
+- Hard refresh browser (Cmd+Shift+R) to clear cached JS bundle
+- Verify export handler includes all active filter parameters
+
+### Smoke Script Fails with "page is not defined" Error
+
+**Symptom:** `pms_admin_ui_properties_list_smoke.sh` fails with ReferenceError: page is not defined when trying to capture debug artifacts.
+
+**Root Cause (Pre-P2.21.4.7p):** `captureDebugArtifacts` function defined outside async IIFE tried to reference `page` and `context` variables defined inside the IIFE scope.
+
+**How to Debug:**
+```bash
+# Check function signature
+rg -n "async function captureDebugArtifacts" backend/scripts/pms_admin_ui_properties_list_smoke.sh
+# Should show: async function captureDebugArtifacts(page, context, testName)
+
+# Check call sites
+rg "captureDebugArtifacts\(" backend/scripts/pms_admin_ui_properties_list_smoke.sh | head -3
+# All should show: await captureDebugArtifacts(page, context, 'testname');
+```
+
+**Solution:**
+- Verify P2.21.4.7p smoke script changes deployed
+- Function signature must accept page and context as parameters
+- All call sites must pass page and context explicitly
+
+### Smoke Test 7 Fails (Modal Background Transparent)
+
+**Symptom:** Test 7 reports "Modal background is transparent" but modal looks correct in UI.
+
+**Root Cause:** Test assertion checks backgroundColor computed style but may fail if CSS not fully loaded or class names changed.
+
+**How to Debug:**
+```bash
+# Check modal testid and classes in UI code
+rg 'data-testid="new-property-modal".*bg-luxe-surface' frontend/app/properties/page.tsx
+
+# Check debug artifacts
+ls -lah /tmp/smoke_test7_*.png
+# Screenshot should show modal with proper styling
+```
+
+**Solution:**
+- Verify modal has both testid AND bg-luxe-surface class
+- Check if LuxeStay CSS variables defined correctly
+- May need to increase wait time for CSS loading
+
+### Smoke Test 8 Fails (Search Doesn't Reduce Results)
+
+**Symptom:** Test 8 types nonexistent search query but property count doesn't decrease.
+
+**Root Cause:** Search not wired to backend, debounce timing too short, or backend search filter not deployed.
+
+**How to Debug:**
+```bash
+# Check if search query sent to backend
+# DevTools → Network tab → Filter XHR/Fetch
+# Type in search box, wait 1.5s
+# Should see: GET /api/v1/properties?search=zzz_nonexistent_property_xyz
+
+# Test backend search directly
+curl -sS "https://api.fewo.kolibri-visions.de/api/v1/properties?search=zzz_nonexistent_property_xyz&limit=10" \
+  -H "Authorization: Bearer $JWT" | jq '.items | length'
+# Expected: 0
+```
+
+**Solution:**
+- Verify backend PropertyFilter schema has search field (P2.21.4.7n)
+- Verify frontend fetchProperties includes debouncedSearchQuery param
+- Increase debounce wait time in smoke test if needed (currently 1.5s)
+
+---
