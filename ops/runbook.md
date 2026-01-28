@@ -45700,3 +45700,44 @@ curl -s -o /dev/null -w "%{http_code}" \
 ```
 
 ---
+
+## Export 500 AmbiguousColumnError (P2.21.4.8c)
+
+### Symptom
+
+```
+HTTP 500 {"detail":"Export failed: AmbiguousColumnError"}
+```
+
+### Root Cause
+
+Export query JOINs `bookings`, `properties`, and `guests` tables but used unqualified column names like `agency_id`, `deleted_at`, `status` without table alias prefix. PostgreSQL cannot determine which table's column to use.
+
+### Fix (P2.21.4.8c)
+
+All columns in WHERE/SELECT/ORDER BY must be fully qualified with table aliases:
+- `agency_id` → `b.agency_id`
+- `deleted_at` → `b.deleted_at`
+- `status` → `b.status`
+- `booking_reference` → `b.booking_reference`
+
+SELECT columns aliased uniquely to avoid row dict key collisions:
+- `b.id AS booking_id`
+- `b.status AS booking_status`
+- `b.created_at AS booking_created_at`
+- `g.first_name AS guest_first_name`
+
+### Verification
+
+```bash
+# Export smoke test
+./backend/scripts/pms_booking_requests_export_smoke.sh
+# Expected: 2/2 passed
+
+# Manual test
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "$API/api/v1/booking-requests/export" | head -2
+# Expected: CSV header + data rows (or just header if 0 rows)
+```
+
+---
