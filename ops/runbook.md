@@ -45650,3 +45650,53 @@ All Admin UI Booking Requests smoke tests passed!
   ```
 
 ---
+
+## Booking Requests Smoke Bypass + Export 500 (P2.21.4.8b)
+
+### Symptom: Smoke Script Redirects to /login
+
+**Evidence:**
+```
+WARNING: Smoke bypass cookies not detected
+URL: /login?next=%2Fbooking-requests
+Total [data-testid] elements: 0
+```
+
+**Root Cause:** `/booking-requests` was not in middleware smoke bypass allowlist.
+
+**Fix (P2.21.4.8b):** Added `pathname === '/booking-requests'` to frontend/middleware.ts line 58.
+
+**Verification:**
+```bash
+# Preflight check should show smoke bypass active
+curl -I -H "Authorization: Bearer $TOKEN" -H "x-pms-smoke: 1" \
+  "$ADMIN_BASE_URL/booking-requests" 2>&1 | grep -i smoke
+# Expected: x-pms-smoke-auth: ok
+```
+
+### Symptom: Export Returns HTTP 500
+
+**Evidence:**
+```
+HTTP=500
+{"detail":"Failed to export booking requests"}
+```
+
+**Root Cause:** UUID/datetime not converted to string, broad exception masking real error.
+
+**Fix (P2.21.4.8b):**
+- Convert `row.get("id")` to `str(row_id)` for CSV writer
+- Handle None values with `or ""` fallback
+- Log full exception with `exc_info=True`
+- Re-raise HTTPException (auth failures) without masking
+
+**Verification:**
+```bash
+# Export should return 200 with CSV (even if 0 rows)
+curl -s -o /dev/null -w "%{http_code}" \
+  -H "Authorization: Bearer $TOKEN" \
+  "$API/api/v1/booking-requests/export"
+# Expected: 200
+```
+
+---
