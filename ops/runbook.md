@@ -45199,3 +45199,119 @@ curl -sS "https://api.fewo.kolibri-visions.de/api/v1/properties?search=zzz_nonex
 - Increase debounce wait time in smoke test if needed (currently 1.5s)
 
 ---
+
+## Admin UI Properties List: Modal Backdrop + Search Robustness (P2.21.4.7q)
+
+**Overview:** Fixed two remaining smoke test failures for /properties page - modal backdrop transparency and search query robustness.
+
+**Changes Implemented:**
+
+1. **Modal Backdrop Separation** (frontend/app/properties/page.tsx):
+   - Split backdrop and modal card into separate elements
+   - Added `data-testid="new-property-backdrop"` on backdrop element
+   - Backdrop: `fixed inset-0 bg-black/40 backdrop-blur-sm` with onClick={onClose}
+   - Modal card: Positioned with pointer-events pattern for proper click handling
+   - Maintains LuxeStay styling: modal card has `bg-luxe-surface rounded-xl shadow-bo-xl`
+
+2. **Smoke Test 7 Enhancement** (backend/scripts/pms_admin_ui_properties_list_smoke.sh):
+   - Now checks backdrop element instead of modal card
+   - Validates backdrop backgroundColor and opacity are not transparent
+   - Also validates modal card background as secondary check
+   - Better error messages showing actual computed styles
+
+3. **Smoke Test 8 Robustness** (backend/scripts/pms_admin_ui_properties_list_smoke.sh):
+   - Reads property names from DOM (samples up to 20 rows)
+   - Prefers "SMOKE-P1" query if test property marker found
+   - Else uses first 3-5 characters of first property name (likely unique)
+   - Verifies results decreased OR became 0
+   - Verifies visible rows contain search query (case-insensitive)
+   - Better error messages with query used and mismatch details
+
+**Verification Commands:**
+
+```bash
+# HOST-SERVER-TERMINAL
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="..."
+
+# Run properties list smoke test
+./backend/scripts/pms_admin_ui_properties_list_smoke.sh
+# Expected: rc=0, 9/9 tests passed
+
+# Manual verification:
+# 1. Navigate to /properties
+# 2. Click "+ Neues Objekt" - verify backdrop is semi-transparent dark overlay
+# 3. Click backdrop - verify modal closes
+# 4. Test search with any property name substring - verify results filter correctly
+```
+
+**Common Issues:**
+
+### Test 7 Still Fails: Backdrop Transparent
+
+**Symptom:** Test 7 fails with "Modal backdrop is transparent or missing" despite changes deployed.
+
+**Root Cause:** Frontend not deployed with P2.21.4.7q changes or CSS not loading correctly.
+
+**How to Debug:**
+```bash
+# Check if backdrop testid exists
+curl -sS "https://admin.fewo.kolibri-visions.de/properties" \
+  -H "Authorization: Bearer $JWT" \
+  -H "x-pms-smoke: 1" | grep -c 'data-testid="new-property-backdrop"'
+# Expected: 1
+
+# Check debug artifacts
+ls -lah /tmp/smoke_test7_*.png
+# Screenshot should show dark semi-transparent overlay behind modal
+```
+
+**Solution:**
+- Verify P2.21.4.7q changes deployed (git log shows commit)
+- Hard refresh browser (Cmd+Shift+R) to clear cached JS bundle
+- Check browser console for CSS loading errors
+
+### Test 8 Still Fails: Search Doesn't Reduce
+
+**Symptom:** Test 8 fails with "Search did not reduce results" despite robust query selection.
+
+**Root Cause:** All properties have similar names making any substring match too many, or search API not working.
+
+**How to Debug:**
+```bash
+# Check what query was used (from test output)
+# Look for: "ℹ Using query from first property: ..."
+
+# Test backend search API directly
+curl -sS "https://api.fewo.kolibri-visions.de/api/v1/properties?search=<query>&limit=10" \
+  -H "Authorization: Bearer $JWT" | jq '.items | length'
+# Should be less than total properties count
+
+# Check if SMOKE-P1 test property exists
+curl -sS "https://api.fewo.kolibri-visions.de/api/v1/properties?search=SMOKE-P1&limit=10" \
+  -H "Authorization: Bearer $JWT" | jq '.items[].name'
+```
+
+**Solution:**
+- Create test property with name "SMOKE-P1-Test" for deterministic testing
+- Verify backend PropertyFilter schema has search field (P2.21.4.7n)
+- Check backend search implementation uses ILIKE (case-insensitive)
+
+### Modal Doesn't Close When Clicking Backdrop
+
+**Symptom:** UI works but clicking dark area around modal doesn't close it.
+
+**Root Cause:** onClick handler on backdrop not wired correctly.
+
+**How to Debug:**
+```bash
+# Check modal structure in deployed code
+rg -n "data-testid=\"new-property-backdrop\".*onClick" frontend/app/properties/page.tsx
+# Should show: onClick={onClose}
+```
+
+**Solution:**
+- Verify P2.21.4.7q changes deployed with onClick={onClose} on backdrop
+- Check browser console for JavaScript errors when clicking backdrop
+
+---
