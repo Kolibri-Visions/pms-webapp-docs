@@ -45869,3 +45869,54 @@ def mask_token(token: str) -> str:
 ```
 
 ---
+
+## Smoke Test Output Format Standard (P1)
+
+### Output Format
+
+All smoke scripts should follow this consistent output format:
+
+**Per-test lines:**
+```
+[PASS] Test N: description
+[FAIL] Test N: description
+```
+
+**Summary line:**
+```
+Test Results: X/Y passed
+```
+
+### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | All tests passed |
+| 1 | One or more tests failed |
+| 2 | Missing required environment variables |
+
+### Example Output
+
+```
+Test 1: Export with status=pending...
+  HTTP: 200
+  Content-Type: text/csv; charset=utf-8
+  [PASS]
+
+Test 2: Export with search=__definitely_no_match__...
+  HTTP: 200
+  Content-Type: text/csv; charset=utf-8
+  [PASS]
+
+========================================
+Test Results: 2/2 passed
+========================================
+```
+
+### Scripts Following This Standard
+
+- `pms_booking_requests_export_smoke.sh`
+- `pms_admin_ui_booking_requests_smoke.sh`
+- `pms_admin_ui_properties_list_smoke.sh`
+
+---
