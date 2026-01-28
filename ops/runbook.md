@@ -45773,3 +45773,47 @@ content_type=$(tr -d '\r' < "$hdr_file" | awk 'BEGIN{IGNORECASE=1} /^content-typ
 This ensures headers come from the same request as the body.
 
 ---
+
+## Security: 500 Response Exception Detail Leaks (SEC-P0)
+
+### Problem
+
+HTTP 500 responses that include `str(e)` in the detail field leak internal exception information to API consumers:
+
+```python
+# BAD: Leaks internal error details
+except Exception as e:
+    raise HTTPException(status_code=500, detail=f"Failed to X: {str(e)}")
+```
+
+This can expose:
+- Database column names and table structures
+- File paths and internal service URLs
+- Stack trace information
+- Third-party API error messages
+
+### Solution
+
+Log the full exception server-side, return generic message to client:
+
+```python
+# GOOD: Logs internally, generic message to client
+except Exception as e:
+    logger.error("Failed to X", exc_info=True)
+    raise HTTPException(status_code=500, detail="Failed to X")
+```
+
+**Key points:**
+- `exc_info=True` captures full traceback in server logs
+- Generic detail message reveals nothing about internal structure
+- 400 errors for validation (ValueError) may still expose `str(e)` - this is intentional for user input feedback
+- 503 errors for schema issues may expose migration instructions - this is intentional for ops debugging
+
+### Files Fixed (SEC-P0, 2026-01-28)
+
+- `backend/app/api/routers/channel_connections.py`: 13 instances fixed
+  - create_connection, list_connections, get_connection, update_connection, delete_connection
+  - test_connection (simulate + real), trigger_sync, get_sync_logs
+  - list_batches, get_batch_status, preview_purge, purge_sync_logs
+
+---
