@@ -45519,3 +45519,134 @@ Manual verification:
 - Verify archivedView state updates on toggle click
 
 ---
+
+## Buchungsanfragen (Booking Requests) Smoke + Troubleshooting
+
+**Added:** P2.21.4.8a
+
+### Running the Smoke Test
+
+**WHERE:** HOST-SERVER-TERMINAL
+
+```bash
+# Set environment variables
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+export MANAGER_JWT_TOKEN="<your_jwt_token>"
+
+# Run smoke test
+./backend/scripts/pms_admin_ui_booking_requests_smoke.sh
+```
+
+**Expected Output (11/11 tests pass):**
+```
+Starting Admin UI Booking Requests Playwright smoke test...
+Target: https://admin.fewo.kolibri-visions.de
+Running Playwright tests in Docker container...
+PASSED Test 1: Found data-testid="booking-requests-title"
+PASSED Test 2: Found data-testid="booking-requests-search"
+PASSED Test 3: Found data-testid="booking-requests-export"
+PASSED Test 4: Found data-testid="booking-requests-manual"
+PASSED Test 5: Found data-testid="booking-requests-tabs"
+PASSED Test 6: Found all tab buttons
+PASSED Test 7: Found data-testid="booking-requests-filters-toggle"
+PASSED Test 8: Found data-testid="booking-request-row" (or booking-requests-empty)
+PASSED Test 9: Found data-testid="booking-request-status" (or skipped)
+PASSED Test 10: Found data-testid="booking-request-deadline" (or skipped)
+PASSED Test 11: Found data-testid="booking-request-actions" (or skipped)
+================================
+Test Results: 11/11 passed
+================================
+All Admin UI Booking Requests smoke tests passed!
+```
+
+### Test Matrix
+
+| Test | Element | Required |
+|------|---------|----------|
+| 1 | booking-requests-title | Always |
+| 2 | booking-requests-search | Always |
+| 3 | booking-requests-export | Always |
+| 4 | booking-requests-manual | Always |
+| 5 | booking-requests-tabs | Always |
+| 6 | Tab buttons (all, new, expiring, inprogress) | Always |
+| 7 | booking-requests-filters-toggle | Always |
+| 8 | booking-request-row OR booking-requests-empty | Always (one or other) |
+| 9 | booking-request-status | If rows exist |
+| 10 | booking-request-deadline | If rows exist |
+| 11 | booking-request-actions | If rows exist |
+
+### Troubleshooting
+
+#### Title Not Found (Test 1)
+
+**Symptom:** Test 1 fails with "booking-requests-title not found".
+
+**Root Cause:** Frontend not deployed or page not loaded.
+
+**Solution:**
+- Verify P2.21.4.8a frontend deployed (check SOURCE_COMMIT)
+- Check JWT token is valid manager/admin role
+- Verify booking-requests page exists at /booking-requests
+
+#### Export Button Missing (Test 3)
+
+**Symptom:** Test 3 fails with "booking-requests-export not found".
+
+**Root Cause:** Export button not rendered or testid missing.
+
+**Solution:**
+- Verify P2.21.4.8a changes deployed
+- Check data-testid="booking-requests-export" on export button
+- Hard refresh browser to clear cached JS bundle
+
+#### Tabs Not Found (Test 5/6)
+
+**Symptom:** Tests 5-6 fail with tabs not found.
+
+**Root Cause:** Tabs not rendered or testids missing.
+
+**Solution:**
+- Verify P2.21.4.8a changes deployed
+- Check data-testid on tabs container and individual tab buttons
+- Verify tabs: all, new, expiring, inprogress
+
+#### Neither Rows Nor Empty State (Test 8)
+
+**Symptom:** Test 8 fails with "Neither rows nor empty state found".
+
+**Root Cause:** Table not rendered or loading state stuck.
+
+**Solution:**
+- Check API endpoint /api/v1/booking-requests returns data
+- Verify accessToken passed correctly
+- Check for JavaScript errors in console
+- Verify data-testid="booking-request-row" on table rows
+- Verify data-testid="booking-requests-empty" on empty state
+
+#### Status/Deadline/Actions Missing (Tests 9-11)
+
+**Symptom:** Tests 9-11 fail when rows exist.
+
+**Root Cause:** Testids missing on row elements.
+
+**Solution:**
+- Verify data-testid="booking-request-status" on status badges
+- Verify data-testid="booking-request-deadline" on deadline pills
+- Verify data-testid="booking-request-actions" on actions buttons
+
+#### CSV Export Fails
+
+**Symptom:** Export button click results in error toast.
+
+**Root Cause:** Backend export endpoint missing or auth issue.
+
+**Solution:**
+- Verify /api/v1/booking-requests/export endpoint exists
+- Check manager/admin role authorization
+- Test endpoint manually with curl:
+  ```bash
+  curl -H "Authorization: Bearer $TOKEN" \
+    "$API/api/v1/booking-requests/export" -o test.csv
+  ```
+
+---
