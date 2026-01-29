@@ -437,3 +437,80 @@ curl -H "Authorization: Bearer $TOKEN" \
 ```
 
 ---
+
+### Troubleshooting: Approve Returns HTTP 500 "Database error occurred"
+
+**Symptom**
+- POST /api/v1/booking-requests/{id}/approve returns HTTP 500
+- Error detail: "Database error occurred" (generic)
+- Booking status remains unchanged
+
+**Root Cause**
+The approve endpoint encountered a PostgresError that wasn't properly mapped:
+
+1. **CHECK constraint violation** - Status value 'requested' or 'confirmed' not in allowed list
+2. **Schema drift** - `approved_booking_id` column doesn't exist in PROD
+3. **Other constraint violation** - FK, unique, or exclusion constraint
+
+**Fix**
+
+**Step 1: Check if migration is pending**
+```bash
+# List applied migrations
+supabase migration list
+
+# Check if 20260129000000_fix_bookings_status_constraint_for_requested.sql exists
+ls -la supabase/migrations/ | grep 20260129
+```
+
+**Step 2: Apply migration if missing**
+```bash
+# Apply the migration
+supabase db push
+
+# Or manually run on PROD database:
+psql $DATABASE_URL -f supabase/migrations/20260129000000_fix_bookings_status_constraint_for_requested.sql
+```
+
+**Step 3: Verify constraint allows 'requested'**
+```sql
+-- Check current CHECK constraint
+SELECT con.conname, pg_get_constraintdef(con.oid)
+FROM pg_constraint con
+JOIN pg_class rel ON rel.oid = con.conrelid
+WHERE rel.relname = 'bookings'
+  AND con.contype = 'c'
+  AND pg_get_constraintdef(con.oid) ILIKE '%status%';
+
+-- Should show: status IN ('inquiry', 'pending', 'requested', 'confirmed', ...)
+```
+
+**Step 4: Verify approved_booking_id column exists**
+```sql
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_name = 'bookings' AND column_name = 'approved_booking_id';
+
+-- Should return 1 row with uuid type
+```
+
+**Step 5: Retry the approve**
+```bash
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}' \
+  "https://api.fewo.kolibri-visions.de/api/v1/booking-requests/<uuid>/approve"
+# Should return 200 with status=confirmed
+```
+
+**Error Code Reference (P2.21.4.8d)**
+
+| HTTP Code | Error Code | Meaning |
+|-----------|------------|---------|
+| 422 | CHECK_VIOLATION | Status value not allowed by constraint |
+| 422 | FK_VIOLATION | Referenced record doesn't exist |
+| 409 | UNIQUE_VIOLATION | Duplicate record conflict |
+| 503 | SCHEMA_DRIFT | Column/table missing (migration pending) |
+| 500 | DB_ERROR | Other database error (check logs) |
+
+---

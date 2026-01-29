@@ -194,6 +194,50 @@ Reduced `backend/docs/ops/runbook.md` from 45,946 lines to 430 lines by extracti
 
 ---
 
+### P2.21.4.8d: Booking Requests Approve 500 Error Fix ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-29
+
+**Overview:**
+
+Fixed HTTP 500 "Database error occurred" on POST /api/v1/booking-requests/{id}/approve. The approve endpoint now has comprehensive PostgresError handling that maps database errors to actionable HTTP codes.
+
+**Root Cause:**
+
+1. `approved_booking_id` column might not exist in PROD (UndefinedColumnError)
+2. Status CHECK constraint didn't include 'requested' (CheckViolationError)
+3. Only ExclusionViolationError was caught, other PostgresError types bubbled up as 500
+
+**Changes:**
+
+- **booking_requests.py**: Added comprehensive try/except asyncpg.PostgresError handling
+  - CheckViolationError → 422 (CHECK_VIOLATION)
+  - ForeignKeyViolationError → 422 (FK_VIOLATION)
+  - UniqueViolationError → 409 (UNIQUE_VIOLATION)
+  - UndefinedColumnError/UndefinedTableError → 503 (SCHEMA_DRIFT)
+  - Other PostgresError → 500 with error details
+
+- **booking_requests.py**: SELECT query fallback for missing `approved_booking_id` column
+
+- **Migration**: `20260129000000_fix_bookings_status_constraint_for_requested.sql`
+  - Drops existing status CHECK constraint
+  - Adds new constraint including 'requested' value
+  - Ensures `approved_booking_id` column exists
+  - Adds index for efficient `status='requested'` queries
+
+- **Runbook 03-auth.md**: Added "Approve Returns HTTP 500" troubleshooting section with:
+  - Step-by-step migration verification
+  - SQL commands to check constraint and column
+  - Error code reference table
+
+- **Tests**: Added `TestApproveBookingRequestErrorHandling` class with:
+  - test_approve_nonexistent_booking_returns_404
+  - test_approve_returns_structured_error_on_conflict
+
+**Status:** ✅ IMPLEMENTED (requires PROD migration + smoke test verification)
+
+---
+
 ### DOCS Phase 2: Runbook Modularization ✅ IMPLEMENTED
 
 **Date Completed:** 2026-01-28
