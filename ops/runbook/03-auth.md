@@ -11,6 +11,8 @@
 - [CORS Errors (Admin Console Blocked)](#cors-errors-admin-console-blocked)
 - [Booking Requests Approve/Decline](#booking-requests-approvedecline)
 - [Admin UI Tab Count Issues](#admin-ui-tab-count-issues)
+- [Public Booking vs Direct Booking](#public-booking-vs-direct-booking-definitionen--datenfluss)
+- [Booking Requests: Details, Export, Manuelle Buchung](#booking-requests-details-drawer-csv-export-manuelle-buchung)
 
 ---
 
@@ -724,6 +726,102 @@ frontend/app/booking-requests/page.tsx
   - Lines 151-154: expiring_soon param for list fetch
   - Lines 199-246: fetchTabCounts() with parallel server calls
   - Lines 269: tabCounts = stableTabCounts assignment
+```
+
+---
+
+## Public Booking vs Direct Booking (Definitionen + Datenfluss)
+
+**When to use:** Understanding the difference between booking requests and direct bookings.
+
+### Definitionen
+
+**Public Booking (Buchungsanfrage)**
+- Originates from public booking widget or external channels
+- Initial status: `requested` (neu)
+- Requires manual review before confirmation
+- Stored in `bookings` table with `status='requested'`
+- Workflow: requested → under_review (In Bearbeitung) → approved/declined
+
+**Direct Booking (Manuelle Buchung)**
+- Created directly by staff via Admin UI or API
+- Initial status: `confirmed`
+- No review workflow required
+- Source field: `manual`
+- Stored in `bookings` table with `status='confirmed'`
+
+### Datenfluss
+
+```
+Public Booking:
+  Widget → POST /api/v1/public/booking-requests → bookings(status=requested)
+         → Admin Review → POST /approve → bookings(status=confirmed)
+
+Direct Booking:
+  Admin UI → POST /api/v1/bookings (source=manual) → bookings(status=confirmed)
+```
+
+### Status-Definitionen (Tab Filters)
+
+| Tab | API Filter | DB Status | Bedeutung |
+|-----|------------|-----------|-----------|
+| Alle | (none) | * | All booking requests |
+| Neu | status=requested | requested | New, unreviewed |
+| In Bearbeitung | status=under_review | inquiry | Being reviewed |
+| Läuft bald ab | expiring_soon=true | requested/inquiry + deadline ≤3d | Urgent action needed |
+
+**Note:** "In Bearbeitung" maps to DB status `inquiry` due to legacy constraint.
+
+---
+
+## Booking Requests: Details Drawer, CSV Export, Manuelle Buchung
+
+**When to use:** Admin UI /booking-requests features troubleshooting.
+
+### Features (P2.21.4.8j)
+
+**Details Drawer**
+- Click row actions → "Details anzeigen"
+- Fetches full detail from GET /api/v1/booking-requests/{id}
+- Shows loading state while fetching
+- Actions: "In Bearbeitung setzen" (only for status=requested), "Genehmigen", "Ablehnen"
+
+**CSV Export**
+- Button: "CSV exportieren"
+- Respects active tab filter (status, expiring_soon)
+- Exports ALL matching rows (not just current page)
+- Filename includes tab hint: `buchungsanfragen_expiring_2026-01-29.csv`
+
+**Manuelle Buchung**
+- Button: "Manuelle Buchung"
+- Opens modal with form fields: property_id, dates, guest info, price
+- Creates direct booking via POST /api/v1/bookings with source=manual
+- On 409: overlap conflict with existing booking
+
+### Troubleshooting
+
+**CSV Export Empty**
+- Check: Tab filter may be too restrictive
+- Check: Network/auth error (console)
+- Verify: API returns 200 with proper Content-Type: text/csv
+
+**409 Overlap on Manual Booking**
+- Cause: Property already booked for the requested dates
+- Check: GET /api/v1/bookings?property_id=X&check_in=Y to see conflicts
+- Solution: Choose different dates or cancel conflicting booking
+
+**"In Bearbeitung" Count Mismatch**
+- Definition: status=under_review (DB: inquiry)
+- Tab uses server-side filter, not client-side
+- Counts fetched via parallel limit=1 API calls
+
+### Smoke Test
+
+```bash
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<manager_jwt>"
+./backend/scripts/pms_booking_requests_approve_decline_smoke.sh
+# Tests 8-9 validate detail endpoint and CSV export
 ```
 
 ---

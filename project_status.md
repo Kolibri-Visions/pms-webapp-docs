@@ -440,6 +440,58 @@ export JWT_TOKEN="<manager_jwt>"
 
 ---
 
+### P2.21.4.8j: Booking Requests - Details Drawer + CSV Export + Manuelle Buchung ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-29
+
+**Overview:**
+
+Production-grade enhancements to Admin UI /booking-requests:
+- Details drawer fetches from API and shows loading state
+- "In Bearbeitung" action button to set status to under_review
+- CSV export respects expiring_soon filter for "Läuft bald ab" tab
+- Manuelle Buchung modal creates direct bookings with overlap validation
+- Documentation: Public Booking vs Direct Booking definitions
+
+**Changes:**
+
+- **Backend** (`booking_requests.py`):
+  - Added `expiring_soon` param to CSV export endpoint
+  - Export now filters by deadline like list endpoint
+
+- **Frontend** (`page.tsx`):
+  - Detail drawer fetches via GET /api/v1/booking-requests/{id}
+  - Added "In Bearbeitung setzen" action (calls /review endpoint)
+  - Manuelle Buchung modal with full form
+  - CSV export passes expiring_soon for "Läuft bald ab" tab
+
+- **Smoke** (`pms_booking_requests_approve_decline_smoke.sh`):
+  - Test 8: Detail endpoint validation
+  - Test 9: CSV export with expiring_soon filter
+
+- **Docs** (`runbook/03-auth.md`):
+  - Added "Public Booking vs Direct Booking" definitions
+  - Added "Details Drawer, CSV Export, Manuelle Buchung" section
+
+**Verification Commands:**
+
+```bash
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<manager_jwt>"
+./backend/scripts/pms_booking_requests_approve_decline_smoke.sh
+# Expected: 9/9 passed, RC=0
+```
+
+**Manual UI Check:**
+1. Click row → "Details anzeigen" → verify drawer loads with detail
+2. For status=requested: verify "In Bearbeitung setzen" button appears
+3. Click "CSV exportieren" on "Läuft bald ab" tab → verify download
+4. Click "Manuelle Buchung" → fill form → submit → verify booking created
+
+**Status:** ✅ IMPLEMENTED (NOT VERIFIED - requires PROD deploy + smoke rc=0)
+
+---
+
 ### DOCS Phase 2: Runbook Modularization ✅ IMPLEMENTED
 
 **Date Completed:** 2026-01-28
