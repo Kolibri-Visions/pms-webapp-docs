@@ -305,8 +305,11 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 export API_BASE_URL="https://api.fewo.kolibri-visions.de"
 export JWT_TOKEN="<manager_jwt>"
 ./backend/scripts/pms_booking_requests_approve_decline_smoke.sh
-# Expected: Test Results: 6/6 passed
+# Expected: Test Results: 12/12 passed (RC=0)
 ```
+
+**PROD-Safe Behavior (P2.21.4.8k):**
+If PROD has only real booking_overlap conflicts (different guests), approve-success tests (2-3) are **skipped** instead of failed. This is valid PROD state - conflict behavior is still validated. Set `REQUIRE_APPROVE_SUCCESS=true` for strict mode (staging).
 
 ### Troubleshooting: Approve Returns 409 but GET Shows status=requested
 
