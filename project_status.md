@@ -502,6 +502,74 @@ export JWT_TOKEN="<manager_jwt>"
 
 ---
 
+### P2.21.4.8k: Booking Requests - Workflow Consistency Hardening ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-29
+
+**Overview:**
+
+Comprehensive workflow hardening for booking requests:
+- "In Bearbeitung" (under_review) definition consistency across tabs and API
+- CSV Export with UTF-8 BOM for Excel compatibility
+- Status mapping documentation (API ↔ DB: under_review ↔ inquiry)
+- Server-side expiring filter uses correct DB status constants
+- Smoke tests for review flow, BOM detection, filter consistency
+
+**Changes:**
+
+- **Backend** (`booking_requests.py`):
+  - CSV export now writes UTF-8 BOM (`\ufeff`) for Excel detection
+  - Fixed expiring_soon filter to use DB status constants (`inquiry` not `under_review`)
+  - Consistent use of `DB_STATUS_REQUESTED`, `DB_STATUS_INQUIRY` constants
+
+- **Smoke** (`pms_booking_requests_approve_decline_smoke.sh`):
+  - Test 10: Review endpoint (requested → under_review)
+  - Test 11: CSV export UTF-8 BOM detection
+  - Test 12: under_review filter consistency check
+  - Updated TOTAL_TESTS=12
+
+- **Docs** (`runbook/03-auth.md`):
+  - Added "Workflow Consistency (P2.21.4.8k)" section
+  - Documented status mapping (API under_review ↔ DB inquiry)
+  - Review endpoint documentation
+  - CSV UTF-8 BOM verification commands
+
+**Verification Commands:**
+
+```bash
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<manager_jwt>"
+./backend/scripts/pms_booking_requests_approve_decline_smoke.sh
+# Expected: 12/12 passed, RC=0
+```
+
+**Manual Verification:**
+
+```bash
+# Verify CSV BOM
+curl -H "Authorization: Bearer $TOKEN" \
+  "$API_BASE_URL/api/v1/booking-requests/export" | head -c 3 | xxd -p
+# Expected: efbbbf
+
+# Verify review endpoint
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"internal_note": "Testing"}' \
+  "$API_BASE_URL/api/v1/booking-requests/<uuid>/review"
+# Expected: status=under_review
+```
+
+**Files Changed:**
+
+- backend/app/api/routes/booking_requests.py (UTF-8 BOM, DB status constants)
+- backend/scripts/pms_booking_requests_approve_decline_smoke.sh (Tests 10-12)
+- backend/docs/ops/runbook/03-auth.md (Workflow Consistency section)
+- backend/docs/project_status.md (this entry)
+
+**Status:** ✅ IMPLEMENTED
+
+---
+
 ### DOCS Phase 2: Runbook Modularization ✅ IMPLEMENTED
 
 **Date Completed:** 2026-01-28

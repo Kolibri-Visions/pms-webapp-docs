@@ -13,6 +13,7 @@
 - [Admin UI Tab Count Issues](#admin-ui-tab-count-issues)
 - [Public Booking vs Direct Booking](#public-booking-vs-direct-booking-definitionen--datenfluss)
 - [Booking Requests: Details, Export, Manuelle Buchung](#booking-requests-details-drawer-csv-export-manuelle-buchung)
+- [Booking Requests: Workflow Consistency (P2.21.4.8k)](#booking-requests-workflow-consistency-p221-4-8k)
 
 ---
 
@@ -823,5 +824,118 @@ export JWT_TOKEN="<manager_jwt>"
 ./backend/scripts/pms_booking_requests_approve_decline_smoke.sh
 # Tests 8-9 validate detail endpoint and CSV export
 ```
+
+---
+
+## Booking Requests: Workflow Consistency (P2.21.4.8k)
+
+**When to use:** Ensuring consistent behavior across booking request workflow components.
+
+### Status Mapping (API ↔ DB)
+
+Due to PROD database constraint, the API and DB use different status values:
+
+| API Status | DB Status | UI Label | Meaning |
+|------------|-----------|----------|---------|
+| `requested` | `requested` | "Neu" | New booking request, not yet reviewed |
+| `under_review` | `inquiry` | "In Bearbeitung" | Staff is reviewing the request |
+| `confirmed` | `confirmed` | "Bestätigt" | Approved and confirmed |
+| `cancelled` | `cancelled` | "Storniert" | Declined or cancelled |
+
+**Key Mapping Functions (booking_requests.py):**
+- `to_api_status(db_status)`: DB → API (inquiry → under_review)
+- `to_db_status(api_status)`: API → DB (under_review → inquiry)
+- `compute_effective_status()`: Handles soft-healed rows (confirmed_at set but status unchanged)
+
+### Review Endpoint (/review)
+
+**Purpose:** Transition request from `requested` to `under_review` (In Bearbeitung)
+
+**Endpoint:** `POST /api/v1/booking-requests/{id}/review`
+
+**Body:**
+```json
+{
+  "internal_note": "Optional note about review"
+}
+```
+
+**Response:**
+```json
+{
+  "id": "uuid",
+  "status": "under_review",
+  "reviewed_at": "2026-01-29T...",
+  "reviewed_by": "user_uuid",
+  "message": "Booking request marked as under review"
+}
+```
+
+**Valid Transitions:**
+- `requested` → `under_review` ✓
+- `under_review` → `under_review` ✓ (idempotent, updates note)
+- `confirmed` → `under_review` ✗ (409 conflict)
+- `cancelled` → `under_review` ✗ (409 conflict)
+
+### CSV Export with UTF-8 BOM (P2.21.4.8k)
+
+**Purpose:** Ensure Excel properly detects UTF-8 encoding for German umlauts.
+
+**Implementation:**
+```python
+output = io.StringIO()
+output.write('\ufeff')  # UTF-8 BOM
+writer = csv.DictWriter(output, fieldnames=[...])
+```
+
+**Verification:**
+```bash
+# Check first 3 bytes are EF BB BF (UTF-8 BOM)
+curl -H "Authorization: Bearer $TOKEN" \
+  "$API_BASE_URL/api/v1/booking-requests/export" | head -c 3 | xxd -p
+# Expected: efbbbf
+```
+
+### Tab Filter Consistency
+
+All tabs use server-side filters to ensure accurate counts:
+
+| Tab | API Parameters | Backend Logic |
+|-----|----------------|---------------|
+| Alle | (none) | All non-deleted |
+| Neu | `status=requested` | `status = 'requested' AND confirmed_at IS NULL` |
+| In Bearbeitung | `status=under_review` | `status = 'inquiry'` (DB mapping) |
+| Läuft bald ab | `expiring_soon=true` | `status IN ('requested', 'inquiry') AND deadline <= 3d` |
+
+**Note:** "Neu" tab excludes effectively-confirmed rows (those with confirmed_at set).
+
+### Smoke Test Coverage (Tests 10-12)
+
+```bash
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<manager_jwt>"
+./backend/scripts/pms_booking_requests_approve_decline_smoke.sh
+
+# Test 10: Review endpoint (requested → under_review)
+# Test 11: CSV export UTF-8 BOM detection
+# Test 12: under_review filter consistency
+```
+
+### Troubleshooting
+
+**Review Returns 409 but Status is Still "requested"**
+- Check: Request may already be confirmed via another path
+- Verify: `GET /api/v1/booking-requests/{id}` and check effective status
+- If confirmed_at is set, effective status is "confirmed"
+
+**CSV Opens with Garbled Characters in Excel**
+- Cause: UTF-8 BOM missing or stripped
+- Verify: First 3 bytes should be EF BB BF
+- Fix: Check CSV export endpoint includes BOM write
+
+**"In Bearbeitung" Count Different from Displayed Rows**
+- Cause: Client/server mismatch or stale counts
+- Fix: Tab counts are fetched via parallel limit=1 API calls
+- Verify: Network tab shows 4 parallel requests on page load
 
 ---
