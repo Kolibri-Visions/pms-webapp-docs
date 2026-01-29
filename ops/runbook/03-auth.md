@@ -382,4 +382,58 @@ curl -H "Authorization: Bearer $TOKEN" \
 # Should show status=confirmed
 ```
 
+### Troubleshooting: Approve Returns 409 but GET Shows status=requested (related booking exists)
+
+**Symptom**
+- Approve returns 409 (interpreted as "idempotent" by smoke)
+- GET shows status=requested instead of confirmed
+- Exclusion constraint fires because there's an overlapping confirmed booking
+
+**Root Cause**
+A related booking exists for the same guest/property/dates that's already confirmed. This can happen when:
+- Channel manager created a booking from a different source
+- The request was manually approved via DB but status wasn't updated
+- A separate booking flow created a confirmed booking
+
+**Fix**
+The approve endpoint now performs comprehensive healing (commit 2026-01-29):
+
+**5 Evidence Types Checked:**
+1. `confirmed_at` is set but status != confirmed
+2. Status is already confirmed (no healing needed)
+3. `approved_booking_id` points to a confirmed booking
+4. `inventory_ranges` entry exists with state='active'
+5. Related confirmed booking exists (same guest/property/dates)
+
+**Healing Behavior:**
+- Returns HTTP 200 (not 409) with status=confirmed
+- Message includes evidence type: "healed: confirmed_at_set", "healed: related_booking_confirmed", etc.
+- Subsequent GET shows status=confirmed
+
+**Verify Healing**
+```bash
+# Check for related bookings in DB
+SELECT b1.id AS request_id, b1.status AS request_status,
+       b2.id AS related_id, b2.status AS related_status
+FROM bookings b1
+JOIN bookings b2 ON b1.property_id = b2.property_id
+                AND b1.guest_id = b2.guest_id
+                AND b1.check_in = b2.check_in
+                AND b1.check_out = b2.check_out
+                AND b1.id != b2.id
+WHERE b1.status = 'requested' AND b2.status = 'confirmed';
+
+# Test healing via API
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}' \
+  "https://api.fewo.kolibri-visions.de/api/v1/booking-requests/<uuid>/approve"
+# Should return 200 with "healed" in message
+
+# Verify healed state
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://api.fewo.kolibri-visions.de/api/v1/booking-requests/<uuid>"
+# Should show status=confirmed
+```
+
 ---
