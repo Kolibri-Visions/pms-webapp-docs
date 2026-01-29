@@ -502,7 +502,7 @@ export JWT_TOKEN="<manager_jwt>"
 
 ---
 
-### P2.21.4.8k: Booking Requests - Workflow Consistency Hardening ✅ IMPLEMENTED
+### P2.21.4.8k: Booking Requests - Workflow Consistency Hardening ✅ VERIFIED
 
 **Date Completed:** 2026-01-29
 
@@ -566,7 +566,19 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 - backend/docs/ops/runbook/03-auth.md (Workflow Consistency section)
 - backend/docs/project_status.md (this entry)
 
-**Status:** ✅ IMPLEMENTED
+**Production Evidence:**
+
+- Verified date: 2026-01-29
+- API domain: https://api.fewo.kolibri-visions.de
+- Admin domain: https://admin.fewo.kolibri-visions.de
+- source_commit: `e1d07bd73fec981a804d829898ef09b33992367c`
+- Backend started_at: 2026-01-29T20:07:05.048286+00:00
+- Admin started_at: 2026-01-29T20:04:54.046Z
+- Deploy verify: `pms_verify_deploy.sh` rc=0, exact commit match
+- Smoke: `pms_booking_requests_approve_decline_smoke.sh` rc=0 (12/12 passed)
+  - Note: PROD-safe behavior allows Tests 2/3/8 to be SKIPPED when no approvable candidates exist due to real booking_overlap conflicts
+
+**Status:** ✅ VERIFIED
 
 ---
 
