@@ -514,3 +514,64 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 | 500 | DB_ERROR | Other database error (check logs) |
 
 ---
+
+### Troubleshooting: Approve Returns 409 Overlap but Request Status Stays "requested"
+
+**Symptom**
+- POST /api/v1/booking-requests/{id}/approve returns HTTP 409 `booking_overlap`
+- GET /api/v1/booking-requests/{id} still shows `status=requested` (not `confirmed`)
+- Smoke test Test 3 fails: "Unexpected status 'requested' after approve"
+
+**Root Cause**
+The booking request overlaps with an existing confirmed booking for the SAME guest, but:
+1. The old code tried to heal by setting `status='confirmed'` which triggered the exclusion constraint again
+2. No healing was possible, so status remained `requested`
+
+**Schema Reality (P2.21.4.8e)**
+- PROD uses single `public.bookings` table for both bookings and booking requests
+- `to_regclass('public.booking_requests')` returns NULL (table doesn't exist)
+- Booking requests are rows in `bookings` with `status='requested'`
+- Exclusion constraint prevents multiple confirmed bookings on same property/dates
+
+**Fix (commit 2026-01-29)**
+The approve endpoint now uses **soft healing** for overlap-same-guest:
+
+1. **Detect same-guest overlap**: Query for existing confirmed booking with same guest_id
+2. **Soft heal**: Set `confirmed_at` WITHOUT changing `status` (avoids constraint)
+3. **Effective status**: API returns `status='confirmed'` based on `confirmed_at` presence
+4. **List filter**: `status=requested` filter excludes rows with `confirmed_at` set
+
+**Evidence Type in Response**
+When soft-healed, response includes: `message: "healed: fulfilled_by_overlap_same_guest"`
+
+**Verify Fix**
+```bash
+# Check if booking has confirmed_at set (soft-healed)
+SELECT id, status, confirmed_at, internal_notes
+FROM bookings
+WHERE id = '<booking_request_uuid>';
+
+# If status='requested' but confirmed_at IS NOT NULL, it's soft-healed
+# API will return effective status='confirmed'
+
+# Test with GET endpoint
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://api.fewo.kolibri-visions.de/api/v1/booking-requests/<uuid>"
+# Should return status=confirmed (effective status)
+
+# Verify not in requested list
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://api.fewo.kolibri-visions.de/api/v1/booking-requests?status=requested"
+# Soft-healed requests should NOT appear here
+```
+
+**Effective Status Logic**
+```
+effective_status = 'confirmed' if (
+    db_status == 'confirmed' OR
+    confirmed_at IS NOT NULL OR
+    approved_booking_id IS NOT NULL
+) else db_status
+```
+
+---

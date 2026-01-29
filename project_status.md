@@ -238,6 +238,53 @@ Fixed HTTP 500 "Database error occurred" on POST /api/v1/booking-requests/{id}/a
 
 ---
 
+### P2.21.4.8e: Booking Requests Approve Overlap Healing ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-29
+
+**Overview:**
+
+Fixed approve returning 409 `booking_overlap` but GET still showing `status=requested`. When an overlap conflict occurs for the SAME guest (request effectively fulfilled), the endpoint now soft-heals and returns 200 with effective `status=confirmed`.
+
+**Root Cause:**
+
+1. Old heal logic tried to set `status='confirmed'` which triggered exclusion constraint again
+2. No soft-heal path existed for overlap-same-guest scenario
+3. PROD uses single `public.bookings` table (no `booking_requests` table exists)
+
+**Changes:**
+
+- **booking_requests.py**: Added `compute_effective_status()` helper
+  - Returns 'confirmed' if `confirmed_at IS NOT NULL` (even if DB status is 'requested')
+  - Used in LIST and GET endpoints for consistent API responses
+
+- **booking_requests.py**: Soft-heal on overlap-same-guest
+  - Sets `confirmed_at` WITHOUT changing `status` (avoids constraint violation)
+  - Returns HTTP 200 with `status='confirmed'` (effective status)
+  - Message: "healed: fulfilled_by_overlap_same_guest"
+
+- **booking_requests.py**: List filter excludes "effectively confirmed"
+  - `status=requested` filter adds `AND confirmed_at IS NULL`
+  - Soft-healed requests don't appear in pending list
+
+- **booking_requests.py**: approved_by tolerates non-UUID strings
+  - Changed schema from `Optional[UUID]` to `Optional[str]`
+  - Legacy values like "host" no longer cause row skipping
+
+- **Smoke script**: Updated to handle 409 + effective status verification
+  - If approve returns 409, Test 3 verifies GET shows effective `status=confirmed`
+  - Evidence type logged in pass message
+
+- **Runbook 03-auth.md**: Added "Approve Returns 409 Overlap but Status Stays requested" section
+
+**Evidence Type:** `fulfilled_by_overlap_same_guest`
+
+**Smoke Expectation:** 6/6 passed, RC=0
+
+**Status:** ✅ IMPLEMENTED (requires PROD smoke test verification with pms_booking_requests_approve_decline_smoke.sh)
+
+---
+
 ### DOCS Phase 2: Runbook Modularization ✅ IMPLEMENTED
 
 **Date Completed:** 2026-01-28
