@@ -327,7 +327,7 @@ SELECT to_regclass('public.booking_requests');  -- Returns NULL
 
 ---
 
-### P2.21.4.8g: Booking Requests Approve - Distinguish Overlap Conflict vs Idempotent Fulfillment ✅ IMPLEMENTED
+### P2.21.4.8g: Booking Requests Approve - Distinguish Overlap Conflict vs Idempotent Fulfillment ✅ VERIFIED
 
 **Date Completed:** 2026-01-29
 
@@ -364,7 +364,13 @@ Fixed smoke test failure where 409 `booking_overlap` was incorrectly treated as 
 
 **Smoke Expectation:** 6/6 passed, RC=0
 
-**Status:** ✅ IMPLEMENTED (NOT VERIFIED - requires PROD smoke test RC=0)
+**Production Evidence:**
+- Deploy verify: rc=0
+- Backend commit: `988c50f47feee34d86059148a2bef0d30f2967df`, started_at: 2026-01-29T16:05:04.660719+00:00
+- Admin UI commit: `988c50f47feee34d86059148a2bef0d30f2967df`, started_at: 2026-01-29T16:07:04.096Z
+- Smoke: 6/6 passed, rc=0
+
+**Status:** ✅ VERIFIED
 
 ---
 
