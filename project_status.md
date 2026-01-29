@@ -378,6 +378,58 @@ Fixed smoke test failure where 409 `booking_overlap` was incorrectly treated as 
 
 ---
 
+### P2.21.4.8i: Booking Requests Tabs - Server-Side Filtered Pagination ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-29
+
+**Overview:**
+
+Fixed bug where "Läuft bald ab" tab showed inconsistent counts: badge showed N items but table showed fewer rows, and footer showed "von 168" (all total) instead of the expiring total.
+
+**Root Cause:**
+
+1. "Läuft bald ab" tab used client-side filtering on a paginated "all" response
+2. Client couldn't see items beyond current page, so count was wrong
+3. Footer `total` came from "all" response, not the filtered dataset
+
+**Fix:**
+
+- **Backend**: Added `expiring_soon=true` query parameter to `/api/v1/booking-requests`
+  - Filters server-side: `status IN ('requested', 'under_review')` AND deadline within 0-3 days
+  - Deadline = check_in - 48 hours
+  - Returns accurate `total` for pagination
+
+- **Frontend**: Use server-side filtering for all tabs
+  - "Läuft bald ab" tab passes `expiring_soon=true` param
+  - Tab counts fetched via parallel `limit=1` API calls using server-side filters
+  - Footer uses active tab's server-returned `total`
+  - Removed client-side expiring filter from `filteredRequests`
+
+- **Smoke**: Added Test 7 to validate `expiring_soon` filter returns consistent total
+
+**Verification Commands:**
+
+```bash
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<manager_jwt>"
+./backend/scripts/pms_booking_requests_approve_decline_smoke.sh
+# Expected: 7/7 passed, RC=0
+```
+
+**Manual UI Check:**
+1. Go to /booking-requests and click "Läuft bald ab"
+2. Verify: badge count = table row count = footer "von X"
+
+**Files Changed:**
+- backend/app/api/routes/booking_requests.py (expiring_soon param + filter)
+- frontend/app/booking-requests/page.tsx (server-side filtering for all tabs)
+- backend/scripts/pms_booking_requests_approve_decline_smoke.sh (Test 7)
+- backend/docs/ops/runbook/03-auth.md (updated Admin UI Tab Count section)
+
+**Status:** ✅ IMPLEMENTED (NOT VERIFIED - requires PROD deploy + smoke rc=0)
+
+---
+
 ### DOCS Phase 2: Runbook Modularization ✅ IMPLEMENTED
 
 **Date Completed:** 2026-01-28

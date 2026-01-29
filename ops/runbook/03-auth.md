@@ -672,38 +672,58 @@ This includes: confirmed, checked_in, checked_out, pending, inquiry, requested.
 - "Alle" count equals the currently selected tab's count
 - Counts flicker or show stale values
 
-### Root Cause (Fixed in P2.21.4.8h)
+### Root Cause (Fixed in P2.21.4.8h + P2.21.4.8i)
 
-Prior to the fix, tab counts were computed from the `requests` state, which was already filtered by the active tab. When switching to "Neu" tab:
-1. API returns only `status=requested` items
-2. `requests` state contains only those items
-3. All tab counts were computed from this filtered set (incorrect)
+**Phase 1 (P2.21.4.8h):** Tab counts were computed from the `requests` state, which was already filtered by the active tab.
+
+**Phase 2 (P2.21.4.8i):** "Läuft bald ab" tab used client-side filtering on paginated results:
+- Footer showed "von 168" (all total) instead of "von 3" (expiring total)
+- Client filtering couldn't see items beyond the current page
 
 ### Fix Applied
 
-Tab counts are now fetched separately via a dedicated API call without status filter:
-- `fetchTabCounts()` fetches all booking requests (up to 500) and computes counts
-- Counts are stored in `stableTabCounts` state, independent of active tab
-- Counts are refreshed on search change and after approve/decline actions
+**Backend (P2.21.4.8i):** Added `expiring_soon=true` query parameter to `/api/v1/booking-requests`:
+- Filters to: `status IN ('requested', 'under_review')` AND deadline within 0-3 days
+- Deadline = check_in - 48 hours
+- Returns accurate `total` for pagination
+
+**Frontend (P2.21.4.8h + P2.21.4.8i):**
+- Tab counts fetched via lightweight parallel API calls (`limit=1`) using server-side filters
+- Each tab's total comes from server response, not client-side computation
+- "Läuft bald ab" tab uses `expiring_soon=true` for both list AND count
+- Footer uses active tab's server-returned `total` (not "all" total)
 - Race condition handling via `countsRequestId` prevents stale responses
 
 ### Manual Verification
 
 1. Open Admin UI: https://admin.fewo.kolibri-visions.de/booking-requests
 2. Note the badge counts on each tab
-3. Click each tab in sequence (Alle → Neu → Läuft bald ab → In Bearbeitung)
-4. Verify: The OTHER tabs' counts remain stable (do not inherit active tab's total)
-5. Type a search query and verify counts update for all tabs consistently
-6. Approve or decline a request and verify all counts reflect the change
+3. Click "Läuft bald ab" tab
+4. Verify: Badge count matches table row count AND footer "von X" shows same number
+5. Click each other tab and verify footer total matches that tab's badge count
+6. Approve or decline a request and verify all counts refresh correctly
+
+### Smoke Test
+
+```bash
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<manager_jwt>"
+./backend/scripts/pms_booking_requests_approve_decline_smoke.sh
+# Test 7 validates expiring_soon filter
+```
 
 ### Related Files
 
 ```
+backend/app/api/routes/booking_requests.py
+  - Lines 294: expiring_soon query parameter
+  - Lines 341-348: Server-side expiring filter logic
+
 frontend/app/booking-requests/page.tsx
   - Lines 75-81: stableTabCounts state
-  - Lines 196-236: fetchTabCounts() function
-  - Lines 238-239: useEffect to fetch counts on mount/search change
-  - Lines 274: tabCounts = stableTabCounts assignment
+  - Lines 151-154: expiring_soon param for list fetch
+  - Lines 199-246: fetchTabCounts() with parallel server calls
+  - Lines 269: tabCounts = stableTabCounts assignment
 ```
 
 ---
