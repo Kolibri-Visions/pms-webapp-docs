@@ -440,7 +440,7 @@ export JWT_TOKEN="<manager_jwt>"
 
 ---
 
-### P2.21.4.8j: Booking Requests - Details Drawer + CSV Export + Manuelle Buchung ✅ IMPLEMENTED
+### P2.21.4.8j: Booking Requests - Details Drawer + CSV Export + Manuelle Buchung ✅ VERIFIED
 
 **Date Completed:** 2026-01-29
 
@@ -488,7 +488,17 @@ export JWT_TOKEN="<manager_jwt>"
 3. Click "CSV exportieren" on "Läuft bald ab" tab → verify download
 4. Click "Manuelle Buchung" → fill form → submit → verify booking created
 
-**Status:** ✅ IMPLEMENTED (NOT VERIFIED - requires PROD deploy + smoke rc=0)
+**Production Evidence:**
+- Verified date: 2026-01-29
+- API domain: https://api.fewo.kolibri-visions.de
+- Admin domain: https://admin.fewo.kolibri-visions.de
+- source_commit: `2e9587ca67f94d2de96303e763da42f13316a7d2`
+- Backend started_at: 2026-01-29T19:25:04.692431+00:00
+- Admin started_at: 2026-01-29T19:26:57.361Z
+- Deploy verify: `pms_verify_deploy.sh` rc=0, commit match
+- Smoke: `pms_booking_requests_approve_decline_smoke.sh` rc=0 (9/9 passed)
+
+**Status:** ✅ VERIFIED
 
 ---
 
