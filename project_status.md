@@ -664,7 +664,7 @@ export API_BASE_URL="https://api.fewo.kolibri-visions.de"
 
 ---
 
-### P2.21.4.8m: Booking Requests - SLA/Overdue Ops-Grade Consistency + UX Polish ✅ IMPLEMENTED
+### P2.21.4.8m: Booking Requests - SLA/Overdue Ops-Grade Consistency + UX Polish ✅ VERIFIED
 
 **Date Completed:** 2026-01-29
 
@@ -720,7 +720,20 @@ export API_BASE_URL="https://api.fewo.kolibri-visions.de"
 - backend/docs/ops/runbook/03-auth.md (P2.21.4.8m section)
 - backend/docs/project_status.md (this entry)
 
-**Status:** ✅ IMPLEMENTED
+**Production Evidence:**
+
+- Verified date: 2026-01-29
+- API domain: https://api.fewo.kolibri-visions.de
+- Admin domain: https://admin.fewo.kolibri-visions.de
+- source_commit: `fd10cf5f80a2965bdc5a7f8c0612431d182f276a`
+- Backend started_at: 2026-01-29T21:15:04.097178+00:00
+- Admin started_at: 2026-01-29T21:16:30.295Z
+- Deploy verify: `pms_verify_deploy.sh` STRICT commit match, all checks passed
+- Smoke: `pms_booking_requests_approve_decline_smoke.sh` rc=0 (17/17 passed)
+  - Note: PROD-safe behavior allowed approve SKIPs when all candidates had real `409 booking_overlap` conflicts (validations OK)
+  - Additional verified: Combined filter overdue+status=under_review PASS, Policy server_now PASS
+
+**Status:** ✅ VERIFIED
 
 ---
 
