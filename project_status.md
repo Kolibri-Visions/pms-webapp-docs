@@ -430,7 +430,9 @@ export JWT_TOKEN="<manager_jwt>"
 - Verified date: 2026-01-29
 - API domain: https://api.fewo.kolibri-visions.de
 - Admin domain: https://admin.fewo.kolibri-visions.de
-- source_commit: `d9a4f7f`
+- source_commit: `d9a4f7f47feee34d86059148a2bef0d30f2967df`
+- Backend started_at: 2026-01-29T16:05:04.660719+00:00
+- Admin started_at: 2026-01-29T16:07:04.096Z
 - Deploy verify: `pms_verify_deploy.sh` rc=0, commit match
 - Smoke: `pms_booking_requests_approve_decline_smoke.sh` rc=0 (7/7 passed)
 
