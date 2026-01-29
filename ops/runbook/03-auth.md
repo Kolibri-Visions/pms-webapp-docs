@@ -575,3 +575,39 @@ effective_status = 'confirmed' if (
 ```
 
 ---
+
+### Legacy Single-Table Mode (booking_requests table missing)
+
+**Context**
+
+In PROD, `public.booking_requests` table does NOT exist. Booking requests are stored as rows in `public.bookings` with `status='requested'`.
+
+```sql
+-- Verify: booking_requests table doesn't exist
+SELECT to_regclass('public.booking_requests');
+-- Returns: NULL
+```
+
+**Approve Behavior**
+
+When approving a booking request in legacy single-table mode:
+
+1. The endpoint updates the **same row** in `bookings` table (in-place update)
+2. Sets `status='confirmed'`, `confirmed_at=now()`, `approved_by=user_id`
+3. Returns HTTP 200 with `message: "Booking request approved (in-place update)"`
+4. `booking_id` in response equals `booking_request_id` (same row)
+
+**No Overlap Self-Conflict**
+
+Since we UPDATE the existing row (not INSERT a new one), the `no_double_bookings` exclusion constraint is not triggered for self-overlap.
+
+**Smoke Test**
+
+```bash
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<manager_jwt>"
+./backend/scripts/pms_booking_requests_approve_decline_smoke.sh
+# Expected: 6/6 passed, RC=0
+```
+
+---

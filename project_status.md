@@ -285,6 +285,48 @@ Fixed approve returning 409 `booking_overlap` but GET still showing `status=requ
 
 ---
 
+### P2.21.4.8f: Booking Requests Approve Legacy Single-Table Mode ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-29
+
+**Overview:**
+
+Fixed approve endpoint for legacy single-table mode where `public.booking_requests` table does NOT exist. The critical bug was that the `return ApproveResponse(...)` statement was INSIDE the `if idempotency_key:` block, causing approve without idempotency key to fall through to exception handlers without returning a response.
+
+**Root Cause:**
+
+1. `return ApproveResponse(**response_data)` was at line 1023 INSIDE `if idempotency_key:` block
+2. When no `Idempotency-Key` header provided (normal case), the happy path never returned
+3. Execution fell through to the PostgresError exception handlers, likely causing undefined behavior
+
+**Fix:**
+
+- **booking_requests.py**: Moved `return ApproveResponse(**response_data)` OUTSIDE the `if idempotency_key:` block
+  - Now returns 200 with `status='confirmed'` for all approve calls (with or without idempotency key)
+  - Message: "Booking request approved (in-place update)"
+
+- **Smoke script**: Updated to recognize "in-place" message as valid success
+
+- **Runbook 03-auth.md**: Added "Legacy Single-Table Mode" section explaining:
+  - PROD has no `booking_requests` table
+  - Approve updates the same row in `bookings` table (in-place)
+  - `booking_id` equals `booking_request_id` (same row)
+
+**Verification:**
+
+```bash
+# Verify booking_requests table doesn't exist in PROD
+SELECT to_regclass('public.booking_requests');  -- Returns NULL
+
+# Run smoke test
+./backend/scripts/pms_booking_requests_approve_decline_smoke.sh
+# Expected: 6/6 passed, RC=0
+```
+
+**Status:** ✅ IMPLEMENTED (NOT VERIFIED - requires PROD smoke test RC=0)
+
+---
+
 ### DOCS Phase 2: Runbook Modularization ✅ IMPLEMENTED
 
 **Date Completed:** 2026-01-28
