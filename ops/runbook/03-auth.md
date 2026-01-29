@@ -15,6 +15,7 @@
 - [Booking Requests: Details, Export, Manuelle Buchung](#booking-requests-details-drawer-csv-export-manuelle-buchung)
 - [Booking Requests: Workflow Consistency (P2.21.4.8k)](#booking-requests-workflow-consistency-p221-4-8k)
 - [Booking Requests: SLA/Notifications/Filters (P2.21.4.8l)](#booking-requests-slanotificationsfilters-p221-4-8l)
+- [Booking Requests: SLA/Overdue Ops-Grade Consistency (P2.21.4.8m)](#booking-requests-slaoverdue-ops-grade-consistency-p221-4-8m)
 
 ---
 
@@ -955,8 +956,10 @@ Get current SLA configuration:
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
   "$API_BASE_URL/api/v1/booking-requests/policy"
-# Returns: {"sla_hours": 24, "expiring_soon_days": 3, "computed_at": "..."}
+# Returns: {"sla_hours": 24, "expiring_soon_days": 3, "computed_at": "...", "server_now": "..."}
 ```
+
+**Note (P2.21.4.8m):** The `server_now` field was added for debugging and clock-sync verification.
 
 **Environment Variables:**
 - `BOOKING_REQUEST_SLA_HOURS=24` - Hours after creation before overdue
@@ -982,6 +985,13 @@ Each booking request has a computed `sla_state` field:
 | `expiring_soon=true` | Läuft bald ab | Deadline within 0-3 days |
 | `overdue=true` | Überfällig | Deadline has passed |
 
+**Filter Combinability (P2.21.4.8m):**
+
+When multiple filter parameters are provided, they combine using AND (intersection semantics):
+- `status=requested&overdue=true` → Only overdue items with status=requested
+- `expiring_soon=true&overdue=true` → Intersection (usually empty, rare edge case)
+- `status=under_review&expiring_soon=true` → Under review AND expiring soon
+
 **Example Queries:**
 
 ```bash
@@ -993,9 +1003,9 @@ curl -H "Authorization: Bearer $TOKEN" \
 curl -H "Authorization: Bearer $TOKEN" \
   "$API_BASE_URL/api/v1/booking-requests?expiring_soon=true&limit=10"
 
-# Both (intersection - rare)
+# Combined filter (intersection)
 curl -H "Authorization: Bearer $TOKEN" \
-  "$API_BASE_URL/api/v1/booking-requests?expiring_soon=true&overdue=true&limit=10"
+  "$API_BASE_URL/api/v1/booking-requests?status=under_review&overdue=true&limit=10"
 ```
 
 ### Admin UI Notification Banners
@@ -1040,5 +1050,92 @@ export JWT_TOKEN="<manager_jwt>"
 - Cause: Counts are 0 for all priority levels
 - Or: Currently viewing that tab (banner hidden when tab active)
 - Verify: Network tab shows 5 parallel count requests on load
+
+---
+
+## Booking Requests: SLA/Overdue Ops-Grade Consistency (P2.21.4.8m)
+
+**When to use:** Understanding combined filter semantics, SLA block in details drawer, and debugging server time.
+
+### Policy Endpoint: server_now Field
+
+The policy endpoint now includes `server_now` for debugging and client-server clock synchronization:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "$API_BASE_URL/api/v1/booking-requests/policy"
+# Returns: {
+#   "sla_hours": 24,
+#   "expiring_soon_days": 3,
+#   "computed_at": "2026-01-29T21:30:00.000000Z",
+#   "server_now": "2026-01-29T21:30:00.000000Z"
+# }
+```
+
+Use `server_now` to verify:
+- Client-server clock drift
+- Timezone handling (always UTC)
+- SLA computation correctness
+
+### Combined Filter Semantics (AND/Intersection)
+
+When multiple filter parameters are provided, they combine with AND (intersection):
+
+| Parameters | Result |
+|------------|--------|
+| `status=requested&overdue=true` | Overdue items with status=requested only |
+| `status=under_review&expiring_soon=true` | Expiring items under review |
+| `overdue=true&expiring_soon=true` | Intersection (rare, usually empty) |
+
+**Why this matters for Ops:**
+- UI tabs use single filters (one filter per tab)
+- Custom queries can combine filters for specific use cases
+- Export endpoint respects combined filters
+
+### Admin UI: SLA Block in Details Drawer
+
+The details drawer shows an "SLA Status" block with:
+
+- **Frist:** Decision deadline timestamp (check_in - 48h)
+- **Status:** SLA state badge (on_track/expiring_soon/overdue/closed)
+
+Badge colors:
+- `on_track` → Gray
+- `expiring_soon` → Orange
+- `overdue` → Red
+- `closed` → Green
+
+### Admin UI: Überfällig Tab Tooltip
+
+The "Überfällig" tab has a tooltip explaining:
+> "Anfragen, deren Frist (48h vor Check-in) abgelaufen ist"
+> (Requests whose deadline (48h before check-in) has expired)
+
+### Smoke Test Coverage (Tests 16-17)
+
+```bash
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<manager_jwt>"
+./backend/scripts/pms_booking_requests_approve_decline_smoke.sh
+
+# Test 16: Combined filter (overdue + under_review) returns valid JSON
+# Test 17: Policy endpoint includes server_now field
+```
+
+### Troubleshooting
+
+**server_now differs from local time by hours**
+- Expected: Server uses UTC, client may use local timezone
+- Verify: `date -u` on server vs local system
+- Not a bug unless difference exceeds seconds
+
+**Combined filter returns empty but individual filters have items**
+- Expected: Intersection semantics means fewer matches
+- Example: `overdue=true` has 5 items, `status=under_review` has 3 items, but intersection may be 0
+
+**SLA block not appearing in drawer**
+- Check: Network tab for detail endpoint response
+- Verify: Response includes `decision_deadline_at` and `sla_state`
+- If missing: Check backend routes compute these fields
 
 ---

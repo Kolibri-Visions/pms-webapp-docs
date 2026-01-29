@@ -664,6 +664,66 @@ export API_BASE_URL="https://api.fewo.kolibri-visions.de"
 
 ---
 
+### P2.21.4.8m: Booking Requests - SLA/Overdue Ops-Grade Consistency + UX Polish ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-29
+
+**Overview:**
+
+Ops-grade consistency improvements for SLA/overdue features:
+- Policy endpoint now includes `server_now` for debugging/clock-sync
+- Combined filter semantics (AND/intersection) documented
+- Admin UI "Überfällig" tab tooltip explaining 48h deadline
+- Admin UI details drawer shows SLA block (deadline + state)
+- Smoke tests for combined filter and server_now field
+
+**Changes:**
+
+- **Backend Schemas** (`booking_requests.py`):
+  - `server_now` field added to `BookingRequestPolicy` schema
+
+- **Backend Routes** (`booking_requests.py`):
+  - GET /api/v1/booking-requests/policy returns `server_now`
+  - Comment added explaining filter combinability (AND semantics)
+
+- **Frontend** (`booking-requests/page.tsx`):
+  - Tooltip on "Überfällig" tab explaining deadline logic
+  - SLA block in details drawer showing `decision_deadline_at` and `sla_state`
+  - Badge colors: on_track=gray, expiring_soon=orange, overdue=red, closed=green
+
+- **Smoke** (`pms_booking_requests_approve_decline_smoke.sh`):
+  - TOTAL_TESTS=17
+  - Test 16: Combined filter (overdue + under_review) returns valid JSON
+  - Test 17: Policy includes server_now field
+
+- **Docs** (`runbook/03-auth.md`):
+  - Added "SLA/Overdue Ops-Grade Consistency (P2.21.4.8m)" section
+  - Documented server_now, combined filter semantics, SLA block, tooltip
+
+**Verification Commands:**
+
+```bash
+EXPECT_COMMIT=<commit> ./backend/scripts/pms_verify_deploy.sh
+
+export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_booking_requests_approve_decline_smoke.sh
+# Expected: 17/17 passed (allow SKIPs per PROD-safe rules), RC=0
+```
+
+**Files Changed:**
+
+- backend/app/schemas/booking_requests.py (server_now field)
+- backend/app/api/routes/booking_requests.py (server_now return, filter comment)
+- frontend/app/booking-requests/page.tsx (tooltip, SLA block in drawer)
+- backend/scripts/pms_booking_requests_approve_decline_smoke.sh (Tests 16-17)
+- backend/docs/ops/runbook/03-auth.md (P2.21.4.8m section)
+- backend/docs/project_status.md (this entry)
+
+**Status:** ✅ IMPLEMENTED
+
+---
+
 ### DOCS Phase 2: Runbook Modularization ✅ IMPLEMENTED
 
 **Date Completed:** 2026-01-28
