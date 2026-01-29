@@ -582,7 +582,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 
 ---
 
-### P2.21.4.8l: Booking Requests - SLA/Notifications/Filter Finalization ✅ IMPLEMENTED
+### P2.21.4.8l: Booking Requests - SLA/Notifications/Filter Finalization ✅ VERIFIED
 
 **Date Completed:** 2026-01-29
 
@@ -648,7 +648,19 @@ export API_BASE_URL="https://api.fewo.kolibri-visions.de"
 - backend/docs/ops/runbook/03-auth.md (P2.21.4.8l section)
 - backend/docs/project_status.md (this entry)
 
-**Status:** ✅ IMPLEMENTED
+**Production Evidence:**
+
+- Verified date: 2026-01-29
+- API domain: https://api.fewo.kolibri-visions.de
+- Admin domain: https://admin.fewo.kolibri-visions.de
+- source_commit: `bf0860edbff774e6fdbb9da6bc347355ff49256c`
+- Backend started_at: 2026-01-29T20:48:51.496601+00:00
+- Admin started_at: 2026-01-29T20:51:21.150Z
+- Deploy verify: `pms_verify_deploy.sh` STRICT commit match, all checks passed
+- Smoke: `pms_booking_requests_approve_decline_smoke.sh` rc=0 (15/15 passed)
+  - Note: PROD-safe behavior allowed approve SKIPs when all candidates had real `409 booking_overlap` conflicts (validations OK)
+
+**Status:** ✅ VERIFIED
 
 ---
 
