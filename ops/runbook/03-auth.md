@@ -342,4 +342,44 @@ curl -H "Authorization: Bearer $TOKEN" \
 # Should show status=confirmed
 ```
 
+### Troubleshooting: Approve Idempotent but GET Shows status=requested (inventory_ranges exists)
+
+**Symptom**
+- Approve returns 409 (smoke interprets as "idempotent")
+- GET shows status=requested instead of confirmed
+- There's an active `inventory_ranges` entry for this booking
+
+**Root Cause**
+The booking was previously "activated" (via booking_service or channel manager) which created an `inventory_ranges` entry with state='active', but the `bookings.status` wasn't updated to 'confirmed'. This can happen from:
+- Partial transaction failure
+- booking_service creating inventory_ranges but bookings.status update failing
+- Manual DB intervention
+
+**Fix**
+The approve endpoint now checks for inventory_ranges evidence BEFORE the UPDATE (commit 2026-01-29):
+- Detects: `inventory_ranges` entry with `kind='booking'`, `source_id=<booking_id>`, `state='active'`
+- Heals: Updates bookings.status to 'confirmed', sets confirmed_at if null
+- Returns: 200 with message "Booking request already approved (idempotent, state healed from inventory)"
+
+**Verify Healing**
+```bash
+# Check for inventory_ranges evidence
+SELECT ir.source_id, ir.state, b.status, b.confirmed_at
+FROM inventory_ranges ir
+JOIN bookings b ON b.id = ir.source_id
+WHERE ir.kind = 'booking' AND ir.state = 'active' AND b.status = 'requested';
+
+# Test healing via API
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}' \
+  "https://api.fewo.kolibri-visions.de/api/v1/booking-requests/<uuid>/approve"
+# Should return 200 with "inventory" in message
+
+# Verify healed state
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://api.fewo.kolibri-visions.de/api/v1/booking-requests/<uuid>"
+# Should show status=confirmed
+```
+
 ---
