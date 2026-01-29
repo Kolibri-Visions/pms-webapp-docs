@@ -611,3 +611,52 @@ export JWT_TOKEN="<manager_jwt>"
 ```
 
 ---
+
+### Troubleshooting: 409 booking_overlap vs 200 Idempotent Fulfillment (P2.21.4.8g)
+
+**Context**
+
+When approving a booking request, the endpoint may encounter an overlap conflict due to the `no_double_bookings` exclusion constraint. The behavior depends on whether the overlap is with the SAME guest or a DIFFERENT guest.
+
+**Scenario A: Same Guest Overlap (Idempotent Fulfillment)**
+
+If the overlapping booking is for the **same guest**:
+- The request is effectively fulfilled (same person, same dates)
+- API returns **HTTP 200** with `status=confirmed`
+- Message includes: `"healed: fulfilled_by_overlap_same_guest"`
+- The booking request is soft-healed: `confirmed_at` is set, effective status becomes `confirmed`
+
+**Scenario B: Different Guest Overlap (Real Conflict)**
+
+If the overlapping booking is for a **different guest**:
+- This is a genuine double-booking attempt
+- API returns **HTTP 409** with `conflict_type=booking_overlap`
+- Message does NOT include "idempotent" or "healed"
+- The booking request remains `status=requested` (not healed)
+
+**Smoke Script Behavior (P2.21.4.8g)**
+
+The smoke script now correctly distinguishes these cases:
+1. On 409 with `conflict_type=booking_overlap` and no "healed" message → tries next candidate
+2. Iterates up to 5 candidates looking for an approvable request
+3. Only fails if ALL candidates have real conflicts
+
+**Verify in Logs**
+
+```bash
+# Same guest healing (expected: 200)
+grep "Soft-healing booking request" /var/log/pms/backend.log
+# Real conflict (expected: 409)
+grep "Real booking conflict on approve" /var/log/pms/backend.log
+```
+
+**Active Statuses in Constraint**
+
+The `no_double_bookings` constraint applies to bookings with:
+```sql
+status NOT IN ('cancelled', 'declined', 'no_show')
+```
+
+This includes: confirmed, checked_in, checked_out, pending, inquiry, requested.
+
+---

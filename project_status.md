@@ -327,6 +327,47 @@ SELECT to_regclass('public.booking_requests');  -- Returns NULL
 
 ---
 
+### P2.21.4.8g: Booking Requests Approve - Distinguish Overlap Conflict vs Idempotent Fulfillment ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-29
+
+**Overview:**
+
+Fixed smoke test failure where 409 `booking_overlap` was incorrectly treated as "idempotent". Now properly distinguishes:
+- **Same guest overlap → HTTP 200** with soft-heal (idempotent fulfillment)
+- **Different guest overlap → HTTP 409** (real conflict, no healing)
+
+**Root Cause:**
+
+1. Smoke script treated ANY 409 as potentially idempotent, setting `APPROVE_CONFLICT=true` and hoping Test 3 would show confirmed
+2. API overlap query only checked `guest_id = $4` (same guest), not finding different-guest conflicts
+3. API didn't return overlapping booking details in 409 response for debugging
+
+**Fix:**
+
+- **booking_requests.py**: Updated overlap query to find ANY overlapping booking first, then check if same guest
+  - Same guest: soft-heal with `confirmed_at`, return 200 with "healed: fulfilled_by_overlap_same_guest"
+  - Different guest: return 409 with detailed message including overlapping booking ID
+  - Added `DB_ACTIVE_BOOKING_STATUSES` constant for constraint-consistent status checking
+
+- **Smoke script**: Complete rewrite of Test 1-3 logic
+  - Fetches multiple candidates (up to 10)
+  - On 409 `booking_overlap` without "healed" message, tries next candidate
+  - Iterates up to 5 attempts before failing
+  - Only runs Test 3 (verify confirmed) against the ID that actually approved
+
+- **Tests**: Added `test_approve_overlap_different_guest_returns_409` to verify real conflicts aren't healed
+
+- **Runbook 03-auth.md**: Added "409 booking_overlap vs 200 Idempotent Fulfillment" troubleshooting section
+
+**Evidence Type:** `fulfilled_by_overlap_same_guest` (200) vs `booking_overlap` (409)
+
+**Smoke Expectation:** 6/6 passed, RC=0
+
+**Status:** ✅ IMPLEMENTED (NOT VERIFIED - requires PROD smoke test RC=0)
+
+---
+
 ### DOCS Phase 2: Runbook Modularization ✅ IMPLEMENTED
 
 **Date Completed:** 2026-01-28
