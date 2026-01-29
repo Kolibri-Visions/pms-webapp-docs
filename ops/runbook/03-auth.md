@@ -17,6 +17,7 @@
 - [Booking Requests: SLA/Notifications/Filters (P2.21.4.8l)](#booking-requests-slanotificationsfilters-p221-4-8l)
 - [Booking Requests: SLA/Overdue Ops-Grade Consistency (P2.21.4.8m)](#booking-requests-slaoverdue-ops-grade-consistency-p221-4-8m)
 - [Booking Requests: Detail/CSV Consistency + Review Queue UX (P2.21.4.8n)](#booking-requests-detailcsv-consistency--review-queue-ux-p221-4-8n)
+- [Booking Requests: Review Queue Zero + Bulk Actions (P2.21.4.8o)](#booking-requests-review-queue-zero--bulk-actions-p221-4-8o)
 
 ---
 
@@ -1227,5 +1228,105 @@ export JWT_TOKEN="<manager_jwt>"
 - `declined_at`: Set when request is explicitly declined (status becomes cancelled)
 - `cancelled_at`: General cancellation timestamp (may be same value)
 - Both map to DB column `cancelled_at` but `declined_at` only populated if status indicates decline
+
+---
+
+## Booking Requests: Review Queue Zero + Bulk Actions (P2.21.4.8o)
+
+**When to use:** Processing multiple booking requests efficiently with bulk operations.
+
+### Bulk Endpoints
+
+**POST /api/v1/booking-requests/bulk/review**
+
+Set multiple requests to `under_review` status:
+
+```bash
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"ids": ["uuid1", "uuid2"], "internal_note": "Bulk review"}' \
+  "$API_BASE_URL/api/v1/booking-requests/bulk/review"
+```
+
+Response:
+```json
+{
+  "total": 2,
+  "succeeded": 2,
+  "failed": 0,
+  "results": [
+    {"id": "uuid1", "success": true, "status": "under_review"},
+    {"id": "uuid2", "success": true, "status": "under_review"}
+  ],
+  "message": "Bulk review completed: 2 succeeded, 0 failed"
+}
+```
+
+**POST /api/v1/booking-requests/bulk/decline**
+
+Decline multiple requests with a single reason:
+
+```bash
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"ids": ["uuid1", "uuid2"], "decline_reason": "Property unavailable", "internal_note": "Bulk decline"}' \
+  "$API_BASE_URL/api/v1/booking-requests/bulk/decline"
+```
+
+### Limits and Constraints
+
+| Parameter | Limit | Notes |
+|-----------|-------|-------|
+| Max batch size | 50 | Request fails if >50 IDs |
+| Valid status transitions | requested → under_review | For bulk review |
+| Valid status transitions | requested/under_review → cancelled | For bulk decline |
+
+**PROD-Safe:** No bulk-approve endpoint (too risky for accidental confirmations).
+
+### Admin UI: Multi-Select
+
+The Admin UI provides checkboxes for bulk selection:
+
+1. **Select individual items**: Click checkbox on each row
+2. **Select all actionable**: Click header checkbox (selects all requested/under_review)
+3. **Action bar appears**: Shows count and bulk action buttons
+4. **Actions**:
+   - "In Bearbeitung setzen" → Bulk review
+   - "Ablehnen" → Opens modal for decline reason
+
+### Admin UI: Refresh Button
+
+The refresh button (↻) in header reloads:
+- Current tab's request list
+- All tab counts (badges)
+
+No page flicker - data updates in-place.
+
+### Smoke Test Coverage (Tests 20-21)
+
+```bash
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<manager_jwt>"
+./backend/scripts/pms_booking_requests_approve_decline_smoke.sh
+
+# Test 20: Bulk review endpoint (>=2 IDs else SKIP)
+# Test 21: Bulk decline endpoint (>=2 IDs else SKIP)
+```
+
+### Troubleshooting
+
+**Bulk action returns partial success**
+- Check `results` array for per-item errors
+- Common errors: "Not found", "Invalid status: confirmed"
+- Partial success is intentional (one bad ID doesn't fail entire batch)
+
+**Checkbox not appearing for a row**
+- Cause: Only `requested` and `under_review` items are selectable
+- Confirmed/cancelled items show disabled checkbox
+
+**Refresh button not updating**
+- Check: Network tab for API calls
+- Verify: No errors in console
+- May take a moment if many requests in queue
 
 ---

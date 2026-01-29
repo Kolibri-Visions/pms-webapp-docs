@@ -812,6 +812,72 @@ export API_BASE_URL="https://api.fewo.kolibri-visions.de"
 
 ---
 
+### P2.21.4.8o: Booking Requests - Review Queue Zero + Bulk Actions ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-29
+
+**Overview:**
+
+Bulk actions for efficient queue processing:
+- PROD-safe bulk endpoints (no bulk-approve)
+- Bulk set_under_review: Max 50 IDs, per-item success/failure
+- Bulk decline: Single reason applies to all selected
+- Admin UI multi-select with checkboxes and action bar
+- Refresh button for manual reload without flicker
+
+**Changes:**
+
+- **Backend Schemas** (`booking_requests.py`):
+  - BulkReviewInput, BulkReviewResponse schemas
+  - BulkDeclineInput, BulkDeclineResponse schemas
+  - BulkActionResult schema (per-item result)
+
+- **Backend Routes** (`booking_requests.py`):
+  - POST /api/v1/booking-requests/bulk/review endpoint
+  - POST /api/v1/booking-requests/bulk/decline endpoint
+  - Max batch size: 50 items
+  - Partial success allowed (per-item results)
+
+- **Frontend** (`booking-requests/page.tsx`):
+  - selectedIds state for multi-select
+  - Checkboxes on table header and rows
+  - Bulk action bar (appears when items selected)
+  - Bulk decline modal (collects reason once)
+  - Refresh button (RefreshCw icon)
+
+- **Smoke** (`pms_booking_requests_approve_decline_smoke.sh`):
+  - TOTAL_TESTS=21
+  - Test 20: Bulk review endpoint (>=2 IDs else SKIP)
+  - Test 21: Bulk decline endpoint (>=2 IDs else SKIP)
+
+- **Docs** (`runbook/03-auth.md`):
+  - Added "Review Queue Zero + Bulk Actions (P2.21.4.8o)" section
+  - Documented bulk endpoints, limits, UI features
+
+**Verification Commands:**
+
+```bash
+EXPECT_COMMIT=<commit> ./backend/scripts/pms_verify_deploy.sh
+
+export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_booking_requests_approve_decline_smoke.sh
+# Expected: 21/21 passed (SKIPs allowed if <2 actionable requests), RC=0
+```
+
+**Files Changed:**
+
+- backend/app/schemas/booking_requests.py (bulk action schemas)
+- backend/app/api/routes/booking_requests.py (bulk endpoints)
+- frontend/app/booking-requests/page.tsx (multi-select, action bar, refresh)
+- backend/scripts/pms_booking_requests_approve_decline_smoke.sh (Tests 20-21)
+- backend/docs/ops/runbook/03-auth.md (P2.21.4.8o section)
+- backend/docs/project_status.md (this entry)
+
+**Status:** ✅ IMPLEMENTED
+
+---
+
 ### DOCS Phase 2: Runbook Modularization ✅ IMPLEMENTED
 
 **Date Completed:** 2026-01-28
