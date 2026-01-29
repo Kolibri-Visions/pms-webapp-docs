@@ -16,7 +16,7 @@
 
 ```bash
 # Check database health
-curl -s https://api.fewo.kolibri-visions.de/health/ready | jq '.checks.database'
+curl -s https://api.fewo.kolibri-visions.de/health/ready | jq '.components.db'
 
 # Check pool status
 docker logs $(docker ps -q -f name=pms-backend) 2>&1 | grep "pool created successfully"

@@ -559,7 +559,7 @@ echo "Waiting for worker to start..."
 sleep 60
 
 echo "Step 4: Verifying worker health..."
-CELERY_STATUS=$(curl -s https://api.your-domain.com/health/ready | jq -r '.checks.celery')
+CELERY_STATUS=$(curl -s https://api.your-domain.com/health/ready | jq -r '.components.celery.status')
 if [ "$CELERY_STATUS" = "up" ]; then
   echo "✓ Deployment complete and healthy"
 else
@@ -593,7 +593,7 @@ jobs:
 **Step 1: Identify Failed Component**
 ```bash
 # Check which service is unhealthy
-curl https://api.your-domain.com/health/ready | jq '.checks'
+curl https://api.your-domain.com/health/ready | jq '.components'
 ```
 
 **Step 2: Rollback via Coolify**

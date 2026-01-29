@@ -18,7 +18,7 @@
 
 ```bash
 # Check health (Redis + Celery)
-curl -s https://api.fewo.kolibri-visions.de/health/ready | jq '.checks'
+curl -s https://api.fewo.kolibri-visions.de/health/ready | jq '.components'
 
 # Ping Celery workers
 docker exec pms-backend celery -A app.channel_manager.core.sync_engine:celery_app \

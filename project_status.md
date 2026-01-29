@@ -156,6 +156,44 @@ Verification passes if `source_commit` from production starts with the expected 
 
 ## Completed Phases
 
+### DOCS Phase 3: Runbook Index Slimming + Legacy Extraction ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-29
+
+**Overview:**
+
+Reduced `backend/docs/ops/runbook.md` from 45,946 lines to 430 lines by extracting legacy content to `99-legacy.md` and adding redirect stubs for backward-compatible anchor links.
+
+**Changes:**
+
+- **runbook.md** slimmed to ~430 lines (index + golden paths + daily ops checklist + stubs)
+- **99-legacy.md** created with 45,667 lines of archived content
+- **Stub headings** added for all commonly referenced sections (DB DNS, Schema Drift, Token Validation, etc.)
+- **jq paths** corrected: `.checks` → `.components` in chapter files
+- **Docs sanity smoke** added: `backend/scripts/pms_docs_sanity_smoke.sh`
+
+**Smoke Script Checks:**
+
+1. Root *.md files are pointer stubs (<30 lines)
+2. backend/docs/index.md exists
+3. runbook.md <= 800 lines
+4. All chapter files exist (00, 01, 02, 03, 04, 99)
+5. Runbook contains RULE block for modular chapters
+6. No incorrect .checks jq paths in active chapters
+
+**Files Changed:**
+
+- `backend/docs/ops/runbook.md` - Slimmed to index with stubs
+- `backend/docs/ops/runbook/99-legacy.md` - New legacy archive
+- `backend/docs/ops/runbook/01-deployment.md` - Fixed jq paths
+- `backend/docs/ops/runbook/02-database.md` - Fixed jq paths
+- `backend/docs/ops/runbook/04-channel-manager.md` - Fixed jq paths
+- `backend/scripts/pms_docs_sanity_smoke.sh` - New sanity smoke script
+
+**Status:** ✅ IMPLEMENTED (documentation change, no production verification needed)
+
+---
+
 ### DOCS Phase 2: Runbook Modularization ✅ IMPLEMENTED
 
 **Date Completed:** 2026-01-28
