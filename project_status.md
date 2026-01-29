@@ -737,7 +737,7 @@ export API_BASE_URL="https://api.fewo.kolibri-visions.de"
 
 ---
 
-### P2.21.4.8n: Booking Requests - Detail/CSV Consistency + Review Queue UX Hardening ✅ IMPLEMENTED
+### P2.21.4.8n: Booking Requests - Detail/CSV Consistency + Review Queue UX Hardening ✅ VERIFIED
 
 **Date Completed:** 2026-01-29
 
@@ -795,7 +795,20 @@ export API_BASE_URL="https://api.fewo.kolibri-visions.de"
 - backend/docs/ops/runbook/03-auth.md (P2.21.4.8n section)
 - backend/docs/project_status.md (this entry)
 
-**Status:** ✅ IMPLEMENTED
+**Production Evidence:**
+
+- Verified date: 2026-01-29
+- API domain: https://api.fewo.kolibri-visions.de
+- Admin domain: https://admin.fewo.kolibri-visions.de
+- source_commit: `11e9dff54ed1035872783ba47923d9408a3fa2ee`
+- Backend started_at: 2026-01-29T21:32:04.730151+00:00
+- Admin started_at: 2026-01-29T21:33:55.701Z
+- Deploy verify: `pms_verify_deploy.sh` STRICT commit match, all checks passed
+- Smoke: `pms_booking_requests_approve_decline_smoke.sh` rc=0 (19/19 passed)
+  - Note: PROD-safe behavior allowed approve SKIPs when all candidates had real `409 booking_overlap` conflicts (validations OK)
+  - Additional verified (P2.21.4.8n): Detail endpoint field completeness PASS, CSV export includes SLA columns PASS
+
+**Status:** ✅ VERIFIED
 
 ---
 
