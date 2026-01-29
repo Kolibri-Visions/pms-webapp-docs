@@ -14,6 +14,7 @@
 - [Public Booking vs Direct Booking](#public-booking-vs-direct-booking-definitionen--datenfluss)
 - [Booking Requests: Details, Export, Manuelle Buchung](#booking-requests-details-drawer-csv-export-manuelle-buchung)
 - [Booking Requests: Workflow Consistency (P2.21.4.8k)](#booking-requests-workflow-consistency-p221-4-8k)
+- [Booking Requests: SLA/Notifications/Filters (P2.21.4.8l)](#booking-requests-slanotificationsfilters-p221-4-8l)
 
 ---
 
@@ -939,6 +940,105 @@ export JWT_TOKEN="<manager_jwt>"
 **"In Bearbeitung" Count Different from Displayed Rows**
 - Cause: Client/server mismatch or stale counts
 - Fix: Tab counts are fetched via parallel limit=1 API calls
-- Verify: Network tab shows 4 parallel requests on page load
+- Verify: Network tab shows 5 parallel requests on page load (incl. overdue)
+
+---
+
+## Booking Requests: SLA/Notifications/Filters (P2.21.4.8l)
+
+**When to use:** Understanding SLA deadlines, overdue detection, and notification banners.
+
+### Policy Endpoint
+
+Get current SLA configuration:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "$API_BASE_URL/api/v1/booking-requests/policy"
+# Returns: {"sla_hours": 24, "expiring_soon_days": 3, "computed_at": "..."}
+```
+
+**Environment Variables:**
+- `BOOKING_REQUEST_SLA_HOURS=24` - Hours after creation before overdue
+- `BOOKING_REQUEST_EXPIRING_SOON_DAYS=3` - Days before deadline for 'expiring soon'
+
+### SLA State Values
+
+Each booking request has a computed `sla_state` field:
+
+| State | Meaning | Deadline Status |
+|-------|---------|-----------------|
+| `on_track` | Normal processing time | deadline > now + expiring_days |
+| `expiring_soon` | Approaching deadline | now < deadline <= now + expiring_days |
+| `overdue` | Deadline has passed | deadline < now |
+| `closed` | No action needed | Status is confirmed/cancelled/declined |
+
+### Filter Query Parameters
+
+| Parameter | Tab | Meaning |
+|-----------|-----|---------|
+| `status=requested` | Neu | Open requests not yet reviewed |
+| `status=under_review` | In Bearbeitung | Under review (DB: inquiry) |
+| `expiring_soon=true` | Läuft bald ab | Deadline within 0-3 days |
+| `overdue=true` | Überfällig | Deadline has passed |
+
+**Example Queries:**
+
+```bash
+# Overdue requests
+curl -H "Authorization: Bearer $TOKEN" \
+  "$API_BASE_URL/api/v1/booking-requests?overdue=true&limit=10"
+
+# Expiring soon
+curl -H "Authorization: Bearer $TOKEN" \
+  "$API_BASE_URL/api/v1/booking-requests?expiring_soon=true&limit=10"
+
+# Both (intersection - rare)
+curl -H "Authorization: Bearer $TOKEN" \
+  "$API_BASE_URL/api/v1/booking-requests?expiring_soon=true&overdue=true&limit=10"
+```
+
+### Admin UI Notification Banners
+
+Banners show in priority order (only one at a time):
+
+1. **RED** (overdue > 0): "X Anfragen überfällig" → "Jetzt anzeigen"
+2. **ORANGE** (expiring > 0): "X Anfragen laufen bald ab" → "Jetzt anzeigen"
+3. **BLUE** (new > 0): "X neue Anfragen" → "Jetzt anzeigen"
+
+Clicking CTA switches to the relevant tab.
+
+### Smoke Test Coverage (Tests 13-15)
+
+```bash
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<manager_jwt>"
+./backend/scripts/pms_booking_requests_approve_decline_smoke.sh
+
+# Test 13: Policy endpoint returns expected keys
+# Test 14: Overdue filter consistency (SKIP if no overdue in PROD)
+# Test 15: Tab totals diagnostic summary
+```
+
+**PROD-Safe Behavior:**
+- Test 14 SKIPs if no overdue items exist (valid PROD state)
+- Test 15 prints tab totals for diagnostic visibility
+
+### Troubleshooting
+
+**Count Mismatch Between Tabs and Table**
+- Root cause: Fixed in P2.21.4.8h/i via server-side totals
+- Tab counts fetched via parallel `limit=1` API calls
+- Each tab uses its own server-side filter
+
+**Overdue Tab Shows 0 but Requests Exist**
+- Check: Are requests already closed (confirmed/cancelled)?
+- Verify: Only open statuses (requested, inquiry) can be overdue
+- Check: `confirmed_at IS NULL` filter excludes effectively-confirmed
+
+**Banner Not Appearing**
+- Cause: Counts are 0 for all priority levels
+- Or: Currently viewing that tab (banner hidden when tab active)
+- Verify: Network tab shows 5 parallel count requests on load
 
 ---

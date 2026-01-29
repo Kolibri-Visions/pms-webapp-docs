@@ -582,6 +582,76 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 
 ---
 
+### P2.21.4.8l: Booking Requests - SLA/Notifications/Filter Finalization ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-29
+
+**Overview:**
+
+Comprehensive SLA/deadline policy implementation with notifications:
+- Policy endpoint: GET /api/v1/booking-requests/policy
+- Computed fields: decision_deadline_at, sla_state in API responses
+- Overdue filter: overdue=true query parameter
+- Admin UI "Überfällig" tab with red badge
+- Notification banners (red=overdue, orange=expiring, blue=new)
+- Smoke tests for policy, overdue filter, and tab totals
+
+**Changes:**
+
+- **Backend Config** (`config.py`):
+  - `BOOKING_REQUEST_SLA_HOURS=24` - Hours before overdue
+  - `BOOKING_REQUEST_EXPIRING_SOON_DAYS=3` - Days before deadline for expiring soon
+
+- **Backend Schemas** (`booking_requests.py`):
+  - `BookingRequestPolicy` - Policy response schema
+  - `decision_deadline_at` - Computed deadline field
+  - `sla_state` - on_track|expiring_soon|overdue|closed
+
+- **Backend Routes** (`booking_requests.py`):
+  - GET /api/v1/booking-requests/policy - Policy endpoint
+  - `overdue=true` query parameter for list/export
+  - Computed SLA fields in list/detail responses
+
+- **Frontend** (`booking-requests/page.tsx`):
+  - "Überfällig" tab with red badge
+  - Notification banner area (priority: overdue > expiring > new)
+  - Server-side overdue filter in fetchRequests/fetchTabCounts
+
+- **Smoke** (`pms_booking_requests_approve_decline_smoke.sh`):
+  - TOTAL_TESTS=15
+  - Test 13: Policy endpoint validation
+  - Test 14: Overdue filter consistency (SKIP if none)
+  - Test 15: Tab totals diagnostic summary
+
+- **Docs** (`runbook/03-auth.md`):
+  - Added "SLA/Notifications/Filters (P2.21.4.8l)" section
+  - Policy endpoint, SLA states, filter params, troubleshooting
+
+**Verification Commands:**
+
+```bash
+EXPECT_COMMIT=<commit> ./backend/scripts/pms_verify_deploy.sh
+
+export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_booking_requests_approve_decline_smoke.sh
+# Expected: 15/15 passed (allow SKIPs per PROD-safe rules), RC=0
+```
+
+**Files Changed:**
+
+- backend/app/core/config.py (SLA settings)
+- backend/app/schemas/booking_requests.py (Policy + SLA fields)
+- backend/app/api/routes/booking_requests.py (policy endpoint, overdue filter, computed fields)
+- frontend/app/booking-requests/page.tsx (Überfällig tab, notification banners)
+- backend/scripts/pms_booking_requests_approve_decline_smoke.sh (Tests 13-15)
+- backend/docs/ops/runbook/03-auth.md (P2.21.4.8l section)
+- backend/docs/project_status.md (this entry)
+
+**Status:** ✅ IMPLEMENTED
+
+---
+
 ### DOCS Phase 2: Runbook Modularization ✅ IMPLEMENTED
 
 **Date Completed:** 2026-01-28
