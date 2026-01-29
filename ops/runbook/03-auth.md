@@ -9,6 +9,7 @@
 - [Token Validation (apikey Header)](#token-validation-apikey-header)
 - [Fresh JWT (Supabase)](#fresh-jwt-supabase)
 - [CORS Errors (Admin Console Blocked)](#cors-errors-admin-console-blocked)
+- [Booking Requests Approve/Decline](#booking-requests-approvedecline)
 
 ---
 
@@ -243,5 +244,64 @@ If env var is not set, these defaults will be used.
 - Always include admin and frontend origins in `ALLOWED_ORIGINS`
 - Test CORS with `curl -X OPTIONS` before deploying frontend changes
 - Document required origins in deployment checklist
+
+---
+
+## Booking Requests Approve/Decline
+
+### Symptom
+
+- Admin UI "Genehmigen" (Approve) or "Ablehnen" (Decline) buttons return error
+- HTTP 409 Conflict when trying to approve/decline
+- HTTP 422 Validation Error on decline action
+
+### Root Cause
+
+**409 Conflict** - Invalid state transition:
+- Request already approved/declined (idempotent - same response returned)
+- Trying to approve a cancelled request
+- Trying to decline an already confirmed request
+
+**422 Validation Error** - Missing required fields:
+- Decline requires `decline_reason` field (non-empty string)
+
+### Verify
+
+```bash
+# Check current status of booking request
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://api.fewo.kolibri-visions.de/api/v1/booking-requests/<uuid>"
+
+# Test approve (only for requested/under_review status)
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"internal_note": "Approved via ops"}' \
+  "https://api.fewo.kolibri-visions.de/api/v1/booking-requests/<uuid>/approve"
+
+# Test decline (requires decline_reason)
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"decline_reason": "Property unavailable", "internal_note": "Declined via ops"}' \
+  "https://api.fewo.kolibri-visions.de/api/v1/booking-requests/<uuid>/decline"
+```
+
+### Valid State Transitions
+
+| From Status | Approve → | Decline → |
+|-------------|-----------|-----------|
+| `requested` | `confirmed` | `declined` |
+| `under_review` | `confirmed` | `declined` |
+| `confirmed` | ❌ (already approved) | ❌ (cannot decline) |
+| `declined` | ❌ (cannot approve) | ❌ (already declined) |
+| `cancelled` | ❌ (cannot approve) | ❌ (cannot decline) |
+
+### Smoke Test
+
+```bash
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<manager_jwt>"
+./backend/scripts/pms_booking_requests_approve_decline_smoke.sh
+# Expected: Test Results: 6/6 passed
+```
 
 ---
