@@ -16,6 +16,7 @@
 - [Booking Requests: Workflow Consistency (P2.21.4.8k)](#booking-requests-workflow-consistency-p221-4-8k)
 - [Booking Requests: SLA/Notifications/Filters (P2.21.4.8l)](#booking-requests-slanotificationsfilters-p221-4-8l)
 - [Booking Requests: SLA/Overdue Ops-Grade Consistency (P2.21.4.8m)](#booking-requests-slaoverdue-ops-grade-consistency-p221-4-8m)
+- [Booking Requests: Detail/CSV Consistency + Review Queue UX (P2.21.4.8n)](#booking-requests-detailcsv-consistency--review-queue-ux-p221-4-8n)
 
 ---
 
@@ -1137,5 +1138,94 @@ export JWT_TOKEN="<manager_jwt>"
 - Check: Network tab for detail endpoint response
 - Verify: Response includes `decision_deadline_at` and `sla_state`
 - If missing: Check backend routes compute these fields
+
+---
+
+## Booking Requests: Detail/CSV Consistency + Review Queue UX (P2.21.4.8n)
+
+**When to use:** Understanding CSV export columns, detail endpoint fields, and operator workflow features.
+
+### Detail Endpoint Fields
+
+GET `/api/v1/booking-requests/{id}` returns all fields needed by Admin drawer:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `decision_deadline_at` | string (ISO) | check_in - 48h, when decision is needed |
+| `sla_state` | string | on_track, expiring_soon, overdue, closed |
+| `reviewed_at` | string | Always null (not tracked separately) |
+| `approved_at` | string | ISO timestamp when approved (from confirmed_at) |
+| `declined_at` | string | ISO timestamp when declined (from cancelled_at) |
+| `cancelled_at` | string | ISO timestamp when cancelled |
+
+**Note:** `reviewed_at` is always null because the P1 workflow doesn't track review timestamp separately.
+
+### CSV Export Columns
+
+GET `/api/v1/booking-requests/export` includes these columns:
+
+```
+id, booking_reference, property_name, guest_name, guest_email,
+check_in, check_out, num_adults, num_children,
+status, source, total_price, currency, created_at,
+decision_deadline_at, sla_state, approved_at, declined_at
+```
+
+**CSV Features:**
+- UTF-8 BOM for Excel compatibility
+- Respects active tab filter (status, expiring_soon, overdue)
+- Exports ALL matching rows (no pagination limit in export)
+- Filename includes tab hint: `buchungsanfragen_expiring_2026-01-29.csv`
+
+### Admin UI: Request-ID Copy
+
+The detail drawer includes a "ID kopieren" button that copies the booking request UUID to clipboard. Useful for:
+- Sharing specific requests with colleagues
+- Debugging API calls
+- Internal notes and references
+
+### Admin UI: Nächster Quick-Action
+
+The "Nächster" button in the drawer opens the next actionable request:
+
+**Priority order:**
+1. Requests with `sla_state=expiring_soon`
+2. Requests with `sla_state=overdue`
+3. Requests with `status=requested`
+4. Remaining `under_review` requests
+
+**Workflow tip:** Use "Nächster" to process the review queue efficiently:
+1. Open any request
+2. Review and decide (Approve/Decline)
+3. Click "Nächster" to move to next priority item
+4. Repeat until "Keine weiteren Anfragen" message appears
+
+### Smoke Test Coverage (Tests 18-19)
+
+```bash
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="<manager_jwt>"
+./backend/scripts/pms_booking_requests_approve_decline_smoke.sh
+
+# Test 18: Detail endpoint field completeness (decision_deadline_at, sla_state, timestamps)
+# Test 19: CSV export includes SLA columns
+```
+
+### Troubleshooting
+
+**CSV missing SLA columns**
+- Check: Export endpoint at `/api/v1/booking-requests/export`
+- Verify: Header row includes `decision_deadline_at`, `sla_state`, `approved_at`, `declined_at`
+- If missing: Backend may not be updated (check commit)
+
+**"Nächster" button not appearing**
+- Cause: No actionable requests in current list (all confirmed/cancelled)
+- Verify: Check other tabs for pending requests
+- Button only shows when `status=requested` or `status=under_review`
+
+**declined_at vs cancelled_at**
+- `declined_at`: Set when request is explicitly declined (status becomes cancelled)
+- `cancelled_at`: General cancellation timestamp (may be same value)
+- Both map to DB column `cancelled_at` but `declined_at` only populated if status indicates decline
 
 ---

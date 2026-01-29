@@ -737,6 +737,68 @@ export API_BASE_URL="https://api.fewo.kolibri-visions.de"
 
 ---
 
+### P2.21.4.8n: Booking Requests - Detail/CSV Consistency + Review Queue UX Hardening ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-29
+
+**Overview:**
+
+Detail/CSV consistency and review queue UX improvements:
+- Detail endpoint returns all workflow timestamps (declined_at, cancelled_at)
+- CSV export extended with SLA columns (decision_deadline_at, sla_state, approved_at, declined_at)
+- Admin UI drawer: "Request-ID kopieren" button
+- Admin UI drawer: "Nächster" quick-action (priority: expiring_soon > overdue > requested)
+- Smoke tests for detail field completeness and CSV columns
+
+**Changes:**
+
+- **Backend Schemas** (`booking_requests.py`):
+  - `declined_at` field added to BookingRequestDetail
+  - `cancelled_at` field added to BookingRequestDetail
+
+- **Backend Routes** (`booking_requests.py`):
+  - Detail endpoint computes declined_at/cancelled_at from DB
+  - CSV export includes: decision_deadline_at, sla_state, approved_at, declined_at
+  - CSV export computes SLA fields per row
+
+- **Frontend** (`booking-requests/page.tsx`):
+  - "ID kopieren" button in drawer header (copies UUID to clipboard)
+  - "Nächster" button in drawer actions (opens next priority request)
+  - getNextRequest() helper: prioritizes expiring_soon > overdue > requested
+
+- **Smoke** (`pms_booking_requests_approve_decline_smoke.sh`):
+  - TOTAL_TESTS=19
+  - Test 18: Detail endpoint field completeness check
+  - Test 19: CSV export includes SLA columns
+
+- **Docs** (`runbook/03-auth.md`):
+  - Added "Detail/CSV Consistency + Review Queue UX (P2.21.4.8n)" section
+  - Documented CSV columns, detail fields, operator workflow tips
+
+**Verification Commands:**
+
+```bash
+EXPECT_COMMIT=<commit> ./backend/scripts/pms_verify_deploy.sh
+
+export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+./backend/scripts/pms_booking_requests_approve_decline_smoke.sh
+# Expected: 19/19 passed (allow SKIPs per PROD-safe rules), RC=0
+```
+
+**Files Changed:**
+
+- backend/app/schemas/booking_requests.py (declined_at, cancelled_at fields)
+- backend/app/api/routes/booking_requests.py (detail timestamps, CSV SLA columns)
+- frontend/app/booking-requests/page.tsx (ID copy, Nächster action)
+- backend/scripts/pms_booking_requests_approve_decline_smoke.sh (Tests 18-19)
+- backend/docs/ops/runbook/03-auth.md (P2.21.4.8n section)
+- backend/docs/project_status.md (this entry)
+
+**Status:** ✅ IMPLEMENTED
+
+---
+
 ### DOCS Phase 2: Runbook Modularization ✅ IMPLEMENTED
 
 **Date Completed:** 2026-01-28
