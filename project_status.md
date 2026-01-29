@@ -365,10 +365,14 @@ Fixed smoke test failure where 409 `booking_overlap` was incorrectly treated as 
 **Smoke Expectation:** 6/6 passed, RC=0
 
 **Production Evidence:**
-- Deploy verify: rc=0
-- Backend commit: `988c50f47feee34d86059148a2bef0d30f2967df`, started_at: 2026-01-29T16:05:04.660719+00:00
-- Admin UI commit: `988c50f47feee34d86059148a2bef0d30f2967df`, started_at: 2026-01-29T16:07:04.096Z
-- Smoke: 6/6 passed, rc=0
+- Verified date: 2026-01-29
+- API domain: https://api.fewo.kolibri-visions.de
+- Admin domain: https://admin.fewo.kolibri-visions.de
+- source_commit: `988c50f47feee34d86059148a2bef0d30f2967df`
+- Backend started_at: 2026-01-29T16:05:04.660719+00:00
+- Admin started_at: 2026-01-29T16:07:04.096Z
+- Deploy verify: rc=0, commit match
+- Smoke: `pms_booking_requests_approve_decline_smoke.sh` rc=0 (6/6 passed)
 
 **Status:** ✅ VERIFIED
 

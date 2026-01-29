@@ -10,6 +10,7 @@
 - [Fresh JWT (Supabase)](#fresh-jwt-supabase)
 - [CORS Errors (Admin Console Blocked)](#cors-errors-admin-console-blocked)
 - [Booking Requests Approve/Decline](#booking-requests-approvedecline)
+- [Admin UI Tab Count Issues](#admin-ui-tab-count-issues)
 
 ---
 
@@ -658,5 +659,51 @@ status NOT IN ('cancelled', 'declined', 'no_show')
 ```
 
 This includes: confirmed, checked_in, checked_out, pending, inquiry, requested.
+
+---
+
+## Admin UI Tab Count Issues
+
+**When to use:** Badge counts on Buchungsanfragen tabs ("Alle", "Neu", "Läuft bald ab", "In Bearbeitung") show inconsistent or changing values.
+
+### Symptoms
+
+- Switching tabs causes other tab counts to change unexpectedly
+- "Alle" count equals the currently selected tab's count
+- Counts flicker or show stale values
+
+### Root Cause (Fixed in P2.21.4.8h)
+
+Prior to the fix, tab counts were computed from the `requests` state, which was already filtered by the active tab. When switching to "Neu" tab:
+1. API returns only `status=requested` items
+2. `requests` state contains only those items
+3. All tab counts were computed from this filtered set (incorrect)
+
+### Fix Applied
+
+Tab counts are now fetched separately via a dedicated API call without status filter:
+- `fetchTabCounts()` fetches all booking requests (up to 500) and computes counts
+- Counts are stored in `stableTabCounts` state, independent of active tab
+- Counts are refreshed on search change and after approve/decline actions
+- Race condition handling via `countsRequestId` prevents stale responses
+
+### Manual Verification
+
+1. Open Admin UI: https://admin.fewo.kolibri-visions.de/booking-requests
+2. Note the badge counts on each tab
+3. Click each tab in sequence (Alle → Neu → Läuft bald ab → In Bearbeitung)
+4. Verify: The OTHER tabs' counts remain stable (do not inherit active tab's total)
+5. Type a search query and verify counts update for all tabs consistently
+6. Approve or decline a request and verify all counts reflect the change
+
+### Related Files
+
+```
+frontend/app/booking-requests/page.tsx
+  - Lines 75-81: stableTabCounts state
+  - Lines 196-236: fetchTabCounts() function
+  - Lines 238-239: useEffect to fetch counts on mount/search change
+  - Lines 274: tabCounts = stableTabCounts assignment
+```
 
 ---
