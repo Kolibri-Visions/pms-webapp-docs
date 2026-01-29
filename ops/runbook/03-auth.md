@@ -304,4 +304,42 @@ export JWT_TOKEN="<manager_jwt>"
 # Expected: Test Results: 6/6 passed
 ```
 
+### Troubleshooting: Approve Returns 409 but GET Shows status=requested
+
+**Symptom**
+- Smoke test passes Test 2 (approve returns 409 "idempotent")
+- Test 3 fails: GET shows status=requested instead of confirmed
+
+**Root Cause**
+Inconsistent DB state: `confirmed_at` is set (booking was previously approved) but `status` is still "requested". This can happen from:
+- Partial transaction commit during previous approval
+- Manual DB fixes that updated confirmed_at but forgot status
+- Migration issues
+
+**Fix**
+The approve endpoint now includes healing logic (commit 2026-01-29):
+- Detects: `confirmed_at IS NOT NULL AND status != 'confirmed'`
+- Heals: Updates status to 'confirmed'
+- Returns: 200 with message "Booking request already approved (idempotent, state healed)"
+
+**Verify Healing**
+```bash
+# Check for inconsistent state in DB
+SELECT id, status, confirmed_at
+FROM bookings
+WHERE confirmed_at IS NOT NULL AND status != 'confirmed' AND deleted_at IS NULL;
+
+# Test healing via API
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}' \
+  "https://api.fewo.kolibri-visions.de/api/v1/booking-requests/<uuid>/approve"
+# Should return 200 with "state healed" in message
+
+# Verify healed state
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://api.fewo.kolibri-visions.de/api/v1/booking-requests/<uuid>"
+# Should show status=confirmed
+```
+
 ---
