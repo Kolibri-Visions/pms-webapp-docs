@@ -1223,6 +1223,81 @@ PROPERTY_ID=<uuid> ./backend/scripts/pms_public_booking_request_hardening_smoke.
 
 ---
 
+### P4.x: Security Hardening — Orphan Code Removal + CORS + Auth Rate Limiting ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-30
+
+**Overview:**
+
+Security hardening based on code analysis findings:
+1. Removed orphan `/ops/env-sanity` endpoint (was leaking config status)
+2. Restricted CORS `allow_headers` from `["*"]` to specific headers
+3. Added per-user rate limiting for authenticated endpoints
+
+**Changes:**
+
+1. **Orphan Code Removal:**
+   - Deleted `backend/app/routers/ops.py` (not mounted, but security risk)
+   - Endpoint was leaking whether `JWT_SECRET` is configured
+   - `/ops/version` remains public (safe metadata only)
+
+2. **CORS Headers Restriction:**
+   - Changed `allow_headers=["*"]` to specific list
+   - Allowed: `Authorization, Content-Type, Idempotency-Key, X-Agency-Id, X-Request-Id, X-Forwarded-Host, X-Forwarded-Proto`
+   - Configurable via `CORS_ALLOW_HEADERS` env var
+
+3. **Authenticated Rate Limiting:**
+   - New file: `backend/app/core/auth_rate_limit.py`
+   - New dependency: `get_current_user_rate_limited` in `backend/app/core/auth.py`
+   - Default: 100 requests per 60 seconds per user
+   - Fail-open design (allow if Redis unavailable)
+   - Exempt paths: `/health`, `/api/v1/ops/version`, `/docs`
+
+**Config Settings:**
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `AUTH_RATE_LIMIT_ENABLED` | `true` | Enable/disable |
+| `AUTH_RATE_LIMIT_MAX_REQUESTS` | `100` | Max requests per window |
+| `AUTH_RATE_LIMIT_WINDOW_SECONDS` | `60` | Window duration |
+| `CORS_ALLOW_HEADERS` | (specific list) | Comma-separated headers |
+
+**Smoke Tests:**
+
+1. `pms_ops_security_smoke.sh` - Ops endpoint security
+2. `pms_cors_headers_smoke.sh` - CORS headers verification
+3. `pms_auth_rate_limit_smoke.sh` - Auth rate limit headers
+
+**Verification Commands:**
+
+```bash
+# Ops security (no auth needed)
+./backend/scripts/pms_ops_security_smoke.sh
+
+# CORS headers
+./backend/scripts/pms_cors_headers_smoke.sh
+
+# Auth rate limit (requires JWT)
+TOKEN=<jwt> ./backend/scripts/pms_auth_rate_limit_smoke.sh
+```
+
+**Files Changed:**
+
+- `backend/app/routers/ops.py` (DELETED - orphan code)
+- `backend/app/core/auth_rate_limit.py` (NEW)
+- `backend/app/core/auth.py` (added `get_current_user_rate_limited`)
+- `backend/app/core/config.py` (auth rate limit + CORS settings)
+- `backend/app/main.py` (CORS headers from settings)
+- `backend/scripts/pms_ops_security_smoke.sh` (NEW)
+- `backend/scripts/pms_cors_headers_smoke.sh` (NEW)
+- `backend/scripts/pms_auth_rate_limit_smoke.sh` (NEW)
+- `backend/docs/ops/runbook/05-direct-booking-hardening.md` (P4.x section)
+- `backend/scripts/README.md` (P4.x smoke tests)
+
+**Status:** ✅ IMPLEMENTED (awaiting PROD verification)
+
+---
+
 ### DOCS Phase 2: Runbook Modularization ✅ VERIFIED
 
 **Date Completed:** 2026-01-28

@@ -357,6 +357,80 @@ API_BASE_URL="https://api.fewo.kolibri-visions.de" \
 
 ---
 
+## P4.x Security Hardening
+
+### Overview
+
+P4.x security hardening addresses critical security issues identified in code analysis:
+
+1. **Orphan Code Removal**: Removed `/ops/env-sanity` (unauthenticated endpoint leaking config status)
+2. **CORS Headers Restriction**: Changed `allow_headers=["*"]` to specific headers
+3. **Authenticated Rate Limiting**: Added per-user rate limiting for authenticated endpoints
+
+### CORS Headers Configuration
+
+**Before (insecure)**:
+```python
+allow_headers=["*"]
+```
+
+**After (hardened)**:
+```python
+allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Agency-Id", "X-Request-Id", "X-Forwarded-Host", "X-Forwarded-Proto"]
+```
+
+**Environment Variable**: `CORS_ALLOW_HEADERS` (comma-separated list)
+
+### Authenticated Rate Limiting
+
+Per-user rate limiting for authenticated endpoints:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `AUTH_RATE_LIMIT_ENABLED` | `true` | Enable/disable auth rate limiting |
+| `AUTH_RATE_LIMIT_MAX_REQUESTS` | `100` | Max requests per window |
+| `AUTH_RATE_LIMIT_WINDOW_SECONDS` | `60` | Window duration in seconds |
+
+**Exempt Paths** (no rate limiting):
+- `/health`
+- `/api/v1/ops/version`
+- `/docs`, `/redoc`, `/openapi.json`
+
+**Fail-Open Design**: If Redis is unavailable, requests are allowed (PROD-safe).
+
+### Smoke Tests
+
+#### 1. Ops Security Test
+```bash
+./backend/scripts/pms_ops_security_smoke.sh
+```
+
+Tests:
+- `/ops/env-sanity` returns 404 (removed)
+- `/ops/version` is public
+- `/ops/modules` requires auth
+- `/ops/audit-log` requires admin role
+
+#### 2. CORS Headers Test
+```bash
+./backend/scripts/pms_cors_headers_smoke.sh
+```
+
+Tests:
+- `Access-Control-Allow-Headers` is NOT wildcard
+- Required headers (Authorization, Content-Type, etc.) are allowed
+
+#### 3. Auth Rate Limit Test
+```bash
+TOKEN=<jwt> ./backend/scripts/pms_auth_rate_limit_smoke.sh
+```
+
+Tests:
+- X-RateLimit-* headers present on authenticated endpoints
+- Exempt paths don't have rate limit headers
+
+---
+
 ## See Also
 
 - [03-auth.md](./03-auth.md) - Authentication and authorization
