@@ -18,6 +18,7 @@
 - [Booking Requests: SLA/Overdue Ops-Grade Consistency (P2.21.4.8m)](#booking-requests-slaoverdue-ops-grade-consistency-p221-4-8m)
 - [Booking Requests: Detail/CSV Consistency + Review Queue UX (P2.21.4.8n)](#booking-requests-detailcsv-consistency--review-queue-ux-p221-4-8n)
 - [Booking Requests: Review Queue Zero + Bulk Actions (P2.21.4.8o)](#booking-requests-review-queue-zero--bulk-actions-p221-4-8o)
+- [Idempotency-Key Support (P3.1)](#idempotency-key-support-p31)
 
 ---
 
@@ -1328,5 +1329,104 @@ export JWT_TOKEN="<manager_jwt>"
 - Check: Network tab for API calls
 - Verify: No errors in console
 - May take a moment if many requests in queue
+
+---
+
+## Idempotency-Key Support (P3.1)
+
+### Overview
+
+The `Idempotency-Key` header prevents duplicate bookings when clients retry requests (network issues, timeouts, user double-clicks).
+
+**Supported Endpoints:**
+- `POST /api/v1/bookings` (authenticated booking creation)
+- `POST /api/v1/public/booking-requests` (public booking requests)
+
+### How It Works
+
+| Scenario | Result |
+|----------|--------|
+| Same key + same payload | Returns cached response (no duplicate created) |
+| Same key + different payload | Returns `409 idempotency_conflict` |
+| No key provided | Normal request (no idempotency protection) |
+
+Keys expire after **24 hours**.
+
+### Usage
+
+```bash
+# Create booking with idempotency key
+curl -X POST "$HOST/api/v1/bookings" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: unique-client-request-id-123" \
+  -d '{"property_id": "...", "check_in": "2026-02-01", ...}'
+
+# Retry same request (returns same booking, no duplicate)
+curl -X POST "$HOST/api/v1/bookings" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: unique-client-request-id-123" \
+  -d '{"property_id": "...", "check_in": "2026-02-01", ...}'
+```
+
+### Client Implementation Guidelines
+
+1. **Generate unique keys**: Use UUID or `{user_id}-{timestamp}-{random}` format
+2. **Scope keys appropriately**: Include action context (e.g., `booking-create-{uuid}`)
+3. **Persist keys locally**: Store until response confirmed to enable retries
+4. **Never reuse keys**: Each unique operation needs its own key
+
+### Common Failure Modes
+
+**409 idempotency_conflict**
+
+```json
+{
+  "detail": {
+    "error": "idempotency_conflict",
+    "message": "Idempotency key 'xyz' was already used with different request data...",
+    "idempotency_key": "xyz",
+    "entity_id": "existing-booking-uuid"
+  }
+}
+```
+
+**Resolution:**
+- Client sent different payload with same key
+- Generate new key for the new request
+- The `entity_id` field shows what was created with the original request
+
+**Audit Log Entry**
+
+Successful booking creates emit `booking_created` audit events with:
+- `idempotency_key`: The key used (if provided)
+- `entity_id`: The created booking UUID
+- `actor_user_id`: The authenticated user
+
+### Smoke Test
+
+```bash
+# Run idempotency smoke test
+export HOST="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
+./backend/scripts/pms_booking_idempotency_smoke.sh
+```
+
+### Database Cleanup
+
+Idempotency keys auto-expire after 24 hours. For manual cleanup:
+
+```sql
+-- View recent idempotency records
+SELECT idempotency_key, endpoint, created_at, expires_at
+FROM idempotency_keys
+WHERE agency_id = '<agency_uuid>'
+ORDER BY created_at DESC
+LIMIT 20;
+
+-- Delete expired records (normally automatic)
+DELETE FROM idempotency_keys WHERE expires_at < NOW();
+```
 
 ---

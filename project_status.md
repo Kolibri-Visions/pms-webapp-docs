@@ -891,6 +891,44 @@ export API_BASE_URL="https://api.fewo.kolibri-visions.de"
 
 ---
 
+### P3.1: Direct Booking Hardening — Idempotency-Key + Audit Log ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-30
+
+**Overview:**
+
+Added idempotency support and audit logging to authenticated `POST /api/v1/bookings` endpoint to prevent duplicate bookings on client retries.
+
+**Changes:**
+
+1. **Backend (`backend/app/api/routes/bookings.py`):**
+   - Accept optional `Idempotency-Key` header
+   - Same key + same payload → return cached response (no duplicate)
+   - Same key + different payload → return `409 idempotency_conflict`
+   - Emit `booking_created` audit event on successful create
+
+2. **Smoke Test (`backend/scripts/pms_booking_idempotency_smoke.sh`):**
+   - Test 1: Create booking with Idempotency-Key
+   - Test 2: Replay same request → same booking ID returned
+   - Test 3: Different payload → 409 conflict
+   - Test 4: Verify audit log event
+
+3. **Documentation (`backend/docs/ops/runbook/03-auth.md`):**
+   - Added "Idempotency-Key Support (P3.1)" section
+   - Usage examples, client guidelines, troubleshooting
+
+**Verification:**
+
+```bash
+export HOST="https://api.fewo.kolibri-visions.de"
+export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
+./backend/scripts/pms_booking_idempotency_smoke.sh
+```
+
+**Status:** ✅ IMPLEMENTED
+
+---
+
 ### DOCS Phase 2: Runbook Modularization ✅ IMPLEMENTED
 
 **Date Completed:** 2026-01-28
