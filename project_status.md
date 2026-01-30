@@ -930,14 +930,20 @@ Made smoke test reliable in PROD where inventory_ranges/real bookings can block 
 Fixed HTTP 500 during booking create caused by asyncpg UUID normalization bug:
 - Root cause: `UUID(asyncpg_uuid)` failed because asyncpg UUID objects lack `.replace()` method
 - Fix: Normalize to string first: `UUID(str(booking_id))`
-- Awaiting PROD verification
+
+**P3.1c Bugfix (2026-01-30): Idempotency Store Serialization**
+
+Fixed idempotency record storage failing on UUID objects in response body:
+- Root cause: Response body containing UUID objects failed JSONB serialization
+- Fix: Use `jsonable_encoder()` to normalize response body before database insert
+- Expected: Replay returns same booking ID; no serialization errors in logs
 
 **Verification:**
 
 ```bash
 export HOST="https://api.fewo.kolibri-visions.de"
 export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
-./backend/scripts/pms_booking_idempotency_smoke.sh  # rc=0 (PASS or PROD-safe SKIP, NO 500)
+./backend/scripts/pms_booking_idempotency_smoke.sh  # rc=0 (PASS or PROD-safe SKIP)
 ```
 
 **Status:** ✅ IMPLEMENTED

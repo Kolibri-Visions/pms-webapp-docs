@@ -1405,6 +1405,14 @@ Fix: Normalize UUIDs to strings before constructing `uuid.UUID`: `UUID(str(booki
 
 Expected behavior after fix: No 500 errors. Endpoint returns 201 on success, 409 on conflict, or appropriate 4xx on validation errors.
 
+**Idempotency Store Serialization (Fixed in P3.1c)**
+
+Root cause: Response body containing UUID objects failed to serialize to JSONB when storing idempotency record. Error: `Object of type UUID is not JSON serializable`.
+
+Fix: Use `jsonable_encoder()` to normalize response body before database insert. This converts UUIDs, datetimes, and other non-JSON types to strings.
+
+Expected behavior after fix: Idempotency records stored successfully; replay returns same booking ID.
+
 **Audit Log Entry**
 
 Successful booking creates emit `booking_created` audit events with:
