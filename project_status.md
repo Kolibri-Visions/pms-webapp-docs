@@ -891,7 +891,7 @@ export API_BASE_URL="https://api.fewo.kolibri-visions.de"
 
 ---
 
-### P3.1: Direct Booking Hardening — Idempotency-Key + Audit Log ✅ IMPLEMENTED
+### P3.1: Direct Booking Hardening — Idempotency-Key + Audit Log ✅ VERIFIED
 
 **Date Completed:** 2026-01-30
 
@@ -946,7 +946,22 @@ export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
 ./backend/scripts/pms_booking_idempotency_smoke.sh  # rc=0 (PASS or PROD-safe SKIP)
 ```
 
-**Status:** ✅ IMPLEMENTED
+**Production Evidence (2026-01-30):**
+
+- Backend `/api/v1/ops/version`:
+  - source_commit: `697f8b5aa300025467c58a572ebe99bfa63e1a26`
+  - started_at: 2026-01-30T11:40:05.656153+00:00
+- Admin `/api/ops/version`:
+  - source_commit: `697f8b5aa300025467c58a572ebe99bfa63e1a26`
+  - started_at: 2026-01-30T11:30:50.769Z
+- Smoke: `pms_booking_idempotency_smoke.sh` rc=0
+  - Created booking: `18f49b1b-51ef-4905-b34c-8d3849868e84`
+  - Date window: 2026-05-03 to 2026-05-06
+  - Replay same idempotency key → same booking ID returned ✅
+  - Different payload → 409 idempotency_conflict ✅
+  - Audit log contains booking_created ✅
+
+**Status:** ✅ VERIFIED
 
 ---
 
