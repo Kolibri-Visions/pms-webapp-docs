@@ -2636,17 +2636,22 @@ open https://admin.fewo.kolibri-visions.de/login
 
 ```
 
-**Verification Commands (for VERIFIED status):**
+**Verification Commands (HOST-SERVER-TERMINAL):**
 
 ```bash
+# Source environment
+cd /data/repos/pms-webapp
+source /root/.pms_env
+
 # 1. Deploy verification (commit match)
-EXPECT_COMMIT=<commit_sha>
+EXPECT_COMMIT=<current_commit_sha>
 ./backend/scripts/pms_verify_deploy.sh
 
-# 2. Admin UI alive check
+# 2. Admin UI static smoke (PROD-safe, no auth required)
 ./backend/scripts/pms_admin_ui_static_smoke.sh
+# Expected: PASS (rc=0), validates /api/ops/version + /login accessible
 
-# 3. Visual browser verification (manual):
+# 3. Visual browser verification (manual, for full VERIFIED):
 #    - Navigate to https://admin.fewo.kolibri-visions.de/login
 #    - Verify: soft cream background (#FAF8F3), icon-only sidebar, sage green accents
 #    - Check: Plus Jakarta Sans headings, rounded cards/buttons, pill-shaped badges
