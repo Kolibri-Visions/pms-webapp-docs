@@ -965,7 +965,7 @@ export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
 
 ---
 
-### P3.2: Direct Booking Hardening — CORS/Host Allowlist Verification ✅ IMPLEMENTED
+### P3.2: Direct Booking Hardening — CORS/Host Allowlist Verification ✅ VERIFIED
 
 **Date Completed:** 2026-01-30
 
@@ -1025,9 +1025,29 @@ PUBLIC_ORIGIN="https://fewo.kolibri-visions.de" \
 - `backend/app/core/config.py` - CORS/Host settings
 - `backend/app/main.py` - CORS middleware
 
-**Status:** ✅ IMPLEMENTED
+**Status:** ✅ VERIFIED
 
-**Note:** Mark as VERIFIED after PROD evidence (commit match + smoke rc=0).
+**Production Evidence (2026-01-30):**
+
+- Verification Date: 2026-01-30
+- Commit: f18ee57fe2263f8ba4282aa7fba35957c4cb5761
+- pms_verify_deploy.sh (EXPECT_COMMIT=f18ee57):
+  - Backend source_commit: f18ee57fe2263f8ba4282aa7fba35957c4cb5761 ✓
+  - Backend started_at: 2026-01-30T16:22:05.081752+00:00
+  - Admin source_commit: f18ee57fe2263f8ba4282aa7fba35957c4cb5761 ✓
+  - Admin started_at: 2026-01-30T16:19:49.010Z
+  - deploy_rc=0
+- Smoke: `./backend/scripts/pms_direct_booking_cors_host_smoke.sh`
+  - RESULT: PASS, smoke_rc=0
+  - PASS=4, FAIL=0, SKIP=1
+  - Note: Invalid Host test returned 503 (SKIP - proxy behavior varies)
+- CORS Headers Verified:
+  - OPTIONS /api/v1/public/ping: HTTP 200
+    - access-control-allow-origin: https://fewo.kolibri-visions.de
+    - access-control-allow-credentials: true
+  - GET /api/v1/public/ping: HTTP 200
+    - access-control-allow-origin: https://fewo.kolibri-visions.de
+    - access-control-allow-credentials: true
 
 ---
 
