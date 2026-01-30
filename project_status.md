@@ -1135,7 +1135,7 @@ PROPERTY_ID=<uuid> ./backend/scripts/pms_public_booking_request_idempotency_smok
 
 ---
 
-### P3.4: Direct Booking Hardening — Public Booking Request Smoke Hardening ✅ IMPLEMENTED
+### P3.4: Direct Booking Hardening — Public Booking Request Smoke Hardening ✅ VERIFIED
 
 **Date Completed:** 2026-01-30
 
@@ -1194,7 +1194,32 @@ PROPERTY_ID=<uuid> ./backend/scripts/pms_public_booking_request_hardening_smoke.
 - `backend/app/api/routes/public_booking.py` - Booking request endpoint
 - `backend/app/api/routes/public_site.py` - Public properties endpoint
 
-**Status:** ✅ IMPLEMENTED (pending PROD verification)
+**Status:** ✅ VERIFIED
+
+**Production Evidence (2026-01-30):**
+
+- Commit: c04d8e61bceb0d611c4342c2d48b5b3c557d70f3
+- Backend /api/v1/ops/version:
+  - service: pms-backend
+  - source_commit: c04d8e61bceb0d611c4342c2d48b5b3c557d70f3
+  - started_at: 2026-01-30T21:40:05.651279+00:00
+- pms_verify_deploy.sh:
+  - STRICT commit verification: PASS (prefix match)
+  - deploy_rc=0
+- Smoke: `./backend/scripts/pms_public_booking_request_hardening_smoke.sh`
+  - RESULT: PASS, smoke_rc=0
+  - PASS=3, FAIL=0, SKIP=1
+  - Note: SKIP on Test C "System allows multiple pending requests (valid behavior)"
+- Routing Control (avoids Next.js misroute):
+  - SEND_HOST_HEADER=false (default)
+  - SEND_X_FORWARDED_HOST=true (default)
+  - PUBLIC_ORIGIN=https://fewo.kolibri-visions.de
+  - PUBLIC_HOST=fewo.kolibri-visions.de
+- Auto-selected property: ab90a0b2-8a8a-4e1d-a3c1-71c36c33eac9
+- Date window: 2026-03-01 to 2026-03-03
+- Booking requests created:
+  - 111e8dd4-ca37-4b05-bf0e-7b736b041d4b
+  - 9296791a-8830-4518-abc0-d4f001ba0248
 
 ---
 
