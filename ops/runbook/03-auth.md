@@ -1407,11 +1407,51 @@ Successful booking creates emit `booking_created` audit events with:
 ### Smoke Test
 
 ```bash
-# Run idempotency smoke test
+# Run idempotency smoke test (PROD-safe)
 export HOST="https://api.fewo.kolibri-visions.de"
 export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
 ./backend/scripts/pms_booking_idempotency_smoke.sh
 ```
+
+### Smoke Test Environment Variables (P3.1a)
+
+The smoke script searches for free date windows to handle PROD environments with heavy booking load.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BASE_DAYS` | 30 | Start searching this many days in the future |
+| `NIGHTS` | 3 | Booking duration in nights |
+| `SEARCH_STEP_DAYS` | 7 | Days to advance on each retry |
+| `MAX_ATTEMPTS` | 30 | Maximum windows to try before giving up |
+| `REQUIRE_CREATE_SUCCESS` | false | If true, fail on no free window; else PROD-safe skip |
+
+**Date Window Search Algorithm:**
+```
+For attempt i in [0..MAX_ATTEMPTS-1]:
+  check_in  = today + (BASE_DAYS + i*SEARCH_STEP_DAYS) days
+  check_out = check_in + NIGHTS days
+
+  On 409 double_booking/inventory_overlap → try next window
+  On 201 success → proceed with idempotency tests
+```
+
+**PROD-safe SKIP Behavior (default):**
+
+When `REQUIRE_CREATE_SUCCESS=false` (default) and no free window is found after MAX_ATTEMPTS:
+- Script exits with **rc=0** (success)
+- Logs `[SKIP] PROD-SAFE SKIP` message
+- This is expected in PROD with heavy booking load or inventory_ranges blocking windows
+
+**Strict Mode:**
+
+```bash
+# Require successful booking creation (fail if no free window)
+REQUIRE_CREATE_SUCCESS=true ./backend/scripts/pms_booking_idempotency_smoke.sh
+```
+
+When `REQUIRE_CREATE_SUCCESS=true` and no free window is found:
+- Script exits with **rc=1** (failure)
+- Logs `[FAIL] No free window found` error
 
 ### Database Cleanup
 

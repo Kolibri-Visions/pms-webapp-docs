@@ -917,12 +917,20 @@ Added idempotency support and audit logging to authenticated `POST /api/v1/booki
    - Added "Idempotency-Key Support (P3.1)" section
    - Usage examples, client guidelines, troubleshooting
 
+**P3.1a Update (2026-01-30): PROD-Robust Smoke Test**
+
+Made smoke test reliable in PROD where inventory_ranges/real bookings can block many windows:
+- Searches for free date windows (retries on 409 double_booking/inventory_overlap)
+- New env controls: `BASE_DAYS`, `NIGHTS`, `SEARCH_STEP_DAYS`, `MAX_ATTEMPTS`, `REQUIRE_CREATE_SUCCESS`
+- PROD-safe skip: exits rc=0 with `[SKIP]` if no free window found (default)
+- Strict mode: `REQUIRE_CREATE_SUCCESS=true` fails on no free window
+
 **Verification:**
 
 ```bash
 export HOST="https://api.fewo.kolibri-visions.de"
 export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
-./backend/scripts/pms_booking_idempotency_smoke.sh
+./backend/scripts/pms_booking_idempotency_smoke.sh  # rc=0 (PASS or PROD-safe SKIP)
 ```
 
 **Status:** ✅ IMPLEMENTED
