@@ -812,7 +812,7 @@ export API_BASE_URL="https://api.fewo.kolibri-visions.de"
 
 ---
 
-### P2.21.4.8o: Booking Requests - Review Queue Zero + Bulk Actions ✅ IMPLEMENTED
+### P2.21.4.8o: Booking Requests - Review Queue Zero + Bulk Actions ✅ VERIFIED
 
 **Date Completed:** 2026-01-29
 
@@ -874,7 +874,20 @@ export API_BASE_URL="https://api.fewo.kolibri-visions.de"
 - backend/docs/ops/runbook/03-auth.md (P2.21.4.8o section)
 - backend/docs/project_status.md (this entry)
 
-**Status:** ✅ IMPLEMENTED
+**Production Evidence:**
+
+- Verified date: 2026-01-30
+- API domain: https://api.fewo.kolibri-visions.de
+- Admin domain: https://admin.fewo.kolibri-visions.de
+- source_commit: `9614950bf116be13cec45e2327fef198a3e176f3`
+- Backend started_at: 2026-01-29T22:01:13.174058+00:00
+- Admin started_at: 2026-01-29T21:59:11.540Z
+- Deploy verify: `pms_verify_deploy.sh` STRICT commit match, all checks passed
+- Smoke: `pms_booking_requests_approve_decline_smoke.sh` rc=0 (21/21 passed)
+  - Note: PROD-safe behavior allowed approve SKIPs when all candidates had real `409 booking_overlap` conflicts (validations OK)
+  - Additional verified (P2.21.4.8o): Bulk review endpoint PASS (succeeded=2, failed=0), Bulk decline endpoint PASS (succeeded=2, failed=0)
+
+**Status:** ✅ VERIFIED
 
 ---
 
