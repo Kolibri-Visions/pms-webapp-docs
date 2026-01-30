@@ -2462,7 +2462,7 @@ open https://admin.fewo.kolibri-visions.de/login
 
 ---
 
-### Admin UI — Backoffice Visual Style ✅
+### Admin UI — Backoffice Visual Style ✅ IMPLEMENTED
 
 **Date Completed:** 2026-01-07
 
@@ -2634,6 +2634,22 @@ open https://admin.fewo.kolibri-visions.de/login
 
 - /connections
 
+```
+
+**Verification Commands (for VERIFIED status):**
+
+```bash
+# 1. Deploy verification (commit match)
+EXPECT_COMMIT=<commit_sha>
+./backend/scripts/pms_verify_deploy.sh
+
+# 2. Admin UI alive check
+./backend/scripts/pms_admin_ui_static_smoke.sh
+
+# 3. Visual browser verification (manual):
+#    - Navigate to https://admin.fewo.kolibri-visions.de/login
+#    - Verify: soft cream background (#FAF8F3), icon-only sidebar, sage green accents
+#    - Check: Plus Jakarta Sans headings, rounded cards/buttons, pill-shaped badges
 ```
 
 **Status**: ✅ IMPLEMENTED
