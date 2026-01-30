@@ -2462,7 +2462,7 @@ open https://admin.fewo.kolibri-visions.de/login
 
 ---
 
-### Admin UI — Backoffice Visual Style ✅ IMPLEMENTED
+### Admin UI — Backoffice Visual Style ✅ VERIFIED
 
 **Date Completed:** 2026-01-07
 
@@ -2657,7 +2657,27 @@ EXPECT_COMMIT=<current_commit_sha>
 #    - Check: Plus Jakarta Sans headings, rounded cards/buttons, pill-shaped badges
 ```
 
-**Status**: ✅ IMPLEMENTED
+**Status**: ✅ VERIFIED
+
+**PROD Evidence (2026-01-30):**
+
+- Verification Date: 2026-01-30
+- Commit: aaedf0e195fd224e5ae4556fb0ff5a5c63176529
+- Admin URL: https://admin.fewo.kolibri-visions.de
+- Admin static smoke: `./backend/scripts/pms_admin_ui_static_smoke.sh` → PASS (rc=0)
+  - EXPECTED_COMMIT=aaedf0e → PASS (rc=0)
+  - /api/ops/version: HTTP 200, service=pms-admin
+  - /login: HTTP 200 (accessible)
+  - /favicon.ico: HTTP 404 (SKIP, non-critical)
+- Admin /api/ops/version raw:
+  - service: pms-admin
+  - source_commit: aaedf0e195fd224e5ae4556fb0ff5a5c63176529
+  - started_at: 2026-01-30T12:48:16.050Z
+  - environment: production
+- pms_verify_deploy.sh (STRICT MODE):
+  - Backend source_commit: aaedf0e195fd224e5ae4556fb0ff5a5c63176529 ✓
+  - Admin source_commit: aaedf0e195fd224e5ae4556fb0ff5a5c63176529 ✓
+  - Commit verification: exact match
 
 **Runbook Reference:**
 
