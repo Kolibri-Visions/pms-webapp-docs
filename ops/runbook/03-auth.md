@@ -1397,6 +1397,14 @@ curl -X POST "$HOST/api/v1/bookings" \
 - Generate new key for the new request
 - The `entity_id` field shows what was created with the original request
 
+**500 Internal Server Error (Fixed in P3.1b)**
+
+Root cause: asyncpg returns UUID objects (not strings) from database queries. Code attempted `UUID(asyncpg_uuid)` which internally calls `.replace()` on the input, but asyncpg UUID objects lack this method.
+
+Fix: Normalize UUIDs to strings before constructing `uuid.UUID`: `UUID(str(booking_id))`.
+
+Expected behavior after fix: No 500 errors. Endpoint returns 201 on success, 409 on conflict, or appropriate 4xx on validation errors.
+
 **Audit Log Entry**
 
 Successful booking creates emit `booking_created` audit events with:

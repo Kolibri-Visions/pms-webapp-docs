@@ -925,12 +925,19 @@ Made smoke test reliable in PROD where inventory_ranges/real bookings can block 
 - PROD-safe skip: exits rc=0 with `[SKIP]` if no free window found (default)
 - Strict mode: `REQUIRE_CREATE_SUCCESS=true` fails on no free window
 
+**P3.1b Bugfix (2026-01-30): UUID Replace Crash**
+
+Fixed HTTP 500 during booking create caused by asyncpg UUID normalization bug:
+- Root cause: `UUID(asyncpg_uuid)` failed because asyncpg UUID objects lack `.replace()` method
+- Fix: Normalize to string first: `UUID(str(booking_id))`
+- Awaiting PROD verification
+
 **Verification:**
 
 ```bash
 export HOST="https://api.fewo.kolibri-visions.de"
 export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
-./backend/scripts/pms_booking_idempotency_smoke.sh  # rc=0 (PASS or PROD-safe SKIP)
+./backend/scripts/pms_booking_idempotency_smoke.sh  # rc=0 (PASS or PROD-safe SKIP, NO 500)
 ```
 
 **Status:** ✅ IMPLEMENTED
