@@ -965,6 +965,72 @@ export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
 
 ---
 
+### P3.2: Direct Booking Hardening — CORS/Host Allowlist Verification ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-30
+
+**Overview:**
+
+Added PROD-safe smoke test and runbook documentation for verifying CORS preflight behavior and Host allowlist enforcement on public direct booking endpoints. This complements the existing P3b implementation with explicit verification tooling.
+
+**What Was Added:**
+
+1. **Smoke Script**: `backend/scripts/pms_direct_booking_cors_host_smoke.sh`
+   - PROD-safe (no `set -euo pipefail`)
+   - Tests CORS preflight with valid/invalid origins
+   - Tests Host allowlist enforcement
+   - Uses env vars: `API_BASE_URL`, `PUBLIC_ORIGIN`, `PUBLIC_HOST`
+
+2. **Runbook Chapter**: `backend/docs/ops/runbook/05-direct-booking-hardening.md`
+   - CORS configuration and expected behavior
+   - Host allowlist enforcement details
+   - Tenant domain resolution
+   - Troubleshooting guide
+
+3. **Documentation Updates**:
+   - `backend/docs/ops/runbook.md` - Added chapter to index
+   - `backend/scripts/README.md` - Added smoke script documentation
+
+**Tests Performed by Smoke Script:**
+
+| Test | Description | Expected |
+|------|-------------|----------|
+| 1. CORS Preflight | OPTIONS with valid Origin | 200/204, CORS header matches |
+| 2. GET with Origin | GET public endpoint | 200, CORS header present |
+| 3. Invalid Origin | OPTIONS with evil.example | CORS header absent/not echoed |
+| 4. Invalid Host | GET with unknown Host | 403 or skip (proxy behavior) |
+
+**Verification Commands (HOST-SERVER-TERMINAL):**
+
+```bash
+cd /data/repos/pms-webapp
+git pull origin main
+
+# 1. Deploy verification
+EXPECT_COMMIT=<current_sha> ./backend/scripts/pms_verify_deploy.sh
+
+# 2. CORS/Host smoke test
+./backend/scripts/pms_direct_booking_cors_host_smoke.sh
+# Expected: RESULT: PASS, rc=0
+
+# 3. With explicit config
+API_BASE_URL="https://api.fewo.kolibri-visions.de" \
+PUBLIC_ORIGIN="https://fewo.kolibri-visions.de" \
+./backend/scripts/pms_direct_booking_cors_host_smoke.sh
+```
+
+**Related Files:**
+
+- `backend/app/core/public_host_allowlist.py` - Host enforcement
+- `backend/app/core/config.py` - CORS/Host settings
+- `backend/app/main.py` - CORS middleware
+
+**Status:** ✅ IMPLEMENTED
+
+**Note:** Mark as VERIFIED after PROD evidence (commit match + smoke rc=0).
+
+---
+
 ### DOCS Phase 2: Runbook Modularization ✅ VERIFIED
 
 **Date Completed:** 2026-01-28

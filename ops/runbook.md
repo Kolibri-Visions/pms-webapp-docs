@@ -22,6 +22,7 @@
 | [02-database.md](./runbook/02-database.md) | Database connectivity, migrations |
 | [03-auth.md](./runbook/03-auth.md) | Authentication, authorization, JWT |
 | [04-channel-manager.md](./runbook/04-channel-manager.md) | Channel integrations, sync ops |
+| [05-direct-booking-hardening.md](./runbook/05-direct-booking-hardening.md) | CORS, Host allowlist, tenant resolution |
 
 ### Golden Paths (Most Common Operations)
 
