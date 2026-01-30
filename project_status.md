@@ -1223,7 +1223,7 @@ PROPERTY_ID=<uuid> ./backend/scripts/pms_public_booking_request_hardening_smoke.
 
 ---
 
-### P4.x: Security Hardening — Orphan Code Removal + CORS + Auth Rate Limiting ✅ IMPLEMENTED
+### P4.x: Security Hardening — Orphan Code Removal + CORS + Auth Rate Limiting ✅ VERIFIED
 
 **Date Completed:** 2026-01-30
 
@@ -1294,7 +1294,34 @@ TOKEN=<jwt> ./backend/scripts/pms_auth_rate_limit_smoke.sh
 - `backend/docs/ops/runbook/05-direct-booking-hardening.md` (P4.x section)
 - `backend/scripts/README.md` (P4.x smoke tests)
 
-**Status:** ✅ IMPLEMENTED (awaiting PROD verification)
+**Status:** ✅ VERIFIED
+
+**Production Evidence (2026-01-30):**
+
+- Commit: `83aed85a0d87040816c2503463323877da3ee439`
+- Backend /api/v1/ops/version:
+  - service: pms-backend
+  - source_commit: 83aed85a0d87040816c2503463323877da3ee439
+  - started_at: 2026-01-30T22:30:04.663352+00:00
+- Deploy verify: `EXPECT_COMMIT=83aed85 pms_verify_deploy.sh` → deploy_rc=0
+
+**Smoke Test Results:**
+
+1. `pms_ops_security_smoke.sh` → rc=0 (PASS=5, FAIL=0, SKIP=0)
+   - /ops/env-sanity returns 404 (removed) ✓
+   - /ops/version public ✓
+   - /ops/modules requires auth (403) ✓
+   - /ops/audit-log requires auth (403) ✓
+   - /ops/current-commit returns 404 ✓
+
+2. `pms_cors_headers_smoke.sh` → rc=0 (PASS=7, FAIL=0, SKIP=0)
+   - Allow-Headers is NOT wildcard ✓
+   - Includes: Accept, Accept-Language, Authorization, Content-Language, Content-Type, Idempotency-Key, X-Agency-Id, X-Forwarded-Host, X-Forwarded-Proto, X-Request-Id ✓
+
+3. `pms_auth_rate_limit_smoke.sh` → rc=0 (PASS=2, FAIL=0, SKIP=1)
+   - SKIP: X-RateLimit headers not present (AUTH_RATE_LIMIT_ENABLED=false or Redis unavailable in PROD)
+   - /ops/version exempt ✓
+   - /health exempt ✓
 
 ---
 
