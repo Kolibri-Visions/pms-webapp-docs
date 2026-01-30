@@ -1051,6 +1051,67 @@ PUBLIC_ORIGIN="https://fewo.kolibri-visions.de" \
 
 ---
 
+### P3.3: Direct Booking Hardening — Public Booking Request Idempotency ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-30
+
+**Overview:**
+
+Added PROD-safe smoke test and runbook documentation for verifying Idempotency-Key header support on `POST /api/v1/public/booking-requests`. The idempotency implementation was already present in the codebase; this task adds verification tooling and documentation.
+
+**Implementation (Already Exists):**
+
+File: `backend/app/api/routes/public_booking.py`
+- Line 167: `idempotency_key: str | None = Header(None, alias="Idempotency-Key")`
+- Lines 236-256: Check idempotency before processing (return cached response if exists)
+- Lines 413-428: Store idempotency after successful creation
+
+**What Was Added:**
+
+1. **Smoke Script**: `backend/scripts/pms_public_booking_request_idempotency_smoke.sh`
+   - PROD-safe (no `set -euo pipefail`)
+   - Tests: create with key, replay same key (same ID), different payload (409 conflict)
+   - Env vars: `API_BASE_URL`, `PUBLIC_ORIGIN`, `PUBLIC_HOST`, `PROPERTY_ID`
+   - Graceful skip on double_booking conflict (PROD-safe)
+
+2. **Runbook Section**: `backend/docs/ops/runbook/05-direct-booking-hardening.md`
+   - Added "Public Booking Request Idempotency-Key" section
+   - Documents implementation, error responses, smoke test usage
+
+3. **Documentation Updates**:
+   - `backend/scripts/README.md` - Added smoke script documentation
+
+**Tests Performed by Smoke Script:**
+
+| Test | Description | Expected |
+|------|-------------|----------|
+| 1. Create | POST with Idempotency-Key | HTTP 201, booking_request_id |
+| 2. Replay | Same key + same payload | HTTP 200/201, same ID |
+| 3. Conflict | Same key + different payload | HTTP 409 idempotency_conflict |
+
+**Verification Commands (HOST-SERVER-TERMINAL):**
+
+```bash
+cd /data/repos/pms-webapp
+git pull origin main
+
+# 1. Deploy verification
+EXPECT_COMMIT=<current_sha> ./backend/scripts/pms_verify_deploy.sh
+
+# 2. Idempotency smoke test (requires valid PROPERTY_ID)
+PROPERTY_ID=<uuid> ./backend/scripts/pms_public_booking_request_idempotency_smoke.sh
+# Expected: RESULT: PASS, rc=0
+```
+
+**Related Files:**
+
+- `backend/app/api/routes/public_booking.py` - Idempotency implementation
+- `backend/app/services/idempotency.py` - Idempotency store service
+
+**Status:** ✅ IMPLEMENTED (pending PROD verification)
+
+---
+
 ### DOCS Phase 2: Runbook Modularization ✅ VERIFIED
 
 **Date Completed:** 2026-01-28

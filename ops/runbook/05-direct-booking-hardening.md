@@ -226,6 +226,83 @@ SELECT * FROM agency_domains WHERE agency_id = '<agency-uuid>';
 | `scripts/pms_direct_booking_cors_host_smoke.sh` | PROD-safe smoke test |
 | `scripts/pms_p3b_domain_host_cors_smoke.sh` | Extended P3b smoke test |
 
+## Public Booking Request Idempotency-Key
+
+### Overview
+
+The `POST /api/v1/public/booking-requests` endpoint supports an optional `Idempotency-Key` header for safe request retries. This prevents duplicate booking requests when network issues cause clients to retry submissions.
+
+### How It Works
+
+1. Client includes `Idempotency-Key: <unique-string>` header in POST request
+2. Backend checks if key exists in idempotency store
+3. **Key exists + same payload**: Return cached response (HTTP 200/201)
+4. **Key exists + different payload**: Return HTTP 409 `idempotency_conflict`
+5. **Key not found**: Process request, store result with key
+
+### Implementation
+
+File: `backend/app/api/routes/public_booking.py`
+
+- Line 167: `idempotency_key: str | None = Header(None, alias="Idempotency-Key")`
+- Lines 236-256: Check idempotency before processing
+- Lines 413-428: Store idempotency after successful creation
+
+### Error Responses
+
+**409 Conflict (idempotency_conflict)**:
+```json
+{
+  "error": "idempotency_conflict",
+  "message": "Idempotency key already used with different payload"
+}
+```
+
+**409 Conflict (double_booking)**:
+```json
+{
+  "error": "date_conflict",
+  "conflict_type": "double_booking",
+  "message": "Requested dates overlap with existing booking"
+}
+```
+
+### Smoke Test
+
+Script: `backend/scripts/pms_public_booking_request_idempotency_smoke.sh`
+
+```bash
+# Basic usage (requires PROPERTY_ID)
+PROPERTY_ID=<uuid> ./backend/scripts/pms_public_booking_request_idempotency_smoke.sh
+
+# With custom configuration
+API_BASE_URL="https://api.fewo.kolibri-visions.de" \
+PUBLIC_ORIGIN="https://fewo.kolibri-visions.de" \
+PROPERTY_ID=<uuid> \
+./backend/scripts/pms_public_booking_request_idempotency_smoke.sh
+```
+
+**What It Tests**:
+
+| Test | Description | Expected |
+|------|-------------|----------|
+| 1. Create | POST with Idempotency-Key | HTTP 201, booking_request_id |
+| 2. Replay | Same key + same payload | HTTP 200/201, same ID |
+| 3. Conflict | Same key + different payload | HTTP 409 idempotency_conflict |
+
+### Troubleshooting
+
+**Idempotency key not working**:
+- Verify header name: `Idempotency-Key` (case-insensitive)
+- Check key format: any non-empty string
+- Idempotency window: typically 24-48 hours
+
+**409 idempotency_conflict unexpectedly**:
+- Client retried with modified payload
+- Use unique idempotency key for each distinct request
+
+---
+
 ## See Also
 
 - [03-auth.md](./03-auth.md) - Authentication and authorization
