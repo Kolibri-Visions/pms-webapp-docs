@@ -292,6 +292,12 @@ PROPERTY_ID=<uuid> \
 
 ### Troubleshooting
 
+**Smoke script returns "PROXY MISROUTE DETECTED" or Next.js HTML**:
+- The Host header override caused the proxy to route to Next.js instead of FastAPI
+- Fix: Ensure `SEND_HOST_HEADER=false` (default) in smoke script
+- The script uses `X-Forwarded-Host` instead for tenant resolution
+- Direct API calls should target `api.fewo.kolibri-visions.de`, not the public domain
+
 **Idempotency key not working**:
 - Verify header name: `Idempotency-Key` (case-insensitive)
 - Check key format: any non-empty string
