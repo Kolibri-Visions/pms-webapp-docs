@@ -1051,7 +1051,7 @@ PUBLIC_ORIGIN="https://fewo.kolibri-visions.de" \
 
 ---
 
-### P3.3: Direct Booking Hardening — Public Booking Request Idempotency ✅ IMPLEMENTED
+### P3.3: Direct Booking Hardening — Public Booking Request Idempotency ✅ VERIFIED
 
 **Date Completed:** 2026-01-30
 
@@ -1108,7 +1108,30 @@ PROPERTY_ID=<uuid> ./backend/scripts/pms_public_booking_request_idempotency_smok
 - `backend/app/api/routes/public_booking.py` - Idempotency implementation
 - `backend/app/services/idempotency.py` - Idempotency store service
 
-**Status:** ✅ IMPLEMENTED (pending PROD verification)
+**Status:** ✅ VERIFIED
+
+**Production Evidence (2026-01-30):**
+
+- Commit: ef66cae832dd8a16b3e227fae02ca3bc6c2a8514
+- Backend /api/v1/ops/version:
+  - source_commit: ef66cae832dd8a16b3e227fae02ca3bc6c2a8514
+  - started_at: 2026-01-30T18:36:06.429850+00:00
+- pms_verify_deploy.sh:
+  - Auto-detected EXPECT_COMMIT from git HEAD: ef66cae
+  - Commit verification: exact match ✓
+  - deploy_rc=0
+- Smoke: `./backend/scripts/pms_public_booking_request_idempotency_smoke.sh`
+  - RESULT: PASS, smoke_rc=0
+  - Booking request created: 3440834a-fdd3-4c7c-925b-c4235da21bf7
+  - Idempotency-Key: p33-smoke-1769800595-2916396
+  - Guest email: smoke-p33-1769800595-2916396@example.com
+  - Test 1 (Create): 201 ✓
+  - Test 2 (Replay): same booking_request_id ✓
+  - Test 3 (Different payload): 409 idempotency_conflict ✓
+- Routing Pitfall (documented):
+  - Host header can misroute to Next.js 404 when PUBLIC domain used
+  - Smoke uses SEND_HOST_HEADER=false (default) + SEND_X_FORWARDED_HOST=true
+  - API calls target api.fewo.kolibri-visions.de directly
 
 ---
 
