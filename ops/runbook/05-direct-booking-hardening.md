@@ -309,6 +309,54 @@ PROPERTY_ID=<uuid> \
 
 ---
 
+## P3.4 Public Booking Request Smoke Hardening (Deterministic)
+
+### Overview
+
+The `pms_public_booking_request_hardening_smoke.sh` script provides deterministic, PROD-safe smoke testing for public booking request endpoints. It automatically selects a testable property and retries with different date windows to avoid false failures.
+
+### Features
+
+- **Auto-select property**: Uses `/api/v1/public/properties` to find a public property
+- **Date window retry**: Tries up to 5 different date windows if conflicts occur
+- **PROD-safe**: No `set -euo pipefail`, graceful SKIP on unavoidable conflicts
+- **Misroute detection**: Detects and reports Next.js HTML responses
+
+### Routing Pitfall Reminder
+
+**Host header can route to Next.js 404:**
+- The API domain (`api.fewo.kolibri-visions.de`) serves `/api/v1/public/*`
+- The PUBLIC domain (`fewo.kolibri-visions.de`) may return 404 for API paths
+- When testing via curl, **don't force `Host=fewo.*`** to the API endpoint
+
+**Recommended defaults:**
+- `SEND_HOST_HEADER=false` (default) — no Host override
+- `SEND_X_FORWARDED_HOST=true` (default) — tenant resolution via X-Forwarded-Host
+
+### Usage
+
+```bash
+# Basic usage (auto-selects property)
+./backend/scripts/pms_public_booking_request_hardening_smoke.sh
+
+# With explicit property
+PROPERTY_ID=<uuid> ./backend/scripts/pms_public_booking_request_hardening_smoke.sh
+
+# With custom API URL
+API_BASE_URL="https://api.fewo.kolibri-visions.de" \
+./backend/scripts/pms_public_booking_request_hardening_smoke.sh
+```
+
+### Tests Performed
+
+| Test | Description | Expected |
+|------|-------------|----------|
+| A. Create | POST booking request (with retry) | 201/200, booking_request_id |
+| B. Validation | Invalid payload | 422 validation_error |
+| C. Double Booking | Duplicate request same dates | 409 double_booking or SKIP |
+
+---
+
 ## See Also
 
 - [03-auth.md](./03-auth.md) - Authentication and authorization

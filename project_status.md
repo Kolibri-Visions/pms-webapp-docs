@@ -1135,6 +1135,69 @@ PROPERTY_ID=<uuid> ./backend/scripts/pms_public_booking_request_idempotency_smok
 
 ---
 
+### P3.4: Direct Booking Hardening — Public Booking Request Smoke Hardening ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-30
+
+**Overview:**
+
+Added deterministic PROD-safe smoke test for public booking request endpoints. The script automatically selects a testable property and retries with different date windows to achieve reliable rc=0 in production.
+
+**What Was Added:**
+
+1. **Smoke Script**: `backend/scripts/pms_public_booking_request_hardening_smoke.sh`
+   - PROD-safe (no `set -euo pipefail`)
+   - Auto-selects property from `/api/v1/public/properties` if not provided
+   - Date window retry (up to 5 attempts with 7-day offsets)
+   - Graceful SKIP on unavoidable conflicts
+   - Misroute detection for Host header issues
+
+2. **Tests Performed**:
+   - Test A: Create booking request (with retry) → 201/200
+   - Test B: Invalid payload validation → 422
+   - Test C: Double booking detection → 409 or SKIP
+
+3. **Documentation Updates**:
+   - `backend/docs/ops/runbook/05-direct-booking-hardening.md` - Added P3.4 section
+   - `backend/scripts/README.md` - Added smoke script documentation
+
+**Environment Variables:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `API_BASE_URL` | `https://api.fewo.kolibri-visions.de` | API base URL |
+| `PUBLIC_ORIGIN` | `https://fewo.kolibri-visions.de` | CORS origin |
+| `PUBLIC_HOST` | `fewo.kolibri-visions.de` | Tenant resolution |
+| `PROPERTY_ID` | Auto-selected | Property UUID |
+| `SEND_HOST_HEADER` | `false` | Host header override |
+| `SEND_X_FORWARDED_HOST` | `true` | X-Forwarded-Host header |
+
+**Verification Commands (HOST-SERVER-TERMINAL):**
+
+```bash
+cd /data/repos/pms-webapp
+git pull origin main
+
+# 1. Deploy verification
+./backend/scripts/pms_verify_deploy.sh
+
+# 2. Deterministic hardening smoke (auto-selects property)
+./backend/scripts/pms_public_booking_request_hardening_smoke.sh
+# Expected: RESULT: PASS, rc=0
+
+# 3. With explicit property
+PROPERTY_ID=<uuid> ./backend/scripts/pms_public_booking_request_hardening_smoke.sh
+```
+
+**Related Files:**
+
+- `backend/app/api/routes/public_booking.py` - Booking request endpoint
+- `backend/app/api/routes/public_site.py` - Public properties endpoint
+
+**Status:** ✅ IMPLEMENTED (pending PROD verification)
+
+---
+
 ### DOCS Phase 2: Runbook Modularization ✅ VERIFIED
 
 **Date Completed:** 2026-01-28
