@@ -1506,6 +1506,83 @@ EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
 
 ---
 
+### Option A: Availability Frontend (Admin UI) ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-31
+
+**Overview:**
+
+Implemented the missing Admin UI for Availability/Blocking (Sperrzeiten) so staff can manage availability blocks using the existing backend API (`/api/v1/availability*`). Previously the `/availability` route showed only a "Coming Soon" placeholder.
+
+**Features:**
+
+1. **Calendar View:**
+   - Month grid showing availability status per day
+   - Color coding: Gray (available), Amber (blocked), Blue (booked)
+   - Today highlighted with blue ring
+   - Click available day → Create block modal
+   - Click blocked day → Edit block modal
+
+2. **Property Selector:**
+   - Dropdown of all active properties
+   - Auto-selects first property on load
+
+3. **Month Navigation:**
+   - Previous/Next month buttons
+   - "Heute" button to jump to current month
+   - Refresh button to reload data
+
+4. **CRUD Operations:**
+   - Create block with start_date, end_date, reason
+   - Edit block (delete + create, no PATCH endpoint)
+   - Delete block
+   - Conflict handling (409 → user-friendly German message)
+
+5. **Blocks List:**
+   - List of all blocks in current month
+   - Shows date range and reason
+
+**API Endpoints Used:**
+
+| Action | Endpoint | Method |
+|--------|----------|--------|
+| List properties | `/api/v1/properties?limit=100&is_active=true` | GET |
+| Query availability | `/api/v1/availability?property_id=X&from_date=X&to_date=X` | GET |
+| Create block | `/api/v1/availability/blocks` | POST |
+| Get block | `/api/v1/availability/blocks/{id}` | GET |
+| Delete block | `/api/v1/availability/blocks/{id}` | DELETE |
+
+**Data-TestIDs (QA):**
+
+- `availability-page`, `availability-property-select`
+- `availability-month-prev`, `availability-month-next`
+- `availability-create-block`, `availability-block-item-{id}`
+- `availability-modal`, `availability-save`, `availability-delete`
+
+**Verification Commands:**
+
+```bash
+# Deploy verify
+EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
+
+# Availability blocks API smoke test
+JWT_TOKEN="eyJabc..." ./backend/scripts/pms_availability_blocks_smoke.sh
+
+# Manual: Open Admin UI → "Verfügbarkeit" → Calendar should load, CRUD should work
+```
+
+**Files Changed:**
+
+- `frontend/app/availability/page.tsx` (replaced placeholder with full implementation)
+- `backend/scripts/pms_availability_blocks_smoke.sh` (new smoke test)
+- `backend/scripts/README.md` (smoke test documentation)
+- `backend/docs/ops/runbook/06-availability-admin-ui.md` (new runbook chapter)
+- `backend/docs/project_status.md` (this entry)
+
+**Status:** ✅ IMPLEMENTED (awaiting PROD verification)
+
+---
+
 ### DOCS Phase 2: Runbook Modularization ✅ VERIFIED
 
 **Date Completed:** 2026-01-28
