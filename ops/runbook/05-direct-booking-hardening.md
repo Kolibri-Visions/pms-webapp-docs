@@ -376,10 +376,35 @@ allow_headers=["*"]
 
 **After (hardened)**:
 ```python
-allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Agency-Id", "X-Request-Id", "X-Forwarded-Host", "X-Forwarded-Proto"]
+allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Agency-Id", "X-Request-Id",
+               "X-Forwarded-Host", "X-Forwarded-Proto", "Accept", "Accept-Language", "Content-Language",
+               "baggage", "sentry-trace", "traceparent", "tracestate", "x-requested-with"]
 ```
 
 **Environment Variable**: `CORS_ALLOW_HEADERS` (comma-separated list)
+
+**Note**: Tracing headers (baggage, sentry-trace, traceparent, tracestate) and `x-requested-with` are included by default for browser compatibility.
+
+### Troubleshooting: CORS Preflight Blocked in Admin UI
+
+**Symptom**: Admin UI shows "Failed to fetch" or browser console shows "Disallowed CORS headers" / preflight blocked.
+
+**Root Cause**: Browser adds tracing headers (Sentry, OpenTelemetry) that were not in the CORS allowlist.
+
+**Headers that browsers may add**:
+- `baggage` - W3C Trace Context baggage
+- `sentry-trace` - Sentry distributed tracing
+- `traceparent` - W3C Trace Context
+- `tracestate` - W3C Trace Context state
+- `x-requested-with` - AJAX request marker
+
+**Fix**:
+1. Default config now includes all common tracing headers
+2. To add custom headers, extend via `CORS_ALLOW_HEADERS` env var:
+   ```bash
+   CORS_ALLOW_HEADERS="Authorization,Content-Type,...,my-custom-header"
+   ```
+3. Do NOT revert to wildcard `*` (security risk with credentials)
 
 ### Authenticated Rate Limiting
 
@@ -419,6 +444,8 @@ Tests:
 Tests:
 - `Access-Control-Allow-Headers` is NOT wildcard
 - Required headers (Authorization, Content-Type, etc.) are allowed
+- Tracing headers (baggage, sentry-trace, traceparent, tracestate, x-requested-with) are allowed
+- Admin UI preflight with browser-realistic headers returns 200
 
 #### 3. Auth Rate Limit Test
 ```bash

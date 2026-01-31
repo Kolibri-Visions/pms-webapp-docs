@@ -1325,6 +1325,57 @@ TOKEN=<jwt> ./backend/scripts/pms_auth_rate_limit_smoke.sh
 
 ---
 
+### P4.x-hotfix: CORS Tracing Headers for Admin UI Preflight ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-31
+
+**Overview:**
+
+Hotfix for Admin UI CORS preflight failure. Browsers add tracing headers (Sentry, OpenTelemetry) that were not in the CORS allowlist, causing "Disallowed CORS headers" errors.
+
+**Root Cause:**
+
+Browser preflight with headers `baggage,sentry-trace,traceparent,tracestate,x-requested-with` returned HTTP 400 because these headers were not in `CORS_ALLOW_HEADERS`.
+
+**Changes:**
+
+1. **Backend (`backend/app/core/config.py`):**
+   - Extended default `CORS_ALLOW_HEADERS` to include tracing headers
+   - Added: `baggage`, `sentry-trace`, `traceparent`, `tracestate`, `x-requested-with`
+   - Added deduplication to `cors_headers` property
+
+2. **Smoke Test (`backend/scripts/pms_cors_headers_smoke.sh`):**
+   - Added Test 4: Admin UI preflight with browser-realistic tracing headers
+   - Verifies all tracing headers are in Allow-Headers response
+
+3. **Documentation:**
+   - `backend/docs/ops/runbook/05-direct-booking-hardening.md`: Added troubleshooting section
+   - `backend/scripts/README.md`: Documented tracing headers and extension mechanism
+
+**Verification Commands:**
+
+```bash
+# Deploy verify
+EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
+
+# CORS smoke (includes tracing headers test)
+./backend/scripts/pms_cors_headers_smoke.sh
+
+# Manual: Open Admin UI → "Objekte" should load without CORS error
+```
+
+**Files Changed:**
+
+- `backend/app/core/config.py` (extended CORS headers, added dedup)
+- `backend/scripts/pms_cors_headers_smoke.sh` (added Test 4)
+- `backend/docs/ops/runbook/05-direct-booking-hardening.md` (troubleshooting section)
+- `backend/scripts/README.md` (tracing headers docs)
+- `backend/docs/project_status.md` (this entry)
+
+**Status:** ✅ IMPLEMENTED (awaiting PROD verification)
+
+---
+
 ### DOCS Phase 2: Runbook Modularization ✅ VERIFIED
 
 **Date Completed:** 2026-01-28
