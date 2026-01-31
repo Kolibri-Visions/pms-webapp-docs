@@ -1506,41 +1506,40 @@ EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
 
 ---
 
-### Option A: Availability Frontend (Admin UI) ✅ IMPLEMENTED
+### Option A: Availability (Property Tab Kalender + Global /availability Overview) ✅ IMPLEMENTED
 
 **Date Completed:** 2026-01-31
 
 **Overview:**
 
-Implemented the missing Admin UI for Availability/Blocking (Sperrzeiten) so staff can manage availability blocks using the existing backend API (`/api/v1/availability*`). Previously the `/availability` route showed only a "Coming Soon" placeholder.
+Implemented availability management with two complementary views:
 
-**Features:**
+1. **Property Calendar Tab** (`/properties/[id]/calendar`) — Per-property calendar with CRUD for blocks
+2. **Global Overview** (`/availability`) — Disposition view showing all properties in a timeline
 
-1. **Calendar View:**
-   - Month grid showing availability status per day
-   - Color coding: Gray (available), Amber (blocked), Blue (booked)
-   - Today highlighted with blue ring
-   - Click available day → Create block modal
-   - Click blocked day → Edit block modal
+Previously `/availability` showed only "Coming Soon" placeholder. Now it serves as a global overview, while detailed CRUD operations happen in the property-specific calendar tab.
 
-2. **Property Selector:**
-   - Dropdown of all active properties
-   - Auto-selects first property on load
+**A1) Property Calendar Tab:**
 
-3. **Month Navigation:**
-   - Previous/Next month buttons
-   - "Heute" button to jump to current month
-   - Refresh button to reload data
+- **Location:** Admin → Objekte → [Objekt] → Tab "Kalender"
+- **Month calendar grid** showing availability status per day
+- **Color coding:**
+  - Green: Frei (available) — clickable to create block
+  - Amber: Gesperrt (blocked) — clickable to edit/delete
+  - Red: Belegt (booked) — read-only
+- **Today** highlighted with blue ring
+- **CRUD:** Create/Edit/Delete blocks with in-page confirm dialog (no window.confirm)
+- **Conflict handling:** 409 → "Konflikt: Zeitraum kollidiert..."
+- **No property selector** — property_id from route
 
-4. **CRUD Operations:**
-   - Create block with start_date, end_date, reason
-   - Edit block (delete + create, no PATCH endpoint)
-   - Delete block
-   - Conflict handling (409 → user-friendly German message)
+**A2) Global Overview (/availability):**
 
-5. **Blocks List:**
-   - List of all blocks in current month
-   - Shows date range and reason
+- **Location:** Admin → Sidebar → "Verfügbarkeit"
+- **Timeline view:** rows = properties, columns = days
+- **Date range controls:** Default 4 weeks, buttons for "4 Wochen" / "3 Monate"
+- **Property search/filter**
+- **Click property row** → deep link to property calendar tab
+- **Read-first view** — CRUD happens in property tab
 
 **API Endpoints Used:**
 
@@ -1554,10 +1553,19 @@ Implemented the missing Admin UI for Availability/Blocking (Sperrzeiten) so staf
 
 **Data-TestIDs (QA):**
 
-- `availability-page`, `availability-property-select`
-- `availability-month-prev`, `availability-month-next`
-- `availability-create-block`, `availability-block-item-{id}`
-- `availability-modal`, `availability-save`, `availability-delete`
+Property Calendar Tab:
+- `properties-tab-calendar` — Tab link
+- `property-calendar-page` — Page container
+- `availability-calendar-grid` — Calendar grid
+- `availability-month-prev` / `availability-month-next` / `availability-today`
+- `availability-block-create` / `availability-block-modal`
+- `availability-block-save` / `availability-block-delete` / `availability-block-delete-confirm`
+
+Global Overview:
+- `availability-overview-page` — Page container
+- `availability-overview-grid` — Timeline grid
+- `availability-overview-prev` / `availability-overview-next` / `availability-overview-today`
+- `availability-overview-search` — Search input
 
 **Verification Commands:**
 
@@ -1568,15 +1576,19 @@ EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
 # Availability blocks API smoke test
 JWT_TOKEN="eyJabc..." ./backend/scripts/pms_availability_blocks_smoke.sh
 
-# Manual: Open Admin UI → "Verfügbarkeit" → Calendar should load, CRUD should work
+# Manual checks:
+# 1. Admin → Objekt → Tab "Kalender" → Calendar loads, can create/delete block
+# 2. Admin → "Verfügbarkeit" → Timeline shows all properties, links to property calendar
 ```
 
 **Files Changed:**
 
-- `frontend/app/availability/page.tsx` (replaced placeholder with full implementation)
-- `backend/scripts/pms_availability_blocks_smoke.sh` (new smoke test)
+- `frontend/app/properties/[id]/layout.tsx` (added "Kalender" tab)
+- `frontend/app/properties/[id]/calendar/page.tsx` (new property calendar page)
+- `frontend/app/availability/page.tsx` (global overview with timeline)
+- `backend/scripts/pms_availability_blocks_smoke.sh` (smoke test)
 - `backend/scripts/README.md` (smoke test documentation)
-- `backend/docs/ops/runbook/06-availability-admin-ui.md` (new runbook chapter)
+- `backend/docs/ops/runbook/06-availability-admin-ui.md` (runbook chapter)
 - `backend/docs/project_status.md` (this entry)
 
 **Status:** ✅ IMPLEMENTED (awaiting PROD verification)
