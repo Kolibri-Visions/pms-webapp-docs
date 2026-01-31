@@ -1441,6 +1441,71 @@ EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
 
 ---
 
+### P4.x-hotfix3: CORS Browser-Realistic Preflight Headers ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-31
+
+**Overview:**
+
+Third hotfix for Admin UI CORS preflight failure. Despite hotfix2 being deployed (commit bf42549), the Admin UI "Objekte" page still shows "Failed to fetch" with CORS preflight errors. Browser sends additional conditional/cache headers not in the allowlist.
+
+**Root Cause:**
+
+Browser preflight includes headers like `cache-control`, `pragma`, `if-none-match`, `if-modified-since` that were not in CORS_ALLOW_HEADERS. The smoke test was incomplete and didn't test browser-realistic header combinations.
+
+**Repro Command (before fix):**
+```bash
+API="https://api.fewo.kolibri-visions.de"
+ORIGIN="https://admin.fewo.kolibri-visions.de"
+REQ_HEADERS="authorization,content-type,x-agency-id,apikey,x-client-info,x-supabase-api-version,x-supabase-client,x-supabase-auth,x-csrf-token,x-xsrf-token,x-csrftoken,baggage,sentry-trace,traceparent,tracestate,x-requested-with,cache-control,pragma,if-none-match,if-modified-since"
+curl -k -sS -i -X OPTIONS \
+  "${API}/api/v1/properties?limit=50&offset=0&sort_by=name&sort_order=asc" \
+  -H "Origin: ${ORIGIN}" \
+  -H "Access-Control-Request-Method: GET" \
+  -H "Access-Control-Request-Headers: ${REQ_HEADERS}"
+# Before: HTTP 400 "Disallowed CORS headers"
+# After: HTTP 200/204 with Access-Control-Allow-Headers including all requested
+```
+
+**Changes:**
+
+1. **Backend (`backend/app/core/config.py`):**
+   - Extended default `CORS_ALLOW_HEADERS` to include browser/conditional headers:
+     `cache-control`, `pragma`, `range`, `prefer`, `x-http-method-override`, `if-match`, `if-none-match`, `if-modified-since`, `if-unmodified-since`
+
+2. **Smoke Test (`backend/scripts/pms_cors_headers_smoke.sh`):**
+   - Added Test 6: Comprehensive browser-realistic preflight test
+   - Test includes all common browser headers in a single preflight request
+   - Added header probe feature: on failure, tests each header individually to identify problematic ones
+
+3. **Documentation:**
+   - `backend/docs/ops/runbook/05-direct-booking-hardening.md`: Added debug commands section
+   - `backend/scripts/README.md`: Updated test description
+
+**Verification Commands:**
+
+```bash
+# Deploy verify
+EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
+
+# CORS smoke (includes comprehensive browser-realistic test)
+./backend/scripts/pms_cors_headers_smoke.sh
+
+# Manual: Open Admin UI → "Objekte" should load without CORS error
+```
+
+**Files Changed:**
+
+- `backend/app/core/config.py` (added browser/conditional headers)
+- `backend/scripts/pms_cors_headers_smoke.sh` (added Test 6 with header probe)
+- `backend/docs/ops/runbook/05-direct-booking-hardening.md` (added debug commands)
+- `backend/scripts/README.md` (updated test description)
+- `backend/docs/project_status.md` (this entry)
+
+**Status:** ✅ IMPLEMENTED (awaiting PROD verification)
+
+---
+
 ### DOCS Phase 2: Runbook Modularization ✅ VERIFIED
 
 **Date Completed:** 2026-01-28

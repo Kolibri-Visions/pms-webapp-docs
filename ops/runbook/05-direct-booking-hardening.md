@@ -422,6 +422,28 @@ allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Agency-Id"
 
 **Coolify Note**: If `CORS_ALLOW_HEADERS` env var is set in Coolify, it **overrides** the defaults. Ensure it includes all required headers.
 
+**Debug Commands** (HOST-SERVER-TERMINAL):
+
+```bash
+# 1. Test browser-realistic preflight
+API="https://api.fewo.kolibri-visions.de"
+ORIGIN="https://admin.fewo.kolibri-visions.de"
+REQ_HEADERS="authorization,content-type,x-agency-id,apikey,x-client-info,x-supabase-api-version,x-supabase-client,x-supabase-auth,x-csrf-token,cache-control,if-none-match"
+curl -k -sS -i -X OPTIONS \
+  "${API}/api/v1/properties?limit=50" \
+  -H "Origin: ${ORIGIN}" \
+  -H "Access-Control-Request-Method: GET" \
+  -H "Access-Control-Request-Headers: ${REQ_HEADERS}" | head -30
+
+# 2. Run CORS smoke test (includes header probe on failure)
+./backend/scripts/pms_cors_headers_smoke.sh
+
+# 3. Check if Coolify overrides CORS config
+docker exec pms-backend env | grep -i cors
+```
+
+**Expected**: HTTP 200/204 for preflight, `access-control-allow-headers` includes requested headers.
+
 ### Authenticated Rate Limiting
 
 Per-user rate limiting for authenticated endpoints:
