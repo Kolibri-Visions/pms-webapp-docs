@@ -1376,6 +1376,71 @@ EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
 
 ---
 
+### P4.x-hotfix2: CORS Supabase/Client Headers for Admin UI Preflight ✅ IMPLEMENTED
+
+**Date Completed:** 2026-01-31
+
+**Overview:**
+
+Second hotfix for Admin UI CORS preflight failure. Browser sends additional Supabase client headers and CSRF tokens that were not in the CORS allowlist, causing HTTP 400 "Disallowed CORS headers".
+
+**Root Cause:**
+
+Browser preflight with headers `apikey,x-client-info,x-supabase-api-version,x-supabase-client,x-supabase-auth,x-csrf-token,x-xsrf-token,x-csrftoken` returned HTTP 400.
+
+**Repro Command (before fix):**
+```bash
+API="https://api.fewo.kolibri-visions.de"
+ORIGIN="https://admin.fewo.kolibri-visions.de"
+REQ_HEADERS="authorization,content-type,x-agency-id,apikey,x-client-info,x-supabase-api-version,x-supabase-client,x-supabase-auth,x-csrf-token,x-xsrf-token,x-csrftoken"
+curl -k -sS -i -X OPTIONS \
+  "${API}/api/v1/properties?limit=1" \
+  -H "Origin: ${ORIGIN}" \
+  -H "Access-Control-Request-Method: GET" \
+  -H "Access-Control-Request-Headers: ${REQ_HEADERS}"
+# Before: HTTP 400 "Disallowed CORS headers"
+# After: HTTP 200 with Access-Control-Allow-Headers including all requested
+```
+
+**Changes:**
+
+1. **Backend (`backend/app/core/config.py`):**
+   - Extended default `CORS_ALLOW_HEADERS` to include Supabase client headers:
+     `apikey`, `x-client-info`, `x-supabase-api-version`, `x-supabase-client`, `x-supabase-auth`
+   - Added CSRF headers: `x-csrf-token`, `x-xsrf-token`, `x-csrftoken`
+
+2. **Smoke Test (`backend/scripts/pms_cors_headers_smoke.sh`):**
+   - Added Test 5: Admin UI preflight with Supabase/client headers
+   - Verifies all Supabase and CSRF headers are in Allow-Headers response
+
+3. **Documentation:**
+   - `backend/docs/ops/runbook/05-direct-booking-hardening.md`: Extended troubleshooting section
+   - `backend/scripts/README.md`: Updated test description
+
+**Verification Commands:**
+
+```bash
+# Deploy verify
+EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
+
+# CORS smoke (includes Supabase headers test)
+./backend/scripts/pms_cors_headers_smoke.sh
+
+# Manual: Open Admin UI → "Objekte" should load without CORS error
+```
+
+**Files Changed:**
+
+- `backend/app/core/config.py` (added Supabase/CSRF headers)
+- `backend/scripts/pms_cors_headers_smoke.sh` (added Test 5)
+- `backend/docs/ops/runbook/05-direct-booking-hardening.md` (extended troubleshooting)
+- `backend/scripts/README.md` (updated test description)
+- `backend/docs/project_status.md` (this entry)
+
+**Status:** ✅ IMPLEMENTED (awaiting PROD verification)
+
+---
+
 ### DOCS Phase 2: Runbook Modularization ✅ VERIFIED
 
 **Date Completed:** 2026-01-28

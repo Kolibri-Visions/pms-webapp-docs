@@ -387,24 +387,40 @@ allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Agency-Id"
 
 ### Troubleshooting: CORS Preflight Blocked in Admin UI
 
-**Symptom**: Admin UI shows "Failed to fetch" or browser console shows "Disallowed CORS headers" / preflight blocked.
+**Symptom**: Admin UI shows "Failed to fetch" or browser console shows "Disallowed CORS headers" / preflight blocked / HTTP 400.
 
-**Root Cause**: Browser adds tracing headers (Sentry, OpenTelemetry) that were not in the CORS allowlist.
+**Root Cause**: Browser adds headers that were not in the CORS allowlist.
 
-**Headers that browsers may add**:
+**Headers that browsers/clients may add**:
+
+*Tracing headers:*
 - `baggage` - W3C Trace Context baggage
 - `sentry-trace` - Sentry distributed tracing
 - `traceparent` - W3C Trace Context
 - `tracestate` - W3C Trace Context state
 - `x-requested-with` - AJAX request marker
 
+*Supabase client headers:*
+- `apikey` - Supabase anonymous key
+- `x-client-info` - Supabase client info
+- `x-supabase-api-version` - Supabase API version
+- `x-supabase-client` - Supabase client identifier
+- `x-supabase-auth` - Supabase auth header
+
+*CSRF headers:*
+- `x-csrf-token` - CSRF protection token
+- `x-xsrf-token` - XSRF protection token
+- `x-csrftoken` - Alternative CSRF token
+
 **Fix**:
-1. Default config now includes all common tracing headers
+1. Default config now includes all common tracing, Supabase, and CSRF headers
 2. To add custom headers, extend via `CORS_ALLOW_HEADERS` env var:
    ```bash
    CORS_ALLOW_HEADERS="Authorization,Content-Type,...,my-custom-header"
    ```
 3. Do NOT revert to wildcard `*` (security risk with credentials)
+
+**Coolify Note**: If `CORS_ALLOW_HEADERS` env var is set in Coolify, it **overrides** the defaults. Ensure it includes all required headers.
 
 ### Authenticated Rate Limiting
 
