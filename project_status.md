@@ -1680,6 +1680,96 @@ JWT_TOKEN="eyJabc..." ./backend/scripts/pms_dashboard_smoke.sh
 
 ---
 
+### Option D: Email Notifications System ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-01
+
+**Overview:**
+
+Added email notifications system with outbox pattern for reliable delivery. Defaults to safe mode (EMAIL_NOTIFICATIONS_ENABLED=false) where emails are queued but not sent.
+
+**Features:**
+
+1. **Email Outbox Table** (`email_outbox`):
+   - Stores all notification emails with status tracking
+   - Supports retry semantics (attempts counter, last_error)
+   - Idempotency support to prevent duplicates
+   - Multi-tenant isolation via agency_id
+
+2. **Provider System**:
+   - **OutboxOnly** (default): Queues emails, marks as 'skipped'
+   - **Console**: Logs emails, marks as 'sent' (dev/testing)
+   - **SMTP**: Actual email delivery when enabled
+
+3. **Admin API Endpoints**:
+   - `GET /api/v1/notifications/email/outbox` — List/search outbox
+   - `POST /api/v1/notifications/email/test` — Send test email
+   - `POST /api/v1/notifications/email/process-outbox` — Process queued
+
+4. **Email Templates (DE)**:
+   - `booking_request_created` — New request notification
+   - `booking_request_approved` — Approval confirmation
+   - `booking_request_declined` — Decline notification
+   - `booking_confirmed` / `booking_cancelled` — Status updates
+   - `test` — Manual test emails
+
+**Safety Defaults:**
+
+- `EMAIL_NOTIFICATIONS_ENABLED=false` by default
+- When disabled: emails queued with status='skipped', NOT sent
+- Test endpoint respects the setting (PROD-safe)
+
+**Environment Variables:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `EMAIL_NOTIFICATIONS_ENABLED` | `false` | Enable actual sending |
+| `SMTP_HOST` | - | SMTP server hostname |
+| `SMTP_PORT` | `587` | SMTP port |
+| `SMTP_USER` | - | SMTP username |
+| `SMTP_PASSWORD` | - | SMTP password |
+| `SMTP_FROM_EMAIL` | - | Sender address |
+| `SMTP_FROM_NAME` | `PMS-Webapp` | Sender name |
+| `SMTP_REPLY_TO` | - | Reply-to address |
+
+**Verification Commands:**
+
+```bash
+# Deploy verify
+EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
+
+# Email notifications smoke test
+JWT_TOKEN="eyJabc..." ./backend/scripts/pms_email_notifications_smoke.sh
+
+# Manual checks:
+# 1. Admin → Call test email endpoint
+# 2. Verify outbox entry created (status=skipped if disabled)
+# 3. No actual email sent when EMAIL_NOTIFICATIONS_ENABLED=false
+```
+
+**Files Changed:**
+
+- `supabase/migrations/20260201100000_add_email_outbox.sql` (DB migration)
+- `backend/app/core/config.py` (EMAIL_NOTIFICATIONS_ENABLED setting)
+- `backend/app/services/email_notification_service.py` (service + providers)
+- `backend/app/api/routes/notifications.py` (API endpoints)
+- `backend/app/modules/notifications.py` (module registration)
+- `backend/app/modules/bootstrap.py` (module import)
+- `backend/app/main.py` (router fallback mount)
+- `backend/scripts/pms_email_notifications_smoke.sh` (smoke test)
+- `backend/scripts/README.md` (smoke documentation)
+- `backend/docs/ops/runbook/09-email-notifications.md` (runbook chapter)
+- `backend/docs/project_status.md` (this entry)
+
+**Status:** ✅ IMPLEMENTED (awaiting PROD verification)
+
+**Note:** VERIFIED status requires:
+- Deploy verification with commit match
+- Smoke test `pms_email_notifications_smoke.sh` rc=0
+- Evidence block with PROD timestamps
+
+---
+
 ### Option A (Refined): Availability UI + Bulk Endpoint — TypeScript Fix ✅ VERIFIED
 
 **Date Completed:** 2026-02-01 (hotfix)
