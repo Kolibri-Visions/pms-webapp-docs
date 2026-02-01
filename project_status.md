@@ -1506,66 +1506,84 @@ EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
 
 ---
 
-### Option A: Availability (Property Tab Kalender + Global /availability Overview) ✅ IMPLEMENTED
+### Option A (Refined): Availability UI + Bulk Endpoint (Stop Request Storm) ✅ IMPLEMENTED
 
-**Date Completed:** 2026-01-31
+**Date Completed:** 2026-02-01
 
 **Overview:**
 
-Implemented availability management with two complementary views:
+Fixed critical production bug where `/availability` page sent hundreds of requests causing `net::ERR_INSUFFICIENT_RESOURCES`. Added bulk overview endpoint and rewrote frontend to use single request.
 
-1. **Property Calendar Tab** (`/properties/[id]/calendar`) — Per-property calendar with CRUD for blocks
-2. **Global Overview** (`/availability`) — Disposition view showing all properties in a timeline
+**Problem (PROD Bug):**
+- Old implementation: N+1 fetching (one request per property)
+- With 100 properties → 100+ concurrent requests → browser resource exhaustion
+- Root cause: useEffect dependency on callback recreated every render + no request deduplication
 
-Previously `/availability` showed only "Coming Soon" placeholder. Now it serves as a global overview, while detailed CRUD operations happen in the property-specific calendar tab.
+**Solution:**
 
-**A1) Property Calendar Tab:**
+1. **Backend:** Added `GET /api/v1/availability/overview` bulk endpoint
+2. **Frontend:** Rewrote `/availability/page.tsx` to use bulk endpoint
+3. **Added:** AbortController, debounced search, pagination, stable dependencies
+
+**A1) Property Calendar Tab** (unchanged):
 
 - **Location:** Admin → Objekte → [Objekt] → Tab "Kalender"
-- **Month calendar grid** showing availability status per day
-- **Color coding:**
-  - Green: Frei (available) — clickable to create block
-  - Amber: Gesperrt (blocked) — clickable to edit/delete
-  - Red: Belegt (booked) — read-only
-- **Today** highlighted with blue ring
-- **CRUD:** Create/Edit/Delete blocks with in-page confirm dialog (no window.confirm)
-- **Conflict handling:** 409 → "Konflikt: Zeitraum kollidiert..."
-- **No property selector** — property_id from route
+- **Uses:** Single-property endpoint `/api/v1/availability?property_id=X`
+- **CRUD:** Create/Edit/Delete blocks with in-page confirm dialog
 
-**A2) Global Overview (/availability):**
+**A2) Global Overview** (fixed):
 
 - **Location:** Admin → Sidebar → "Verfügbarkeit"
-- **Timeline view:** rows = properties, columns = days
-- **Date range controls:** Default 4 weeks, buttons for "4 Wochen" / "3 Monate"
-- **Property search/filter**
-- **Click property row** → deep link to property calendar tab
-- **Read-first view** — CRUD happens in property tab
+- **Uses:** Bulk endpoint `/api/v1/availability/overview` (ONE request)
+- **Features:**
+  - Pagination: 25 properties per page
+  - Debounced search: 300ms delay
+  - AbortController: cancels in-flight request on filter change
+  - Stable dependencies: no refetch loops
+- **Network:** DevTools should show 1 request, not hundreds
 
-**API Endpoints Used:**
+**API Endpoints:**
 
 | Action | Endpoint | Method |
 |--------|----------|--------|
-| List properties | `/api/v1/properties?limit=100&is_active=true` | GET |
-| Query availability | `/api/v1/availability?property_id=X&from_date=X&to_date=X` | GET |
+| **Bulk overview** | `/api/v1/availability/overview?from_date=X&to_date=X&limit=25&offset=0&q=search` | GET |
+| Single property | `/api/v1/availability?property_id=X&from_date=X&to_date=X` | GET |
 | Create block | `/api/v1/availability/blocks` | POST |
 | Get block | `/api/v1/availability/blocks/{id}` | GET |
 | Delete block | `/api/v1/availability/blocks/{id}` | DELETE |
 
+**Bulk Endpoint Response:**
+```json
+{
+  "from_date": "2026-02-01",
+  "to_date": "2026-03-01",
+  "limit": 25, "offset": 0, "total": 42,
+  "items": [
+    {
+      "property_id": "...",
+      "property_name": "Strandhaus Sylt",
+      "segments": [
+        { "start_date": "2026-02-01", "end_date": "2026-02-08", "status": "booked", "source": "booking" },
+        { "start_date": "2026-02-08", "end_date": "2026-02-15", "status": "blocked", "source": "block" },
+        { "start_date": "2026-02-15", "end_date": "2026-03-01", "status": "free", "source": "none" }
+      ]
+    }
+  ]
+}
+```
+
 **Data-TestIDs (QA):**
 
 Property Calendar Tab:
-- `properties-tab-calendar` — Tab link
-- `property-calendar-page` — Page container
-- `availability-calendar-grid` — Calendar grid
+- `properties-tab-calendar`, `property-calendar-page`, `availability-calendar-grid`
 - `availability-month-prev` / `availability-month-next` / `availability-today`
-- `availability-block-create` / `availability-block-modal`
-- `availability-block-save` / `availability-block-delete` / `availability-block-delete-confirm`
+- `availability-block-create` / `availability-block-modal` / `availability-block-save`
+- `availability-block-delete` / `availability-block-delete-confirm`
 
 Global Overview:
-- `availability-overview-page` — Page container
-- `availability-overview-grid` — Timeline grid
+- `availability-overview-page`, `availability-overview-grid`
 - `availability-overview-prev` / `availability-overview-next` / `availability-overview-today`
-- `availability-overview-search` — Search input
+- `availability-overview-search`
 
 **Verification Commands:**
 
@@ -1573,22 +1591,26 @@ Global Overview:
 # Deploy verify
 EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
 
-# Availability blocks API smoke test
+# Smoke tests
 JWT_TOKEN="eyJabc..." ./backend/scripts/pms_availability_blocks_smoke.sh
+JWT_TOKEN="eyJabc..." ./backend/scripts/pms_availability_overview_smoke.sh
 
-# Manual checks:
-# 1. Admin → Objekt → Tab "Kalender" → Calendar loads, can create/delete block
-# 2. Admin → "Verfügbarkeit" → Timeline shows all properties, links to property calendar
+# Manual check (CRITICAL):
+# 1. Open /availability in browser
+# 2. Open DevTools → Network tab
+# 3. Hard refresh
+# 4. Should see: 1 request to /api/v1/availability/overview
+# 5. Should NOT see: Many requests to /api/v1/availability?property_id=...
 ```
 
 **Files Changed:**
 
-- `frontend/app/properties/[id]/layout.tsx` (added "Kalender" tab)
-- `frontend/app/properties/[id]/calendar/page.tsx` (new property calendar page)
-- `frontend/app/availability/page.tsx` (global overview with timeline)
-- `backend/scripts/pms_availability_blocks_smoke.sh` (smoke test)
+- `backend/app/api/routes/availability.py` (added bulk overview endpoint)
+- `backend/app/schemas/availability.py` (added overview response schemas)
+- `frontend/app/availability/page.tsx` (rewrote to use bulk endpoint)
+- `backend/scripts/pms_availability_overview_smoke.sh` (new smoke test)
 - `backend/scripts/README.md` (smoke test documentation)
-- `backend/docs/ops/runbook/06-availability-admin-ui.md` (runbook chapter)
+- `backend/docs/ops/runbook/06-availability-admin-ui.md` (request storm troubleshooting)
 - `backend/docs/project_status.md` (this entry)
 
 **Status:** ✅ IMPLEMENTED (awaiting PROD verification)
