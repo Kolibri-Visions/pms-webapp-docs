@@ -1103,6 +1103,75 @@ export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
 
 ---
 
+### P2.21.4.8s: Owner Management Pro (Phases 1-4) ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-01
+
+**Overview:**
+
+Comprehensive Owner Management Pro feature spanning 4 phases:
+- Phase 1: Owner deactivate/reactivate + self-edit + commission configuration
+- Phase 2: Owner invitation workflow (email + token + accept flow)
+- Phase 3: Statements Pro (finalize, PDF, email send)
+- Phase 4: Owner Portal Pro (dashboard KPIs, calendar, enhanced profile)
+
+**Changes:**
+
+- **Database Migration** (`20260201200000_owner_management_pro.sql`):
+  - Added `commission_rate_bps`, `phone`, `address`, `notes` columns to owners
+  - Created `owner_invites` table with RLS policies
+  - Added `finalized_at`, `sent_at`, `sent_to_email` to owner_statements
+
+- **Backend Routes** (`api/routes/owners.py`):
+  - Phase 1: `GET/PATCH /api/v1/owner/me` (owner self-edit)
+  - Phase 2: Owner invites CRUD + accept
+  - Phase 3: Statement finalize, PDF download, email send
+  - Phase 4: Owner dashboard, calendar endpoints
+  - Commission rate applied to statement generation
+
+- **Schemas** (`schemas/owners.py`):
+  - Added `OwnerSelfUpdate`, `OwnerSelfResponse`
+  - Added `OwnerInviteCreate`, `OwnerInviteResponse`
+  - Added `OwnerDashboardSummary`, `OwnerCalendarEntry`
+
+- **Smoke Script** (`pms_owner_management_pro_smoke.sh`):
+  - Tests all new endpoints
+  - PROD-safe (no destructive operations)
+
+- **Docs** (runbook chapters):
+  - `12-owner-management-pro.md` (Admin)
+  - `13-owner-portal-pro.md` (Owner Portal)
+
+**Verification Commands (PROD):**
+
+```bash
+# 1. Deploy verify
+EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
+
+# 2. Smoke test (rc=0)
+export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
+./backend/scripts/pms_owner_management_pro_smoke.sh
+
+# 3. Manual UI check
+# - Admin: Create owner invite, set commission rate
+# - Owner Portal: Accept invite, view dashboard, view calendar
+```
+
+**Files Changed:**
+
+- supabase/migrations/20260201200000_owner_management_pro.sql (NEW)
+- backend/app/api/routes/owners.py (enhanced)
+- backend/app/schemas/owners.py (enhanced)
+- backend/scripts/pms_owner_management_pro_smoke.sh (NEW)
+- backend/docs/ops/runbook/12-owner-management-pro.md (NEW)
+- backend/docs/ops/runbook/13-owner-portal-pro.md (NEW)
+- backend/scripts/README.md (smoke entry)
+- backend/docs/project_status.md (this entry)
+
+**Status:** ✅ IMPLEMENTED
+
+---
+
 ### P3.1: Direct Booking Hardening — Idempotency-Key + Audit Log ✅ VERIFIED
 
 **Date Completed:** 2026-01-30
