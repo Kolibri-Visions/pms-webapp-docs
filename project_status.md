@@ -1680,7 +1680,7 @@ JWT_TOKEN="eyJabc..." ./backend/scripts/pms_dashboard_smoke.sh
 
 ---
 
-### Option D: Email Notifications System ✅ IMPLEMENTED
+### Option D: Email Notifications System ✅ VERIFIED
 
 **Date Completed:** 2026-02-01
 
@@ -1761,12 +1761,21 @@ JWT_TOKEN="eyJabc..." ./backend/scripts/pms_email_notifications_smoke.sh
 - `backend/docs/ops/runbook/09-email-notifications.md` (runbook chapter)
 - `backend/docs/project_status.md` (this entry)
 
-**Status:** ✅ IMPLEMENTED (awaiting PROD verification)
+**Evidence (PROD):**
 
-**Note:** VERIFIED status requires:
-- Deploy verification with commit match
-- Smoke test `pms_email_notifications_smoke.sh` rc=0
-- Evidence block with PROD timestamps
+- **Verified:** 2026-02-01
+- **Backend Deploy:**
+  - API Base: https://api.fewo.kolibri-visions.de
+  - source_commit: e3a9f5889163b65bd98fb636b35723b626b86922
+  - started_at: 2026-02-01T10:42:04.779216+00:00
+- **Admin Deploy:**
+  - Admin Base: https://admin.fewo.kolibri-visions.de
+  - source_commit: e3a9f5889163b65bd98fb636b35723b626b86922
+  - started_at: 2026-02-01T10:39:39.559Z
+- **Smoke Tests:**
+  - `pms_email_notifications_smoke.sh` rc=0 (PASS=6, FAIL=0, SKIP=0)
+
+**Status:** ✅ VERIFIED
 
 ---
 

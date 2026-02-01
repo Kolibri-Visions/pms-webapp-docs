@@ -207,6 +207,39 @@ Summary: PASS=6, FAIL=0, SKIP=0
 Test emails are created with unique addresses like `smoke.<timestamp>@example.com`.
 These entries remain in the outbox for inspection but are never sent to real addresses.
 
+## Migration ohne Supabase CLI (Studio SQL Editor)
+
+Wenn `supabase db push` nicht verfügbar ist (`supabase: command not found` oder keine CLI installiert):
+
+### Schritte
+
+1. **Supabase Studio öffnen**
+   - Dashboard: https://supabase.com/dashboard
+   - Projekt auswählen → SQL Editor
+
+2. **Migration-Datei einfügen**
+   - Inhalt von `supabase/migrations/20260201100000_add_email_outbox.sql` kopieren
+   - In SQL Editor einfügen und ausführen
+
+3. **Verifizierung**
+   ```sql
+   SELECT to_regclass('public.email_outbox');
+   -- Erwartetes Ergebnis: 'email_outbox' (nicht NULL)
+   ```
+
+### Troubleshooting: "must be owner of table"
+
+**Fehler:** `ERROR: must be owner of table email_outbox`
+
+**Ursache:** Sie haben die Migration als falsche Rolle ausgeführt (z.B. `postgres` via docker exec).
+
+**Lösung:**
+- Tabelle existiert bereits (Prüfung: `SELECT to_regclass('public.email_outbox');`)
+- Migration erneut via **Studio SQL Editor** ausführen (korrekte Owner-Rechte)
+- Alternativ: Smoke-Test ausführen — wenn rc=0, ist die Tabelle funktionsfähig
+
+---
+
 ## Celery Integration (Future)
 
 For production workloads, process outbox via Celery task:
