@@ -1103,7 +1103,7 @@ export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
 
 ---
 
-### P2.21.4.8s: Owner Management Pro (Phases 1-4) ✅ IMPLEMENTED
+### P2.21.4.8s: Owner Management Pro (Phases 1-4) ✅ VERIFIED
 
 **Date Completed:** 2026-02-01
 
@@ -1168,7 +1168,21 @@ export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
 - backend/scripts/README.md (smoke entry)
 - backend/docs/project_status.md (this entry)
 
-**Status:** ✅ IMPLEMENTED
+**Evidence (PROD):**
+
+- **Date Verified:** 2026-02-01
+- **Commit:** `d702439bd30b55c4e2e9b880128071a71f38f736`
+- **Deploy Verify:**
+  - Script: `pms_verify_deploy.sh` → `verify_rc=0`
+  - Backend `/api/v1/ops/version`: commit match, started_at=2026-02-01T19:47:05.063851+00:00
+  - Admin `/api/ops/version`: commit match, started_at=2026-02-01T19:49:22.692Z
+- **Smoke Test:**
+  - Script: `pms_owner_management_pro_smoke.sh` → `rc=0`
+  - Summary: PASS=8, FAIL=0, SKIP=0
+  - Key: "List owner invites (HTTP 200)" confirmed
+- **DB Confirmation:** `public.owner_invites` exists (count=0, table created)
+
+**Status:** ✅ VERIFIED
 
 ---
 

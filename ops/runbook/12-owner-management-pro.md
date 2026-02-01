@@ -212,6 +212,29 @@ curl -X POST "${API}/api/v1/owner-statements/${STATEMENT_ID}/send-email" \
 JWT_TOKEN="eyJ..." ./backend/scripts/pms_owners_list_smoke.sh
 ```
 
+### /owners/invites Returns 503 (Schema Not Installed)
+
+**Symptom:** GET `/api/v1/owners/invites` returns HTTP 503 with message "schema not installed".
+
+**Cause:** `public.owner_invites` table missing — migration not applied in PROD.
+
+**Resolution:**
+1. Apply migration as `supabase_admin` (table owner) via Supabase Studio SQL Editor:
+   - Run contents of `supabase/migrations/20260201200000_owner_management_pro.sql`
+2. Verify table exists:
+   ```sql
+   SELECT to_regclass('public.owner_invites');
+   -- Expected: 'public.owner_invites'
+
+   SELECT count(*) FROM public.owner_invites;
+   -- Expected: 0 (empty table)
+   ```
+3. Re-run smoke test to confirm:
+   ```bash
+   JWT_TOKEN="eyJ..." ./backend/scripts/pms_owner_management_pro_smoke.sh
+   # Expected: "List owner invites (HTTP 200)"
+   ```
+
 ## Database Schema
 
 ### owners table (updated)
