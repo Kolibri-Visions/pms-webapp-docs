@@ -74,6 +74,19 @@ JWT_TOKEN="eyJhbG..." ./backend/scripts/pms_amenities_toggle_smoke.sh
 
 **Debug:** Check browser console and Next.js server logs for detailed error messages.
 
+### Aktionen-Menü (Dropdown) wird abgeschnitten
+
+**Symptom:** Das 3-Punkte-Menü ("Aktionen") bei einem Eintrag wird abgeschnitten oder ist nicht vollständig sichtbar.
+
+**Ursache:** Das übergeordnete Container-Element hat `overflow: hidden`, was das Dropdown-Menü abschneidet.
+
+**Lösung (Fixed 2026-02-01):**
+1. Das Dropdown-Menü wird jetzt via React Portal direkt in `<body>` gerendert
+2. z-index auf `9999` gesetzt, um über allen anderen Elementen zu erscheinen
+3. Position wird dynamisch aus den Button-Koordinaten berechnet
+
+**Verifizierung:** Öffne `/amenities`, klicke auf die 3-Punkte bei einem Eintrag → Menü erscheint vollständig.
+
 ### 403 Forbidden
 
 **Symptom:** Create/Edit/Delete operations return 403.
@@ -167,6 +180,69 @@ CREATE TABLE public.amenities (
   CONSTRAINT amenities_unique_per_agency UNIQUE (agency_id, name)
 );
 ```
+
+## Icon Picker
+
+Das Ausstattungs-Icon wird als String-Key in der Datenbank gespeichert (`icon` Spalte).
+
+### Unterstützte Icon-Keys
+
+Die folgenden Keys werden von der UI mit Lucide-React Icons gerendert:
+
+| Key | Label | Icon |
+|-----|-------|------|
+| `wifi` | WLAN | Wifi |
+| `tv` | Fernseher | Tv |
+| `car` | Auto | Car |
+| `parking` | Parkplatz | ParkingSquare |
+| `key` | Schlüssel | Key |
+| `lock` | Schloss/Safe | Lock |
+| `shield` | Sicherheit | Shield |
+| `snowflake` | Klimaanlage | Snowflake |
+| `flame` | Heizung/Kamin | Flame |
+| `coffee` | Kaffeemaschine | Coffee |
+| `bath` | Badewanne | Bath |
+| `bed` | Bett | Bed |
+| `refrigerator` | Kühlschrank | Refrigerator |
+| `utensils` | Besteck/Küche | Utensils |
+| `paw` | Haustierfreundlich | PawPrint |
+| `baby` | Kinderfreundlich | Baby |
+| `accessibility` | Barrierefrei | Accessibility |
+| `trees` | Garten | Trees |
+| `waves` | Pool/Wasser | Waves |
+| `wind` | Ventilator | Wind |
+| `sun` | Sonnenterrasse | Sun |
+| `dumbbell` | Fitness | Dumbbell |
+| `bike` | Fahrrad | Bike |
+| `sofa` | Wohnzimmer | Sofa |
+| `airvent` | Lüftung | AirVent |
+| `microwave` | Mikrowelle | Microwave |
+| `cooking` | Kochen | CookingPot |
+| `washer` | Waschmaschine | Shirt |
+| `armchair` | Sessel | Armchair |
+| `lamp` | Beleuchtung | Lamp |
+| `monitor` | Arbeitsplatz | Monitor |
+| `speaker` | Soundsystem | Speaker |
+| `gaming` | Spielkonsole | Gamepad2 |
+| `books` | Bücher | BookOpen |
+| `scissors` | Werkzeug | Scissors |
+| `sparkles` | Sauberkeit | Sparkles |
+
+### Fallback-Verhalten
+
+- **Bekannter Key:** Zeigt das entsprechende Lucide-Icon
+- **Unbekannter Key:** Zeigt den Text als kleines Label (Legacy-Kompatibilität für z.B. "ofen")
+- **Kein Icon:** Zeigt "—"
+
+### Icon Picker Komponente
+
+Datei: `frontend/app/amenities/components/amenity-icon-picker.tsx`
+
+Features:
+- Visuelles Grid aller verfügbaren Icons
+- Suchfunktion nach Name/Label
+- "Benutzerdefinierter Text" Option für Legacy-Werte
+- Vorschau des aktuell gewählten Icons
 
 ## Related Documentation
 

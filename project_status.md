@@ -24583,6 +24583,41 @@ export EXPECTED_COMMIT="b28d4f8120918be48cca6a51f6b4e6e63ea55a34"
 
 ---
 
+**Amenities UI Polish: Actions Dropdown Overlay + Icon Picker (2026-02-01):**
+
+- **Issue 1:** 3-Punkte "Aktionen" Dropdown wird abgeschnitten (overflow-hidden auf Parent)
+- **Issue 2:** Icon-Feld war nur Text-Eingabe ohne visuelle Auswahl
+
+- **Fix:**
+  - Actions Dropdown: Render via React Portal in `<body>` mit z-index 9999
+  - Icon Picker: Neues Component mit kuratierten Lucide-Icons, Suche, Vorschau
+  - Smoke Script: Robuster gegen verschiedene API-Response-Shapes (array vs {items})
+
+- **Files Changed:**
+  - `frontend/app/amenities/page.tsx` (Portal-Dropdown, Icon-Komponenten)
+  - `frontend/app/amenities/components/amenity-icon-picker.tsx` (NEW)
+  - `backend/scripts/pms_amenities_toggle_smoke.sh` (response shape handling)
+  - `backend/docs/ops/runbook/10-amenities-admin-ui.md` (Dropdown-Fix, Icon-Keys Doku)
+  - `backend/scripts/README.md` (list-shape tolerance note)
+
+- **Status:** ✅ IMPLEMENTED
+
+- **Verification Commands:**
+  ```bash
+  # 1. Verify deploy
+  EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
+
+  # 2. Run smoke test
+  JWT_TOKEN="..." ./backend/scripts/pms_amenities_toggle_smoke.sh
+  # Expected: RESULT: PASS, rc=0
+
+  # 3. Manual UI check:
+  # - Open /amenities, click 3-dots → menu fully visible
+  # - Create/Edit → icon picker grid works
+  ```
+
+---
+
 ## Admin UI: Buchungen (List + Detail + Actions) - ROLLED BACK
 
 **Status:** ❌ ROLLED BACK / NOT DEPLOYED
