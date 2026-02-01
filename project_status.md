@@ -1,12 +1,12 @@
 # PMS-Webapp Project Status
 
-**Last Updated:** 2026-01-28
+**Last Updated:** 2026-02-01
 
-**Last Updated (actual):** 2026-01-28
+**Last Updated (actual):** 2026-02-01
 
 **Current Phase:** Phase 21 - Inventory/Availability Production Hardening
 
-**Current Phase (actual):** (see latest VERIFIED evidence blocks dated 2026-01-10 below)
+**Current Phase (actual):** (see latest VERIFIED evidence blocks dated 2026-02-01 below)
 
 **Note (2026-01-13):** Latest VERIFIED evidence blocks now include 2026-01-13 (see "Admin UI /pricing 404 Fix (2026-01-13)" entry below).
 
