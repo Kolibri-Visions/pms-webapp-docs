@@ -954,7 +954,7 @@ export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
 
 ---
 
-### P2.21.4.8q: Email Outbox UI v1 ✅ IMPLEMENTED
+### P2.21.4.8q: Email Outbox UI v1 ✅ VERIFIED
 
 **Date Completed:** 2026-02-01
 
@@ -1021,7 +1021,17 @@ export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
 - backend/scripts/README.md (UI verification note)
 - backend/docs/project_status.md (this entry)
 
-**Status:** ✅ IMPLEMENTED
+**PROD Evidence (2026-02-01):**
+- backend:
+  - source_commit: `7f586563881fb419f7dbb92ecd814406f654cbaf`
+- admin:
+  - source_commit: `7f586563881fb419f7dbb92ecd814406f654cbaf`
+  - started_at: 2026-02-01T17:03:40.828Z
+  - environment: production
+- smoke:
+  - `pms_email_notifications_smoke.sh` rc=0 (PASS=6, FAIL=0)
+
+**Status:** ✅ VERIFIED
 
 ---
 
