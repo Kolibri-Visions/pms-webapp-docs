@@ -24525,6 +24525,45 @@ export EXPECTED_COMMIT="b28d4f8120918be48cca6a51f6b4e6e63ea55a34"
 
 ---
 
+**Amenities Toggle 400 Bad Request Fix (2026-02-01):**
+
+- **Issue:** Toggling "aktiv/inaktiv" switch in Admin UI `/amenities` returns 400 Bad Request.
+
+- **Root Cause:**
+  - Backend `AmenityUpdate` schema missing `is_active` field
+  - When frontend sends `{"is_active": false}`, Pydantic ignores unknown field
+  - Service raises `ValidationException("No fields to update")` → HTTP 400
+
+- **Fix:** End-to-end `is_active` support:
+  - Migration: `20260201110000_add_amenities_is_active.sql` adds `is_active` column with DEFAULT true
+  - Schema: `AmenityCreate`, `AmenityUpdate`, `AmenityResponse` now include `is_active`
+  - Service: `create_amenity`, `update_amenity`, list/get queries updated for `is_active`
+
+- **Files Changed:**
+  - `supabase/migrations/20260201110000_add_amenities_is_active.sql` (NEW)
+  - `backend/app/schemas/amenities.py` (added is_active to all schemas)
+  - `backend/app/services/amenity_service.py` (added is_active to all queries)
+  - `backend/scripts/pms_amenities_toggle_smoke.sh` (NEW - toggle-specific smoke test)
+  - `backend/scripts/README.md` (added smoke test documentation)
+  - `backend/docs/ops/runbook/10-amenities-admin-ui.md` (NEW - runbook chapter)
+
+- **Smoke Test:** `backend/scripts/pms_amenities_toggle_smoke.sh`
+  - Tests PATCH with `{is_active: false}` and `{is_active: true}`
+  - Verifies persisted state via GET
+  - Expected: PASS=5, FAIL=0
+
+- **Status:** ✅ IMPLEMENTED (mark VERIFIED after PROD smoke rc=0)
+
+- **Verification Commands:**
+  ```bash
+  # Apply migration in Supabase Studio SQL Editor
+  # Then run smoke test:
+  JWT_TOKEN="..." ./backend/scripts/pms_amenities_toggle_smoke.sh
+  # Expected: RESULT: PASS
+  ```
+
+---
+
 ## Admin UI: Buchungen (List + Detail + Actions) - ROLLED BACK
 
 **Status:** ❌ ROLLED BACK / NOT DEPLOYED
