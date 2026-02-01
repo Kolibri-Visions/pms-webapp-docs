@@ -1035,6 +1035,74 @@ export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
 
 ---
 
+### P2.21.4.8r: Team Management UI - Role Edit + Remove Member ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-01
+
+**Overview:**
+
+Enhanced Team Management Admin UI with role editing and member removal capabilities:
+- Actions menu (3-dots) on each member row
+- Role change modal with role dropdown
+- Remove member confirmation dialog
+- Toast notifications for success/error feedback
+
+**Changes:**
+
+- **Frontend Route** (`team/page.tsx`):
+  - Added actions menu (MoreVertical icon) per member row
+  - "Rolle ändern..." action → Opens modal with role dropdown
+  - "Mitglied entfernen..." action → Opens confirmation dialog
+  - Role options: Administrator, Mitarbeiter, Eigentümer
+  - Proper z-index handling (dropdown not clipped by table overflow)
+  - Click-outside to close menu
+
+- **Internal API Proxy** (`api/internal/team/members/[user_id]/route.ts`):
+  - PATCH → forwards to `PATCH /api/v1/team/members/{user_id}`
+  - DELETE → forwards to `DELETE /api/v1/team/members/{user_id}`
+  - Auth: Supabase session + x-agency-id header
+
+- **Smoke Script** (`pms_team_role_remove_smoke.sh`):
+  - Health check
+  - List members
+  - Role toggle (agent↔owner, then revert)
+  - DELETE endpoint validation (SKIPPED for PROD safety)
+
+- **Docs** (`runbook/11-team-management-admin-ui.md`):
+  - Feature documentation
+  - Troubleshooting (403, last admin protection, 404)
+  - Smoke test usage
+
+**Verification Commands (PROD):**
+
+```bash
+# 1. Deploy verify
+EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
+
+# 2. Smoke test (rc=0)
+export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
+./backend/scripts/pms_team_role_remove_smoke.sh
+
+# 3. Manual UI check
+# - Navigate to /team
+# - Click actions menu on member row
+# - Test "Rolle ändern..." → change role → verify toast
+# - Test "Mitglied entfernen..." → confirm → verify removed
+```
+
+**Files Changed:**
+
+- frontend/app/team/page.tsx (actions menu, modals)
+- frontend/app/api/internal/team/members/[user_id]/route.ts (NEW)
+- backend/scripts/pms_team_role_remove_smoke.sh (NEW)
+- backend/docs/ops/runbook/11-team-management-admin-ui.md (NEW)
+- backend/scripts/README.md (smoke entry)
+- backend/docs/project_status.md (this entry)
+
+**Status:** ✅ IMPLEMENTED
+
+---
+
 ### P3.1: Direct Booking Hardening — Idempotency-Key + Audit Log ✅ VERIFIED
 
 **Date Completed:** 2026-01-30
