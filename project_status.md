@@ -1237,6 +1237,48 @@ export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
 
 ---
 
+### P2.21.4.8u: Owner Portal O1/O2 Null Field Bugfix ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-01
+
+**Overview:**
+
+Fixes two 500 errors in Owner Portal endpoints caused by NULL values in legacy booking data.
+
+**Bugs Fixed:**
+
+1. **GET /api/v1/owner/bookings → 500 (Pydantic ValidationError):**
+   - Cause: OwnerBookingResponse required non-null date_from/date_to, but legacy bookings have NULL
+   - Fix: Made date_from/date_to Optional[datetime] in response schema
+
+2. **POST /api/v1/owners/{id}/statements/generate → 500 (NotNullViolation):**
+   - Cause: Legacy bookings have NULL total_price_cents; insert to owner_statement_items failed NOT NULL constraint
+   - Fix: Default NULL total_price_cents to 0 during statement item insertion
+
+**Files Changed:**
+
+- backend/app/schemas/owners.py (OwnerBookingResponse dates Optional)
+- backend/app/api/routes/owners.py (statement generation null handling)
+- backend/docs/ops/runbook/13-owner-portal-pro.md (troubleshooting entries)
+- backend/docs/project_status.md (this entry)
+
+**Verification Commands (PROD):**
+
+```bash
+# 1. Deploy verify
+EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
+
+# 2. Owner Portal smoke (rc=0)
+./backend/scripts/pms_owner_portal_smoke.sh
+
+# 3. Owner Statements smoke (rc=0)
+./backend/scripts/pms_owner_statements_smoke.sh
+```
+
+**Status:** ✅ IMPLEMENTED
+
+---
+
 ### P3.1: Direct Booking Hardening — Idempotency-Key + Audit Log ✅ VERIFIED
 
 **Date Completed:** 2026-01-30

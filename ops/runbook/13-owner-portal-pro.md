@@ -187,6 +187,31 @@ PDF download available if admin has generated PDF.
 - Generate new statement for correct period
 - Or admin manually adjusts in database (not recommended)
 
+### Owner Bookings Returns 500 (Pydantic Validation)
+
+**Symptom:** GET `/api/v1/owner/bookings` returns HTTP 500 with "ValidationError: date_from/date_to Input should be a valid datetime".
+
+**Cause:** Legacy bookings have NULL date_from/date_to values in database.
+
+**Resolution:**
+- Fixed in backend: OwnerBookingResponse schema now uses Optional[datetime] for dates
+- Legacy bookings with NULL dates are returned with null date values
+- Deploy latest backend code to resolve
+
+### Statement Generation Returns 500 (NotNullViolation)
+
+**Symptom:** POST `/api/v1/owners/{id}/statements/generate` returns HTTP 500 with "NotNullViolationError: null value in column total_price_cents".
+
+**Cause:** Legacy bookings have NULL total_price_cents values; insert into owner_statement_items fails NOT NULL constraint.
+
+**Resolution:**
+- Fixed in backend: Statement generation now defaults NULL total_price_cents to 0
+- Deploy latest backend code to resolve
+- Verify fix:
+  ```bash
+  JWT_TOKEN="eyJ..." ./backend/scripts/pms_owner_statements_smoke.sh
+  ```
+
 ## Owner Authentication Flow
 
 ### Invite Acceptance
