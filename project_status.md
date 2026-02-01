@@ -1506,7 +1506,7 @@ EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
 
 ---
 
-### Option B: Guests CRUD (Admin UI) ✅ IMPLEMENTED
+### Option B: Guests CRUD (Admin UI) ✅ VERIFIED
 
 **Date Completed:** 2026-02-01
 
@@ -1573,11 +1573,25 @@ JWT_TOKEN="eyJabc..." ./backend/scripts/pms_guests_crud_smoke.sh
 - `backend/docs/ops/runbook/07-guests-admin-ui.md` (new runbook chapter)
 - `backend/docs/project_status.md` (this entry)
 
-**Status:** ✅ IMPLEMENTED (awaiting PROD verification)
+**Evidence (PROD):**
+
+- **Verified:** 2026-02-01
+- **Backend Deploy:**
+  - API Base: https://api.fewo.kolibri-visions.de
+  - source_commit: a5904344214fe7809f03a5014ee7335116729bb9
+  - started_at: 2026-02-01T09:59:04.658161+00:00
+- **Admin Deploy:**
+  - Admin Base: https://admin.fewo.kolibri-visions.de
+  - source_commit: a5904344214fe7809f03a5014ee7335116729bb9
+  - started_at: 2026-02-01T10:00:39.570Z
+- **Smoke Tests:**
+  - `pms_guests_crud_smoke.sh` rc=0 (PASS=7, FAIL=0)
+
+**Status:** ✅ VERIFIED
 
 ---
 
-### Option C: Dashboard Widgets (Admin UI) ✅ IMPLEMENTED
+### Option C: Dashboard Widgets (Admin UI) ✅ VERIFIED
 
 **Date Completed:** 2026-02-01
 
@@ -1648,11 +1662,25 @@ JWT_TOKEN="eyJabc..." ./backend/scripts/pms_dashboard_smoke.sh
 - `backend/docs/ops/runbook/08-dashboard-widgets.md` (new runbook chapter)
 - `backend/docs/project_status.md` (this entry)
 
-**Status:** ✅ IMPLEMENTED (awaiting PROD verification)
+**Evidence (PROD):**
+
+- **Verified:** 2026-02-01
+- **Backend Deploy:**
+  - API Base: https://api.fewo.kolibri-visions.de
+  - source_commit: a5904344214fe7809f03a5014ee7335116729bb9
+  - started_at: 2026-02-01T09:59:04.658161+00:00
+- **Admin Deploy:**
+  - Admin Base: https://admin.fewo.kolibri-visions.de
+  - source_commit: a5904344214fe7809f03a5014ee7335116729bb9
+  - started_at: 2026-02-01T10:00:39.570Z
+- **Smoke Tests:**
+  - `pms_dashboard_smoke.sh` rc=0 (PASS=5, FAIL=0)
+
+**Status:** ✅ VERIFIED
 
 ---
 
-### Option A (Refined): Availability UI + Bulk Endpoint — TypeScript Fix ✅ IMPLEMENTED
+### Option A (Refined): Availability UI + Bulk Endpoint — TypeScript Fix ✅ VERIFIED
 
 **Date Completed:** 2026-02-01 (hotfix)
 
@@ -1692,11 +1720,24 @@ This maintains backwards compatibility with existing call sites while supporting
 cd frontend && npm run build  # Must succeed without type errors
 ```
 
-**Status:** ✅ IMPLEMENTED (awaiting PROD verification)
+**Evidence (PROD):**
+
+- **Verified:** 2026-02-01
+- **Backend Deploy:**
+  - API Base: https://api.fewo.kolibri-visions.de
+  - source_commit: a5904344214fe7809f03a5014ee7335116729bb9
+  - started_at: 2026-02-01T09:59:04.658161+00:00
+- **Admin Deploy:**
+  - Admin Base: https://admin.fewo.kolibri-visions.de
+  - source_commit: a5904344214fe7809f03a5014ee7335116729bb9
+  - started_at: 2026-02-01T10:00:39.570Z
+- **Note:** Backend /api/v1/ops/version reports environment=development; verification based on commit match + smoke rc=0.
+
+**Status:** ✅ VERIFIED
 
 ---
 
-### Option A (Refined): Availability UI + Bulk Endpoint (Stop Request Storm) ✅ IMPLEMENTED
+### Option A (Refined): Availability UI + Bulk Endpoint (Stop Request Storm) ✅ VERIFIED
 
 **Date Completed:** 2026-02-01
 
@@ -1803,7 +1844,23 @@ JWT_TOKEN="eyJabc..." ./backend/scripts/pms_availability_overview_smoke.sh
 - `backend/docs/ops/runbook/06-availability-admin-ui.md` (request storm troubleshooting)
 - `backend/docs/project_status.md` (this entry)
 
-**Status:** ✅ IMPLEMENTED (awaiting PROD verification)
+**Evidence (PROD):**
+
+- **Verified:** 2026-02-01
+- **Backend Deploy:**
+  - API Base: https://api.fewo.kolibri-visions.de
+  - source_commit: a5904344214fe7809f03a5014ee7335116729bb9
+  - started_at: 2026-02-01T09:59:04.658161+00:00
+- **Admin Deploy:**
+  - Admin Base: https://admin.fewo.kolibri-visions.de
+  - source_commit: a5904344214fe7809f03a5014ee7335116729bb9
+  - started_at: 2026-02-01T10:00:39.570Z
+- **Smoke Tests:**
+  - `pms_availability_overview_smoke.sh` rc=0 (PASS=7, FAIL=0)
+  - `pms_availability_blocks_smoke.sh` rc=0 (PASS=8, FAIL=0)
+- **Note:** Backend /api/v1/ops/version reports environment=development; verification based on commit match + smoke rc=0.
+
+**Status:** ✅ VERIFIED
 
 ---
 
