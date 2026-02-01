@@ -1172,6 +1172,57 @@ export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
 
 ---
 
+### P2.21.4.8t: Owners List 503 Bugfix ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-01
+
+**Overview:**
+
+Fixes HTTP 503 error on `/api/v1/owners` endpoint after deploying Owner Management Pro when migration is not yet applied.
+
+**Root Cause:**
+- The list_owners query referenced new "pro" columns (commission_rate_bps, phone, address, notes)
+- If migration not applied, asyncpg throws UndefinedColumnError → global handler returns 503
+
+**Fix:**
+- Added try/catch in list_owners that falls back to legacy query when pro columns missing
+- Legacy query only selects original columns (id, agency_id, auth_user_id, email, first_name, last_name, is_active, created_at, updated_at)
+- Pydantic defaults fill missing fields (commission_rate_bps=0, phone/address/notes=null)
+- Added INFO log when fallback triggered
+
+**Additional Changes:**
+- Migration made idempotent (DROP POLICY IF EXISTS before CREATE)
+- UI owners page now shows backend error message (if provided)
+- Added pms_owners_list_smoke.sh for targeted testing
+- Runbook troubleshooting section updated
+
+**Verification Commands (PROD):**
+
+```bash
+# 1. Deploy verify
+EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
+
+# 2. Owners list smoke test (rc=0, must return 200)
+export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
+./backend/scripts/pms_owners_list_smoke.sh
+
+# 3. Manual UI check: /owners page loads without 503 error
+```
+
+**Files Changed:**
+
+- backend/app/api/routes/owners.py (list_owners fallback)
+- frontend/app/owners/page.tsx (error surfacing)
+- supabase/migrations/20260201200000_owner_management_pro.sql (idempotent)
+- backend/scripts/pms_owners_list_smoke.sh (NEW)
+- backend/scripts/README.md (script entry)
+- backend/docs/ops/runbook/12-owner-management-pro.md (troubleshooting)
+- backend/docs/project_status.md (this entry)
+
+**Status:** ✅ IMPLEMENTED
+
+---
+
 ### P3.1: Direct Booking Hardening — Idempotency-Key + Audit Log ✅ VERIFIED
 
 **Date Completed:** 2026-01-30

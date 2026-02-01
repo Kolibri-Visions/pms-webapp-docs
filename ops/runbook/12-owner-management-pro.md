@@ -187,6 +187,31 @@ curl -X POST "${API}/api/v1/owner-statements/${STATEMENT_ID}/send-email" \
 2. Enable SMTP and set `EMAIL_NOTIFICATIONS_ENABLED=true`
 3. Or manually provide accept link to owner
 
+### /owners Returns 503 After Deploy
+
+**Symptom:** Admin UI owners page shows "Service vorübergehend nicht verfügbar" and GET `/api/v1/owners` returns HTTP 503.
+
+**Cause:** Migration `20260201200000_owner_management_pro.sql` not applied, or applied with wrong user (ownership issue).
+
+**Resolution:**
+1. Apply migration as `supabase_admin` (table owner):
+   ```bash
+   # Via Supabase Studio SQL Editor (recommended)
+   # Or via psql as supabase_admin user
+   ```
+2. Verify migration applied:
+   ```sql
+   SELECT column_name FROM information_schema.columns
+   WHERE table_name = 'owners' AND column_name IN ('commission_rate_bps', 'phone', 'address', 'notes');
+   ```
+3. If migration is applied but still 503, check backend logs for schema drift errors.
+4. Backend fallback: The list endpoint should automatically use legacy query if "pro" columns are missing. Ensure backend is deployed with latest code.
+
+**Smoke Test:**
+```bash
+JWT_TOKEN="eyJ..." ./backend/scripts/pms_owners_list_smoke.sh
+```
+
 ## Database Schema
 
 ### owners table (updated)
