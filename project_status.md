@@ -1506,6 +1506,50 @@ EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
 
 ---
 
+### Option A (Refined): Availability UI + Bulk Endpoint — TypeScript Fix ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-01 (hotfix)
+
+**Overview:**
+
+Fixed TypeScript build error that broke Coolify deploy:
+
+```
+./app/availability/page.tsx:196:11
+Type error: Type 'AbortSignal' is not assignable to type 'string'.
+```
+
+**Root Cause:**
+
+The `apiClient.get` signature was:
+```typescript
+get(endpoint, token?, headers?: Record<string, string>, noCache?: boolean)
+```
+
+The availability page passed `{ signal: controller.signal }` as the 3rd argument, but TypeScript expected `Record<string, string>`.
+
+**Fix:**
+
+Updated `apiClient.get` to accept both legacy and new signatures:
+- Legacy: `apiClient.get(endpoint, token, headers?, noCache?)`
+- New: `apiClient.get(endpoint, token, { signal?, headers?, noCache? })`
+
+This maintains backwards compatibility with existing call sites while supporting AbortController.
+
+**Files Changed:**
+
+- `frontend/app/lib/api-client.ts` (updated get signature)
+
+**Verification:**
+
+```bash
+cd frontend && npm run build  # Must succeed without type errors
+```
+
+**Status:** ✅ IMPLEMENTED (awaiting PROD verification)
+
+---
+
 ### Option A (Refined): Availability UI + Bulk Endpoint (Stop Request Storm) ✅ IMPLEMENTED
 
 **Date Completed:** 2026-02-01
