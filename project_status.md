@@ -1237,7 +1237,7 @@ export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
 
 ---
 
-### P2.21.4.8u: Owner Portal O1/O2 Null Field Bugfix ✅ IMPLEMENTED
+### P2.21.4.8u: Owner Portal O1/O2 Null Field Bugfix ✅ VERIFIED
 
 **Date Completed:** 2026-02-01
 
@@ -1266,7 +1266,7 @@ Fixes two 500 errors in Owner Portal endpoints caused by NULL values in legacy b
 
 ```bash
 # 1. Deploy verify
-EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
+API_BASE_URL=https://api.fewo.kolibri-visions.de EXPECT_COMMIT=dcbd635 ./backend/scripts/pms_verify_deploy.sh
 
 # 2. Owner Portal smoke (rc=0)
 ./backend/scripts/pms_owner_portal_smoke.sh
@@ -1275,7 +1275,22 @@ EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
 ./backend/scripts/pms_owner_statements_smoke.sh
 ```
 
-**Status:** ✅ IMPLEMENTED
+**Evidence (PROD):**
+
+- **Date Verified:** 2026-02-01
+- **Commit:** `dcbd63537048cf40e0287ee245bd306deb29a440`
+- **Deploy Verify:** `verify_rc=0`
+  - Backend `/api/v1/ops/version`: commit=dcbd635, started_at=2026-02-01T21:49:04.482694+00:00
+  - Admin `/api/ops/version`: commit=dcbd635, started_at=2026-02-01T21:51:02.187Z
+- **pms_owner_portal_smoke.sh:** `rc=0`
+  - Bookings endpoint returned 85 bookings (no 500 error)
+  - Staff endpoint denied 403 (expected)
+- **pms_owner_statements_smoke.sh:** `rc=0`
+  - Statement generated: 7bb56497-ee14-47a5-bf7c-fef68a8f9e59
+  - CSV download: 8 lines (success)
+  - Staff endpoint denied 403 (expected)
+
+**Status:** ✅ VERIFIED
 
 ---
 
