@@ -1577,6 +1577,81 @@ JWT_TOKEN="eyJabc..." ./backend/scripts/pms_guests_crud_smoke.sh
 
 ---
 
+### Option C: Dashboard Widgets (Admin UI) ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-01
+
+**Overview:**
+
+Added dashboard KPI widgets to the Admin UI home page. The dashboard shows at-a-glance metrics for agency administrators.
+
+**Features:**
+
+1. **Dashboard API** (`/api/v1/dashboard/summary`):
+   - Single bulk endpoint for all KPIs (no N+1 storms)
+   - Efficient SQL aggregations
+   - Stable response even with empty DB
+   - RBAC: owner role sees only their properties' metrics
+
+2. **Dashboard Widgets**:
+   - **Heute (Today)**: Check-ins and check-outs scheduled for today
+   - **Buchungsanfragen offen**: Pending requests with age buckets (0-3d, 4-7d, 8+d)
+   - **Belegung**: Occupancy percentage for next 30 days with progress bar
+   - **Umsatz**: Revenue totals for current week and month (EUR)
+
+3. **Frontend**:
+   - Responsive grid layout (1/2/4 columns)
+   - Loading skeleton states
+   - Error states with German messages
+   - AbortController for request cancellation
+
+**API Response Schema:**
+
+```json
+{
+  "today": {"check_ins": 0, "check_outs": 0},
+  "booking_requests": {"pending": 0, "oldest_pending_days": null, "by_age_bucket": {...}},
+  "occupancy": {"window_days": 30, "percent": 0.0, "reason": null},
+  "revenue": {"week": 0.0, "month": 0.0, "currency": "EUR"}
+}
+```
+
+**Data-TestIDs (QA):**
+
+- `dashboard-page`, `dashboard-today`
+- `dashboard-requests`, `dashboard-occupancy`, `dashboard-revenue`
+
+**Verification Commands:**
+
+```bash
+# Deploy verify
+EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
+
+# Dashboard API smoke test
+JWT_TOKEN="eyJabc..." ./backend/scripts/pms_dashboard_smoke.sh
+
+# Manual checks:
+# 1. Admin UI → Dashboard loads without errors
+# 2. Verify no request storm in network tab (single API call)
+# 3. Check KPI values match expected data
+```
+
+**Files Changed:**
+
+- `backend/app/api/routes/dashboard.py` (new dashboard endpoint)
+- `backend/app/modules/dashboard.py` (new dashboard module)
+- `backend/app/modules/bootstrap.py` (dashboard module import)
+- `backend/app/main.py` (dashboard router fallback mount)
+- `frontend/app/dashboard/page.tsx` (dashboard widgets UI)
+- `backend/scripts/pms_dashboard_smoke.sh` (new smoke test)
+- `backend/scripts/README.md` (smoke test documentation)
+- `backend/docs/ops/runbook/08-dashboard-widgets.md` (new runbook chapter)
+- `backend/docs/project_status.md` (this entry)
+
+**Status:** ✅ IMPLEMENTED (awaiting PROD verification)
+
+---
+
 ### Option A (Refined): Availability UI + Bulk Endpoint — TypeScript Fix ✅ IMPLEMENTED
 
 **Date Completed:** 2026-02-01 (hotfix)
