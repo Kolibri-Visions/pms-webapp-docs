@@ -24564,6 +24564,25 @@ export EXPECTED_COMMIT="b28d4f8120918be48cca6a51f6b4e6e63ea55a34"
 
 ---
 
+**Amenities Internal API + Smoke Boolean Fix (2026-02-01):**
+
+- **Issue 1:** Admin UI `/api/internal/amenities` returned 503/502 due to poor error handling
+- **Issue 2:** Smoke script `jq '.is_active // empty'` treated `false` as empty (bug)
+
+- **Fix:**
+  - Internal route: Added robust error handling, proper JSON parse error → 502
+  - Smoke script: Changed to `jq '.is_active | tostring'` for correct boolean handling
+
+- **Files Changed:**
+  - `frontend/app/api/internal/amenities/route.ts` (improved error handling)
+  - `backend/scripts/pms_amenities_toggle_smoke.sh` (boolean fix)
+  - `backend/docs/ops/runbook/10-amenities-admin-ui.md` (troubleshooting)
+  - `backend/scripts/README.md` (technical notes)
+
+- **Status:** ✅ IMPLEMENTED (combined with toggle fix above)
+
+---
+
 ## Admin UI: Buchungen (List + Detail + Actions) - ROLLED BACK
 
 **Status:** ❌ ROLLED BACK / NOT DEPLOYED

@@ -35,7 +35,7 @@ JWT_TOKEN="eyJhbG..." ./backend/scripts/pms_amenities_toggle_smoke.sh
 # Expected: PASS=5, FAIL=0
 ```
 
-### 503 Service Unavailable
+### 503 Service Unavailable (Backend)
 
 **Symptom:** All amenities operations return 503.
 
@@ -50,6 +50,29 @@ JWT_TOKEN="eyJhbG..." ./backend/scripts/pms_amenities_toggle_smoke.sh
    SELECT to_regclass('public.amenities');
    -- Expected: 'amenities' (not NULL)
    ```
+
+### 503/502 on /api/internal/amenities (Admin UI)
+
+**Symptom:** Admin UI `/amenities` page shows 503 or 502 error in Network tab for `/api/internal/amenities`.
+
+**Possible Causes:**
+
+1. **Session expired**: Supabase session token expired
+   - **Fix:** Clear cookies, re-login to Admin UI
+
+2. **Backend unreachable**: `NEXT_PUBLIC_API_BASE_URL` misconfigured on server
+   - **Check:** Verify env var in frontend deployment
+   - **Fix:** Set `NEXT_PUBLIC_API_BASE_URL=https://api.fewo.kolibri-visions.de`
+
+3. **Agency ID missing**: User not in any agency's team_members
+   - **Check:** Query `team_members` for user_id
+   - **Fix:** Add user to agency via team_members table
+
+4. **Backend 503**: Upstream amenities service unavailable
+   - **Check:** Direct API call: `curl -H "Authorization: Bearer $JWT" $API/api/v1/amenities`
+   - **Fix:** See "503 Service Unavailable (Backend)" above
+
+**Debug:** Check browser console and Next.js server logs for detailed error messages.
 
 ### 403 Forbidden
 
@@ -70,6 +93,11 @@ JWT_TOKEN="eyJhbG..." ./backend/scripts/pms_amenities_toggle_smoke.sh
 | Get amenity | `/api/v1/amenities/{id}` | GET | all authenticated |
 | Update amenity | `/api/v1/amenities/{id}` | PATCH | admin, manager |
 | Delete amenity | `/api/v1/amenities/{id}` | DELETE | admin, manager |
+
+**API Response Shape Note:**
+- `GET /api/v1/amenities` returns a **JSON array** directly (not `{items: [...]}`)
+- The internal proxy route (`/api/internal/amenities`) forwards this array to the UI
+- Example: `[{"id": "...", "name": "WiFi", "is_active": true}, ...]`
 
 ### Toggle Active Example
 
