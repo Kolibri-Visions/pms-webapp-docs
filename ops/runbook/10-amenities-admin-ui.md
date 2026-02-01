@@ -244,6 +244,52 @@ Features:
 - "Benutzerdefinierter Text" Option für Legacy-Werte
 - Vorschau des aktuell gewählten Icons
 
+## Objekt-Detail: Ausstattung
+
+### Deaktivierte Ausstattungen werden ausgeblendet
+
+**Verhalten (seit 2026-02-01):**
+- Auf der Objekt-Detail-Seite (`/properties/{id}`) werden nur aktive Ausstattungen (`is_active=true`) angezeigt
+- Deaktivierte Ausstattungen werden automatisch ausgeblendet
+
+**Im "Ausstattung zuweisen" Modal:**
+- Inaktive Ausstattungen werden nur angezeigt, wenn sie bereits dem Objekt zugewiesen sind
+- Bereits zugewiesene inaktive Ausstattungen zeigen ein "deaktiviert" Badge
+- Inaktive, nicht zugewiesene Ausstattungen sind nicht auswählbar
+
+### Icons im Objekt-Detail
+
+**Verhalten (seit 2026-02-01):**
+- Ausstattungs-Icons werden mit der `AmenityIcon` Komponente gerendert
+- Shared Komponente: `frontend/app/components/amenity-icon.tsx`
+- Unterstützt alle Icon-Keys aus dem Icon Picker (s.o.)
+
+**API-Payload:**
+- `GET /api/v1/amenities/property/{id}` liefert `is_active` und `icon` für jede Ausstattung
+- Frontend filtert basierend auf `is_active`
+
+### Property Amenities Smoke Test
+
+**Location:** `backend/scripts/pms_property_amenities_is_active_smoke.sh`
+
+**EXECUTION LOCATION:** HOST-SERVER-TERMINAL
+
+**Usage:**
+```bash
+JWT_TOKEN="eyJhbG..." ./backend/scripts/pms_property_amenities_is_active_smoke.sh
+```
+
+**What It Tests:**
+1. Find a property with amenities
+2. Verify `is_active` field is present in response
+3. Verify `icon` field is present in response
+
+**Expected Result:**
+```
+RESULT: PASS
+Summary: PASS=N, FAIL=0, SKIP=0
+```
+
 ## Related Documentation
 
 - [Backend Amenities Routes](../../api/amenities.md) — API endpoint details

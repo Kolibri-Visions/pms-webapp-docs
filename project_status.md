@@ -891,6 +891,69 @@ export API_BASE_URL="https://api.fewo.kolibri-visions.de"
 
 ---
 
+### P2.21.4.8p: Amenities - Property Detail Hide Inactive + Icon Rendering ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-01
+
+**Overview:**
+
+Property detail page improvements for amenities:
+- Hide inactive amenities (is_active=false) from property detail display
+- Render amenity icons using curated Lucide icon mapping (not text)
+- Modal: filter inactive unless already assigned, show "deaktiviert" badge
+- Shared AmenityIcon component for consistent icon rendering
+
+**Changes:**
+
+- **Frontend Interface** (`properties/[id]/page.tsx`):
+  - Added `is_active?: boolean` to Amenity interface
+  - Import `AmenityIcon` from shared component
+
+- **Frontend Display** (`properties/[id]/page.tsx`):
+  - Filter inactive amenities from display (only show `is_active !== false`)
+  - Use `AmenityIcon` component for icon rendering
+
+- **Frontend Modal** (`properties/[id]/page.tsx`):
+  - Filter inactive amenities (unless already assigned)
+  - Show "deaktiviert" badge for assigned inactive amenities
+  - Disable checkbox for unassigned inactive amenities
+  - Use `AmenityIcon` component for modal icons
+
+- **Shared Component** (`frontend/app/components/amenity-icon.tsx`):
+  - Extracted `AMENITY_ICONS` mapping and `AmenityIcon` component
+  - Reusable across amenities catalog and property detail pages
+
+- **Smoke** (`pms_property_amenities_is_active_smoke.sh`):
+  - Verifies property amenities API includes `is_active` field
+  - Verifies property amenities API includes `icon` field
+
+- **Docs** (`runbook/10-amenities-admin-ui.md`):
+  - Added "Objekt-Detail: Ausstattung" section
+  - Documented inactive filtering behavior
+  - Documented property amenities smoke test
+
+**Verification Commands:**
+
+```bash
+export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
+./backend/scripts/pms_property_amenities_is_active_smoke.sh
+# Expected: PASS, is_active field present, icon field present
+```
+
+**Files Changed:**
+
+- frontend/app/properties/[id]/page.tsx (Amenity interface, display filter, modal filter, AmenityIcon usage)
+- frontend/app/components/amenity-icon.tsx (NEW - shared component)
+- frontend/app/amenities/components/amenity-icon-picker.tsx (refactored to use shared component)
+- backend/scripts/pms_property_amenities_is_active_smoke.sh (NEW)
+- backend/scripts/README.md (new smoke script docs)
+- backend/docs/ops/runbook/10-amenities-admin-ui.md (property detail sections)
+- backend/docs/project_status.md (this entry)
+
+**Status:** ✅ IMPLEMENTED
+
+---
+
 ### P3.1: Direct Booking Hardening — Idempotency-Key + Audit Log ✅ VERIFIED
 
 **Date Completed:** 2026-01-30
