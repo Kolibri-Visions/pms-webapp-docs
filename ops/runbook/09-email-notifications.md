@@ -255,6 +255,62 @@ def process_email_outbox():
 
 Schedule via Celery Beat (e.g., every 5 minutes).
 
+---
+
+## Admin UI: E-Mail-Outbox
+
+**Route:** `/notifications/email-outbox`
+
+**Berechtigungen:** `admin`, `manager`
+
+### Features
+
+1. **Outbox-Tabelle**
+   - Paginierte Liste aller E-Mails
+   - Status-Badges: queued (gelb), sent (grün), failed (rot), skipped (grau)
+   - Spalten: Status, Empfänger, Betreff, Event-Typ, Erstellt, Versuche
+
+2. **Filter**
+   - Status-Dropdown: Alle/Warteschlange/Gesendet/Fehlgeschlagen/Übersprungen
+   - Freitextsuche: Empfänger, Betreff, Event-Typ
+
+3. **Aktionen**
+   - **Test-E-Mail senden:** Modal mit E-Mail-Eingabe, sendet Test-Email (oder speichert als "skipped" wenn disabled)
+   - **Warteschlange verarbeiten:** Verarbeitet queued Emails mit Cooldown-Protection
+
+4. **Detail-Modal**
+   - Alle Felder inkl. Idempotency-Key, Fehler, Timestamps
+   - Deep-Links zu Buchungen/Anfragen (entity_type → UI-Route)
+   - Plaintext-Body-Vorschau (kein HTML-Rendering aus Sicherheitsgründen)
+
+### Sicherheitshinweise
+
+- **HTML-Preview:** Nur Plaintext wird angezeigt. HTML-Rendering ist deaktiviert um XSS zu vermeiden.
+- **Process-Outbox:** Button hat Cooldown (3 Sekunden) um Spam-Klicks zu verhindern.
+- **Feature-Flag:** Wenn `EMAIL_NOTIFICATIONS_ENABLED=false`, werden Test-E-Mails als "skipped" gespeichert.
+
+### Troubleshooting UI
+
+**Symptom:** 403 Forbidden beim Aufruf von `/notifications/email-outbox`
+
+**Ursache:** Benutzer hat keine admin/manager Rolle.
+
+**Lösung:** Rolle in `team_members` Tabelle prüfen.
+
+---
+
+**Symptom:** Leere Tabelle obwohl E-Mails versendet wurden
+
+**Ursache:** Mögliche Ursachen:
+1. Session abgelaufen (401)
+2. Agency-ID nicht gefunden
+3. Filter zu restriktiv
+
+**Lösung:**
+1. Seite neu laden / neu einloggen
+2. Filter auf "Alle Status" zurücksetzen
+3. Browser-Konsole auf Fehler prüfen
+
 ## Related Documentation
 
 - [Backend Notifications Routes](../../api/notifications.md) — API endpoint details

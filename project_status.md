@@ -954,6 +954,77 @@ export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
 
 ---
 
+### P2.21.4.8q: Email Outbox UI v1 ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-01
+
+**Overview:**
+
+Admin UI for viewing and operating the Email Outbox:
+- Table with pagination and status badges
+- Filters: status dropdown + search
+- Test-E-Mail modal (safe with feature flag)
+- Warteschlange verarbeiten button with cooldown
+- Detail modal with deep links to entities
+
+**Changes:**
+
+- **Frontend Route** (`notifications/email-outbox/page.tsx`):
+  - Outbox table with pagination (25/50/100 per page)
+  - Status badges: queued (yellow), sent (green), failed (red), skipped (gray)
+  - Status filter dropdown + search input
+  - Test-E-Mail modal (creates outbox entry)
+  - Process-outbox button with 3s cooldown + toast summary
+  - Detail modal with entity deep links (booking_request → /booking-requests, booking → /bookings)
+  - Plaintext body preview only (no HTML rendering for XSS safety)
+
+- **Internal API Proxies**:
+  - `/api/internal/notifications/email/outbox` (GET proxy)
+  - `/api/internal/notifications/email/test` (POST proxy)
+  - `/api/internal/notifications/email/process-outbox` (POST proxy)
+
+- **Navigation** (`AdminShell.tsx`):
+  - Added "E-Mail-Outbox" entry under "Betrieb" group
+  - Role gated: admin, manager only
+  - Uses Mail icon from lucide-react
+
+- **Docs** (`runbook/09-email-notifications.md`):
+  - Added "Admin UI: E-Mail-Outbox" section
+  - Added "Troubleshooting UI" section
+
+**Verification Commands (PROD):**
+
+```bash
+# 1. Deploy verify
+EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
+
+# 2. API smoke (rc=0)
+export JWT_TOKEN="$(./backend/scripts/get_fresh_token.sh)"
+./backend/scripts/pms_email_notifications_smoke.sh
+
+# 3. Manual UI check (optional)
+# - Navigate to /notifications/email-outbox
+# - Verify table loads with outbox entries
+# - Test status filter dropdown
+# - Send Test-E-Mail → verify toast + new entry appears
+```
+
+**Files Changed:**
+
+- frontend/app/notifications/email-outbox/page.tsx (NEW)
+- frontend/app/notifications/email-outbox/layout.tsx (NEW)
+- frontend/app/api/internal/notifications/email/outbox/route.ts (NEW)
+- frontend/app/api/internal/notifications/email/test/route.ts (NEW)
+- frontend/app/api/internal/notifications/email/process-outbox/route.ts (NEW)
+- frontend/app/components/AdminShell.tsx (Mail icon + nav entry)
+- backend/docs/ops/runbook/09-email-notifications.md (Admin UI section)
+- backend/scripts/README.md (UI verification note)
+- backend/docs/project_status.md (this entry)
+
+**Status:** ✅ IMPLEMENTED
+
+---
+
 ### P3.1: Direct Booking Hardening — Idempotency-Key + Audit Log ✅ VERIFIED
 
 **Date Completed:** 2026-01-30
