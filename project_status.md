@@ -1506,6 +1506,77 @@ EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
 
 ---
 
+### Option B: Guests CRUD (Admin UI) ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-01
+
+**Overview:**
+
+Completed the Guests Admin UI with full CRUD functionality. The backend API already existed; this update implements the frontend UI components.
+
+**Features:**
+
+1. **Guest List Page** (`/guests`):
+   - Paginated table (25 per page) with search (debounced 300ms)
+   - Columns: Name, E-Mail, Telefon, Ort, Status, Buchungen, Letzte Buchung
+   - Create guest modal with validation
+   - AbortController for request cancellation
+   - Row click → detail page
+
+2. **Guest Detail Page** (`/guests/[id]`):
+   - Contact info and booking statistics
+   - Timeline tab with booking history
+   - Edit guest modal with VIP/blacklist toggles
+   - German labels throughout
+
+**API Endpoints Used:**
+
+| Action | Endpoint | Method |
+|--------|----------|--------|
+| List guests | `/api/v1/guests?limit=25&offset=0&q=search` | GET |
+| Get guest | `/api/v1/guests/{id}` | GET |
+| Create guest | `/api/v1/guests` | POST |
+| Update guest | `/api/v1/guests/{id}` | PATCH |
+| Get timeline | `/api/v1/guests/{id}/timeline` | GET |
+
+**Data-TestIDs (QA):**
+
+List Page:
+- `guests-page`, `guests-search`, `guests-create`
+- `guests-row-{id}`, `guests-create-modal`, `guests-create-submit`
+
+Detail Page:
+- `guest-detail-page`, `guests-edit-{id}`
+- `guests-edit-modal`, `guests-edit-submit`
+
+**Verification Commands:**
+
+```bash
+# Deploy verify
+EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
+
+# Guests CRUD API smoke test
+JWT_TOKEN="eyJabc..." ./backend/scripts/pms_guests_crud_smoke.sh
+
+# Manual checks:
+# 1. Admin → Gäste → Create guest "Test - Smoke"
+# 2. Click guest → Edit → Change phone → Save
+# 3. Verify changes persist
+```
+
+**Files Changed:**
+
+- `frontend/app/guests/page.tsx` (list page with create modal)
+- `frontend/app/guests/[id]/page.tsx` (detail page with edit modal)
+- `backend/scripts/pms_guests_crud_smoke.sh` (new smoke test)
+- `backend/scripts/README.md` (smoke test documentation)
+- `backend/docs/ops/runbook/07-guests-admin-ui.md` (new runbook chapter)
+- `backend/docs/project_status.md` (this entry)
+
+**Status:** ✅ IMPLEMENTED (awaiting PROD verification)
+
+---
+
 ### Option A (Refined): Availability UI + Bulk Endpoint — TypeScript Fix ✅ IMPLEMENTED
 
 **Date Completed:** 2026-02-01 (hotfix)
