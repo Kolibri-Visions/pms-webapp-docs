@@ -1294,7 +1294,7 @@ API_BASE_URL=https://api.fewo.kolibri-visions.de EXPECT_COMMIT=dcbd635 ./backend
 
 ---
 
-### P2.21.4.8v: Audit-Log Viewer Admin UI ✅ IMPLEMENTED
+### P2.21.4.8v: Audit-Log Viewer Admin UI ✅ VERIFIED
 
 **Date Completed:** 2026-02-02
 
@@ -1352,7 +1352,22 @@ cd frontend && npm run build
 JWT_TOKEN="eyJhbG..." ./backend/scripts/pms_audit_log_api_smoke.sh
 ```
 
-**Status:** ✅ IMPLEMENTED (pending PROD verification)
+**Evidence (PROD):**
+
+- **Date Verified:** 2026-02-02
+- **Commit:** `f3b727e8951f7b888d9eef84ab0522ca8cd98c99`
+- **Deploy Verify:** `pms_verify_deploy.sh` rc=0 (STRICT MODE commit match)
+  - API: https://api.fewo.kolibri-visions.de
+  - Admin: https://admin.fewo.kolibri-visions.de
+  - Backend commit: f3b727e
+  - Admin commit: f3b727e
+- **Smoke Test:** `pms_audit_log_api_smoke.sh` rc=0
+  - PASS=7, FAIL=0, SKIP=0
+  - GET /api/v1/ops/audit-log: 200 ✓
+  - Filters (action, date range): 200 ✓
+  - GET /api/v1/ops/audit-log/export: 200, CSV header present ✓
+
+**Status:** ✅ VERIFIED
 
 ---
 
