@@ -16,6 +16,18 @@ The Audit-Log Viewer Admin UI allows administrators to:
 
 **Access:** Admin role required.
 
+## Navigation / Wo finde ich das?
+
+Die Audit-Log-bezogenen Seiten befinden sich im Admin-Panel unter **Einstellungen**:
+
+| Menüpunkt | Pfad | Beschreibung |
+|-----------|------|--------------|
+| Einstellungen → Systemstatus | `/ops/status` | System-Gesundheit und Status |
+| Einstellungen → Runbook | `/ops/runbook` | Operations-Dokumentation |
+| Einstellungen → Log-Protokoll | `/ops/audit-log` | **Audit-Log Viewer** |
+
+**Direkter Link:** `/ops/audit-log`
+
 ## Features
 
 ### Date Presets
