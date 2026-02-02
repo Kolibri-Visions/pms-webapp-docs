@@ -1437,6 +1437,89 @@ JWT_TOKEN="eyJhbG..." ./backend/scripts/pms_ops_modules_smoke.sh
 
 ---
 
+### P2.21.4.8x: Zusatzleistungen (Extra Services) - Katalog + Objekt-Zuweisung ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-02
+
+**Overview:**
+
+Extra Services (Zusatzleistungen) feature allowing agencies to define a catalog of optional add-on services (e.g., pets, breakfast, parking) and assign them to properties with optional price/billing overrides.
+
+**Features Implemented:**
+
+1. **Database Schema:**
+   - `extra_services` table (agency-wide catalog)
+   - `property_extra_services` table (property assignments with overrides)
+   - RLS policies for multi-tenant isolation
+   - Billing units: per_night, per_stay, per_person_per_night, per_person_per_stay, per_unit
+
+2. **Backend API (`/api/v1/pricing/extra-services`):**
+   - GET list, POST create, GET/PATCH/DELETE by ID
+   - Property assignments at `/api/v1/properties/{id}/extra-services`
+   - Full RBAC with agency_id scoping
+
+3. **Admin UI (`/settings/extra-services`):**
+   - Catalog management: create/edit/delete services
+   - Table with Name, Abrechnungsmodell, Standardpreis, Status
+   - Toggle active/inactive, create/edit modal
+
+4. **Internal Proxy Routes:**
+   - `/api/internal/extra-services` (catalog GET/POST)
+   - `/api/internal/extra-services/[id]` (PATCH/DELETE)
+   - `/api/internal/properties/[id]/extra-services` (GET/POST)
+   - `/api/internal/properties/[id]/extra-services/[assignmentId]` (PATCH/DELETE)
+
+5. **Smoke Script (`pms_extra_services_smoke.sh`):**
+   - Tests: health, create service, list services, assign to property, list property services
+   - PROD-safe (no set -euo pipefail), cleanup on exit
+
+6. **Navigation:**
+   - Added "Zusatzleistungen" under Einstellungen (admin-only)
+
+**Billing Units:**
+
+| Unit | German | Formula |
+|------|--------|---------|
+| per_night | Pro Nacht | price × nights × quantity |
+| per_stay | Pro Aufenthalt | price × quantity |
+| per_person_per_night | Pro Person/Nacht | price × nights × guests × quantity |
+| per_person_per_stay | Pro Person/Aufenthalt | price × guests × quantity |
+| per_unit | Pro Einheit | price × quantity |
+
+**Files Changed:**
+
+- supabase/migrations/20260202120000_add_extra_services.sql (new migration)
+- backend/app/schemas/extra_services.py (new schemas)
+- backend/app/api/routes/extra_services.py (new routes)
+- backend/app/main.py (router registration)
+- frontend/app/api/internal/extra-services/route.ts (new proxy)
+- frontend/app/api/internal/extra-services/[id]/route.ts (new proxy)
+- frontend/app/api/internal/properties/[id]/extra-services/route.ts (new proxy)
+- frontend/app/api/internal/properties/[id]/extra-services/[assignmentId]/route.ts (new proxy)
+- frontend/app/settings/extra-services/page.tsx (new UI page)
+- frontend/app/components/AdminShell.tsx (nav item)
+- backend/scripts/pms_extra_services_smoke.sh (new smoke script)
+- backend/docs/ops/runbook/16-extra-services.md (new runbook chapter)
+- backend/scripts/README.md (smoke script entry)
+- backend/docs/project_status.md (this entry)
+
+**Verification Commands:**
+
+```bash
+# 1. Frontend build
+cd frontend && npm run build
+
+# 2. Deploy verify
+EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
+
+# 3. Smoke test (requires JWT_TOKEN and PROPERTY_ID)
+JWT_TOKEN="eyJhbG..." PROPERTY_ID="uuid..." ./backend/scripts/pms_extra_services_smoke.sh
+```
+
+**Status:** ✅ IMPLEMENTED
+
+---
+
 ### P3.1: Direct Booking Hardening — Idempotency-Key + Audit Log ✅ VERIFIED
 
 **Date Completed:** 2026-01-30
