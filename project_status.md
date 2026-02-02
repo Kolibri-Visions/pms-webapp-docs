@@ -1371,6 +1371,59 @@ JWT_TOKEN="eyJhbG..." ./backend/scripts/pms_audit_log_api_smoke.sh
 
 ---
 
+### P2.21.4.8w: Ops Modules View Admin UI ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-02
+
+**Overview:**
+
+Admin UI (Developer Tool) for viewing module status, mounted routes, and API prefixes. Helps with deploy validation and route debugging.
+
+**Features Implemented:**
+
+1. **Admin UI Page (`/ops/modules`):**
+   - Summary cards: module system status, total modules, API prefixes, special paths
+   - Module table with search and pagination
+   - Detail modal with JSON copy
+   - Collapsible sections for mounted paths
+
+2. **Internal Proxy Route:**
+   - `/api/internal/ops/modules` (proxies to backend)
+
+3. **Smoke Script (`pms_ops_modules_smoke.sh`):**
+   - Tests endpoint response and field structure
+   - PROD-safe (no set -euo pipefail)
+
+4. **Navigation:**
+   - Added "Module" under Einstellungen (admin-only)
+
+**Files Changed:**
+
+- frontend/app/ops/modules/page.tsx (new UI page)
+- frontend/app/api/internal/ops/modules/route.ts (new proxy)
+- frontend/app/components/AdminShell.tsx (nav item)
+- backend/scripts/pms_ops_modules_smoke.sh (new smoke script)
+- backend/docs/ops/runbook/15-ops-modules-view.md (new runbook chapter)
+- backend/scripts/README.md (smoke script entry)
+- backend/docs/project_status.md (this entry)
+
+**Verification Commands:**
+
+```bash
+# 1. Frontend build
+cd frontend && npm run build
+
+# 2. Deploy verify
+EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
+
+# 3. Smoke test (requires JWT_TOKEN)
+JWT_TOKEN="eyJhbG..." ./backend/scripts/pms_ops_modules_smoke.sh
+```
+
+**Status:** ✅ IMPLEMENTED (pending PROD verification)
+
+---
+
 ### P3.1: Direct Booking Hardening — Idempotency-Key + Audit Log ✅ VERIFIED
 
 **Date Completed:** 2026-01-30
