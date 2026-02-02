@@ -1294,6 +1294,68 @@ API_BASE_URL=https://api.fewo.kolibri-visions.de EXPECT_COMMIT=dcbd635 ./backend
 
 ---
 
+### P2.21.4.8v: Audit-Log Viewer Admin UI ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-02
+
+**Overview:**
+
+Admin UI for viewing, filtering, and exporting audit log entries. Provides visibility into system actions for compliance and troubleshooting.
+
+**Features Implemented:**
+
+1. **Admin UI Page (`/ops/audit-log`):**
+   - Table view with columns: Zeitpunkt, Aktion, Benutzer, Entität, Request-ID
+   - Date presets: Heute, Letzte 7 Tage, Letzte 30 Tage, Benutzerdefiniert
+   - Filters: Action type, Entity type
+   - Pagination (25 per page)
+   - Detail modal with copy buttons for IDs
+   - CSV export button (applies current filters)
+
+2. **Backend API Enhancements (`/api/v1/ops/audit-log`):**
+   - New query parameters: entity_type, actor_user_id, from_date, to_date, offset
+   - Pagination support with offset
+   - Date range filtering
+
+3. **CSV Export Endpoint (`/api/v1/ops/audit-log/export`):**
+   - UTF-8 BOM for Excel compatibility
+   - German column headers
+   - Max 5000 records per export
+   - Timestamped filename
+
+4. **Internal Proxy Routes:**
+   - `/api/internal/ops/audit-log` (list proxy)
+   - `/api/internal/ops/audit-log/export` (export proxy)
+
+5. **Smoke Script (`pms_audit_log_api_smoke.sh`):**
+   - Tests health, list, filtering, date range, CSV export
+   - PROD-safe (no set -euo pipefail)
+
+**Files Changed:**
+
+- backend/app/api/routes/ops.py (extended filters + export endpoint)
+- frontend/app/ops/audit-log/page.tsx (new UI page)
+- frontend/app/api/internal/ops/audit-log/route.ts (new proxy)
+- frontend/app/api/internal/ops/audit-log/export/route.ts (new proxy)
+- backend/scripts/pms_audit_log_api_smoke.sh (new smoke script)
+- backend/docs/ops/runbook/14-audit-log-viewer.md (new runbook chapter)
+- backend/scripts/README.md (smoke script entry)
+- backend/docs/project_status.md (this entry)
+
+**Verification Commands:**
+
+```bash
+# 1. Frontend build
+cd frontend && npm run build
+
+# 2. Smoke test (requires JWT_TOKEN)
+JWT_TOKEN="eyJhbG..." ./backend/scripts/pms_audit_log_api_smoke.sh
+```
+
+**Status:** ✅ IMPLEMENTED (pending PROD verification)
+
+---
+
 ### P3.1: Direct Booking Hardening — Idempotency-Key + Audit Log ✅ VERIFIED
 
 **Date Completed:** 2026-01-30
