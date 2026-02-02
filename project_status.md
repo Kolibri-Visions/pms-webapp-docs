@@ -1371,7 +1371,7 @@ JWT_TOKEN="eyJhbG..." ./backend/scripts/pms_audit_log_api_smoke.sh
 
 ---
 
-### P2.21.4.8w: Ops Modules View Admin UI ✅ IMPLEMENTED
+### P2.21.4.8w: Ops Modules View Admin UI ✅ VERIFIED
 
 **Date Completed:** 2026-02-02
 
@@ -1420,7 +1420,20 @@ EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
 JWT_TOKEN="eyJhbG..." ./backend/scripts/pms_ops_modules_smoke.sh
 ```
 
-**Status:** ✅ IMPLEMENTED (pending PROD verification)
+**Evidence (PROD):**
+
+- **Date Verified:** 2026-02-02
+- **Commit:** `5b8b0e0112993d73ef3447f0add990ff7f741c60`
+- **Deploy Verify:** `pms_verify_deploy.sh` verify_rc=0 (STRICT MODE commit match)
+  - API: https://api.fewo.kolibri-visions.de
+  - Backend: source_commit=5b8b0e0, started_at=2026-02-02T10:55:04.842680+00:00
+  - Admin: source_commit=5b8b0e0, started_at=2026-02-02T10:55:27.933Z
+- **Smoke Test:** `pms_ops_modules_smoke.sh` ops_modules_rc=0
+  - PASS=7, FAIL=0, SKIP=0
+  - Modules endpoint: 200 ✓
+  - First module: core_pms, total_modules: 15
+
+**Status:** ✅ VERIFIED
 
 ---
 
