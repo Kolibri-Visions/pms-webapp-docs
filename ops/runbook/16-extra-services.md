@@ -92,7 +92,104 @@ The Extra Services feature allows agencies to:
 | Update assignment | `/api/v1/properties/{id}/extra-services/{aid}` | PATCH | auth |
 | Remove assignment | `/api/v1/properties/{id}/extra-services/{aid}` | DELETE | auth |
 
+## Verification (PROD)
+
+### Deploy Verification
+
+```bash
+# HOST-SERVER-TERMINAL
+source /root/.pms_env
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+
+# 1. Verify deploy (replace <sha> with expected commit)
+EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
+
+# 2. Get JWT token
+export JWT_TOKEN="$(curl -k -sS -X POST "${SB_URL}/auth/v1/token?grant_type=password" \
+  -H "apikey: ${SB_ANON_KEY}" \
+  -H "Content-Type: application/json" \
+  --data-binary "$(jq -nc --arg e "$SB_EMAIL" --arg p "$SB_PASSWORD" '{email:$e,password:$p}')" \
+  | jq -r '.access_token // empty')"
+
+# 3. Get property ID for testing
+export PROPERTY_ID="$(curl -k -sS \
+  -H "Authorization: Bearer ${JWT_TOKEN}" \
+  -H "x-agency-id: ${AGENCY_ID}" \
+  "${API_BASE_URL}/api/v1/properties?limit=1" \
+  | jq -r '.items[0].id // empty')"
+
+# 4. Run smoke test
+JWT_TOKEN="${JWT_TOKEN}" AGENCY_ID="${AGENCY_ID}" PROPERTY_ID="${PROPERTY_ID}" \
+  ./backend/scripts/pms_extra_services_smoke.sh
+
+echo "extra_services_rc=$?"
+```
+
+### DB Table Verification
+
+```sql
+-- Check tables exist
+SELECT to_regclass('public.extra_services'), to_regclass('public.property_extra_services');
+-- Expected: NOT NULL for both
+
+-- Check trigger function exists
+SELECT proname FROM pg_proc WHERE proname = 'set_updated_at';
+-- Expected: set_updated_at
+```
+
 ## Troubleshooting
+
+### Migration Fails: set_updated_at Missing
+
+**Symptom:** Migration fails with `function public.set_updated_at() does not exist`.
+
+**Cause:** The `set_updated_at()` trigger function is not defined in the database.
+
+**Resolution:**
+1. Apply the prelude migration first:
+   ```sql
+   -- In Supabase SQL Editor, run:
+   CREATE OR REPLACE FUNCTION public.set_updated_at()
+   RETURNS trigger
+   LANGUAGE plpgsql
+   AS $$
+   BEGIN
+       NEW.updated_at = now();
+       RETURN NEW;
+   END;
+   $$;
+
+   GRANT EXECUTE ON FUNCTION public.set_updated_at() TO authenticated;
+   GRANT EXECUTE ON FUNCTION public.set_updated_at() TO service_role;
+   ```
+2. Then apply the extra_services migration
+
+### 404 Not Found (Route Prefix Mismatch)
+
+**Symptom:** API returns 404 for `/api/v1/pricing/extra-services` endpoints.
+
+**Cause:** The extra_services module is not registered in the module system.
+
+**Resolution:**
+1. Verify `backend/app/modules/extra_services.py` exists
+2. Verify `bootstrap.py` imports the extra_services module
+3. Check logs for "Extra Services module not available" warning
+4. Redeploy backend
+
+### 503 Schema Drift (Tables Missing)
+
+**Symptom:** API returns 500/503 when accessing extra services endpoints.
+
+**Cause:** Database migrations not applied.
+
+**Resolution:**
+1. Check if tables exist:
+   ```sql
+   SELECT to_regclass('public.extra_services');
+   ```
+2. If NULL, apply migrations in order:
+   - `20260202115000_add_set_updated_at_function.sql`
+   - `20260202120000_add_extra_services.sql`
 
 ### 401 Unauthorized
 
@@ -174,17 +271,18 @@ API_BASE_URL=https://api.test.example.com JWT_TOKEN="..." PROPERTY_ID="..." ./ba
 ### What It Tests
 
 1. **Health check:** GET /health → HTTP 200
-2. **Create service:** POST /api/v1/pricing/extra-services → HTTP 201
-3. **List services:** GET /api/v1/pricing/extra-services → HTTP 200
-4. **Assign to property:** POST /api/v1/properties/{id}/extra-services → HTTP 201
-5. **List property services:** GET /api/v1/properties/{id}/extra-services → HTTP 200
-6. **Cleanup:** Deletes created test data
+2. **Preflight routes:** Verify extra-services paths exist in OpenAPI
+3. **Create service:** POST /api/v1/pricing/extra-services → HTTP 201
+4. **List services:** GET /api/v1/pricing/extra-services → HTTP 200
+5. **Assign to property:** POST /api/v1/properties/{id}/extra-services → HTTP 201
+6. **List property services:** GET /api/v1/properties/{id}/extra-services → HTTP 200
+7. **Cleanup:** Deletes created test data
 
 ### Expected Result
 
 ```
 RESULT: PASS
-Summary: PASS=5, FAIL=0, SKIP=0
+Summary: PASS=6, FAIL=0, SKIP=0
 ```
 
 ## Database Tables

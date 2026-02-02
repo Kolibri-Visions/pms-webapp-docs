@@ -1470,11 +1470,22 @@ Extra Services (Zusatzleistungen) feature allowing agencies to define a catalog 
    - `/api/internal/properties/[id]/extra-services/[assignmentId]` (PATCH/DELETE)
 
 5. **Smoke Script (`pms_extra_services_smoke.sh`):**
-   - Tests: health, create service, list services, assign to property, list property services
+   - Tests: health, preflight routes, create service, list services, assign to property, list property services
    - PROD-safe (no set -euo pipefail), cleanup on exit
+   - Preflight detects route availability via OpenAPI
 
 6. **Navigation:**
    - Added "Zusatzleistungen" under Einstellungen (admin-only)
+
+7. **Module System Registration (Fix):**
+   - Added `backend/app/modules/extra_services.py` to register with module system
+   - Updated `bootstrap.py` to import extra_services module
+   - Fixes 404 when MODULES_ENABLED=true (production default)
+
+8. **Migration Helper (Fix):**
+   - Added `20260202115000_add_set_updated_at_function.sql` prelude migration
+   - Creates `public.set_updated_at()` trigger function if missing
+   - Required before applying extra_services migration
 
 **Billing Units:**
 
@@ -1488,17 +1499,20 @@ Extra Services (Zusatzleistungen) feature allowing agencies to define a catalog 
 
 **Files Changed:**
 
+- supabase/migrations/20260202115000_add_set_updated_at_function.sql (new prelude migration)
 - supabase/migrations/20260202120000_add_extra_services.sql (new migration)
 - backend/app/schemas/extra_services.py (new schemas)
 - backend/app/api/routes/extra_services.py (new routes)
-- backend/app/main.py (router registration)
+- backend/app/modules/extra_services.py (new module registration)
+- backend/app/modules/bootstrap.py (import extra_services)
+- backend/app/main.py (router registration fallback)
 - frontend/app/api/internal/extra-services/route.ts (new proxy)
 - frontend/app/api/internal/extra-services/[id]/route.ts (new proxy)
 - frontend/app/api/internal/properties/[id]/extra-services/route.ts (new proxy)
 - frontend/app/api/internal/properties/[id]/extra-services/[assignmentId]/route.ts (new proxy)
 - frontend/app/settings/extra-services/page.tsx (new UI page)
 - frontend/app/components/AdminShell.tsx (nav item)
-- backend/scripts/pms_extra_services_smoke.sh (new smoke script)
+- backend/scripts/pms_extra_services_smoke.sh (new/updated smoke script)
 - backend/docs/ops/runbook/16-extra-services.md (new runbook chapter)
 - backend/scripts/README.md (smoke script entry)
 - backend/docs/project_status.md (this entry)
