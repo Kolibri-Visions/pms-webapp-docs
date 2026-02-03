@@ -18,8 +18,10 @@ The Extra Services feature allows agencies to:
 
 | Menüpunkt | Pfad | Beschreibung |
 |-----------|------|--------------|
-| Einstellungen → Zusatzleistungen | `/settings/extra-services` | Katalog verwalten |
-| Objekte → [Objekt] → Zusatzleistungen | `/properties/[id]` (Tab) | Zuweisungen verwalten |
+| Betrieb → Zusatzleistungen | `/extra-services` | Katalog verwalten |
+| Objekte → [Objekt] → Tab "Zusatzleistungen" | `/properties/[id]/extra-services` | Zuweisungen + Overrides |
+
+**Legacy URL:** `/settings/extra-services` redirects automatically to `/extra-services`.
 
 ## Billing Units (Abrechnungsmodelle)
 
@@ -40,9 +42,9 @@ The Extra Services feature allows agencies to:
 
 ## Features
 
-### Catalog Management (Settings)
+### Catalog Management
 
-**UI Location:** Einstellungen → Zusatzleistungen
+**UI Location:** Betrieb → Zusatzleistungen (`/extra-services`)
 
 **Capabilities:**
 - Create/edit/delete extra services
