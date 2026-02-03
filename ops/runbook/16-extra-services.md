@@ -147,24 +147,40 @@ SELECT proname FROM pg_proc WHERE proname = 'set_updated_at';
 
 **Cause:** The `set_updated_at()` trigger function is not defined in the database.
 
-**Resolution:**
-1. Apply the prelude migration first:
-   ```sql
-   -- In Supabase SQL Editor, run:
-   CREATE OR REPLACE FUNCTION public.set_updated_at()
-   RETURNS trigger
-   LANGUAGE plpgsql
-   AS $$
-   BEGIN
-       NEW.updated_at = now();
-       RETURN NEW;
-   END;
-   $$;
+**Resolution:** The migration now includes the function inline (idempotent). If you encounter this error with an older migration version, update to the latest migration file which includes:
 
-   GRANT EXECUTE ON FUNCTION public.set_updated_at() TO authenticated;
-   GRANT EXECUTE ON FUNCTION public.set_updated_at() TO service_role;
+```sql
+CREATE OR REPLACE FUNCTION public.set_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$;
+```
+
+### Migration Fails: agency_users Does Not Exist
+
+**Symptom:** Migration fails with `relation "public.agency_users" does not exist`.
+
+**Cause:** The migration was referencing a non-existent `agency_users` table in RLS policies. The canonical membership table is `team_members`.
+
+**Resolution:**
+1. Ensure you have the latest migration file (`20260202120000_add_extra_services.sql`)
+2. The corrected migration uses `team_members` for all RLS policies:
+   ```sql
+   -- Correct: uses team_members
+   SELECT agency_id FROM public.team_members
+   WHERE user_id = auth.uid() AND is_active = true
    ```
-2. Then apply the extra_services migration
+3. If tables were partially created, drop them first:
+   ```sql
+   DROP TABLE IF EXISTS public.property_extra_services CASCADE;
+   DROP TABLE IF EXISTS public.extra_services CASCADE;
+   ```
+4. Re-apply the corrected migration
 
 ### 404 Not Found (Route Prefix Mismatch)
 
