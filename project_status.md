@@ -1546,6 +1546,74 @@ JWT_TOKEN="eyJhbG..." PROPERTY_ID="uuid..." ./backend/scripts/pms_extra_services
 
 ---
 
+### P2.21.4.8y: Belegungskalender (Occupancy Calendar) - Guest Names + Pending Requests ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-03
+
+**Overview:**
+
+Enhanced the availability overview (renamed to "Belegungskalender") with guest name display in booked segments and pending booking request markers.
+
+**Changes:**
+
+1. **UI Rename:**
+   - Sidebar: "Verfügbarkeit" → "Belegungskalender"
+   - Page H1: "Verfügbarkeit" → "Belegungskalender"
+   - Route remains `/availability`
+
+2. **Guest Name Display:**
+   - Backend already joins `guests.last_name` as `label` in segments
+   - Frontend shows truncated guest name at start of booking segment (4-week view)
+   - Enhanced tooltip: "Property · Date · Status · Gast: [Name]"
+
+3. **Pending Request Markers:**
+   - Backend: Added `pending_requests` field to `PropertyAvailabilityItem`
+   - Query: `bookings WHERE status IN ('requested', 'inquiry')` overlapping date range
+   - Frontend: Amber dot markers on free days with pending requests
+   - 4-week view: Dot with count badge at request start
+   - 3-month view: Small amber dot in corner
+
+4. **3-Month View UX:**
+   - Added month header row with month names (Feb, Mär, Apr, etc.)
+   - Month boundary separators (vertical lines)
+   - Sticky header stays visible on scroll
+
+5. **Documentation:**
+   - Created `backend/docs/ops/runbook/17-occupancy-calendar.md`
+   - Created `backend/scripts/pms_occupancy_calendar_smoke.sh`
+   - Updated `backend/scripts/README.md`
+
+**Files Changed:**
+- `frontend/app/components/AdminShell.tsx` — Sidebar label rename
+- `frontend/app/availability/page.tsx` — H1 rename, guest names, pending markers, month headers
+- `backend/app/schemas/availability.py` — Added `PendingRequestMarker`, updated `PropertyAvailabilityItem`
+- `backend/app/api/routes/availability.py` — Added pending requests query to overview endpoint
+- `backend/scripts/pms_occupancy_calendar_smoke.sh` — New smoke test
+- `backend/docs/ops/runbook/17-occupancy-calendar.md` — New runbook chapter
+
+**Verification:**
+
+```bash
+# HOST-SERVER-TERMINAL
+source /root/.pms_env
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+
+EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
+
+export JWT_TOKEN="$(curl -k -sS -X POST "${SB_URL}/auth/v1/token?grant_type=password" \
+  -H "apikey: ${SB_ANON_KEY}" \
+  -H "Content-Type: application/json" \
+  --data-binary "$(jq -nc --arg e \"$SB_EMAIL\" --arg p \"$SB_PASSWORD\" '{email:\$e,password:\$p}')" \
+  | jq -r '.access_token // empty')"
+
+JWT_TOKEN="${JWT_TOKEN}" ./backend/scripts/pms_occupancy_calendar_smoke.sh
+echo "occupancy_calendar_rc=$?"
+```
+
+**Status:** ✅ IMPLEMENTED
+
+---
+
 ### P3.1: Direct Booking Hardening — Idempotency-Key + Audit Log ✅ VERIFIED
 
 **Date Completed:** 2026-01-30
