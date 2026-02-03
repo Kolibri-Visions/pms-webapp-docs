@@ -194,8 +194,26 @@ curl -sS \
 ### Usage
 
 ```bash
+# Basic usage (SKIP if no guest labels)
 JWT_TOKEN="eyJhbG..." ./backend/scripts/pms_occupancy_calendar_smoke.sh
+
+# Require guest label (FAIL instead of SKIP)
+JWT_TOKEN="eyJhbG..." REQUIRE_GUEST_LABEL=1 ./backend/scripts/pms_occupancy_calendar_smoke.sh
+
+# Create smoke booking with guest (for full verification)
+JWT_TOKEN="eyJhbG..." CREATE_SMOKE_BOOKING=1 ./backend/scripts/pms_occupancy_calendar_smoke.sh
 ```
+
+### Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `JWT_TOKEN` | Yes | - | Valid JWT (admin/manager for booking creation) |
+| `API_BASE_URL` | No | `https://api.fewo.kolibri-visions.de` | API base URL |
+| `PROPERTY_ID` | No | First from API | Property UUID for smoke booking |
+| `REQUIRE_GUEST_LABEL` | No | `0` | Set to `1` to FAIL instead of SKIP if no guest labels |
+| `CREATE_SMOKE_BOOKING` | No | `0` | Set to `1` to create a smoke booking with guest |
+| `CLEANUP_SMOKE` | No | `1` | Set to `0` to keep smoke booking after test |
 
 ### What It Tests
 
@@ -204,14 +222,29 @@ JWT_TOKEN="eyJhbG..." ./backend/scripts/pms_occupancy_calendar_smoke.sh
 3. **Guest display name:** Check for `label` in booked segments
 4. **Pending requests:** Check for `pending_requests` field in response
 
+### Guest Label Verification
+
+The guest display name (`label`) comes from `guests.last_name` via the booking's `guest_id` join.
+
+**Why labels might be missing:**
+- Booking created without linked guest (guest_id = NULL)
+- Guest record exists but `last_name` is empty
+
+**To verify with smoke data:**
+```bash
+JWT_TOKEN="..." CREATE_SMOKE_BOOKING=1 REQUIRE_GUEST_LABEL=1 ./backend/scripts/pms_occupancy_calendar_smoke.sh
+```
+
+This creates a confirmed booking with guest "Kalender Smoke-Gast" (45-48 days in future), then verifies the label appears in the availability overview. The booking is auto-cleaned up after the test.
+
 ### Expected Result
 
 ```
 RESULT: PASS
-Summary: PASS=3, FAIL=0, SKIP=1
+Summary: PASS=4, FAIL=0, SKIP=0
 ```
 
-Note: SKIP is acceptable when no bookings or pending requests exist in the date range.
+Note: With `CREATE_SMOKE_BOOKING=0`, SKIP is acceptable when no bookings exist in the date range.
 
 ## Related Documentation
 

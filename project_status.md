@@ -1608,7 +1608,13 @@ export JWT_TOKEN="$(curl -k -sS -X POST "${SB_URL}/auth/v1/token?grant_type=pass
 
 JWT_TOKEN="${JWT_TOKEN}" ./backend/scripts/pms_occupancy_calendar_smoke.sh
 echo "occupancy_calendar_rc=$?"
+
+# Full verification with smoke data (creates test booking with guest)
+JWT_TOKEN="${JWT_TOKEN}" CREATE_SMOKE_BOOKING=1 REQUIRE_GUEST_LABEL=1 \
+  ./backend/scripts/pms_occupancy_calendar_smoke.sh
 ```
+
+**Note (2026-02-03):** Guest label was previously SKIP due to missing linked guest data in existing bookings. The smoke script now supports `CREATE_SMOKE_BOOKING=1` to generate a test booking with guest data, enabling full verification. Use `REQUIRE_GUEST_LABEL=1` to fail instead of skip when no guest labels are found.
 
 **Status:** ✅ IMPLEMENTED
 
