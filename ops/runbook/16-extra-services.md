@@ -139,6 +139,38 @@ SELECT proname FROM pg_proc WHERE proname = 'set_updated_at';
 -- Expected: set_updated_at
 ```
 
+### VERIFIED Evidence (P2.21.4.8x)
+
+**Date Verified:** 2026-02-03
+
+**Commit:** `569b97a206ce8d4be1867e74b2142b6f7a91844a`
+
+**Commands Run:**
+
+```bash
+# HOST-SERVER-TERMINAL
+source /root/.pms_env
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+
+# Deploy verify (prefix match OK)
+EXPECT_COMMIT=569b97a ./backend/scripts/pms_verify_deploy.sh
+# verify_rc=0
+
+# Get JWT + PROPERTY_ID (see above), then:
+./backend/scripts/pms_extra_services_smoke.sh
+# extra_services_rc=0
+# Preflight OpenAPI: canonical route found /api/v1/pricing/extra-services
+# Property: 23dd8fda-59ae-4b2f-8489-7a90f5d46c66
+```
+
+**Result:**
+
+- Backend: source_commit=569b97a, started_at=2026-02-03T08:17:04.434799+00:00
+- Admin: source_commit=569b97a, started_at=2026-02-03T08:18:50.248Z
+- DB: `to_regclass` returns `extra_services` + `property_extra_services`
+
+**VERIFIED Criteria:** `verify_rc=0` AND `extra_services_rc=0`
+
 ## Troubleshooting
 
 ### Migration Fails: set_updated_at Missing

@@ -1437,7 +1437,7 @@ JWT_TOKEN="eyJhbG..." ./backend/scripts/pms_ops_modules_smoke.sh
 
 ---
 
-### P2.21.4.8x: Zusatzleistungen (Extra Services) - Katalog + Objekt-Zuweisung ✅ IMPLEMENTED
+### P2.21.4.8x: Zusatzleistungen (Extra Services) - Katalog + Objekt-Zuweisung ✅ VERIFIED
 
 **Date Completed:** 2026-02-02
 
@@ -1530,7 +1530,19 @@ EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
 JWT_TOKEN="eyJhbG..." PROPERTY_ID="uuid..." ./backend/scripts/pms_extra_services_smoke.sh
 ```
 
-**Status:** ✅ IMPLEMENTED
+**Evidence (PROD):**
+
+- **Date Verified:** 2026-02-03
+- **Commit:** `569b97a206ce8d4be1867e74b2142b6f7a91844a`
+- **Deploy Verify:** `pms_verify_deploy.sh` verify_rc=0 (EXPECT_COMMIT=569b97a prefix match OK)
+  - Backend: source_commit=569b97a, started_at=2026-02-03T08:17:04.434799+00:00
+  - Admin: source_commit=569b97a, started_at=2026-02-03T08:18:50.248Z
+- **Smoke Test:** `pms_extra_services_smoke.sh` extra_services_rc=0
+  - Preflight OpenAPI: canonical route found `/api/v1/pricing/extra-services`
+  - Property used: `23dd8fda-59ae-4b2f-8489-7a90f5d46c66`
+- **DB Migration:** Applied; `to_regclass` returns `extra_services` + `property_extra_services`
+
+**Status:** ✅ VERIFIED
 
 ---
 
