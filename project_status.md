@@ -1546,7 +1546,7 @@ JWT_TOKEN="eyJhbG..." PROPERTY_ID="uuid..." ./backend/scripts/pms_extra_services
 
 ---
 
-### P2.21.4.8y: Belegungskalender (Occupancy Calendar) - Guest Names + Pending Requests ✅ IMPLEMENTED
+### P2.21.4.8y: Belegungskalender (Occupancy Calendar) - Guest Names + Pending Requests ✅ VERIFIED
 
 **Date Completed:** 2026-02-03
 
@@ -1615,6 +1615,85 @@ JWT_TOKEN="${JWT_TOKEN}" CREATE_SMOKE_BOOKING=1 REQUIRE_GUEST_LABEL=1 \
 ```
 
 **Note (2026-02-03):** Guest label was previously SKIP due to missing linked guest data in existing bookings. The smoke script now supports `CREATE_SMOKE_BOOKING=1` to generate a test booking with guest data, enabling full verification. Use `REQUIRE_GUEST_LABEL=1` to fail instead of skip when no guest labels are found.
+
+**PROD Evidence (2026-02-05):**
+```
+# Deploy verification
+backend: 2944642 (pms_verify_deploy.sh rc=0)
+admin:   /ops/version commit=2944642, started_at=2026-02-03T14:42:XX
+
+# Smoke test
+pms_occupancy_calendar_smoke.sh rc=0
+```
+
+**Status:** ✅ VERIFIED
+
+---
+
+### P2.21.4.8z: Branding Logo Upload + Live Admin Update ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-05
+
+**Overview:**
+
+Added logo upload functionality to Branding Settings and fixed Admin UI sidebar to display the uploaded logo. Logo updates are immediately visible without page reload.
+
+**Changes:**
+
+1. **Backend - Logo Upload Endpoint:**
+   - `POST /api/v1/branding/logo` — accepts multipart/form-data
+   - Validates: PNG, JPEG, WebP, SVG; max 2MB
+   - Uploads to Supabase Storage: `property-media/branding/{tenant_id}/logo_{hash}.{ext}`
+   - Content-hash in filename for cache-busting
+   - Updates `tenant_branding.logo_url` with public URL
+   - Returns: `{ logo_url, updated_at }`
+
+2. **Frontend - AdminShell Logo Display:**
+   - Imports `useTheme()` to access branding
+   - Displays `branding.logo_url` as `<img>` if set
+   - Fallback: Gold circle with agency name initial (or "L")
+   - Auto-resets error state when logo URL changes
+   - Shows agency name instead of hardcoded "LuxeStay" when available
+
+3. **Frontend - Branding Form Upload:**
+   - "Logo hochladen" button with file input
+   - Live preview of selected file
+   - Type/size validation before upload
+   - Uploads immediately on "Speichern" click
+   - Calls `refreshBranding()` to update AdminShell without reload
+   - Collapsible manual URL input (legacy support)
+
+4. **Documentation:**
+   - Created `backend/docs/ops/runbook/18-branding-logo.md`
+   - Created `backend/scripts/pms_branding_logo_smoke.sh`
+   - Updated `backend/scripts/README.md`
+
+**Files Changed:**
+- `backend/app/api/routes/branding.py` — Added POST /logo endpoint
+- `backend/app/schemas/branding.py` — Added `BrandingLogoResponse`
+- `frontend/app/components/AdminShell.tsx` — Dynamic logo display
+- `frontend/app/settings/branding/branding-form.tsx` — Logo upload control
+- `backend/scripts/pms_branding_logo_smoke.sh` — New smoke test
+- `backend/docs/ops/runbook/18-branding-logo.md` — New runbook chapter
+
+**Verification:**
+
+```bash
+# HOST-SERVER-TERMINAL
+source /root/.pms_env
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+
+EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
+
+export JWT_TOKEN="$(curl -k -sS -X POST "${SB_URL}/auth/v1/token?grant_type=password" \
+  -H "apikey: ${SB_ANON_KEY}" \
+  -H "Content-Type: application/json" \
+  --data-binary "$(jq -nc --arg e \"$SB_EMAIL\" --arg p \"$SB_PASSWORD\" '{email:\$e,password:\$p}')" \
+  | jq -r '.access_token // empty')"
+
+JWT_TOKEN="${JWT_TOKEN}" ./backend/scripts/pms_branding_logo_smoke.sh
+echo "branding_logo_rc=$?"
+```
 
 **Status:** ✅ IMPLEMENTED
 
