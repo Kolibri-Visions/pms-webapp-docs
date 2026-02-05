@@ -138,7 +138,8 @@ curl -s "${SUPABASE_URL}/storage/v1/bucket/branding-assets" \
 |--------|-------|
 | 400 | Invalid file type or size > 2MB |
 | 403 | Not admin or manager role |
-| 503 | Storage bucket missing or service not configured |
+| 502 | Storage upload failed (bucket creation or upload error) |
+| 503 | Storage service not configured |
 
 ## Verification (PROD)
 
@@ -204,17 +205,37 @@ rm /tmp/test_logo.png
 3. Check backend logs for detailed error message
 4. If permissions cannot be fixed, create bucket manually (see Bucket Provisioning above)
 
-### Upload Fails with 500 (Storage Error)
+### Upload Fails with 502 (Storage Error)
 
-**Symptom:** Error: "Failed to upload logo to storage"
+**Symptom:** Error: "Failed to upload logo to storage (HTTP 4xx)"
 
-**Cause:** Upload to Supabase Storage failed after bucket check.
+**Cause:** Upload to Supabase Storage failed after bucket check/creation.
 
 **Resolution:**
 1. Check backend logs for detailed storage error
 2. Verify Supabase Storage is operational
 3. Check bucket exists and is accessible
 4. Verify file size is under 2MB
+
+### Upload Fails with 400 (Embedded 404 - Bucket Not Found)
+
+**Symptom:** Upload returns HTTP 500/502 with logs showing:
+```
+HTTP 400 - {"statusCode":"404","error":"Bucket not found","message":"Bucket not found"}
+```
+
+**Cause:** Supabase Storage behind Kong returns HTTP 400 with embedded 404 in JSON body instead of plain HTTP 404. The backend now detects both cases.
+
+**Resolution:**
+1. Backend should auto-detect and create bucket (check logs for "Ensuring branding bucket")
+2. If auto-creation fails, check `SUPABASE_SERVICE_ROLE_KEY` permissions
+3. Manual fallback — create bucket via SQL:
+   ```sql
+   INSERT INTO storage.buckets (id, name, public)
+   VALUES ('branding-assets', 'branding-assets', true)
+   ON CONFLICT (id) DO NOTHING;
+   ```
+4. Verify bucket exists after manual creation, then retry upload
 
 ### Logo Not Appearing in Sidebar
 

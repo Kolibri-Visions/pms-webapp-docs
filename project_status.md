@@ -1646,10 +1646,11 @@ Added logo upload functionality to Branding Settings and fixed Admin UI sidebar 
    - Uploads to Supabase Storage: `branding-assets/{tenant_id}/logo_{hash}.{ext}`
    - Bucket name configurable via `BRANDING_STORAGE_BUCKET` env var
    - **Auto-creates bucket if missing** (public access, retries upload after creation)
+   - **Hotfix:** Detects bucket-not-found for both HTTP 404 AND HTTP 400 with embedded 404 JSON
    - Content-hash in filename for cache-busting
    - Updates `tenant_branding.logo_url` with public URL
    - Returns: `{ logo_url, updated_at }`
-   - Clear 503 error message if bucket auto-creation fails
+   - Clear 502 error if bucket creation or upload fails; 503 if service not configured
 
 2. **Frontend - Internal Proxy Route:**
    - Added `/api/internal/branding/logo` Next.js route
