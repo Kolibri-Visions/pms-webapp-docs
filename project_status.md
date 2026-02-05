@@ -1643,36 +1643,46 @@ Added logo upload functionality to Branding Settings and fixed Admin UI sidebar 
 1. **Backend - Logo Upload Endpoint:**
    - `POST /api/v1/branding/logo` — accepts multipart/form-data
    - Validates: PNG, JPEG, WebP, SVG; max 2MB
-   - Uploads to Supabase Storage: `property-media/branding/{tenant_id}/logo_{hash}.{ext}`
+   - Uploads to Supabase Storage: `branding-assets/{tenant_id}/logo_{hash}.{ext}`
+   - Bucket name configurable via `BRANDING_STORAGE_BUCKET` env var
    - Content-hash in filename for cache-busting
    - Updates `tenant_branding.logo_url` with public URL
    - Returns: `{ logo_url, updated_at }`
+   - Clear 503 error message if bucket missing
 
-2. **Frontend - AdminShell Logo Display:**
+2. **Frontend - Internal Proxy Route:**
+   - Added `/api/internal/branding/logo` Next.js route
+   - Proxies multipart upload to backend
+   - Uses server-side session auth (no client-side token needed)
+   - Fixes 404 error when frontend is on different domain than API
+
+3. **Frontend - AdminShell Logo Display:**
    - Imports `useTheme()` to access branding
    - Displays `branding.logo_url` as `<img>` if set
    - Fallback: Gold circle with agency name initial (or "L")
    - Auto-resets error state when logo URL changes
    - Shows agency name instead of hardcoded "LuxeStay" when available
 
-3. **Frontend - Branding Form Upload:**
+4. **Frontend - Branding Form Upload:**
    - "Logo hochladen" button with file input
    - Live preview of selected file
    - Type/size validation before upload
-   - Uploads immediately on "Speichern" click
+   - Posts to `/api/internal/branding/logo` (proxy route)
    - Calls `refreshBranding()` to update AdminShell without reload
    - Collapsible manual URL input (legacy support)
 
-4. **Documentation:**
-   - Created `backend/docs/ops/runbook/18-branding-logo.md`
+5. **Documentation:**
+   - Created `backend/docs/ops/runbook/18-branding-logo.md` with bucket provisioning instructions
    - Created `backend/scripts/pms_branding_logo_smoke.sh`
    - Updated `backend/scripts/README.md`
 
 **Files Changed:**
-- `backend/app/api/routes/branding.py` — Added POST /logo endpoint
+- `backend/app/api/routes/branding.py` — Added POST /logo endpoint with separate bucket
 - `backend/app/schemas/branding.py` — Added `BrandingLogoResponse`
+- `backend/app/core/config.py` — Added `branding_storage_bucket` setting
+- `frontend/app/api/internal/branding/logo/route.ts` — New proxy route
 - `frontend/app/components/AdminShell.tsx` — Dynamic logo display
-- `frontend/app/settings/branding/branding-form.tsx` — Logo upload control
+- `frontend/app/settings/branding/branding-form.tsx` — Logo upload via internal proxy
 - `backend/scripts/pms_branding_logo_smoke.sh` — New smoke test
 - `backend/docs/ops/runbook/18-branding-logo.md` — New runbook chapter
 

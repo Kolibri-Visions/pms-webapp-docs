@@ -15,6 +15,25 @@ The Branding Logo feature provides:
 
 **Access:** Admin and Manager roles can upload; all authenticated users see the logo.
 
+## Architecture
+
+### Request Flow
+
+```
+Browser → /api/internal/branding/logo → Backend /api/v1/branding/logo → Supabase Storage
+```
+
+The Admin UI uses an internal Next.js API route (`/api/internal/branding/logo`) to proxy uploads to the backend. This avoids CORS/routing issues when the frontend is served from a different domain than the API.
+
+### Storage
+
+| Setting | Value | Description |
+|---------|-------|-------------|
+| Bucket | `branding-assets` | Dedicated bucket for branding assets |
+| Path | `{tenant_id}/logo_{hash}.{ext}` | Per-tenant path with content hash |
+| Access | Public | No signed URLs needed |
+| ENV Override | `BRANDING_STORAGE_BUCKET` | Configurable bucket name |
+
 ## Navigation / Wo finde ich das?
 
 | Menüpunkt | Pfad | Beschreibung |
@@ -41,8 +60,6 @@ The Branding Logo feature provides:
 3. Click "Speichern" to upload
 4. Sidebar logo updates automatically
 
-**Storage Path:** `property-media` bucket → `branding/{tenant_id}/logo_{hash}.{ext}`
-
 ### Sidebar Logo Display
 
 The Admin UI sidebar displays the uploaded logo:
@@ -51,6 +68,40 @@ The Admin UI sidebar displays the uploaded logo:
 
 **Cache-Busting:** Logo URL includes content hash, ensuring browsers fetch the new version.
 
+## Bucket Provisioning
+
+The branding logo feature requires the `branding-assets` bucket in Supabase Storage.
+
+### Create Bucket (Supabase Dashboard)
+
+1. Open Supabase Dashboard → Storage
+2. Click "New bucket"
+3. Name: `branding-assets`
+4. Public bucket: **Yes** (logos must be publicly accessible)
+5. File size limit: 2MB (optional, backend enforces this)
+6. Click "Create bucket"
+
+### Create Bucket (SQL)
+
+```sql
+-- Run in Supabase SQL Editor
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('branding-assets', 'branding-assets', true)
+ON CONFLICT (id) DO NOTHING;
+```
+
+### Verify Bucket Exists
+
+```bash
+# Using Supabase CLI
+supabase storage ls
+
+# Or check via API
+curl -s "${SUPABASE_URL}/storage/v1/bucket/branding-assets" \
+  -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+  -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" | jq
+```
+
 ## API Endpoints
 
 | Action | Endpoint | Method | RBAC |
@@ -58,6 +109,7 @@ The Admin UI sidebar displays the uploaded logo:
 | Get branding | `/api/v1/branding` | GET | authenticated |
 | Update branding | `/api/v1/branding` | PUT | admin, manager |
 | Upload logo | `/api/v1/branding/logo` | POST | admin, manager |
+| Internal proxy | `/api/internal/branding/logo` | POST | session auth |
 
 ### POST /api/v1/branding/logo
 
@@ -68,7 +120,7 @@ The Admin UI sidebar displays the uploaded logo:
 **Response:**
 ```json
 {
-  "logo_url": "https://sb-pms.../storage/v1/object/public/property-media/branding/{tenant_id}/logo_{hash}.png",
+  "logo_url": "https://sb-pms.../storage/v1/object/public/branding-assets/{tenant_id}/logo_{hash}.png",
   "updated_at": "2026-02-05T10:00:00Z"
 }
 ```
@@ -78,7 +130,7 @@ The Admin UI sidebar displays the uploaded logo:
 |--------|-------|
 | 400 | Invalid file type or size > 2MB |
 | 403 | Not admin or manager role |
-| 503 | Storage service not configured |
+| 503 | Storage bucket missing or service not configured |
 
 ## Verification (PROD)
 
@@ -96,7 +148,7 @@ EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
 export JWT_TOKEN="$(curl -k -sS -X POST "${SB_URL}/auth/v1/token?grant_type=password" \
   -H "apikey: ${SB_ANON_KEY}" \
   -H "Content-Type: application/json" \
-  --data-binary "$(jq -nc --arg e \"$SB_EMAIL\" --arg p \"$SB_PASSWORD\" '{email:$e,password:$p}')" \
+  --data-binary "$(jq -nc --arg e \"$SB_EMAIL\" --arg p \"$SB_PASSWORD\" '{email:\$e,password:\$p}')" \
   | jq -r '.access_token // empty')"
 
 # 3. Run smoke test
@@ -121,6 +173,28 @@ rm /tmp/test_logo.png
 
 ## Troubleshooting
 
+### Upload Fails with 404 (Admin UI)
+
+**Symptom:** Browser shows 404 when clicking "Speichern" for logo upload.
+
+**Cause:** Frontend posting to wrong URL (direct `/api/v1/...` instead of internal proxy).
+
+**Resolution:**
+1. Verify frontend uses `/api/internal/branding/logo` (not direct API URL)
+2. Check `frontend/app/api/internal/branding/logo/route.ts` exists
+3. Redeploy frontend if route was recently added
+
+### Upload Fails with 503 (Bucket Missing)
+
+**Symptom:** Error: "Branding bucket 'branding-assets' not found"
+
+**Cause:** Storage bucket doesn't exist in Supabase.
+
+**Resolution:**
+1. Create bucket via Supabase Dashboard or SQL (see Bucket Provisioning above)
+2. Ensure bucket is public
+3. Retry upload
+
 ### Logo Not Appearing in Sidebar
 
 **Symptom:** Uploaded logo but sidebar still shows letter initial.
@@ -140,14 +214,14 @@ rm /tmp/test_logo.png
 2. Check file size is under 2 MB
 3. Try re-saving image in supported format
 
-### Upload Fails with 503
+### Upload Fails with 503 (Service Not Configured)
 
 **Symptom:** "Storage service not configured" error.
 
 **Resolution:**
 1. Check `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set
 2. Verify Supabase storage is accessible
-3. Check `property-media` bucket exists in Supabase Storage
+3. Check bucket exists (see Bucket Provisioning)
 
 ### Old Logo Still Showing
 
@@ -188,7 +262,7 @@ JWT_TOKEN="eyJhbG..." SKIP_UPLOAD=1 ./backend/scripts/pms_branding_logo_smoke.sh
 1. **Health check:** GET /health → HTTP 200
 2. **Get branding:** GET /api/v1/branding → HTTP 200
 3. **Upload logo:** POST /api/v1/branding/logo with tiny PNG → HTTP 200/201
-4. **Verify change:** GET /api/v1/branding → logo_url contains "branding/" path
+4. **Verify change:** GET /api/v1/branding → logo_url contains "branding-assets/" path
 
 ### Expected Result
 
