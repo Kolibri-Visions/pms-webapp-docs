@@ -72,6 +72,14 @@ The Admin UI sidebar displays the uploaded logo:
 
 The branding logo feature requires the `branding-assets` bucket in Supabase Storage.
 
+### Auto-Creation (Default Behavior)
+
+The backend **automatically creates** the `branding-assets` bucket on first upload if it doesn't exist. This requires:
+- `SUPABASE_SERVICE_ROLE_KEY` to be set and have admin permissions
+- Supabase Storage API to be accessible
+
+If auto-creation fails, the upload will return a 503 error with details. In this case, create the bucket manually (see below).
+
 ### Create Bucket (Supabase Dashboard)
 
 1. Open Supabase Dashboard → Storage
@@ -184,16 +192,29 @@ rm /tmp/test_logo.png
 2. Check `frontend/app/api/internal/branding/logo/route.ts` exists
 3. Redeploy frontend if route was recently added
 
-### Upload Fails with 503 (Bucket Missing)
+### Upload Fails with 503 (Bucket Auto-Creation Failed)
 
-**Symptom:** Error: "Branding bucket 'branding-assets' not found"
+**Symptom:** Error: "Could not create branding bucket 'branding-assets'. Check service role permissions."
 
-**Cause:** Storage bucket doesn't exist in Supabase.
+**Cause:** Backend tried to auto-create the bucket but failed (likely permissions issue).
 
 **Resolution:**
-1. Create bucket via Supabase Dashboard or SQL (see Bucket Provisioning above)
-2. Ensure bucket is public
-3. Retry upload
+1. Check `SUPABASE_SERVICE_ROLE_KEY` has admin/service_role permissions
+2. Verify the key is not expired or rate-limited
+3. Check backend logs for detailed error message
+4. If permissions cannot be fixed, create bucket manually (see Bucket Provisioning above)
+
+### Upload Fails with 500 (Storage Error)
+
+**Symptom:** Error: "Failed to upload logo to storage"
+
+**Cause:** Upload to Supabase Storage failed after bucket check.
+
+**Resolution:**
+1. Check backend logs for detailed storage error
+2. Verify Supabase Storage is operational
+3. Check bucket exists and is accessible
+4. Verify file size is under 2MB
 
 ### Logo Not Appearing in Sidebar
 

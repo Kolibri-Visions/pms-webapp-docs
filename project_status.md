@@ -1645,10 +1645,11 @@ Added logo upload functionality to Branding Settings and fixed Admin UI sidebar 
    - Validates: PNG, JPEG, WebP, SVG; max 2MB
    - Uploads to Supabase Storage: `branding-assets/{tenant_id}/logo_{hash}.{ext}`
    - Bucket name configurable via `BRANDING_STORAGE_BUCKET` env var
+   - **Auto-creates bucket if missing** (public access, retries upload after creation)
    - Content-hash in filename for cache-busting
    - Updates `tenant_branding.logo_url` with public URL
    - Returns: `{ logo_url, updated_at }`
-   - Clear 503 error message if bucket missing
+   - Clear 503 error message if bucket auto-creation fails
 
 2. **Frontend - Internal Proxy Route:**
    - Added `/api/internal/branding/logo` Next.js route
@@ -1672,8 +1673,8 @@ Added logo upload functionality to Branding Settings and fixed Admin UI sidebar 
    - Collapsible manual URL input (legacy support)
 
 5. **Documentation:**
-   - Created `backend/docs/ops/runbook/18-branding-logo.md` with bucket provisioning instructions
-   - Created `backend/scripts/pms_branding_logo_smoke.sh`
+   - Created `backend/docs/ops/runbook/18-branding-logo.md` with bucket provisioning/auto-creation docs
+   - Created `backend/scripts/pms_branding_logo_smoke.sh` (includes logo accessibility HEAD test)
    - Updated `backend/scripts/README.md`
 
 **Files Changed:**
