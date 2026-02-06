@@ -2013,6 +2013,57 @@ Extends the Admin UI branding system with navigation customization. Tenants can 
 
 ---
 
+### P2.21.4.8ae: Navigation Builder (Order + Visibility + Labels) ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-06
+
+**Overview:**
+
+Extends P2.21.4.8ad with a full Navigation Builder UI for reordering, showing/hiding, and relabeling navigation items.
+
+**Backend Changes:**
+
+- `backend/app/schemas/branding.py`: Added `hidden_keys` and `label_overrides` fields to NavigationBrandingConfig
+- Validation for hidden_keys (ALLOWED_NAV_KEYS only)
+- Validation for label_overrides (keys must be ALLOWED_NAV_KEYS, values non-empty)
+
+**Frontend Changes:**
+
+- `frontend/app/components/AdminShell.tsx`:
+  - Exported `NAV_REGISTRY` as single source of truth for nav items
+  - Added `computeNavItems()` function to apply order, hidden, and label overrides
+  - Sidebar renders items based on nav_config customizations
+
+- `frontend/app/settings/branding/branding-form.tsx`:
+  - Added Navigation Builder UI section
+  - Up/down buttons for reordering
+  - Eye/EyeOff buttons for visibility toggle
+  - Input fields for custom labels
+  - "Zurücksetzen" button to reset all customizations
+
+**nav_config Fields Added:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `hidden_keys` | string[] | Nav items to hide |
+| `label_overrides` | object | Custom labels {key: label} |
+
+**Smoke Test:**
+
+- Extended `backend/scripts/pms_admin_theming_smoke.sh` with Navigation Builder test
+- Verifies builder UI loads, sidebar renders with customizations
+
+**Documentation:**
+
+- Updated `backend/docs/ops/runbook/20-navigation-branding.md`:
+  - Added Navigation Builder section
+  - Added troubleshooting for hidden items and custom labels
+  - Added "Maximale Branding Möglichkeiten" future features table
+
+**Status:** ✅ IMPLEMENTED (awaiting production deployment for VERIFIED)
+
+---
+
 ### P3.1: Direct Booking Hardening — Idempotency-Key + Audit Log ✅ VERIFIED
 
 **Date Completed:** 2026-01-30

@@ -1,8 +1,8 @@
 # Admin Navigation Branding
 
-This runbook chapter covers the Navigation Customization feature (P2.21.4.8ad).
+This runbook chapter covers the Navigation Customization feature (P2.21.4.8ad + P2.21.4.8ae).
 
-**When to use:** Understanding and troubleshooting navigation branding settings, sidebar customization, and nav item ordering.
+**When to use:** Understanding and troubleshooting navigation branding settings, sidebar customization, nav item ordering, visibility, and custom labels.
 
 ## Overview
 
@@ -11,7 +11,9 @@ Navigation Branding provides:
 1. **Sidebar Width** — Configurable width percentage (12-28rem)
 2. **Nav Styling** — Custom colors for text, hover, and active states
 3. **Icon & Spacing** — Adjustable icon sizes (14-24px) and item gaps (4-16px)
-4. **Item Ordering** — Tenant-specific navigation item order persistence
+4. **Item Ordering** — Tenant-specific navigation item order (P2.21.4.8ae)
+5. **Show/Hide Items** — Toggle visibility of nav items per tenant (P2.21.4.8ae)
+6. **Custom Labels** — Override default labels with custom text (P2.21.4.8ae)
 
 **Access:** Admin/Manager roles can customize via Settings > Branding > Navigation section.
 
@@ -36,6 +38,8 @@ Navigation Branding provides:
 | `active_bg` | hex | - | (uses accent) | Active item background |
 | `active_text` | hex | - | #ffffff | Active item text |
 | `order` | string[] | - | [] | Custom nav item order |
+| `hidden_keys` | string[] | - | [] | Nav items to hide |
+| `label_overrides` | object | - | {} | Custom labels {key: label} |
 
 ### CSS Variables
 
@@ -134,6 +138,8 @@ Only provided fields are merged; existing values are preserved.
 | `item_gap_px` | 4 ≤ value ≤ 16 |
 | Color fields | Valid hex (#RRGGBB) |
 | `order` | Only ALLOWED_NAV_KEYS permitted |
+| `hidden_keys` | Only ALLOWED_NAV_KEYS permitted |
+| `label_overrides` | Keys must be ALLOWED_NAV_KEYS, values non-empty |
 
 ### Error Responses
 
@@ -180,6 +186,83 @@ getComputedStyle(document.documentElement).getPropertyValue('--nav-width')
 1. **Empty string sent:** Only non-empty hex values are applied
 2. **Invalid format:** Must be #RRGGBB format
 3. **CSS specificity:** Custom classes may override CSS vars
+
+### Hidden Items Still Visible
+
+**Symptom:** Items in `hidden_keys` still appear in sidebar.
+
+**Causes & Solutions:**
+
+1. **Browser cache:** Hard refresh (Ctrl+Shift+R)
+2. **Theme not refreshed:** Check that branding API response includes `hidden_keys`
+3. **Verify API:** `curl /api/v1/branding | jq '.nav_config.hidden_keys'`
+
+### Custom Labels Not Showing
+
+**Symptom:** Label overrides not displayed in sidebar.
+
+**Causes & Solutions:**
+
+1. **Empty label:** Labels cannot be empty strings
+2. **Invalid key:** Key must match ALLOWED_NAV_KEYS exactly
+3. **Verify API:** `curl /api/v1/branding | jq '.nav_config.label_overrides'`
+
+## Navigation Builder (P2.21.4.8ae)
+
+The Navigation Builder UI in Settings > Branding provides:
+
+### Reorder Items
+
+Use up/down arrows to change item order:
+- Items are displayed in custom order after save
+- If no custom order, default group structure is preserved
+- Missing items from order array are appended at end
+
+### Show/Hide Items
+
+Toggle visibility per item:
+- Hidden items are stored in `hidden_keys` array
+- Hidden items don't render in sidebar
+- Role restrictions still apply (hidden item + no role = hidden)
+
+### Custom Labels
+
+Override default labels:
+- Enter custom text in input field
+- Empty field = use default label
+- Stored in `label_overrides` object: `{key: "Custom Label"}`
+
+### Reset
+
+Click "Zurücksetzen" to clear all customizations:
+- Resets order to default
+- Shows all hidden items
+- Removes all label overrides
+
+## Maximale Branding Möglichkeiten
+
+Future enhancements for maximum branding flexibility:
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Sidebar Width | ✅ Implemented | 12-28rem range |
+| Nav Text Color | ✅ Implemented | Hex color |
+| Icon Size | ✅ Implemented | 14-24px |
+| Item Gap | ✅ Implemented | 4-16px |
+| Hover Background | ✅ Implemented | Hex color |
+| Hover Text | ✅ Implemented | Hex color |
+| Active Background | ✅ Implemented | Hex color |
+| Active Text | ✅ Implemented | Hex color |
+| Item Ordering | ✅ Implemented | Custom order array |
+| Show/Hide Items | ✅ Implemented | hidden_keys array |
+| Custom Labels | ✅ Implemented | label_overrides object |
+| Collapsed Width | 🔮 Planned | Custom collapsed sidebar width |
+| Active Indicator Style | 🔮 Planned | Line, pill, background variants |
+| Icon Color | 🔮 Planned | Separate icon color token |
+| Divider Color | 🔮 Planned | Color for section dividers |
+| Section Header Style | 🔮 Planned | Font size, weight, color |
+| Density Mode | 🔮 Planned | Compact vs. comfortable spacing |
+| Custom Icons | 🔮 Planned | Upload custom icons per item |
 
 ## Verification (PROD)
 
