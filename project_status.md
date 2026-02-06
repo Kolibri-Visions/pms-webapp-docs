@@ -1789,6 +1789,69 @@ echo "branding_logo_rc=$?"
 
 ---
 
+### P2.21.4.8ab: Branding Theme Visual Application in Admin UI ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-06
+
+**Overview:**
+
+Made branding theme colors (Primary, Secondary, Accent, Background) visually apply across Admin UI components. Previously colors were saved to DB but not rendered in the UI.
+
+**Changes:**
+
+1. **Tailwind Config (`frontend/tailwind.config.ts`):**
+   - Added `t` color palette mapping CSS variables to Tailwind classes
+   - Classes: `bg-t-primary`, `text-t-primary-fg`, `hover:bg-t-primary-hover`, etc.
+   - Ring colors: `ring-t`, `ring-t-primary`, `ring-t-accent`
+
+2. **Theme Provider (`frontend/app/lib/theme-provider.tsx`):**
+   - Added data attributes on `<html>` for smoke test verification:
+     `data-t-primary`, `data-t-secondary`, `data-t-accent`, `data-t-bg`
+
+3. **Admin UI Pages Updated (15 pages):**
+   - Primary buttons: `bg-blue-600` → `bg-t-primary`
+   - Text colors: `text-blue-600` → `text-t-primary`
+   - Hover states: `hover:bg-blue-700` → `hover:bg-t-primary-hover`
+   - Foreground: `text-white` → `text-t-primary-fg` (auto-computed contrast)
+   - Focus rings: `ring-indigo-500` → `ring-t-ring`
+
+4. **Branding Form Enhancement:**
+   - Added live preview section showing theme colors before save
+   - Updated form buttons to use theme classes
+
+5. **Documentation (`backend/docs/ops/runbook/18-branding-logo.md`):**
+   - Added Tailwind class column to colors table
+   - Added "Theme-Aware Components" section
+   - Added "Theme Colors Not Applying to UI" troubleshooting
+   - Added browser verification commands
+
+**Pages Updated:**
+- `guests/page.tsx`, `guests/[id]/page.tsx`
+- `organisation/page.tsx`, `team/page.tsx`
+- `booking-requests/page.tsx`
+- `pricing/page.tsx`, `pricing/seasons/page.tsx`, `pricing/quote/page.tsx`
+- `connections/page.tsx`, `buchung/page.tsx`
+- `properties/[id]/calendar/page.tsx`, `properties/[id]/rate-plans/page.tsx`
+- `login/login-client.tsx`
+- `settings/branding/branding-form.tsx`
+
+**NOT Changed (intentional):**
+- Public pages (`page.tsx`, `_public/*`, `(public)/*`) retain hardcoded colors
+
+**Verification (Browser):**
+
+```javascript
+// Check data attributes on <html>
+document.documentElement.dataset.tPrimary  // Should show hex color
+
+// Check computed CSS variable
+getComputedStyle(document.documentElement).getPropertyValue('--t-primary')
+```
+
+**Status:** ✅ IMPLEMENTED
+
+---
+
 ### P3.1: Direct Booking Hardening — Idempotency-Key + Audit Log ✅ VERIFIED
 
 **Date Completed:** 2026-01-30

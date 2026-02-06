@@ -79,21 +79,30 @@ The branding form distinguishes between **uploaded logos** (stored in Supabase S
 ### Branding Colors (Theme Customization)
 
 **Available Colors:**
-| Field | CSS Variable | Usage |
-|-------|--------------|-------|
-| Primärfarbe | `--t-primary` | Buttons, links, primary actions |
-| Sekundärfarbe | `--t-secondary` | Secondary buttons, badges |
-| Akzentfarbe | `--t-accent` | Focus rings, highlights, accents |
-| Hintergrundfarbe | `--t-bg` | Main app background |
+| Field | CSS Variable | Tailwind Class | Usage |
+|-------|--------------|----------------|-------|
+| Primärfarbe | `--t-primary` | `bg-t-primary`, `text-t-primary` | Primary buttons, links, active states |
+| Sekundärfarbe | `--t-secondary` | `bg-t-secondary` | Secondary buttons, badges |
+| Akzentfarbe | `--t-accent` | `bg-t-accent`, `ring-t` | Focus rings, highlights, accents |
+| Hintergrundfarbe | `--t-bg` | `bg-t-bg` | Main app background |
 
 **How Colors Apply Globally:**
 - Colors are applied as CSS variables on `document.documentElement`
-- Components using Tailwind classes automatically pick up colors
-- Foreground colors (text on buttons) are computed for contrast
+- Frontend components use Tailwind classes (`bg-t-primary`, `hover:bg-t-primary-hover`)
+- Foreground colors (text on buttons) are computed for contrast (`text-t-primary-fg`)
+- Data attributes on `<html>` for smoke test verification: `data-t-primary`, `data-t-accent`, etc.
+
+**Theme-Aware Components (P2.21.4.8ab):**
+- Primary buttons: "Save Changes", "Create", "Submit" → `bg-t-primary`
+- Focus rings: Input focus states → `ring-t-ring`
+- Active/hover states: Computed darker variant → `hover:bg-t-primary-hover`
+
+**Live Preview:**
+The branding form includes a live preview section showing how the theme will appear after saving.
 
 **Default Behavior:**
 - If a color field is empty, the default theme is used
-- Defaults: Primary=#4F46E5, Secondary=#0F172A, Accent=#10B981, Background=#FFFFFF
+- Defaults: Primary=#3B82F6 (blue), Secondary=#0F172A (slate), Accent=#8B5CF6 (violet), Background=#FFFFFF
 
 ### Sidebar Logo Display
 
@@ -361,6 +370,24 @@ HTTP 400 - {"statusCode":"404","error":"Bucket not found","message":"Bucket not 
 3. Hard refresh browser
 4. Check for CDN caching (if using CDN)
 
+### Theme Colors Not Applying to UI
+
+**Symptom:** Colors saved successfully but Admin UI buttons/links still show old colors.
+
+**Causes & Solutions:**
+
+1. **Browser cache:** Hard refresh (Ctrl+Shift+R / Cmd+Shift+R) or clear cache
+2. **CSS variables not set:** Check DevTools → Elements → `<html>` element for `data-t-primary` attribute
+3. **Component using hardcoded colors:** Some legacy components may use hardcoded Tailwind classes. Check if the component uses `bg-t-primary` vs `bg-blue-600`.
+4. **Theme provider not loaded:** Verify the ThemeProvider is in the component tree by checking for CSS variable `--t-primary` on `:root`
+
+**Verification:**
+```javascript
+// In browser console
+document.documentElement.dataset.tPrimary  // Should show hex color
+getComputedStyle(document.documentElement).getPropertyValue('--t-primary')  // Should show hex color
+```
+
 ## Smoke Test
 
 **Script:** `backend/scripts/pms_branding_logo_smoke.sh`
@@ -384,20 +411,43 @@ JWT_TOKEN="eyJhbG..." SKIP_UPLOAD=1 ./backend/scripts/pms_branding_logo_smoke.sh
 | `JWT_TOKEN` | Yes | - | Valid JWT (admin/manager role) |
 | `API_BASE_URL` | No | `https://api.fewo.kolibri-visions.de` | API base URL |
 | `SKIP_UPLOAD` | No | `0` | Set to `1` to skip upload test |
+| `SKIP_COLOR_UPDATE` | No | `0` | Set to `1` to skip color update test |
 
 ### What It Tests
 
 1. **Health check:** GET /health → HTTP 200
 2. **Get branding:** GET /api/v1/branding → HTTP 200
 3. **Upload logo:** POST /api/v1/branding/logo with tiny PNG → HTTP 200/201
-4. **Verify change:** GET /api/v1/branding → logo_url contains "branding-assets/" path
+4. **Verify logo change:** GET /api/v1/branding → logo_url contains "branding-assets/" path
+5. **Logo accessibility:** HEAD on logo_url → HTTP 200
+6. **Update colors:** PUT /api/v1/branding with test colors → HTTP 200
+7. **Verify colors:** GET /api/v1/branding → tokens.primary, tokens.secondary populated
 
 ### Expected Result
 
 ```
 RESULT: PASS
-Summary: PASS=4, FAIL=0, SKIP=0
+Summary: PASS=7, FAIL=0, SKIP=0
 ```
+
+### Theme Application Verification (Browser)
+
+To verify the theme is applied in the Admin UI:
+
+1. **Browser DevTools:**
+   ```javascript
+   // Check data attributes on <html>
+   document.documentElement.dataset.tPrimary
+   document.documentElement.dataset.tAccent
+
+   // Check computed CSS variable
+   getComputedStyle(document.documentElement).getPropertyValue('--t-primary')
+   ```
+
+2. **Visual Check:**
+   - Primary buttons should match the configured primary color
+   - Focus rings on inputs should use the accent color
+   - The branding settings page includes a live preview section
 
 ## Related Documentation
 
