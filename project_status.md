@@ -2011,6 +2011,25 @@ Extends the Admin UI branding system with navigation customization. Tenants can 
 
 **Status:** ✅ IMPLEMENTED (awaiting production deployment for VERIFIED)
 
+**P2.21.4.8ad-hotfix-1 (2026-02-06): Fix "column reference nav_config is ambiguous"**
+
+- **Root Cause:** Backend SQL UPSERT query used unqualified `nav_config` reference in `ON CONFLICT DO UPDATE SET`, causing PostgreSQL ambiguity error (500) when saving branding with nav_config changes.
+- **Fix:** Qualified column reference as `tenant_branding.nav_config` in `backend/app/api/routes/branding.py`.
+- **Smoke:** Extended `pms_admin_theming_smoke.sh` with branding save test that verifies PUT /api/v1/branding returns 200.
+- **Docs:** Added troubleshooting entry in runbook/20-navigation-branding.md.
+- **Status:** ✅ IMPLEMENTED
+
+**Verification:**
+
+```bash
+# HOST-SERVER-TERMINAL
+source /root/.pms_env
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+EXPECT_COMMIT=<commit_sha> ./backend/scripts/pms_verify_deploy.sh
+./backend/scripts/pms_admin_theming_smoke.sh
+echo "admin_theming_rc=$?"
+```
+
 ---
 
 ### P2.21.4.8ae: Navigation Builder (Order + Visibility + Labels) ✅ IMPLEMENTED

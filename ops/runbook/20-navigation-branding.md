@@ -207,6 +207,27 @@ getComputedStyle(document.documentElement).getPropertyValue('--nav-width')
 2. **Invalid key:** Key must match ALLOWED_NAV_KEYS exactly
 3. **Verify API:** `curl /api/v1/branding | jq '.nav_config.label_overrides'`
 
+### Save Fails with 500 "column reference nav_config is ambiguous"
+
+**Symptom:** Clicking "Save Changes" in Branding settings returns HTTP 500 with error message containing "column reference 'nav_config' is ambiguous".
+
+**Root Cause:** Backend SQL UPSERT query used unqualified `nav_config` reference in `ON CONFLICT DO UPDATE SET`, causing PostgreSQL ambiguity between table column and EXCLUDED row.
+
+**Fix:** Deploy backend with commit containing the fix. The SQL now uses qualified `tenant_branding.nav_config` reference.
+
+**Verification:**
+
+```bash
+# 1. Verify deploy has the fix
+EXPECT_COMMIT=<fixed_commit_sha> ./backend/scripts/pms_verify_deploy.sh
+
+# 2. Run smoke test (includes branding save test)
+./backend/scripts/pms_admin_theming_smoke.sh
+echo "rc=$?"
+```
+
+Expected: Both scripts return rc=0, branding save works without errors.
+
 ## Navigation Builder (P2.21.4.8ae)
 
 The Navigation Builder UI in Settings > Branding provides:
