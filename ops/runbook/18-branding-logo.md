@@ -60,6 +60,41 @@ The Admin UI uses an internal Next.js API route (`/api/internal/branding/logo`) 
 3. Click "Speichern" to upload
 4. Sidebar logo updates automatically
 
+### Manual URL (extern) vs Upload (Storage)
+
+The branding form distinguishes between **uploaded logos** (stored in Supabase Storage) and **external URLs**:
+
+| Source | Behavior | Manual URL Input |
+|--------|----------|------------------|
+| **Upload** | File stored in `branding-assets` bucket | Input stays **empty** (not auto-filled) |
+| **External URL** | URL saved directly to `logo_url` | Input shows current external URL |
+
+**Important:** After uploading a logo, the "URL manuell eingeben" field intentionally remains empty. The storage URL is NOT copied into this field. This prevents confusion between uploaded and external logos.
+
+**To use an external logo instead of upload:**
+1. Expand "Oder externe URL manuell eingeben"
+2. Enter the full URL (e.g., `https://cdn.example.com/logo.png`)
+3. Click "Save Changes"
+
+### Branding Colors (Theme Customization)
+
+**Available Colors:**
+| Field | CSS Variable | Usage |
+|-------|--------------|-------|
+| Primärfarbe | `--t-primary` | Buttons, links, primary actions |
+| Sekundärfarbe | `--t-secondary` | Secondary buttons, badges |
+| Akzentfarbe | `--t-accent` | Focus rings, highlights, accents |
+| Hintergrundfarbe | `--t-bg` | Main app background |
+
+**How Colors Apply Globally:**
+- Colors are applied as CSS variables on `document.documentElement`
+- Components using Tailwind classes automatically pick up colors
+- Foreground colors (text on buttons) are computed for contrast
+
+**Default Behavior:**
+- If a color field is empty, the default theme is used
+- Defaults: Primary=#4F46E5, Secondary=#0F172A, Accent=#10B981, Background=#FFFFFF
+
 ### Sidebar Logo Display
 
 The Admin UI sidebar displays the uploaded logo:

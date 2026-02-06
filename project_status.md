@@ -1711,6 +1711,83 @@ echo "branding_logo_rc=$?"
 
 ---
 
+### P2.21.4.8aa: Branding Theme Colors + Manual URL Fix ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-06
+
+**Overview:**
+
+Added 4-color branding theme (Primary, Secondary, Accent, Background) that applies globally to Admin UI, and fixed the manual URL input bug where storage URLs were incorrectly auto-filled.
+
+**Changes:**
+
+1. **Backend - New Branding Columns:**
+   - Added `secondary_color` and `background_color` to `tenant_branding` table
+   - Migration: `20260206000000_add_branding_secondary_background_colors.sql`
+   - Schema: Updated `BrandingUpdate`, `BrandingResponse`, `ThemeTokens`
+   - API: GET/PUT `/api/v1/branding` now supports all 4 colors
+
+2. **Frontend - Theme Applier:**
+   - Enhanced `theme-provider.tsx` with CSS variables for all colors
+   - Variables: `--t-primary`, `--t-secondary`, `--t-accent`, `--t-bg`
+   - Auto-computed foreground colors based on background luminance
+   - Focus ring (`--t-ring`) uses accent color
+
+3. **Frontend - Manual URL Fix:**
+   - Separate state for `manualLogoUrl` (external URLs only)
+   - Storage URLs (containing `/storage/v1/object` or `/branding-assets/`) NOT shown in manual input
+   - After upload, manual URL input stays empty
+   - Only external URLs are editable in the manual input field
+
+4. **Frontend - Branding Form:**
+   - 4 color inputs: Primärfarbe, Sekundärfarbe, Akzentfarbe, Hintergrundfarbe
+   - Color picker + hex input for each
+   - Helper text: "Wenn leer, Default-Theme"
+
+5. **Smoke Test:**
+   - Extended `pms_branding_logo_smoke.sh` with color update tests
+   - PUT colors → verify returned in GET response
+   - Env: `SKIP_COLOR_UPDATE=1` to skip color tests
+
+**Files Changed:**
+- `supabase/migrations/20260206000000_add_branding_secondary_background_colors.sql` — New migration
+- `backend/app/schemas/branding.py` — Added secondary_color, background_color fields
+- `backend/app/api/routes/branding.py` — Updated SELECT/INSERT/UPDATE queries
+- `frontend/app/lib/theme-provider.tsx` — Enhanced with 4-color theme vars
+- `frontend/app/settings/branding/branding-form.tsx` — Fixed manual URL, added 4 color inputs
+- `backend/scripts/pms_branding_logo_smoke.sh` — Added color update tests
+- `backend/docs/ops/runbook/18-branding-logo.md` — Added color and manual URL docs
+
+**Verification:**
+
+```bash
+# HOST-SERVER-TERMINAL
+source /root/.pms_env
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+
+EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
+
+export JWT_TOKEN="$(curl -k -sS -X POST "${SB_URL}/auth/v1/token?grant_type=password" \
+  -H "apikey: ${SB_ANON_KEY}" \
+  -H "Content-Type: application/json" \
+  --data-binary "$(jq -nc --arg e \"$SB_EMAIL\" --arg p \"$SB_PASSWORD\" '{email:\$e,password:\$p}')" \
+  | jq -r '.access_token // empty')"
+
+JWT_TOKEN="${JWT_TOKEN}" ./backend/scripts/pms_branding_logo_smoke.sh
+echo "branding_logo_rc=$?"
+```
+
+**Manual UI Check:**
+1. Admin → Einstellungen → Branding
+2. Set colors (Primary, Secondary, Accent, Background)
+3. Click "Save Changes"
+4. Navigate to Dashboard and other pages
+5. Verify: Buttons, highlights, background reflect the new colors
+
+**Status:** ✅ IMPLEMENTED
+
+---
+
 ### P3.1: Direct Booking Hardening — Idempotency-Key + Audit Log ✅ VERIFIED
 
 **Date Completed:** 2026-01-30
