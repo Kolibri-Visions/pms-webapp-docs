@@ -1723,9 +1723,10 @@ Added 4-color branding theme (Primary, Secondary, Accent, Background) that appli
 
 1. **Backend - New Branding Columns:**
    - Added `secondary_color` and `background_color` to `tenant_branding` table
-   - Migration: `20260206000000_add_branding_secondary_background_colors.sql`
+   - Migration: `20260206000000_add_branding_secondary_background_colors.sql` (MUST be applied in PROD)
    - Schema: Updated `BrandingUpdate`, `BrandingResponse`, `ThemeTokens`
    - API: GET/PUT `/api/v1/branding` now supports all 4 colors
+   - Improved error handling: returns 503 with actionable message if schema out of date
 
 2. **Frontend - Theme Applier:**
    - Enhanced `theme-provider.tsx` with CSS variables for all colors

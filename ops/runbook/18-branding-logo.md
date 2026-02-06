@@ -217,6 +217,57 @@ rm /tmp/test_logo.png
 
 ## Troubleshooting
 
+### Branding API Returns 503 (Schema Out of Date)
+
+**Symptom:** PUT/GET `/api/v1/branding` returns 503 with message:
+- "Branding schema out of date. Run database migrations"
+- Or in logs: "column secondary_color does not exist"
+
+**Cause:** The `tenant_branding` table is missing the `secondary_color` and/or `background_color` columns added in migration `20260206000000_add_branding_secondary_background_colors.sql`.
+
+**Resolution:**
+1. Apply the migration in Supabase SQL Editor:
+   ```sql
+   -- Add secondary_color if missing
+   DO $$
+   BEGIN
+     IF NOT EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'tenant_branding'
+         AND column_name = 'secondary_color'
+     ) THEN
+       ALTER TABLE public.tenant_branding ADD COLUMN secondary_color text;
+       ALTER TABLE public.tenant_branding
+         ADD CONSTRAINT valid_secondary_color
+         CHECK (secondary_color IS NULL OR secondary_color ~* '^#[0-9A-Fa-f]{6}$');
+     END IF;
+   END $$;
+
+   -- Add background_color if missing
+   DO $$
+   BEGIN
+     IF NOT EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'tenant_branding'
+         AND column_name = 'background_color'
+     ) THEN
+       ALTER TABLE public.tenant_branding ADD COLUMN background_color text;
+       ALTER TABLE public.tenant_branding
+         ADD CONSTRAINT valid_background_color
+         CHECK (background_color IS NULL OR background_color ~* '^#[0-9A-Fa-f]{6}$');
+     END IF;
+   END $$;
+   ```
+2. Verify columns exist:
+   ```sql
+   SELECT column_name FROM information_schema.columns
+   WHERE table_name = 'tenant_branding'
+   ORDER BY ordinal_position;
+   ```
+3. Retry the branding API call.
+
 ### Upload Fails with 404 (Admin UI)
 
 **Symptom:** Browser shows 404 when clicking "Speichern" for logo upload.
