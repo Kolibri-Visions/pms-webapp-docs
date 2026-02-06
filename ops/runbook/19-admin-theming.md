@@ -227,9 +227,7 @@ export API_BASE_URL="https://api.fewo.kolibri-visions.de"
 # 1. Verify deploy
 EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
 
-# 2. Run smoke test
-E2E_ADMIN_EMAIL="$SB_EMAIL" \
-E2E_ADMIN_PASSWORD="$SB_PASSWORD" \
+# 2. Run smoke test (uses SB_EMAIL/SB_PASSWORD from .pms_env)
 ./backend/scripts/pms_admin_theming_smoke.sh
 
 echo "admin_theming_rc=$?"
@@ -329,10 +327,14 @@ E2E_ADMIN_PASSWORD="password" \
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `E2E_ADMIN_EMAIL` | Yes | - | Admin email for UI login |
-| `E2E_ADMIN_PASSWORD` | Yes | - | Admin password |
+| `E2E_ADMIN_EMAIL` | Yes* | Falls back to `SB_EMAIL` | Admin email for UI login |
+| `E2E_ADMIN_PASSWORD` | Yes* | Falls back to `SB_PASSWORD` | Admin password |
+| `SB_EMAIL` | No | - | Fallback email (from `.pms_env`) |
+| `SB_PASSWORD` | No | - | Fallback password (from `.pms_env`) |
 | `ADMIN_BASE_URL` | No | `https://admin.fewo.kolibri-visions.de` | Admin UI URL |
 | `PW_PROJECT` | No | `chromium` | Browser (chromium/firefox/webkit) |
+
+*Either `E2E_ADMIN_EMAIL`/`E2E_ADMIN_PASSWORD` or `SB_EMAIL`/`SB_PASSWORD` must be set.
 
 ### What It Tests
 
