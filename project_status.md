@@ -1852,6 +1852,90 @@ getComputedStyle(document.documentElement).getPropertyValue('--t-primary')
 
 ---
 
+### P2.21.4.8ac: Admin UI Design System + Tenant Theming Full Refactor ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-06
+
+**Overview:**
+
+Complete design system refactor for the Admin UI. Migrated all 43+ admin pages from hardcoded Tailwind colors to unified design tokens with tenant theming integration.
+
+**Design System Architecture:**
+
+1. **Token Categories:**
+   - `t-*` (Tenant/Theme): Dynamic branding colors from API
+   - `state-*` (Semantic): Fixed status colors (success, warning, error, info)
+   - `surface-*`: Background hierarchy (elevated, sunken, overlay)
+   - `content-*`: Text hierarchy (default, secondary, muted, inverse)
+   - `stroke-*`: Border colors (default, subtle, strong)
+
+2. **CSS Variable Foundation (`frontend/app/globals.css`):**
+   - 35+ CSS variables with sensible defaults
+   - Semantic state colors (green=success, yellow=warning, red=error, blue=info)
+   - Surface/content/stroke tokens for consistent hierarchy
+
+3. **Tailwind Integration (`frontend/tailwind.config.ts`):**
+   - All tokens mapped to Tailwind classes
+   - Usage: `bg-t-primary`, `text-state-success-fg`, `border-stroke-default`
+
+**UI Primitives Created:**
+
+| Component | Location | Features |
+|-----------|----------|----------|
+| `Button` | `components/ui/Button.tsx` | Variants: primary, secondary, ghost, danger, outline. Loading state. |
+| `Badge` | `components/ui/Badge.tsx` | Semantic variants. Dot indicator. Sizes: sm, md, lg. |
+| `Alert` | `components/ui/Alert.tsx` | Dismissible. Title support. Icons per variant. |
+
+**Pages Migrated (43+ files):**
+
+All admin pages migrated from hardcoded colors to design tokens:
+- Dashboard, Booking Requests, Availability
+- Properties (list, detail, calendar, rate-plans, media, extra-services)
+- Pricing (list, seasons, quote, rate-plans)
+- Guests (list, detail), Owners (list, detail)
+- Team, Organisation
+- Connections, Channel-Sync
+- Settings (branding, roles, billing, extra-services)
+- Ops (status, runbook, audit-log, modules)
+- Notifications (email-outbox)
+- Profile (view, edit, security)
+- Amenities, Extra-Services
+- Buchung (direct booking)
+- AdminShell, BackofficeLayout
+
+**Token Migration Applied:**
+
+| Old Class | New Token |
+|-----------|-----------|
+| `bg-white` | `bg-surface-elevated` |
+| `bg-gray-50` | `bg-surface-sunken` |
+| `text-gray-900` | `text-content-default` |
+| `text-gray-600` | `text-content-secondary` |
+| `text-gray-500` | `text-content-muted` |
+| `border-gray-200` | `border-stroke-default` |
+| `bg-blue-600` | `bg-t-primary` |
+| `hover:bg-blue-700` | `hover:bg-t-primary-hover` |
+| `bg-green-100` | `bg-state-success-bg` |
+| `text-green-800` | `text-state-success-fg` |
+| `bg-red-100` | `bg-state-error-bg` |
+| `text-red-800` | `text-state-error-fg` |
+| `bg-yellow-100` | `bg-state-warning-bg` |
+
+**Documentation:**
+
+- `backend/docs/ops/runbook/19-admin-theming.md` — Full runbook chapter
+- Token reference, troubleshooting, migration guide
+
+**Smoke Test:**
+
+- `backend/scripts/pms_admin_theming_smoke.sh`
+- Uses Playwright in Docker to verify CSS variables are applied
+- Tests: theme tokens, semantic states, surface/content hierarchy
+
+**Status:** ✅ IMPLEMENTED
+
+---
+
 ### P3.1: Direct Booking Hardening — Idempotency-Key + Audit Log ✅ VERIFIED
 
 **Date Completed:** 2026-01-30
