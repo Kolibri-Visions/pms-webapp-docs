@@ -1949,6 +1949,70 @@ pms_admin_theming_smoke.sh: rc=0
 
 ---
 
+### P2.21.4.8ad: Admin Branding — Navigation Customization + Reorder ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-06
+
+**Overview:**
+
+Extends the Admin UI branding system with navigation customization. Tenants can now customize sidebar width, icon sizes, colors, spacing, and optionally reorder navigation items.
+
+**Database Changes:**
+
+- Migration: `20260206120000_add_branding_nav_config.sql`
+- Adds `nav_config` JSONB column to `tenant_branding` table
+
+**nav_config Fields:**
+
+| Field | Type | Range | Default | Description |
+|-------|------|-------|---------|-------------|
+| `width_pct` | int | 12-28 | 16 | Sidebar width in rem |
+| `text_color` | hex | - | #ffffff | Navigation text color |
+| `icon_size_px` | int | 14-24 | 16 | Icon size in pixels |
+| `item_gap_px` | int | 4-16 | 12 | Gap between nav items |
+| `hover_bg` | hex | - | - | Hover background |
+| `hover_text` | hex | - | - | Hover text color |
+| `active_bg` | hex | - | - | Active item background |
+| `active_text` | hex | - | - | Active item text |
+| `order` | string[] | - | [] | Custom nav item order |
+
+**Backend Changes:**
+
+- `backend/app/schemas/branding.py`: Added `NavigationBrandingConfig` model with validation
+- `backend/app/api/routes/branding.py`: Extended GET/PUT to handle `nav_config` with partial merge
+
+**Frontend Changes:**
+
+- `frontend/app/lib/theme-provider.tsx`: Added `applyNavCssVariables()` function
+- `frontend/app/components/AdminShell.tsx`: Sidebar uses CSS vars for width/styling, nav items have stable keys
+- `frontend/app/settings/branding/branding-form.tsx`: Added Navigation section with sliders and color pickers
+
+**CSS Variables Added:**
+
+```css
+--nav-width: 16rem;
+--nav-width-collapsed: 5rem;
+--nav-text: #ffffff;
+--nav-icon-size: 16px;
+--nav-item-gap: 12px;
+--nav-hover-bg: rgba(255,255,255,0.1);
+--nav-hover-text: #ffffff;
+--nav-active-bg: var(--t-accent);
+--nav-active-text: #ffffff;
+```
+
+**Documentation:**
+
+- `backend/docs/ops/runbook/20-navigation-branding.md` — Full runbook chapter
+
+**Smoke Test:**
+
+- Extended `backend/scripts/pms_admin_theming_smoke.sh` with navigation CSS variables test
+
+**Status:** ✅ IMPLEMENTED (awaiting production deployment for VERIFIED)
+
+---
+
 ### P3.1: Direct Booking Hardening — Idempotency-Key + Audit Log ✅ VERIFIED
 
 **Date Completed:** 2026-01-30

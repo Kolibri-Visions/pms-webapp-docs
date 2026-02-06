@@ -1,0 +1,251 @@
+# Admin Navigation Branding
+
+This runbook chapter covers the Navigation Customization feature (P2.21.4.8ad).
+
+**When to use:** Understanding and troubleshooting navigation branding settings, sidebar customization, and nav item ordering.
+
+## Overview
+
+Navigation Branding provides:
+
+1. **Sidebar Width** — Configurable width percentage (12-28rem)
+2. **Nav Styling** — Custom colors for text, hover, and active states
+3. **Icon & Spacing** — Adjustable icon sizes (14-24px) and item gaps (4-16px)
+4. **Item Ordering** — Tenant-specific navigation item order persistence
+
+**Access:** Admin/Manager roles can customize via Settings > Branding > Navigation section.
+
+## Architecture
+
+### Database Schema
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `nav_config` | `jsonb` | Navigation customization settings |
+
+**nav_config Fields:**
+
+| Field | Type | Range | Default | Description |
+|-------|------|-------|---------|-------------|
+| `width_pct` | int | 12-28 | 16 | Sidebar width in rem |
+| `text_color` | hex | - | #ffffff | Navigation text color |
+| `icon_size_px` | int | 14-24 | 16 | Icon size in pixels |
+| `item_gap_px` | int | 4-16 | 12 | Gap between nav items |
+| `hover_bg` | hex | - | rgba(255,255,255,0.1) | Hover background |
+| `hover_text` | hex | - | #ffffff | Hover text color |
+| `active_bg` | hex | - | (uses accent) | Active item background |
+| `active_text` | hex | - | #ffffff | Active item text |
+| `order` | string[] | - | [] | Custom nav item order |
+
+### CSS Variables
+
+```css
+/* Navigation layout */
+--nav-width: 16rem;
+--nav-width-collapsed: 5rem;
+
+/* Navigation colors */
+--nav-text: #ffffff;
+--nav-hover-bg: rgba(255,255,255,0.1);
+--nav-hover-text: #ffffff;
+--nav-active-bg: var(--t-accent);
+--nav-active-text: #ffffff;
+
+/* Navigation sizing */
+--nav-icon-size: 16px;
+--nav-item-gap: 12px;
+```
+
+### Allowed Nav Item Keys
+
+These stable keys are used for ordering:
+
+```
+dashboard, properties, amenities, extra-services, bookings,
+booking-requests, availability, email-outbox, team,
+connections, channel-sync, pricing, pricing-seasons,
+guests, owners, organisation, branding, roles,
+billing, status, runbook, audit-log, modules
+```
+
+## Files & Components
+
+### Backend
+
+| File | Purpose |
+|------|---------|
+| `backend/app/schemas/branding.py` | NavigationBrandingConfig model |
+| `backend/app/api/routes/branding.py` | nav_config CRUD with partial merge |
+| `supabase/migrations/20260206120000_add_branding_nav_config.sql` | Database migration |
+
+### Frontend
+
+| File | Purpose |
+|------|---------|
+| `frontend/app/lib/theme-provider.tsx` | applyNavCssVariables() function |
+| `frontend/app/components/AdminShell.tsx` | Sidebar with CSS var styling |
+| `frontend/app/settings/branding/branding-form.tsx` | Navigation settings UI |
+
+## API
+
+### GET /api/v1/branding
+
+Returns branding with nav_config:
+
+```json
+{
+  "tenant_id": "uuid",
+  "nav_config": {
+    "width_pct": 18,
+    "text_color": "#FFFFFF",
+    "icon_size_px": 18,
+    "item_gap_px": 8,
+    "hover_bg": "#1E293B",
+    "active_bg": "#8B5CF6",
+    "order": ["dashboard", "bookings", "properties"]
+  },
+  "tokens": { ... }
+}
+```
+
+### PUT /api/v1/branding
+
+Update nav_config (partial merge):
+
+```json
+{
+  "nav_config": {
+    "width_pct": 20,
+    "icon_size_px": 20
+  }
+}
+```
+
+Only provided fields are merged; existing values are preserved.
+
+## Validation
+
+### Backend Validation
+
+| Field | Validation |
+|-------|------------|
+| `width_pct` | 12 ≤ value ≤ 28 |
+| `icon_size_px` | 14 ≤ value ≤ 24 |
+| `item_gap_px` | 4 ≤ value ≤ 16 |
+| Color fields | Valid hex (#RRGGBB) |
+| `order` | Only ALLOWED_NAV_KEYS permitted |
+
+### Error Responses
+
+| Status | Cause |
+|--------|-------|
+| 400 | Invalid nav key in order array |
+| 400 | Value out of range |
+| 400 | Invalid hex color format |
+| 403 | Not admin/manager role |
+
+## Troubleshooting
+
+### Sidebar Width Not Changing
+
+**Symptom:** Sidebar stays at default width after saving changes.
+
+**Causes & Solutions:**
+
+1. **Browser cache:** Hard refresh (Ctrl+Shift+R)
+2. **Theme provider not loaded:** Check browser console for errors
+3. **CSS var not applied:** Inspect `--nav-width` on documentElement
+
+```javascript
+// In browser DevTools
+getComputedStyle(document.documentElement).getPropertyValue('--nav-width')
+```
+
+### Nav Item Order Not Persisting
+
+**Symptom:** Navigation items revert to default order.
+
+**Causes & Solutions:**
+
+1. **Invalid keys:** Only ALLOWED_NAV_KEYS are accepted
+2. **API error:** Check network tab for 400 response
+3. **Partial order:** Missing items are appended at end
+
+### Colors Not Applying
+
+**Symptom:** Nav hover/active colors use default instead of custom.
+
+**Causes & Solutions:**
+
+1. **Empty string sent:** Only non-empty hex values are applied
+2. **Invalid format:** Must be #RRGGBB format
+3. **CSS specificity:** Custom classes may override CSS vars
+
+## Verification (PROD)
+
+### Deploy Verification
+
+```bash
+# HOST-SERVER-TERMINAL
+source /root/.pms_env
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+
+# 1. Verify deploy
+EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
+
+# 2. Run smoke test
+./backend/scripts/pms_admin_theming_smoke.sh
+
+echo "admin_theming_rc=$?"
+```
+
+### API Verification
+
+```bash
+# Get current nav_config
+curl -s "${API_BASE_URL}/api/v1/branding" \
+  -H "Authorization: Bearer ${JWT_TOKEN}" | jq '.nav_config'
+
+# Update nav_config
+curl -X PUT "${API_BASE_URL}/api/v1/branding" \
+  -H "Authorization: Bearer ${JWT_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{"nav_config": {"width_pct": 20}}'
+```
+
+### Browser Verification
+
+```javascript
+// Check nav CSS variables
+getComputedStyle(document.documentElement).getPropertyValue('--nav-width')
+getComputedStyle(document.documentElement).getPropertyValue('--nav-icon-size')
+getComputedStyle(document.documentElement).getPropertyValue('--nav-text')
+
+// Check data attributes (set by theme-provider)
+document.documentElement.dataset.navWidth
+document.documentElement.dataset.navIconSize
+```
+
+## Smoke Test
+
+**Script:** `backend/scripts/pms_admin_theming_smoke.sh`
+
+**EXECUTION LOCATION:** HOST-SERVER-TERMINAL
+
+The smoke test includes a navigation CSS variables test that verifies:
+- `--nav-width` is defined
+- `--nav-width-collapsed` is defined
+- `--nav-text` is defined
+- `--nav-icon-size` is defined
+- `--nav-item-gap` is defined
+
+### Expected Result
+
+```
+[PASS] All navigation CSS variables are defined
+```
+
+## Related Documentation
+
+- [Admin UI Design System](./19-admin-theming.md) — Design tokens and theming
+- [Branding Logo Upload](./18-branding-logo.md) — Logo customization
