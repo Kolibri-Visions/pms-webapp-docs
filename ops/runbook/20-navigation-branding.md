@@ -228,6 +228,48 @@ echo "rc=$?"
 
 Expected: Both scripts return rc=0, branding save works without errors.
 
+### Save Fails with 500 "NavigationBrandingConfig mapping not list"
+
+**Symptom:** Clicking "Save Changes" in Branding settings returns HTTP 500 with error containing "argument after ** must be a mapping, not list".
+
+**Root Cause:** Database `nav_config` column contains a JSON array (e.g., `["dashboard","properties"]`) instead of a JSON object (e.g., `{"order":["dashboard","properties"]}`). This happens with legacy data or incorrect writes.
+
+**Fix:** Deploy backend with `normalize_nav_config()` function that auto-converts arrays to objects.
+
+**SQL Normalization (run if needed):**
+
+```sql
+-- Convert array to object with order field
+UPDATE public.tenant_branding
+SET nav_config = jsonb_build_object('order', nav_config)
+WHERE jsonb_typeof(nav_config) = 'array';
+
+-- Reset non-object/non-array to empty object
+UPDATE public.tenant_branding
+SET nav_config = '{}'::jsonb
+WHERE jsonb_typeof(nav_config) NOT IN ('object', 'array');
+```
+
+**Verification:**
+
+```bash
+EXPECT_COMMIT=<commit_sha> ./backend/scripts/pms_verify_deploy.sh
+./backend/scripts/pms_admin_theming_smoke.sh
+```
+
+### Legacy nav_config Array Auto-Normalization
+
+The backend automatically normalizes legacy `nav_config` formats:
+
+| Input Format | Normalized Output |
+|--------------|-------------------|
+| `null` | `{}` |
+| `["a","b"]` (array) | `{"order":["a","b"]}` |
+| `{"order":[...]}` (object) | passthrough |
+| invalid JSON string | `{}` |
+
+The smoke test verifies GET /api/v1/branding always returns `nav_config` as an object.
+
 ## Navigation Builder (P2.21.4.8ae)
 
 The Navigation Builder UI in Settings > Branding provides:

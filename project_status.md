@@ -2019,6 +2019,15 @@ Extends the Admin UI branding system with navigation customization. Tenants can 
 - **Docs:** Added troubleshooting entry in runbook/20-navigation-branding.md.
 - **Status:** ✅ IMPLEMENTED
 
+**P2.21.4.8ad-hotfix-2 (2026-02-06): Normalize nav_config (array->object)**
+
+- **Root Cause:** Database `nav_config` contained JSON array instead of object (e.g., `["dashboard"]` instead of `{"order":["dashboard"]}`). Backend `NavigationBrandingConfig(**nav_config)` crashed with "argument after ** must be a mapping, not list".
+- **Fix:** Added `normalize_nav_config()` function that converts arrays to `{"order": array}` objects. Applied at all DB read points.
+- **Migration:** `20260206130000_normalize_nav_config_object.sql` converts existing array data to object format.
+- **Smoke:** Extended test to verify GET /api/v1/branding returns nav_config as object (not array).
+- **Docs:** Added troubleshooting for "mapping not list" error + auto-normalization table.
+- **Status:** ✅ IMPLEMENTED
+
 **Verification:**
 
 ```bash
