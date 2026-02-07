@@ -350,6 +350,43 @@ EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
 
 Expected: Both scripts return rc=0, Branding Save works without 500/CORS errors.
 
+### Settings Saved But Not Applied (P2.21.4.8af)
+
+**Symptom:** User changes nav width, icon size, gap, or reorder in Settings → Branding, clicks Save (success), but sidebar doesn't visually reflect the changes.
+
+**Root Cause Analysis:**
+
+1. **CSS vars not set:** Theme provider didn't call `applyNavCssVariables()` after save
+2. **Component not using CSS vars:** Hardcoded Tailwind classes override CSS variables
+3. **Context not refreshed:** `refreshBranding()` not called or failed silently
+4. **Values are defaults:** Payload didn't include changed values (only sends non-default)
+
+**Verification Steps:**
+
+1. Open browser DevTools → Console, check for errors
+2. Check CSS variables in DevTools → Elements → :root styles:
+   ```
+   --nav-width: 22rem  (should match saved value)
+   --nav-icon-size: 20px
+   --nav-item-gap: 10px
+   ```
+3. Inspect sidebar `<aside>` element, verify `style` uses `var(--nav-width)`
+4. Check Network tab: PUT /api/v1/branding should return 200 with new values
+
+**Fix Verification (Smoke):**
+
+The smoke test `pms_admin_theming_smoke.sh` includes "Navigation settings APPLY end-to-end" test that:
+- Records BEFORE CSS var values
+- Changes width/icon/gap via sliders
+- Saves and verifies PUT returns 200
+- Records AFTER CSS var values
+- Asserts values CHANGED (not just exist)
+
+```bash
+./backend/scripts/pms_admin_theming_smoke.sh
+# Look for "[PASS] Nav width changed" lines
+```
+
 ## Navigation Builder (P2.21.4.8ae)
 
 The Navigation Builder UI in Settings > Branding provides:

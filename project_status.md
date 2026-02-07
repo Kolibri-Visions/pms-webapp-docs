@@ -2114,6 +2114,55 @@ Extends P2.21.4.8ad with a full Navigation Builder UI for reordering, showing/hi
 
 ---
 
+### P2.21.4.8af: Navigation Branding Apply End-to-End ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-07
+
+**Overview:**
+
+Ensures nav branding settings (width, icon size, gap, reorder) APPLY visually after save, not just persist to DB.
+
+**Problem:**
+
+- User reported nav settings "don't take effect" after save
+- Smoke test only verified CSS vars exist, not that values changed
+- No verification that sidebar DOM actually updated
+
+**Changes:**
+
+1. **Smoke Test Enhancement (`backend/scripts/pms_admin_theming_smoke.sh`):**
+   - Added "Navigation settings APPLY end-to-end" test
+   - Records BEFORE state (CSS vars, sidebar width)
+   - Changes width/icon/gap via UI sliders
+   - Saves and verifies PUT returns 200
+   - Records AFTER state
+   - Asserts CSS var values CHANGED (not just exist)
+   - Logs specific values for debugging
+
+2. **Documentation (`backend/docs/ops/runbook/20-navigation-branding.md`):**
+   - Added "Settings Saved But Not Applied" troubleshooting entry
+   - Root cause analysis for why settings might not apply
+   - Verification steps for debugging
+   - Smoke test verification commands
+
+**Verification:**
+
+```bash
+# HOST-SERVER-TERMINAL
+source /root/.pms_env
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+
+EXPECT_COMMIT=<commit_sha> ./backend/scripts/pms_verify_deploy.sh
+./backend/scripts/pms_admin_theming_smoke.sh
+echo "admin_theming_rc=$?"
+# Look for "[PASS] Nav width changed" in output
+```
+
+**Status:** ✅ IMPLEMENTED (awaiting production deployment for VERIFIED)
+
+---
+
 ### P3.1: Direct Booking Hardening — Idempotency-Key + Audit Log ✅ VERIFIED
 
 **Date Completed:** 2026-01-30
