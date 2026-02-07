@@ -265,10 +265,51 @@ The backend automatically normalizes legacy `nav_config` formats:
 |--------------|-------------------|
 | `null` | `{}` |
 | `["a","b"]` (array) | `{"order":["a","b"]}` |
-| `{"order":[...]}` (object) | passthrough |
+| `{"order":[...]}` (object) | passthrough with sanitized arrays |
 | invalid JSON string | `{}` |
 
-The smoke test verifies GET /api/v1/branding always returns `nav_config` as an object.
+The smoke test verifies GET /api/v1/branding always returns `nav_config` as an object with string-only arrays.
+
+### Save Fails with 500 "order.0 Input should be a valid string"
+
+**Symptom:** Clicking "Save Changes" in Branding settings returns HTTP 500 with error containing "order.0 Input should be a valid string (input_value={}, input_type=dict)".
+
+**Root Cause:** Database `nav_config.order` contains dict objects (e.g., `[{"key":"dashboard"}]`) instead of strings (e.g., `["dashboard"]`). This happens when corrupted data is saved.
+
+**Fix:** Deploy backend with enhanced `normalize_nav_config()` and `_sanitize_key_list()` functions that extract string keys from dict objects. Also deploy frontend with normalized order loading.
+
+**SQL Sanitization (run if needed):**
+
+```sql
+-- Function to extract string key from mixed types
+CREATE OR REPLACE FUNCTION pg_temp.extract_nav_key(val jsonb) RETURNS text AS $$
+BEGIN
+    IF jsonb_typeof(val) = 'string' THEN RETURN val #>> '{}'; END IF;
+    IF jsonb_typeof(val) = 'object' AND val ? 'key' THEN RETURN val->>'key'; END IF;
+    IF jsonb_typeof(val) = 'object' AND val ? 'id' THEN RETURN val->>'id'; END IF;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Sanitize order array
+UPDATE public.tenant_branding
+SET nav_config = nav_config || jsonb_build_object('order',
+    (SELECT COALESCE(jsonb_agg(pg_temp.extract_nav_key(elem)), '[]'::jsonb)
+     FROM jsonb_array_elements(nav_config->'order') AS elem
+     WHERE pg_temp.extract_nav_key(elem) IS NOT NULL))
+WHERE nav_config ? 'order'
+  AND EXISTS (SELECT 1 FROM jsonb_array_elements(nav_config->'order') AS elem
+              WHERE jsonb_typeof(elem) != 'string');
+```
+
+**Verification:**
+
+```bash
+EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
+./backend/scripts/pms_admin_theming_smoke.sh
+```
+
+Expected: Both scripts return rc=0, nav_config.order contains only strings.
 
 ## Navigation Builder (P2.21.4.8ae)
 

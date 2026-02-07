@@ -2028,6 +2028,16 @@ Extends the Admin UI branding system with navigation customization. Tenants can 
 - **Docs:** Added troubleshooting for "mapping not list" error + auto-normalization table.
 - **Status:** ✅ IMPLEMENTED
 
+**P2.21.4.8ad-hotfix-3 (2026-02-07): Sanitize nav_config.order to string-only**
+
+- **Root Cause:** Database `nav_config.order` contained dict objects (e.g., `[{"key":"dashboard"}]`) instead of strings (e.g., `["dashboard"]`). Backend validation failed with "order.0 Input should be a valid string (input_value={}, input_type=dict)".
+- **Fix (Backend):** Enhanced `normalize_nav_config()` with `_sanitize_key_list()` helper that extracts `.key` or `.id` from dict objects, keeping only valid string keys.
+- **Fix (Frontend):** `branding-form.tsx` now normalizes `order` and `hidden_keys` on load, extracting string keys from any dict objects.
+- **Migration:** `20260207100000_sanitize_nav_config_order_strings.sql` sanitizes existing corrupted data.
+- **Smoke:** Extended test to verify nav_config.order contains only strings (no dict objects).
+- **Docs:** Added troubleshooting entry for "order.0 Input should be a valid string" error.
+- **Status:** ✅ IMPLEMENTED
+
 **Verification:**
 
 ```bash
