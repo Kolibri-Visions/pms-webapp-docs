@@ -2163,6 +2163,77 @@ echo "admin_theming_rc=$?"
 
 ---
 
+### P2.21.4.8ag: Navigation Branding Apply End-to-End (Fix) ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-07
+
+**Overview:**
+
+Fixes "Settings saved but NOT applied" issue where navigation branding settings (width, icon size, gap) were saved to database but sidebar didn't visually reflect the changes.
+
+**Problem:**
+
+- User changes nav width from 16rem to 22rem, saves successfully (PUT 200)
+- Sidebar remains at 16rem width
+- CSS variables are set correctly on `:root` but AdminShell.tsx used hardcoded Tailwind classes that override them
+
+**Root Cause:**
+
+AdminShell.tsx had hardcoded Tailwind classes overriding CSS variables:
+- `space-y-3` on nav container (overrides `--nav-item-gap`)
+- `space-y-0` on item groups (overrides gap inheritance)
+- `w-8 h-8` on icon wrapper (overrides `--nav-icon-size`)
+- Fixed icon sizes (ignores CSS var)
+
+**Changes:**
+
+1. **Frontend (`frontend/app/components/AdminShell.tsx`):**
+   - Nav container: `space-y-3` → `style={{ gap: 'var(--nav-item-gap, 12px)' }}`
+   - Item groups: `space-y-0` → `style={{ gap: 'calc(var(--nav-item-gap, 12px) / 3)' }}`
+   - Icon wrapper: `w-8 h-8` → `style={{ width: 'calc(var(--nav-icon-size, 16px) + 16px)' }}`
+   - Icon SVG: fixed size → `style={{ width: 'var(--nav-icon-size, 16px)' }}`
+   - Sidebar: uses `style={{ width: 'var(--nav-width, 16rem)' }}`
+   - Hover: uses `hover:bg-[var(--nav-hover-bg,...)]`
+
+2. **Smoke Test (`backend/scripts/pms_admin_theming_smoke.sh`):**
+   - Enhanced "Navigation settings APPLY end-to-end" test
+   - Now records BEFORE/AFTER DOM computed sizes (not just CSS vars)
+   - Verifies sidebar width, icon size, nav gap actually changed in DOM
+   - Better logging for debugging apply issues
+
+3. **Documentation (`backend/docs/ops/runbook/20-navigation-branding.md`):**
+   - Updated "Settings Saved But Not Applied" section
+   - Added table showing before/after code changes
+   - Enhanced verification steps for DOM inspection
+
+**Files Modified:**
+
+- frontend/app/components/AdminShell.tsx
+- backend/scripts/pms_admin_theming_smoke.sh
+- backend/docs/ops/runbook/20-navigation-branding.md
+- backend/docs/project_status.md (this entry)
+
+**Verification:**
+
+```bash
+# HOST-SERVER-TERMINAL
+source /root/.pms_env
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+
+EXPECT_COMMIT=<commit_sha> ./backend/scripts/pms_verify_deploy.sh
+./backend/scripts/pms_admin_theming_smoke.sh
+echo "admin_theming_rc=$?"
+# Look for:
+#   "[PASS] Nav width CSS var changed"
+#   "[PASS] Icon DOM size changed"
+#   "[PASS] Nav container gap changed"
+```
+
+**Status:** ✅ IMPLEMENTED (awaiting production deployment for VERIFIED)
+
+---
+
 ### P3.1: Direct Booking Hardening — Idempotency-Key + Audit Log ✅ VERIFIED
 
 **Date Completed:** 2026-01-30

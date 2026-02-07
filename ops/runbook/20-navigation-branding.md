@@ -350,7 +350,7 @@ EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
 
 Expected: Both scripts return rc=0, Branding Save works without 500/CORS errors.
 
-### Settings Saved But Not Applied (P2.21.4.8af)
+### Settings Saved But Not Applied (P2.21.4.8af + P2.21.4.8ag)
 
 **Symptom:** User changes nav width, icon size, gap, or reorder in Settings → Branding, clicks Save (success), but sidebar doesn't visually reflect the changes.
 
@@ -360,6 +360,19 @@ Expected: Both scripts return rc=0, Branding Save works without 500/CORS errors.
 2. **Component not using CSS vars:** Hardcoded Tailwind classes override CSS variables
 3. **Context not refreshed:** `refreshBranding()` not called or failed silently
 4. **Values are defaults:** Payload didn't include changed values (only sends non-default)
+
+**P2.21.4.8ag Fix (Hardcoded Tailwind → CSS vars):**
+
+The fix in `AdminShell.tsx` replaced hardcoded Tailwind classes with CSS variable usage:
+
+| Element | Before (hardcoded) | After (CSS var) |
+|---------|-------------------|-----------------|
+| Nav container | `space-y-3` | `style={{ gap: 'var(--nav-item-gap)' }}` |
+| Item groups | `space-y-0` | `style={{ gap: 'calc(var(--nav-item-gap) / 3)' }}` |
+| Icon wrapper | `w-8 h-8` | `style={{ width: 'calc(var(--nav-icon-size) + 16px)' }}` |
+| Icon SVG | fixed size | `style={{ width: 'var(--nav-icon-size)' }}` |
+| Sidebar width | `w-64` | `style={{ width: 'var(--nav-width)' }}` |
+| Hover states | `hover:bg-white/10` | `hover:bg-[var(--nav-hover-bg)]` |
 
 **Verification Steps:**
 
@@ -371,20 +384,23 @@ Expected: Both scripts return rc=0, Branding Save works without 500/CORS errors.
    --nav-item-gap: 10px
    ```
 3. Inspect sidebar `<aside>` element, verify `style` uses `var(--nav-width)`
-4. Check Network tab: PUT /api/v1/branding should return 200 with new values
+4. Inspect `<nav>` element, verify `style` has `gap: var(--nav-item-gap)`
+5. Inspect icon SVG, verify `style` has `width: var(--nav-icon-size)`
+6. Check Network tab: PUT /api/v1/branding should return 200 with new values
 
 **Fix Verification (Smoke):**
 
 The smoke test `pms_admin_theming_smoke.sh` includes "Navigation settings APPLY end-to-end" test that:
-- Records BEFORE CSS var values
+- Records BEFORE CSS var values AND DOM computed sizes
 - Changes width/icon/gap via sliders
 - Saves and verifies PUT returns 200
-- Records AFTER CSS var values
+- Records AFTER CSS var values AND DOM computed sizes
 - Asserts values CHANGED (not just exist)
+- Verifies DOM actually reflects the changes (sidebar width, icon size, nav gap)
 
 ```bash
 ./backend/scripts/pms_admin_theming_smoke.sh
-# Look for "[PASS] Nav width changed" lines
+# Look for "[PASS] Nav width CSS var changed" and "[PASS] Icon DOM size changed" lines
 ```
 
 ## Navigation Builder (P2.21.4.8ae)
