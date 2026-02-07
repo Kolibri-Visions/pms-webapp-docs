@@ -2028,14 +2028,26 @@ Extends the Admin UI branding system with navigation customization. Tenants can 
 - **Docs:** Added troubleshooting for "mapping not list" error + auto-normalization table.
 - **Status:** ✅ IMPLEMENTED
 
-**P2.21.4.8ad-hotfix-3 (2026-02-07): Sanitize nav_config.order to string-only**
+**P2.21.4.8ad-hotfix-3 (2026-02-07): Robust nav_config normalization + prevent 500**
 
-- **Root Cause:** Database `nav_config.order` contained dict objects (e.g., `[{"key":"dashboard"}]`) instead of strings (e.g., `["dashboard"]`). Backend validation failed with "order.0 Input should be a valid string (input_value={}, input_type=dict)".
-- **Fix (Backend):** Enhanced `normalize_nav_config()` with `_sanitize_key_list()` helper that extracts `.key` or `.id` from dict objects, keeping only valid string keys.
-- **Fix (Frontend):** `branding-form.tsx` now normalizes `order` and `hidden_keys` on load, extracting string keys from any dict objects.
-- **Migration:** `20260207100000_sanitize_nav_config_order_strings.sql` sanitizes existing corrupted data.
-- **Smoke:** Extended test to verify nav_config.order contains only strings (no dict objects).
-- **Docs:** Added troubleshooting entry for "order.0 Input should be a valid string" error.
+- **Root Cause:** Multiple nav_config corruption patterns caused 500 errors:
+  1. `nav_config.order` contained dict objects instead of strings
+  2. `nav_config` itself was stored as array of config dicts (e.g., `[{"width_pct":14}, {"order":["dashboard"]}]`)
+  3. Pydantic ValidationError not caught → returned 500 instead of 422
+- **Fix (Backend):**
+  - Enhanced `normalize_nav_config()` to handle list-of-dicts by merging into single object
+  - Added `_merge_list_of_dicts_to_config()` helper for list[dict] recovery
+  - `_sanitize_key_list()` now deduplicates and extracts `.key`/`.id` from dict items
+  - Added `ValidationError` exception handler returning 422 instead of 500
+  - Wrapped normalize in try/except to never crash
+- **Fix (Frontend):**
+  - `branding-form.tsx` detects if nav_config is array → converts to object on load
+  - Save handler sanitizes order/hidden_keys/label_overrides before sending
+- **Migration:** Enhanced `20260207100000_sanitize_nav_config_order_strings.sql`:
+  - Converts nav_config array-of-dicts → single merged object
+  - Sanitizes order/hidden_keys arrays to string-only
+- **Smoke:** Tests verify nav_config is object, order/hidden_keys contain only strings.
+- **Docs:** Added "nav_config is list-of-dicts" troubleshooting entry.
 - **Status:** ✅ IMPLEMENTED
 
 **Verification:**

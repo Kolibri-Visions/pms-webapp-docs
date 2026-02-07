@@ -311,6 +311,45 @@ EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
 
 Expected: Both scripts return rc=0, nav_config.order contains only strings.
 
+### Save Fails with 500 "nav_config is list-of-dicts"
+
+**Symptom:** Clicking "Save Changes" in Branding settings returns HTTP 500, browser shows CORS error. Server logs show nav_config normalization failure or validation errors like "Invalid nav keys: [{"width_pct":14}, ...]".
+
+**Root Cause:** Database `nav_config` column contains a JSON array of config objects (e.g., `[{"width_pct":14}, {"order":["dashboard"]}]`) instead of a single object. This can happen due to:
+- Legacy data migration issues
+- Concurrent updates
+- Frontend bug sending array instead of object
+
+**Fix (Backend):** Deploy backend with enhanced `normalize_nav_config()` that handles list-of-dicts by merging them into a single object. The function now:
+1. Detects if input is `list[dict]`
+2. Merges all scalar config values (last-write-wins)
+3. Collects and sanitizes all `order`/`hidden_keys` arrays
+4. Merges all `label_overrides`
+5. Never crashes - always returns valid dict or empty `{}`
+
+**SQL Normalization (run if needed):**
+
+```sql
+-- Convert array of config dicts to single object
+UPDATE public.tenant_branding
+SET nav_config = (
+    SELECT jsonb_strip_nulls(jsonb_build_object(
+        'width_pct', (SELECT elem->>'width_pct' FROM jsonb_array_elements(nav_config) elem WHERE elem ? 'width_pct' LIMIT 1),
+        'order', (SELECT jsonb_agg(o) FROM jsonb_array_elements(nav_config) elem, jsonb_array_elements_text(elem->'order') o WHERE elem ? 'order')
+    ))
+)
+WHERE jsonb_typeof(nav_config) = 'array';
+```
+
+**Verification:**
+
+```bash
+EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
+./backend/scripts/pms_admin_theming_smoke.sh
+```
+
+Expected: Both scripts return rc=0, Branding Save works without 500/CORS errors.
+
 ## Navigation Builder (P2.21.4.8ae)
 
 The Navigation Builder UI in Settings > Branding provides:
