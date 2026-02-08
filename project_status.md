@@ -2299,6 +2299,66 @@ echo "admin_theming_rc=$?"
 
 ---
 
+### P2.21.4.8ai: Navigation Branding Apply + Data Attributes ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-08
+
+**Overview:**
+
+Ensures navigation branding settings (width, icon size, gap, order) actually apply to the sidebar DOM, and adds stable data attributes for testing.
+
+**Problem:**
+
+1. Navigation CSS var defaults were inconsistent (theme-provider: 4px, AdminShell: 12px)
+2. Nav items lacked `data-nav-key` attributes for reliable order verification
+3. Smoke tests couldn't reliably detect nav order changes
+
+**Changes:**
+
+1. **Frontend (`frontend/app/lib/theme-provider.tsx`):**
+   - Changed default `item_gap_px` from 4px to 12px (matches AdminShell fallback)
+   - Added `data-nav-item-gap` attribute for smoke test verification
+
+2. **Frontend (`frontend/app/components/AdminShell.tsx`):**
+   - Added `data-nav-key={item.key}` to nav Link elements
+   - Added `data-nav-key={item.key}` to locked item div elements
+
+3. **Smoke Test (`backend/scripts/pms_admin_theming_smoke.sh`):**
+   - Updated nav state detection to use `data-nav-key` instead of text content
+   - More reliable order verification using stable key attributes
+
+4. **Documentation (`backend/docs/ops/runbook/20-navigation-branding.md`):**
+   - Added "Navigation Settings Not Applying" troubleshooting section
+
+**Files Modified:**
+
+- frontend/app/lib/theme-provider.tsx
+- frontend/app/components/AdminShell.tsx
+- backend/scripts/pms_admin_theming_smoke.sh
+- backend/docs/ops/runbook/20-navigation-branding.md
+- backend/docs/project_status.md (this entry)
+
+**Verification:**
+
+```bash
+# HOST-SERVER-TERMINAL
+source /root/.pms_env
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+
+EXPECT_COMMIT=<commit_sha> ./backend/scripts/pms_verify_deploy.sh
+./backend/scripts/pms_admin_theming_smoke.sh
+echo "admin_theming_rc=$?"
+# Look for:
+#   "[PASS] Nav width CSS var changed"
+#   "[PASS] Sidebar DOM width changed"
+#   "nav key order:" in output
+```
+
+**Status:** ✅ IMPLEMENTED (awaiting production deployment for VERIFIED)
+
+---
+
 ### P3.1: Direct Booking Hardening — Idempotency-Key + Audit Log ✅ VERIFIED
 
 **Date Completed:** 2026-01-30

@@ -438,6 +438,41 @@ Replaced legacy `bo-primary` tokens with design system `t-primary` tokens:
 # Look for "[PASS] /owners: Primary button uses branding color"
 ```
 
+### Navigation Settings Not Applying (P2.21.4.8ai)
+
+**Symptom:** Saving navigation branding settings (width, icon size, gap, order) succeeds with HTTP 200, but the sidebar doesn't visually change.
+
+**Root Causes:**
+
+1. **CSS vars not re-applied after save:** Theme provider must call `applyNavCssVariables()` after PUT response
+2. **Default value mismatch:** theme-provider and AdminShell had different default gap values
+3. **Missing data attributes:** Nav items lacked `data-nav-key` for reliable order verification
+
+**P2.21.4.8ai Fix:**
+
+| Issue | Resolution |
+|-------|------------|
+| Gap default mismatch | Changed theme-provider default `item_gap_px` from 4px to 12px |
+| Missing data attributes | Added `data-nav-key={item.key}` to nav Link/div elements |
+| Smoke test reliability | Updated tests to use `data-nav-key` for order verification |
+
+**Verification Steps:**
+
+1. Open DevTools → Elements → check `:root` for `--nav-width`, `--nav-icon-size`, `--nav-item-gap`
+2. Check `aside` element computed width matches `--nav-width` value
+3. Check `nav svg` computed size matches `--nav-icon-size` value
+4. Check `nav` computed gap matches `--nav-item-gap` value
+5. Use `document.querySelectorAll('nav [data-nav-key]')` to verify nav order
+
+**Smoke Test Verification:**
+
+```bash
+./backend/scripts/pms_admin_theming_smoke.sh
+# Look for "[PASS] Nav width CSS var changed"
+# Look for "[PASS] Sidebar DOM width changed"
+# Look for nav key order in output
+```
+
 ## Navigation Builder (P2.21.4.8ae)
 
 The Navigation Builder UI in Settings > Branding provides:
