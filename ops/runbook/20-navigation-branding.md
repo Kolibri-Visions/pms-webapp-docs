@@ -438,7 +438,7 @@ Replaced legacy `bo-primary` tokens with design system `t-primary` tokens:
 # Look for "[PASS] /owners: Primary button uses branding color"
 ```
 
-### Navigation Settings Not Applying (P2.21.4.8ai)
+### Navigation Settings Not Applying (P2.21.4.8ai + P2.21.4.8aj)
 
 **Symptom:** Saving navigation branding settings (width, icon size, gap, order) succeeds with HTTP 200, but the sidebar doesn't visually change.
 
@@ -447,6 +447,7 @@ Replaced legacy `bo-primary` tokens with design system `t-primary` tokens:
 1. **CSS vars not re-applied after save:** Theme provider must call `applyNavCssVariables()` after PUT response
 2. **Default value mismatch:** theme-provider and AdminShell had different default gap values
 3. **Missing data attributes:** Nav items lacked `data-nav-key` for reliable order verification
+4. **Stale nav_config values (P2.21.4.8aj):** Frontend only sent non-default values, Backend merged instead of replaced
 
 **P2.21.4.8ai Fix:**
 
@@ -455,6 +456,14 @@ Replaced legacy `bo-primary` tokens with design system `t-primary` tokens:
 | Gap default mismatch | Changed theme-provider default `item_gap_px` from 4px to 12px |
 | Missing data attributes | Added `data-nav-key={item.key}` to nav Link/div elements |
 | Smoke test reliability | Updated tests to use `data-nav-key` for order verification |
+
+**P2.21.4.8aj Fix:**
+
+| Issue | Resolution |
+|-------|------------|
+| Frontend only sent changed values | Now sends ALL nav_config values (width, icon_size, gap, order, hidden_keys, label_overrides) |
+| Backend merged nav_config | Changed from JSONB merge (`\|\|`) to full REPLACE |
+| Order/hidden couldn't be cleared | Empty arrays are now sent and properly saved |
 
 **Verification Steps:**
 

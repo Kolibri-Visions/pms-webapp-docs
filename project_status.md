@@ -2359,6 +2359,66 @@ echo "admin_theming_rc=$?"
 
 ---
 
+### P2.21.4.8aj: Navigation Branding Settings Actually Apply ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-08
+
+**Overview:**
+
+Fixes the root cause of navigation branding settings not applying: Frontend only sent non-default values and Backend merged instead of replacing.
+
+**Problem:**
+
+1. User changes width from 16 to 22, saves → works
+2. User changes width from 22 back to 16 → value NOT sent (16 === default)
+3. Backend merges new values with existing → old value (22) persists
+4. Same issue with order, hidden_keys, label_overrides - couldn't clear them
+
+**Root Cause:**
+
+- **Frontend (`branding-form.tsx`):** Only sent values if `!== default` (e.g., `width_pct !== 16`)
+- **Backend (`branding.py`):** Used JSONB merge (`|| new_values`) instead of replace
+
+**Changes:**
+
+1. **Frontend (`frontend/app/settings/branding/branding-form.tsx`):**
+   - Now sends ALL nav_config values: width_pct, icon_size_px, item_gap_px
+   - Sends order, hidden_keys, label_overrides even if empty (to allow clearing)
+
+2. **Backend (`backend/app/api/routes/branding.py`):**
+   - Changed from JSONB merge to full replace: `nav_config = $N::jsonb`
+   - Ensures stale values are overwritten
+
+3. **Documentation (`backend/docs/ops/runbook/20-navigation-branding.md`):**
+   - Added P2.21.4.8aj troubleshooting section
+
+**Files Modified:**
+
+- frontend/app/settings/branding/branding-form.tsx
+- backend/app/api/routes/branding.py
+- backend/docs/ops/runbook/20-navigation-branding.md
+- backend/docs/project_status.md (this entry)
+
+**Verification:**
+
+```bash
+# HOST-SERVER-TERMINAL
+source /root/.pms_env
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+
+EXPECT_COMMIT=<commit_sha> ./backend/scripts/pms_verify_deploy.sh
+./backend/scripts/pms_admin_theming_smoke.sh
+echo "admin_theming_rc=$?"
+# Look for:
+#   "[PASS] Nav width CSS var changed"
+#   "[PASS] Sidebar DOM width changed"
+```
+
+**Status:** ✅ IMPLEMENTED (awaiting production deployment for VERIFIED)
+
+---
+
 ### P3.1: Direct Booking Hardening — Idempotency-Key + Audit Log ✅ VERIFIED
 
 **Date Completed:** 2026-01-30
