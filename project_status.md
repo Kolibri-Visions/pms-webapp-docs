@@ -2234,6 +2234,71 @@ echo "admin_theming_rc=$?"
 
 ---
 
+### P2.21.4.8ah: Branding Applies to Key Pages + Nav Order Works ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-08
+
+**Overview:**
+
+Fixes branding not visually applying to key admin pages (/bookings, /booking-requests, /owners) and ensures navigation order/hidden settings take effect after save.
+
+**Problem:**
+
+1. User saves branding colors, but buttons on /bookings, /owners pages still show default blue
+2. Navigation order changes save successfully but sidebar doesn't reflect new order
+
+**Root Cause:**
+
+1. Pages used legacy `bg-bo-primary` CSS classes (hardcoded `--bo-primary: #2563eb`) instead of dynamic `bg-t-primary` (connected to branding API)
+2. Navigation order/hidden was working correctly - issue was legacy color tokens
+
+**Changes:**
+
+1. **Frontend - Replace legacy tokens with design system tokens:**
+   - `frontend/app/bookings/page.tsx`: `bg-bo-primary` → `bg-t-primary`, `ring-bo-primary` → `ring-t-primary`
+   - `frontend/app/owners/page.tsx`: `bg-bo-primary` → `bg-t-primary`, `text-bo-primary` → `text-t-primary`
+   - `frontend/app/owners/[ownerId]/page.tsx`: All `bo-primary` → `t-primary` tokens
+
+2. **Smoke Test (`backend/scripts/pms_admin_theming_smoke.sh`):**
+   - Added "Branding applies to key pages" test
+   - Checks /bookings, /booking-requests, /owners for primary button branding
+   - Added "Navigation order/hidden applies after save" test
+   - Verifies nav order persists after save + reload
+
+3. **Documentation (`backend/docs/ops/runbook/20-navigation-branding.md`):**
+   - Added "Branding Not Visible on Key Pages" troubleshooting section
+   - Table showing before/after token replacements
+
+**Files Modified:**
+
+- frontend/app/bookings/page.tsx
+- frontend/app/owners/page.tsx
+- frontend/app/owners/[ownerId]/page.tsx
+- backend/scripts/pms_admin_theming_smoke.sh
+- backend/docs/ops/runbook/20-navigation-branding.md
+- backend/docs/project_status.md (this entry)
+
+**Verification:**
+
+```bash
+# HOST-SERVER-TERMINAL
+source /root/.pms_env
+export API_BASE_URL="https://api.fewo.kolibri-visions.de"
+export ADMIN_BASE_URL="https://admin.fewo.kolibri-visions.de"
+
+EXPECT_COMMIT=<commit_sha> ./backend/scripts/pms_verify_deploy.sh
+./backend/scripts/pms_admin_theming_smoke.sh
+echo "admin_theming_rc=$?"
+# Look for:
+#   "[PASS] /bookings: Primary button uses branding color"
+#   "[PASS] /owners: Primary button uses branding color"
+#   "[PASS] Navigation order/hidden test completed"
+```
+
+**Status:** ✅ IMPLEMENTED (awaiting production deployment for VERIFIED)
+
+---
+
 ### P3.1: Direct Booking Hardening — Idempotency-Key + Audit Log ✅ VERIFIED
 
 **Date Completed:** 2026-01-30

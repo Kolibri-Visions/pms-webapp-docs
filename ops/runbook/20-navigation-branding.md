@@ -403,6 +403,41 @@ The smoke test `pms_admin_theming_smoke.sh` includes "Navigation settings APPLY 
 # Look for "[PASS] Nav width CSS var changed" and "[PASS] Icon DOM size changed" lines
 ```
 
+### Branding Not Visible on Key Pages (P2.21.4.8ah)
+
+**Symptom:** Branding colors are saved successfully, but buttons/badges on /bookings, /booking-requests, /owners pages still show default blue colors instead of branding.
+
+**Root Cause:**
+
+Pages were using legacy `bg-bo-primary` CSS classes which reference hardcoded `--bo-primary: #2563eb` instead of the dynamic `bg-t-primary` which references `--t-primary` from branding API.
+
+**P2.21.4.8ah Fix:**
+
+Replaced legacy `bo-primary` tokens with design system `t-primary` tokens:
+
+| Page | Before | After |
+|------|--------|-------|
+| /bookings | `bg-bo-primary text-white` | `bg-t-primary text-t-primary-fg` |
+| /owners | `bg-bo-primary text-white` | `bg-t-primary text-t-primary-fg` |
+| /owners/[id] | `bg-bo-primary text-white` | `bg-t-primary text-t-primary-fg` |
+| All focus rings | `ring-bo-primary` | `ring-t-primary` |
+| All text links | `text-bo-primary` | `text-t-primary` |
+
+**Verification Steps:**
+
+1. Open browser DevTools → Elements → check `:root` styles for `--t-primary`
+2. Inspect primary button, verify `background-color` matches `--t-primary` computed value
+3. Change branding color in Settings → Branding, save, reload target page
+4. Buttons should reflect new branding color
+
+**Smoke Test Verification:**
+
+```bash
+./backend/scripts/pms_admin_theming_smoke.sh
+# Look for "[PASS] /bookings: Primary button uses branding color"
+# Look for "[PASS] /owners: Primary button uses branding color"
+```
+
 ## Navigation Builder (P2.21.4.8ae)
 
 The Navigation Builder UI in Settings > Branding provides:
