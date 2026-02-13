@@ -16347,6 +16347,68 @@ export JWT_TOKEN="<<<manager/admin JWT token>>>"
 
 ---
 
+# Public Website Design System (P2.21.4.8aq)
+
+**Implementation Date:** 2026-02-13
+
+**Scope:** Separate design token system for public website (distinct from admin branding), plus admin API for website management.
+
+**Status:** ✅ IMPLEMENTED
+
+## Phase 1: Database Schema + API
+
+### Database Changes
+
+**New Table: `public_site_design`**
+- Stores design tokens for public website per agency
+- Colors: primary, secondary, accent, text, text_muted, background, surface
+- Typography: font_heading, font_body
+- Header: header_style (light/dark/transparent), header_sticky
+- Footer: footer_style (light/dark), footer_columns
+- Buttons: button_radius, button_style
+- Cards: card_radius, card_shadow
+- Hero: hero_overlay_opacity, hero_text_alignment
+- Custom CSS support
+
+**Extended: `public_site_pages`**
+- Added: sort_order (INTEGER)
+- Added: template (VARCHAR: default/landing/minimal)
+
+### API Endpoints
+
+**Public (unauthenticated):**
+- `GET /api/v1/public/site/design` - Get design tokens for frontend rendering
+
+**Admin (authenticated):**
+- `GET /api/v1/website/design` - Get design tokens
+- `PUT /api/v1/website/design` - Update design tokens
+- `GET /api/v1/website/pages` - List all pages (incl. drafts)
+- `POST /api/v1/website/pages` - Create page
+- `GET /api/v1/website/pages/{id}` - Get page
+- `PUT /api/v1/website/pages/{id}` - Update page
+- `DELETE /api/v1/website/pages/{id}` - Delete page (protected: home, impressum, datenschutz)
+- `POST /api/v1/website/pages/{id}/publish` - Publish page
+- `POST /api/v1/website/pages/{id}/unpublish` - Unpublish page
+
+### Files Changed
+
+- `supabase/migrations/20260213000000_add_public_site_design.sql` (NEW)
+- `backend/app/schemas/public_site.py` (EXTENDED)
+- `backend/app/api/routes/website_admin.py` (NEW)
+- `backend/app/api/routes/public_site.py` (EXTENDED)
+- `backend/app/main.py` (EXTENDED)
+
+### Architecture: Branding vs. Design Separation
+
+| Aspect | Admin Branding (`/branding`) | Public Design (`/website/design`) |
+|--------|------------------------------|-----------------------------------|
+| Target | Admin UI for property managers | Public website for guests |
+| Tokens | `t-primary`, `surface-elevated` | `pub-primary`, `pub-surface` |
+| Scope | `admin.*` subdomain | Public domain |
+| Focus | Functional dashboard UI | Marketing, conversion-optimized |
+
+---
+
 **Features Implemented:**
 
 1. **Database Schema** (Migration: `20260111000001_add_epic_c_public_website.sql`):
