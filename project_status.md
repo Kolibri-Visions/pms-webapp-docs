@@ -16661,6 +16661,17 @@ PUBLIC_HOST=fewo.kolibri-visions.de \
 ./backend/scripts/pms_epic_c_public_website_smoke.sh
 ```
 
+**OpenAPI URLs**:
+- Canonical: `/openapi.json`
+- Alias: `/api/v1/openapi.json` (same content, for script consistency)
+
+**Hotfix 2026-02-13: website_admin router 404**
+- Root cause: `website_admin` router was only in `MODULES_ENABLED=false` fallback path
+- Fix: Added failsafe mounting in `main.py` (similar to public_site failsafe)
+- Verify: `curl /openapi.json | grep "/api/v1/website/design"` should return matches
+- Smoke: `pms_admin_website_design_smoke.sh` checks OpenAPI before testing endpoints
+- Runbook: See `backend/docs/ops/runbook/22-website-admin-api-404.md`
+
 ---
 
 **Features Implemented:**
