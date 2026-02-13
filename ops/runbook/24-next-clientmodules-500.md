@@ -101,10 +101,46 @@ docker logs public-website 2>&1 | tail -50 | grep -i "clientModules\|TypeError"
 # Expected: no matches
 ```
 
+## Additional Failure Mode: Build Fails with "Device or resource busy"
+
+### Symptom
+
+Coolify build fails with:
+```
+rm: cannot remove '.next/cache': Device or resource busy
+```
+Build exit code 1, deploy never completes.
+
+### Root Cause
+
+Coolify/Nixpacks uses BuildKit cache mounts:
+```
+--mount=type=cache,target=/app/.next/cache
+```
+
+If the build script tries `rm -rf .next`, it cannot delete the mounted `.next/cache` directory.
+
+### Fix
+
+**Do NOT delete `.next` in the default build script:**
+
+```json
+// frontend/package.json
+{
+  "scripts": {
+    "build": "next build",
+    "build:clean": "find .next -mindepth 1 -maxdepth 1 ! -name cache -exec rm -rf {} + 2>/dev/null || true; next build"
+  }
+}
+```
+
+- `build`: Safe for Coolify (doesn't touch cache mount)
+- `build:clean`: For local use only (preserves cache directory)
+
 ## Prevention
 
 1. **Always pin Node version** in production configs
-2. **Clean builds** prevent stale cache issues
+2. **Do NOT delete `.next/cache`** in build scripts (Coolify mount)
 3. **Test Node upgrades** in staging before production
 4. **Monitor container logs** for runtime errors
 
@@ -117,4 +153,5 @@ docker logs public-website 2>&1 | tail -50 | grep -i "clientModules\|TypeError"
 
 ## Version History
 
+- **2026-02-13**: Added "Device or resource busy" failure mode (Coolify cache mount)
 - **2026-02-13**: Initial runbook for Node 22 / Next 14.1 clientModules incompatibility

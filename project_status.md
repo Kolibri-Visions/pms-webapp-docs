@@ -16693,8 +16693,15 @@ PUBLIC_HOST=fewo.kolibri-visions.de \
 - Fix:
   - Pin Node to 20.x via `engines` in package.json + `.node-version` file
   - Add `NIXPACKS_NODE_VERSION=20` in nixpacks.toml
-  - Clean build: `rm -rf .next && next build`
 - Verify: `curl -k https://fewo.kolibri-visions.de/` returns 200 (not 500)
+- Runbook: See `backend/docs/ops/runbook/24-next-clientmodules-500.md`
+- Status: IMPLEMENTED (pending PROD verification after deploy)
+
+**Hotfix 2026-02-13: Build fails "Device or resource busy" (.next cache mount)**
+- Root cause: Build script `rm -rf .next` conflicts with Coolify's BuildKit cache mount on `/app/.next/cache`
+- Symptom: Build fails with `rm: cannot remove '.next/cache': Device or resource busy`, deploy never completes
+- Fix: Change build script to `next build` (no deletion); add `build:clean` for local use
+- Verify: Coolify build succeeds; `curl -k https://fewo.kolibri-visions.de/` returns 200
 - Runbook: See `backend/docs/ops/runbook/24-next-clientmodules-500.md`
 - Status: IMPLEMENTED (pending PROD verification after deploy)
 
