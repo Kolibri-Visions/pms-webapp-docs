@@ -16407,6 +16407,44 @@ export JWT_TOKEN="<<<manager/admin JWT token>>>"
 | Scope | `admin.*` subdomain | Public domain |
 | Focus | Functional dashboard UI | Marketing, conversion-optimized |
 
+## Phase 2: Block Components (Frontend)
+
+**Status:** ✅ IMPLEMENTED
+
+### New Block Types
+
+| Block Type | Description | Props |
+|------------|-------------|-------|
+| `hero_fullwidth` | Full-width hero with background image | `image_url`, `headline`, `subheadline`, `cta_text`, `cta_href`, `overlay_opacity`, `location_links[]` |
+| `trust_indicators` | 3-4 column grid with icons | `items[{icon, title, text}]`, `highlight_text` |
+| `search_form` | Property search form | `show_dates`, `show_guests`, `show_location`, `button_text` |
+| `text_section` | Title + content section | `title`, `content`, `alignment`, `background` |
+| `offer_cards` | 4-column offer cards grid | `title`, `items[{image_url, title, subtitle, href, badge}]` |
+| `location_grid` | Location grid with images | `title`, `items[{image_url, name, property_count, href}]` |
+| `property_showcase` | Featured properties (live API) | `title`, `limit`, `layout`, `show_all_link` |
+| `testimonials` | Customer reviews | `title`, `items[{quote, author, rating, property_name}]` |
+| `cta_banner` | Call-to-action banner | `title`, `text`, `cta_text`, `cta_href`, `background_color` |
+| `image_text` | Image + text side by side | `image_url`, `image_position`, `title`, `content`, `cta_text`, `cta_href` |
+| `faq_accordion` | FAQ with accordion | `title`, `items[{question, answer}]` |
+| `contact_section` | Contact info cards | `title`, `phone`, `email`, `address`, `show_*` |
+
+### Legacy Blocks (backward compatibility)
+
+- `hero_search`, `usp_grid`, `rich_text`, `contact_cta`, `faq`, `featured_properties`
+
+### Files Changed
+
+- `frontend/app/(public)/components/BlockRenderer.tsx` (EXTENDED: 12 new blocks)
+- `frontend/app/(public)/page.tsx` (EXTENDED: design tokens fetch)
+
+### Design Token Integration
+
+All new blocks accept `design` prop with tokens from `/api/v1/public/site/design`:
+- Colors: `primary_color`, `secondary_color`, `accent_color`, `text_color`, `text_muted_color`, `background_color`, `surface_color`
+- Typography: `font_heading`, `font_body`
+- Components: `button_radius`, `card_radius`, `card_shadow`
+- Hero: `hero_overlay_opacity`, `hero_text_alignment`
+
 ---
 
 **Features Implemented:**
