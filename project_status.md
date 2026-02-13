@@ -16541,6 +16541,115 @@ All new blocks accept `design` prop with tokens from `/api/v1/public/site/design
 - `frontend/app/website/design/design-form.tsx` (NEW)
 - `frontend/app/components/AdminShell.tsx` (EXTENDED)
 
+## Phase 6: Admin Pages + Block-Editor
+
+**Status:** ✅ IMPLEMENTED
+
+### Admin UI Pages
+
+| Page | Description |
+|------|-------------|
+| `/website/pages` | Page list with search, sort, publish/unpublish, delete |
+| `/website/pages/[id]` | Page editor with block management |
+
+### Features
+
+- **Page List:** Search, sort by title/updated_at, publish/unpublish toggle, delete
+- **Block Editor:** 11 block types with live editing
+- **Protected Pages:** Cannot delete home, impressum, datenschutz
+- **Block Types:** hero_fullwidth, trust_indicators, text_section, offer_cards, property_showcase, cta_banner, image_text, faq_accordion, contact_section, testimonials, search_form
+
+### Files Created
+
+- `frontend/app/website/pages/page.tsx` (NEW)
+- `frontend/app/website/pages/[id]/page.tsx` (NEW)
+- `frontend/app/components/AdminShell.tsx` (EXTENDED - added "Seiten" nav item)
+
+## Phase 7: Navigation + SEO
+
+**Status:** ✅ IMPLEMENTED
+
+### Admin UI Pages
+
+| Page | Description |
+|------|-------------|
+| `/website/navigation` | Nav and footer links editor |
+| `/website/seo` | Site name, title suffix, meta description, OG image |
+
+### API Endpoints
+
+- `GET /api/v1/website/navigation` - Get nav and footer links
+- `PUT /api/v1/website/navigation` - Update nav and footer links
+- `GET /api/v1/website/seo` - Get SEO defaults
+- `PUT /api/v1/website/seo` - Update SEO defaults
+
+### Files Created/Modified
+
+- `frontend/app/website/navigation/page.tsx` (NEW)
+- `frontend/app/website/seo/page.tsx` (NEW)
+- `backend/app/schemas/public_site.py` (EXTENDED)
+- `backend/app/api/routes/website_admin.py` (EXTENDED)
+- `frontend/app/website/page.tsx` (EXTENDED - added Navigation, SEO cards)
+
+## Phase 8: Control Pack (Tenant Resolution + Smoke Tests)
+
+**Status:** ✅ IMPLEMENTED
+
+### Tenant Resolution Enhancement
+
+Added smoke-test friendly tenant resolution methods to `extract_request_host()`:
+
+| Priority | Method | Example |
+|----------|--------|---------|
+| 1 | Query param `public_host` | `?public_host=fewo.example.com` |
+| 2 | Header `x-public-host` | `-H "x-public-host: fewo.example.com"` |
+| 3 | Header `X-Forwarded-Host` | Proxy-set header |
+| 4 | Header `Host` | Standard fallback |
+
+**Why?** Host header overrides (`-H "Host: ..."`) are unreliable through proxies/LBs. Query param is preferred for smoke tests.
+
+### New Smoke Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `pms_public_site_design_smoke.sh` | Test public design endpoint + tenant resolution |
+| `pms_public_homepage_blocks_smoke.sh` | Test homepage blocks + page structure |
+| `pms_admin_website_design_smoke.sh` | Test admin website design CRUD (auth required) |
+
+### Files Created/Modified
+
+- `backend/app/core/tenant_domain.py` (MODIFIED - added public_host + x-public-host)
+- `backend/scripts/pms_public_site_design_smoke.sh` (NEW)
+- `backend/scripts/pms_public_homepage_blocks_smoke.sh` (NEW)
+- `backend/scripts/pms_admin_website_design_smoke.sh` (NEW)
+- `backend/scripts/pms_epic_c_public_website_smoke.sh` (MODIFIED - uses query param)
+- `backend/docs/ops/runbook/21-public-site-tenant-resolution.md` (NEW)
+- `backend/scripts/README.md` (EXTENDED - documented new scripts)
+
+### Verification Commands
+
+```bash
+# Public Site Design Smoke Test
+API_BASE_URL=https://api.fewo.kolibri-visions.de \
+PUBLIC_HOST=fewo.kolibri-visions.de \
+./backend/scripts/pms_public_site_design_smoke.sh
+
+# Public Homepage Blocks Smoke Test
+API_BASE_URL=https://api.fewo.kolibri-visions.de \
+PUBLIC_HOST=fewo.kolibri-visions.de \
+./backend/scripts/pms_public_homepage_blocks_smoke.sh
+
+# Admin Website Design Smoke Test (requires JWT)
+API_BASE_URL=https://api.fewo.kolibri-visions.de \
+JWT_TOKEN="eyJ..." \
+./backend/scripts/pms_admin_website_design_smoke.sh
+
+# Epic C Public Website Smoke Test (updated to use query param)
+API_BASE_URL=https://api.fewo.kolibri-visions.de \
+PUBLIC_HOST=fewo.kolibri-visions.de \
+./backend/scripts/pms_epic_c_public_website_smoke.sh
+```
+
 ---
 
 **Features Implemented:**
