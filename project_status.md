@@ -16507,6 +16507,40 @@ All new blocks accept `design` prop with tokens from `/api/v1/public/site/design
 - Updates existing pages (no INSERT, only UPDATE)
 - Preserves existing agency-specific customizations after migration
 
+## Phase 5: Admin Website Design Editor
+
+**Status:** ✅ IMPLEMENTED
+
+### Admin UI Pages
+
+| Page | Description |
+|------|-------------|
+| `/website` | Overview with links to Design, Pages, Navigation, SEO |
+| `/website/design` | Full design token editor |
+
+### Design Editor Features
+
+- **Farben:** Primary, Secondary, Accent, Text, Muted, Background, Surface
+- **Typografie:** Heading font, Body font (8 Google Fonts options)
+- **Header:** Style (light/dark/transparent), Sticky toggle
+- **Footer:** Style (light/dark), Column count (2-4)
+- **Buttons:** Border radius, Style (solid/outline/ghost)
+- **Cards:** Border radius, Shadow level
+- **Hero:** Overlay opacity slider, Text alignment
+
+### Navigation Integration
+
+- Added "Website" section to admin sidebar
+- Items: Übersicht, Design
+- Roles: admin, manager
+
+### Files Created
+
+- `frontend/app/website/page.tsx` (NEW)
+- `frontend/app/website/design/page.tsx` (NEW)
+- `frontend/app/website/design/design-form.tsx` (NEW)
+- `frontend/app/components/AdminShell.tsx` (EXTENDED)
+
 ---
 
 **Features Implemented:**
