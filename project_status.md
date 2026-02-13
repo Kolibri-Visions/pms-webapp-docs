@@ -16639,9 +16639,20 @@ API_BASE_URL=https://api.fewo.kolibri-visions.de \
 PUBLIC_HOST=fewo.kolibri-visions.de \
 ./backend/scripts/pms_public_homepage_blocks_smoke.sh
 
-# Admin Website Design Smoke Test (requires JWT)
+# Admin Website Design Smoke Test
+# Preferred: JWT_TOKEN (e.g., from /root/.pms_env on server)
+source /root/.pms_env
 API_BASE_URL=https://api.fewo.kolibri-visions.de \
-JWT_TOKEN="eyJ..." \
+JWT_TOKEN="$JWT_TOKEN" \
+./backend/scripts/pms_admin_website_design_smoke.sh
+
+# Alternative: Password grant (fallback if JWT_TOKEN not available)
+# Requires: SB_URL, ANON_KEY, EMAIL, PASSWORD
+API_BASE_URL=https://api.fewo.kolibri-visions.de \
+SB_URL=https://xxx.supabase.co \
+ANON_KEY=eyJ... \
+EMAIL=admin@example.com \
+PASSWORD=secret \
 ./backend/scripts/pms_admin_website_design_smoke.sh
 
 # Epic C Public Website Smoke Test (updated to use query param)

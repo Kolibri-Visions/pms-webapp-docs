@@ -78,10 +78,14 @@ PUBLIC_HOST=fewo.kolibri-visions.de \
 ### Test Admin Website Design
 
 ```bash
+# Preferred: source env file with JWT_TOKEN
+source /root/.pms_env
 API_BASE_URL=https://api.fewo.kolibri-visions.de \
-JWT_TOKEN=eyJ... \
+JWT_TOKEN="$JWT_TOKEN" \
 ./pms_admin_website_design_smoke.sh
 ```
+
+**Note:** Admin website smokes do NOT require Host override or `public_host` query param. The JWT token already contains the `agency_id` claim, which the API uses to determine the tenant context. Simply provide `API_BASE_URL` and `JWT_TOKEN`.
 
 ## Troubleshooting
 
