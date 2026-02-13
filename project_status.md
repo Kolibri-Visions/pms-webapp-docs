@@ -16726,6 +16726,24 @@ PUBLIC_HOST=fewo.kolibri-visions.de \
 - Runbook: See `backend/docs/ops/runbook/24-next-clientmodules-500.md`
 - Status: IMPLEMENTED (pending PROD verification after deploy)
 
+**Hotfix 2026-02-13: Prebuild guard + Admin /website/pages 403 fix**
+- Root cause A: Potential "index" folder in app/ causes clientModules error (known Next.js bug #69061)
+- Root cause B: Admin /website/pages returns 403 because `website_admin.py` used `user.get("agency_id")` instead of `get_current_agency_id` dependency
+- Symptom A: 500 error on all pages with "clientModules undefined"
+- Symptom B: Admin UI shows "Fehler beim Laden der Seiten" on /website/pages
+- Fix A:
+  - Added prebuild guard `frontend/scripts/assert_no_app_index_dir.mjs`
+  - Added `"prebuild": "node scripts/assert_no_app_index_dir.mjs"` to package.json
+  - Guard fails build early if any "index" folder exists in app/
+- Fix B:
+  - Updated `website_admin.py` to use `get_current_agency_id` dependency (13 routes fixed)
+  - Agency ID now resolved from x-agency-id header or team_members table
+- Verify A: `find frontend/app -type d -name "index"` returns empty
+- Verify B: `curl -H "Authorization: Bearer $JWT" -H "x-agency-id: $AGENCY_ID" .../api/v1/website/pages` returns 200
+- Smoke: `./backend/scripts/pms_admin_website_pages_smoke.sh` rc=0
+- Runbook: See `backend/docs/ops/runbook/24-next-clientmodules-500.md`
+- Status: IMPLEMENTED (pending PROD verification after deploy)
+
 ---
 
 **Features Implemented:**

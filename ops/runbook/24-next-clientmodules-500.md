@@ -17,9 +17,10 @@ Next.js 14.1.0 has a runtime bug affecting Server Component rendering. The `clie
 
 Root causes (in order of likelihood):
 1. **Next.js 14.1.0 runtime bug**: Fixed in 14.2.x (upgrade required)
-2. **Node.js v22 incompatibility**: Next.js 14.1 doesn't support Node 22
-3. **Stale `.next` cache**: Corrupted build artifacts from previous builds
-4. **No Node version pinning**: Nixpacks/Coolify may auto-select incompatible Node version
+2. **Folder named "index" in app directory**: Next.js App Router bug (see below)
+3. **Node.js v22 incompatibility**: Next.js 14.1 doesn't support Node 22
+4. **Stale `.next` cache**: Corrupted build artifacts from previous builds
+5. **No Node version pinning**: Nixpacks/Coolify may auto-select incompatible Node version
 
 ## Quick Diagnosis
 
@@ -60,6 +61,32 @@ Then run `npm install` to update package-lock.json.
 - 14.1.x has the clientModules runtime bug
 - 14.2.x contains the fix and is stable
 - Staying in 14.x avoids breaking changes from Next.js 15/16
+
+### 2. Check for "index" Folder in App Directory
+
+**Known Next.js Bug (Issue #69061):** If any folder in `frontend/app/` is named exactly "index", it causes the clientModules error at runtime.
+
+**Check:**
+```bash
+find frontend/app -type d -name "index" -print
+# Expected: no output
+```
+
+**If found:** Rename the folder. For example:
+- `app/index/page.tsx` → `app/(home)/page.tsx` (route group)
+- Or use a redirect in next.config.js
+
+**Prevention:** A prebuild guard script blocks builds if "index" folders exist:
+```json
+// frontend/package.json
+{
+  "scripts": {
+    "prebuild": "node scripts/assert_no_app_index_dir.mjs"
+  }
+}
+```
+
+The guard scans `frontend/app/` and fails with a clear error if any folder is named "index".
 
 ### 3. Pin Node to 20.x LTS
 
@@ -210,6 +237,7 @@ If the build script tries `rm -rf .next`, it cannot delete the mounted `.next/ca
 
 ## Version History
 
+- **2026-02-13**: Add prebuild guard for "index" folder prevention + website/pages 403 fix
 - **2026-02-13**: Upgrade Next.js 14.1.0 → 14.2.35 to fix clientModules runtime bug
 - **2026-02-14**: Enforce Node 20 via `nixPkgs = ["nodejs_20"]` + runtime version proof in start script
 - **2026-02-13**: Added "Device or resource busy" failure mode (Coolify cache mount)
