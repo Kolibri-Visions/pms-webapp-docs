@@ -15,6 +15,8 @@ The `website_admin` router is not mounted in the FastAPI application. This typic
 1. `MODULES_ENABLED=true` (production default) and the module system doesn't mount it
 2. The failsafe mounting code in `main.py` is missing or broken
 3. Router import fails silently
+4. **ImportError** - `website_admin.py` imports a missing dependency (e.g., `get_authenticated_user`)
+   - Fixed via compat alias in `backend/app/api/deps.py`
 
 ## Quick Diagnosis
 
@@ -88,4 +90,5 @@ Both return the full OpenAPI schema. The alias exists for consistency with `/api
 
 ## Version History
 
+- **2026-02-13**: Added `get_authenticated_user` compat alias in deps.py to fix ImportError
 - **2026-02-13**: Added website_admin router failsafe + OpenAPI alias
