@@ -16480,6 +16480,33 @@ All new blocks accept `design` prop with tokens from `/api/v1/public/site/design
 
 - `frontend/app/(public)/layout.tsx` (REWRITTEN)
 
+## Phase 4: Homepage Default Blocks
+
+**Status:** ✅ IMPLEMENTED
+
+### Homepage Block Structure (like baeder-appartements-usedom.de)
+
+1. **hero_fullwidth** - Full-width hero with headline, subheadline, CTA
+2. **trust_indicators** - 3 columns: Bestpreis-Garantie, Persönliche Beratung, Urlaubserlebnis
+3. **text_section** - Willkommenstext
+4. **offer_cards** - 4 cards: Last-Minute, Meerblick, Mit Hund, Mit Kamin
+5. **property_showcase** - 4 featured properties (live API)
+6. **cta_banner** - "Noch Fragen?" with contact CTA
+
+### Updated Pages
+
+| Page | New Blocks |
+|------|------------|
+| `/` (home) | hero_fullwidth, trust_indicators, text_section, offer_cards, property_showcase, cta_banner |
+| `/kontakt` | text_section, contact_section, faq_accordion |
+| `/faq` | text_section, faq_accordion (8 items), cta_banner |
+
+### Migration
+
+- `supabase/migrations/20260213100000_update_homepage_blocks.sql`
+- Updates existing pages (no INSERT, only UPDATE)
+- Preserves existing agency-specific customizations after migration
+
 ---
 
 **Features Implemented:**
