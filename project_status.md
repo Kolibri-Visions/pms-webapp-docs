@@ -16672,6 +16672,13 @@ PUBLIC_HOST=fewo.kolibri-visions.de \
 - Smoke: `pms_admin_website_design_smoke.sh` checks OpenAPI before testing endpoints
 - Runbook: See `backend/docs/ops/runbook/22-website-admin-api-404.md`
 
+**Hotfix 2026-02-13: website_admin startup crash (PydanticUndefinedAnnotation)**
+- Root cause: `NavigationUpdateRequest` and `SeoUpdateRequest` used as forward-ref strings in route signatures but only imported inside function bodies
+- Symptom: Coolify restart loop with `pydantic.errors.PydanticUndefinedAnnotation: name 'NavigationUpdateRequest' is not defined`
+- Fix: Import all request/response models at module scope in `website_admin.py`
+- Verify: Backend boots without crash; `/openapi.json` contains website routes
+- Runbook: See `backend/docs/ops/runbook/22-website-admin-api-404.md`
+
 ---
 
 **Features Implemented:**

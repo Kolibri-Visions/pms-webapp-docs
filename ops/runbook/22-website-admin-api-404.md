@@ -17,6 +17,10 @@ The `website_admin` router is not mounted in the FastAPI application. This typic
 3. Router import fails silently
 4. **ImportError** - `website_admin.py` imports a missing dependency (e.g., `get_authenticated_user`)
    - Fixed via compat alias in `backend/app/api/deps.py`
+5. **PydanticUndefinedAnnotation** - Forward-ref type hints (e.g., `"NavigationUpdateRequest"`) not resolvable
+   - Cause: Schema classes used in route signatures but only imported inside function body
+   - Fix: Import all request/response models at module scope in `website_admin.py`
+   - Symptom: Coolify restart loop with `pydantic.errors.PydanticUndefinedAnnotation`
 
 ## Quick Diagnosis
 
@@ -90,5 +94,6 @@ Both return the full OpenAPI schema. The alias exists for consistency with `/api
 
 ## Version History
 
+- **2026-02-13**: Fixed PydanticUndefinedAnnotation (NavigationUpdateRequest/SeoUpdateRequest imports)
 - **2026-02-13**: Added `get_authenticated_user` compat alias in deps.py to fix ImportError
 - **2026-02-13**: Added website_admin router failsafe + OpenAPI alias
