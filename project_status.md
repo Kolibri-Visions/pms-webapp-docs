@@ -16683,8 +16683,19 @@ PUBLIC_HOST=fewo.kolibri-visions.de \
 - Root cause: `app/page.tsx` (legacy fallback) had route priority over `app/(public)/page.tsx`; API calls missing `public_host` query param for tenant resolution
 - Symptom: Public domain shows "Willkommen" card instead of CMS homepage with hero/blocks
 - Fix: Replace `frontend/app/page.tsx` with server component that fetches CMS homepage with `public_host` param
-- Verify: `pms_public_homepage_ui_smoke.sh` rc=0 (checks for `data-testid="public-homepage"` and `data-testid="block-hero_fullwidth"`)
+- Verify: `pms_public_homepage_ui_smoke.sh` rc=0 (checks for `data-testid="public-home"` and `data-testid="block-hero_fullwidth"`)
 - Runbook: See `backend/docs/ops/runbook/23-public-homepage-legacy-fallback.md`
+- Status: IMPLEMENTED (pending PROD verification after deploy)
+
+**Hotfix 2026-02-13: Next.js 500 clientModules undefined (Node 22 incompatibility)**
+- Root cause: Node v22 causes `TypeError: Cannot read properties of undefined (reading 'clientModules')` with Next.js 14.1.0
+- Symptom: All pages return HTTP 500; Docker logs show clientModules error in app-page.runtime.prod.js
+- Fix:
+  - Pin Node to 20.x via `engines` in package.json + `.node-version` file
+  - Add `NIXPACKS_NODE_VERSION=20` in nixpacks.toml
+  - Clean build: `rm -rf .next && next build`
+- Verify: `curl -k https://fewo.kolibri-visions.de/` returns 200 (not 500)
+- Runbook: See `backend/docs/ops/runbook/24-next-clientmodules-500.md`
 - Status: IMPLEMENTED (pending PROD verification after deploy)
 
 ---

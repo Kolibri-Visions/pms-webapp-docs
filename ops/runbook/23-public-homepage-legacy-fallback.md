@@ -16,7 +16,7 @@
 
 ```bash
 # Check if homepage HTML contains CMS markers
-curl -sS "https://fewo.kolibri-visions.de/?cb=$(date +%s)" | grep -c 'data-testid="public-homepage"'
+curl -sS "https://fewo.kolibri-visions.de/?cb=$(date +%s)" | grep -c 'data-testid="public-home"'
 # Expected: 1
 # Actual if broken: 0
 
@@ -95,7 +95,7 @@ PUBLIC_BASE_URL=https://fewo.kolibri-visions.de \
 
 The fixed implementation includes SSR-rendered test markers:
 
-- `data-testid="public-homepage"` - On the `<main>` element
+- `data-testid="public-home"` - On the `<main>` element
 - `data-testid="block-hero_fullwidth"` - On the hero block container
 
 These markers appear in the initial HTML (curl-grepable) for automated testing.
