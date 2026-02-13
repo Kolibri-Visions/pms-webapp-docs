@@ -54,29 +54,55 @@ docker logs public-website 2>&1 | grep -i "clientModules\|TypeError"
 20
 ```
 
-**frontend/nixpacks.toml:**
+**frontend/nixpacks.toml (CRITICAL - use nixPkgs, not just env var):**
 ```toml
+# NIXPACKS_NODE_VERSION env var alone does NOT control which Node is installed!
+# We must explicitly request the nodejs_20 Nix package:
+nixPkgs = ["nodejs_20"]
+
 [variables]
+# Keep for compatibility, but actual version is controlled by nixPkgs
 NIXPACKS_NODE_VERSION = "20"
 ```
 
-### 2. Clean Build
+**Why `engines` and `NIXPACKS_NODE_VERSION` env var are NOT enough:**
+- `engines.node` in package.json is only advisory - npm/node don't enforce it
+- `NIXPACKS_NODE_VERSION` as env var may not be respected by Nixpacks
+- Only `nixPkgs = ["nodejs_20"]` guarantees the Nix package used
+
+### 2. Runtime Version Proof
+
+Add version logging to start script so you can verify in container logs:
 
 **frontend/package.json:**
 ```json
 {
   "scripts": {
-    "build": "rm -rf .next && next build"
+    "start": "node -e \"console.log('[pms-frontend] node='+process.version+' next='+require('next/package.json').version)\" && next start"
   }
 }
 ```
 
-### 3. Redeploy
+Container logs will now show: `[pms-frontend] node=v20.x.x next=14.1.0`
+
+### 3. Build Script (Coolify-safe)
+
+**Do NOT delete `.next`** - Coolify mounts cache at `/app/.next/cache`:
+```json
+{
+  "scripts": {
+    "build": "next build",
+    "build:clean": "find .next ... (local only)"
+  }
+}
+```
+
+### 4. Redeploy
 
 Force a fresh build in Coolify:
-1. Clear build cache (if option exists)
+1. Push commit with nixPkgs fix
 2. Trigger new deployment
-3. Verify Node version in new container is 20.x
+3. Check logs for `[pms-frontend] node=v20.x.x`
 
 ## Verification
 
@@ -87,18 +113,26 @@ After deploying the fix:
 curl -k -sS -o /dev/null -w "%{http_code}" https://fewo.kolibri-visions.de/
 # Expected: 200
 
-# 2. Check Node version in container
-docker exec public-website node --version
-# Expected: v20.x.x
+# 2. Check marker exists
+curl -k -sS "https://fewo.kolibri-visions.de/?cb=$(date +%s)" | grep -c 'data-testid="public-home"'
+# Expected: 1
 
 # 3. Run homepage smoke
 PUBLIC_BASE_URL=https://fewo.kolibri-visions.de \
 ./backend/scripts/pms_public_homepage_ui_smoke.sh
 # Expected: rc=0
 
-# 4. Check for clientModules errors in logs
-docker logs public-website 2>&1 | tail -50 | grep -i "clientModules\|TypeError"
-# Expected: no matches
+# 4. Check Node version via start log (MUST be v20.x.x)
+docker logs public-website 2>&1 | grep '\[pms-frontend\]'
+# Expected: [pms-frontend] node=v20.x.x next=14.1.0
+
+# 5. Alternative: direct Node version check
+docker exec public-website node --version
+# Expected: v20.x.x
+
+# 6. No clientModules errors in logs
+docker logs public-website 2>&1 | tail -200 | grep -i "clientModules\|TypeError" || echo "OK: no errors"
+# Expected: no matches (just "OK: no errors")
 ```
 
 ## Additional Failure Mode: Build Fails with "Device or resource busy"
@@ -153,5 +187,6 @@ If the build script tries `rm -rf .next`, it cannot delete the mounted `.next/ca
 
 ## Version History
 
+- **2026-02-14**: Enforce Node 20 via `nixPkgs = ["nodejs_20"]` + runtime version proof in start script
 - **2026-02-13**: Added "Device or resource busy" failure mode (Coolify cache mount)
 - **2026-02-13**: Initial runbook for Node 22 / Next 14.1 clientModules incompatibility

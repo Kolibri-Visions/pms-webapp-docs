@@ -16705,6 +16705,16 @@ PUBLIC_HOST=fewo.kolibri-visions.de \
 - Runbook: See `backend/docs/ops/runbook/24-next-clientmodules-500.md`
 - Status: IMPLEMENTED (pending PROD verification after deploy)
 
+**Hotfix 2026-02-14: Enforce Node 20 in Nixpacks via nixPkgs + runtime version proof**
+- Root cause: `NIXPACKS_NODE_VERSION` env var and `engines.node` do NOT control which Node Nix package is installed; Nixpacks was still using Node 22 causing clientModules 500 errors
+- Symptom: Despite Node 20 "pin", container still ran Node v22, causing 500 errors on all pages
+- Fix:
+  - Add `nixPkgs = ["nodejs_20"]` to nixpacks.toml (forces Nix to install Node 20)
+  - Add runtime version proof: start script logs `[pms-frontend] node=vX.X.X next=X.X.X`
+- Verify: Container logs show `node=v20.x.x`; `curl` returns 200; smoke rc=0
+- Runbook: See `backend/docs/ops/runbook/24-next-clientmodules-500.md`
+- Status: IMPLEMENTED (pending PROD verification after deploy)
+
 ---
 
 **Features Implemented:**
