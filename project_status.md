@@ -16445,6 +16445,41 @@ All new blocks accept `design` prop with tokens from `/api/v1/public/site/design
 - Components: `button_radius`, `card_radius`, `card_shadow`
 - Hero: `hero_overlay_opacity`, `hero_text_alignment`
 
+## Phase 3: Public Layout Redesign (Header/Footer)
+
+**Status:** ✅ IMPLEMENTED
+
+### Header Features
+
+- **Top Bar:** Phone, email, social links, login link (desktop only)
+- **Main Header:** Logo (image or text), navigation, CTA button
+- **Sticky Header:** Optional with scroll shadow effect
+- **Mobile Menu:** Hamburger menu with full navigation
+- **Design Tokens:** header_style (light/dark/transparent), colors
+
+### Footer Features
+
+- **4-Column Layout:** Kontakt, Reiseziele, Service, Rechtliches
+- **Contact Column:** Phone, email, address with icons
+- **Social Links:** Facebook, Instagram, Twitter, YouTube icons
+- **Locations Column:** Dynamic from `footer_links.locations`
+- **Design Tokens:** footer_style (light/dark), footer_columns
+
+### Design Token Usage
+
+| Token | Header | Footer |
+|-------|--------|--------|
+| `header_style` | light/dark/transparent background | - |
+| `header_sticky` | Enable sticky positioning | - |
+| `footer_style` | - | light/dark background |
+| `footer_columns` | - | Number of columns (1-4) |
+| `primary_color` | Top bar, dark header bg | Dark footer bg |
+| `accent_color` | CTA button | - |
+
+### Files Changed
+
+- `frontend/app/(public)/layout.tsx` (REWRITTEN)
+
 ---
 
 **Features Implemented:**
