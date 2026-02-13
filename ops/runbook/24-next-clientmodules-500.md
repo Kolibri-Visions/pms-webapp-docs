@@ -13,11 +13,13 @@
 
 ## Root Cause
 
-Next.js 14.1.0 has compatibility issues with Node.js v22. The `clientModules` error occurs during Server Component rendering when the runtime internals fail to initialize properly.
+Next.js 14.1.0 has a runtime bug affecting Server Component rendering. The `clientModules` error occurs when the runtime internals fail to initialize properly.
 
-Additional contributing factors:
-1. **Stale `.next` cache**: Corrupted build artifacts from previous builds
-2. **No Node version pinning**: Nixpacks/Coolify may auto-select incompatible Node version
+Root causes (in order of likelihood):
+1. **Next.js 14.1.0 runtime bug**: Fixed in 14.2.x (upgrade required)
+2. **Node.js v22 incompatibility**: Next.js 14.1 doesn't support Node 22
+3. **Stale `.next` cache**: Corrupted build artifacts from previous builds
+4. **No Node version pinning**: Nixpacks/Coolify may auto-select incompatible Node version
 
 ## Quick Diagnosis
 
@@ -38,7 +40,28 @@ docker logs public-website 2>&1 | grep -i "clientModules\|TypeError"
 
 ## Fix
 
-### 1. Pin Node to 20.x LTS
+### 1. Upgrade Next.js to 14.2.x (Primary Fix)
+
+**frontend/package.json:**
+```json
+{
+  "dependencies": {
+    "next": "14.2.35"
+  },
+  "devDependencies": {
+    "eslint-config-next": "^14.2.35"
+  }
+}
+```
+
+Then run `npm install` to update package-lock.json.
+
+**Why 14.2.35 and not 14.1.1?**
+- 14.1.x has the clientModules runtime bug
+- 14.2.x contains the fix and is stable
+- Staying in 14.x avoids breaking changes from Next.js 15/16
+
+### 3. Pin Node to 20.x LTS
 
 **frontend/package.json:**
 ```json
@@ -70,7 +93,7 @@ NIXPACKS_NODE_VERSION = "20"
 - `NIXPACKS_NODE_VERSION` as env var may not be respected by Nixpacks
 - Only `nixPkgs = ["nodejs_20"]` guarantees the Nix package used
 
-### 2. Runtime Version Proof
+### 4. Runtime Version Proof
 
 Add version logging to start script so you can verify in container logs:
 
@@ -83,9 +106,9 @@ Add version logging to start script so you can verify in container logs:
 }
 ```
 
-Container logs will now show: `[pms-frontend] node=v20.x.x next=14.1.0`
+Container logs will now show: `[pms-frontend] node=v20.x.x next=14.2.35`
 
-### 3. Build Script (Coolify-safe)
+### 5. Build Script (Coolify-safe)
 
 **Do NOT delete `.next`** - Coolify mounts cache at `/app/.next/cache`:
 ```json
@@ -97,7 +120,7 @@ Container logs will now show: `[pms-frontend] node=v20.x.x next=14.1.0`
 }
 ```
 
-### 4. Redeploy
+### 6. Redeploy
 
 Force a fresh build in Coolify:
 1. Push commit with nixPkgs fix
@@ -122,9 +145,9 @@ PUBLIC_BASE_URL=https://fewo.kolibri-visions.de \
 ./backend/scripts/pms_public_homepage_ui_smoke.sh
 # Expected: rc=0
 
-# 4. Check Node version via start log (MUST be v20.x.x)
+# 4. Check Node/Next versions via start log (MUST be v20.x.x and 14.2.x)
 docker logs public-website 2>&1 | grep '\[pms-frontend\]'
-# Expected: [pms-frontend] node=v20.x.x next=14.1.0
+# Expected: [pms-frontend] node=v20.x.x next=14.2.35
 
 # 5. Alternative: direct Node version check
 docker exec public-website node --version
@@ -187,6 +210,7 @@ If the build script tries `rm -rf .next`, it cannot delete the mounted `.next/ca
 
 ## Version History
 
+- **2026-02-13**: Upgrade Next.js 14.1.0 → 14.2.35 to fix clientModules runtime bug
 - **2026-02-14**: Enforce Node 20 via `nixPkgs = ["nodejs_20"]` + runtime version proof in start script
 - **2026-02-13**: Added "Device or resource busy" failure mode (Coolify cache mount)
 - **2026-02-13**: Initial runbook for Node 22 / Next 14.1 clientModules incompatibility

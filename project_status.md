@@ -16715,6 +16715,17 @@ PUBLIC_HOST=fewo.kolibri-visions.de \
 - Runbook: See `backend/docs/ops/runbook/24-next-clientmodules-500.md`
 - Status: IMPLEMENTED (pending PROD verification after deploy)
 
+**Hotfix 2026-02-13: Upgrade Next.js 14.1.0 → 14.2.35 (clientModules runtime bug)**
+- Root cause: Despite Node 20 being confirmed (v20.18.1), 500 error persists; Next.js 14.1.0 has runtime bug in Server Components rendering
+- Symptom: `TypeError: Cannot read properties of undefined (reading 'clientModules')` on all pages
+- Fix:
+  - Upgrade `next` from 14.1.0 to 14.2.35 (latest stable 14.x)
+  - Upgrade `eslint-config-next` to match (^14.2.35)
+  - Run `npm install` to update package-lock.json
+- Verify: Container logs show `[pms-frontend] node=v20.x.x next=14.2.35`; `curl` returns 200; smoke rc=0
+- Runbook: See `backend/docs/ops/runbook/24-next-clientmodules-500.md`
+- Status: IMPLEMENTED (pending PROD verification after deploy)
+
 ---
 
 **Features Implemented:**
