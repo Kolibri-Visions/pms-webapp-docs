@@ -16679,6 +16679,14 @@ PUBLIC_HOST=fewo.kolibri-visions.de \
 - Verify: Backend boots without crash; `/openapi.json` contains website routes
 - Runbook: See `backend/docs/ops/runbook/22-website-admin-api-404.md`
 
+**Hotfix 2026-02-13: Public domain "/" shows legacy welcome card**
+- Root cause: `app/page.tsx` (legacy fallback) had route priority over `app/(public)/page.tsx`; API calls missing `public_host` query param for tenant resolution
+- Symptom: Public domain shows "Willkommen" card instead of CMS homepage with hero/blocks
+- Fix: Replace `frontend/app/page.tsx` with server component that fetches CMS homepage with `public_host` param
+- Verify: `pms_public_homepage_ui_smoke.sh` rc=0 (checks for `data-testid="public-homepage"` and `data-testid="block-hero_fullwidth"`)
+- Runbook: See `backend/docs/ops/runbook/23-public-homepage-legacy-fallback.md`
+- Status: IMPLEMENTED (pending PROD verification after deploy)
+
 ---
 
 **Features Implemented:**
