@@ -30401,3 +30401,30 @@ const previewUrl = publicBaseUrl ? `${publicBaseUrl}/${pagePath}` : `/${pagePath
 
 **Status:** IMPLEMENTED (awaiting PROD verification after Coolify redeploy)
 
+## BUGFIX: Public CMS Pages 404 (8af2b52)
+
+**Date:** 2026-02-14
+
+**Symptom:** `https://fewo.kolibri-visions.de/kontakt` lieferte 404, obwohl Seite im Admin existierte und veröffentlicht war.
+
+**Root Cause:** CMS-Seiten waren nur unter `/p/[slug]` erreichbar (z.B. `/p/kontakt`), nicht unter `/[slug]` direkt.
+
+**Fix:** Catch-all Route `frontend/app/(public)/[slug]/page.tsx` hinzugefügt:
+
+- Ermöglicht saubere URLs: `/kontakt`, `/impressum`, `/datenschutz`
+- Lädt Seite via API: `GET /api/v1/public/site/pages/{slug}`
+- Zeigt 404 wenn Seite nicht existiert
+- Explizite Routen wie `/unterkuenfte` haben Vorrang (Next.js Routing)
+
+**File Created:** `frontend/app/(public)/[slug]/page.tsx`
+
+**Commit:** `8af2b52` - feat(public): add catch-all [slug] route for CMS pages
+
+**Verification:** Nach Coolify redeploy:
+```bash
+curl -sS -o /dev/null -w "%{http_code}" "https://fewo.kolibri-visions.de/kontakt"
+# Expected: 200
+```
+
+**Status:** IMPLEMENTED (awaiting PROD verification after Coolify redeploy)
+
