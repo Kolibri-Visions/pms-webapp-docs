@@ -8,6 +8,31 @@
 
 ---
 
+## Website Pages Blocks 500 Fix (2026-02-14) - IMPLEMENTED
+
+**Issue**: `GET /api/v1/website/pages` returned HTTP 500 with Pydantic validation error: "blocks Input should be a valid list ... input_type=str"
+
+**Root Cause**: `blocks` JSONB column stored as JSON string (double-encoded) instead of JSON array.
+
+**Fix Applied**:
+1. Backend `normalize_blocks()` function parses JSON strings to arrays on READ
+2. Migration `20260214100000_fix_filter_config_grants_and_blocks.sql`:
+   - Normalizes existing corrupted blocks data
+   - Adds grants for `public_site_filter_config` table (fixes permission denied)
+   - Adds RLS policies for filter config
+3. Fixed amenities filter queries to use `amenity_id` join instead of non-existent `amenity_code` column
+
+**Files Changed**:
+- `backend/app/api/routes/website_admin.py` (added normalize_blocks, fixed all PageAdminResponse returns)
+- `backend/app/api/routes/public_site.py` (fixed amenities queries, added error handling)
+- `supabase/migrations/20260214100000_fix_filter_config_grants_and_blocks.sql` (NEW)
+- `backend/scripts/pms_website_pages_smoke.sh` (NEW)
+- `backend/docs/ops/runbook/25-website-pages-blocks-500.md` (NEW)
+
+**Status**: IMPLEMENTED (awaiting production verification after migration)
+
+---
+
 ## Property Filter Feature (2026-02-14) ✅
 
 **Overview:**
