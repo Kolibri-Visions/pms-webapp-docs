@@ -30340,3 +30340,33 @@ EXPECT_COMMIT=<NEW_COMMIT> ./backend/scripts/pms_verify_deploy.sh
 
 Database migration and endpoints for saving/reusing block configurations. Deferred per plan.
 
+## BUGFIX: React 18 Compatibility (d330fe7)
+
+**Date:** 2026-02-14
+
+**Symptom:** `/website/pages` and `/website/pages/[id]` showed "Application error: a client-side exception has occurred" with React error #438 in browser console.
+
+**Root Cause:** Page editor used `use(params)` hook from React 19, but project runs React 18 (`"react": "^18"` in package.json). The `use()` hook for unwrapping Promises is not available in React 18.
+
+**Fix:** Replaced `use(params)` with `useParams()` from `next/navigation`:
+
+```diff
+- import { useState, useEffect, use } from "react";
+- import { useRouter } from "next/navigation";
++ import { useState, useEffect } from "react";
++ import { useRouter, useParams } from "next/navigation";
+
+- export default function PageEditorPage({ params }: { params: Promise<{ id: string }> }) {
+-   const resolvedParams = use(params);
++ export default function PageEditorPage() {
++   const params = useParams<{ id: string }>();
+```
+
+**File Changed:** `frontend/app/website/pages/[id]/page.tsx`
+
+**Commits:**
+- `bc82dfb` - feat(website): implement Lite Page Builder (Phases 1-5)
+- `d330fe7` - fix(website): use useParams instead of use() for React 18 compatibility
+
+**Status:** IMPLEMENTED (awaiting PROD verification after Coolify redeploy)
+
