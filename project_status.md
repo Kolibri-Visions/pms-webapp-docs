@@ -1,10 +1,86 @@
 # PMS-Webapp Project Status
 
-**Last Updated:** 2026-02-01
+**Last Updated:** 2026-02-14
 
-**Last Updated (actual):** 2026-02-01
+**Last Updated (actual):** 2026-02-14
 
 **Current Phase:** Phase 21 - Inventory/Availability Production Hardening
+
+---
+
+## Property Filter Feature (2026-02-14) ✅
+
+**Overview:**
+Comprehensive property search and filter system for the public website, enabling visitors to filter accommodations by city, guests, bedrooms, price range, property type, and amenities. Includes full admin control via the website configuration panel.
+
+**Backend Changes:**
+
+1. **Database Migration** (`supabase/migrations/20260214000000_add_property_filter_config.sql`):
+   - Added `public_site_filter_config` table for agency-specific filter configuration
+   - Configuration includes: filter visibility toggles, filter order, visible amenities, sort defaults, layout options
+   - Added 20 standard amenity definitions with German/English names and icons
+
+2. **Public API Extensions** (`backend/app/api/routes/public_site.py`):
+   - Extended `/properties` endpoint with filter parameters:
+     - `city`, `min_guests`, `min_bedrooms`, `min_price`, `max_price`
+     - `property_type`, `amenities` (comma-separated codes)
+     - `sort_by`, `sort_order`
+   - Added `/properties/filter-options` endpoint returning available cities, property types, amenities, and value ranges
+   - Added `/site/filter-config` endpoint for public filter UI configuration
+   - Response now includes `property_type`, `base_price`, and `amenities[]`
+
+3. **Admin API Extensions** (`backend/app/api/routes/website_admin.py`):
+   - Added `GET /filter-config` - retrieve current filter configuration
+   - Added `PUT /filter-config` - update filter configuration (upsert pattern)
+
+4. **Schema Updates** (`backend/app/schemas/public_site.py`):
+   - Extended `PublicPropertyListItem` and `PublicPropertyDetail` with `property_type`, `base_price`, `amenities`
+   - Added `FilterOptionsResponse`, `AmenityOption`, `FilterConfigResponse`, `FilterConfigUpdate` schemas
+
+**Frontend Changes:**
+
+1. **PropertyFilter Component** (`frontend/app/(public)/components/PropertyFilter.tsx`):
+   - Full-featured filter component with three layout modes: sidebar, top, modal
+   - Collapsible sections for each filter type
+   - Supports city dropdown, guest/bedroom selects, price range inputs, property type, amenity checkboxes
+   - Sort options with ascending/descending order
+   - Debounced filter changes for performance
+
+2. **Updated /unterkuenfte Page** (`frontend/app/(public)/unterkuenfte/page.tsx`):
+   - Integrated PropertyFilter component
+   - Dynamic layout based on filter configuration
+   - Property cards show price badges and improved metadata display
+   - Loading skeletons and empty state handling
+
+3. **Admin Filter Config Page** (`frontend/app/website/filters/page.tsx`):
+   - Visual filter order management with drag handles and visibility toggles
+   - Layout selection (sidebar/top/modal)
+   - Sorting options configuration
+   - Custom label overrides for filter elements
+
+4. **PropertySearchBlock** (`frontend/app/(public)/components/BlockRenderer.tsx`):
+   - New block type `property_search` for embedding property listings in CMS pages
+   - Configurable columns (2/3/4), limit, and filter display
+
+5. **Block Schema** (`frontend/app/website/lib/block-schemas.ts`):
+   - Added `property_search` block schema with title, subtitle, showFilters, filterLayout, limit, columns fields
+
+6. **Website Admin Overview** (`frontend/app/website/page.tsx`):
+   - Added "Filter" section linking to `/website/filters`
+
+**Files Changed:**
+- `supabase/migrations/20260214000000_add_property_filter_config.sql` (NEW)
+- `backend/app/api/routes/public_site.py` (MODIFIED)
+- `backend/app/api/routes/website_admin.py` (MODIFIED)
+- `backend/app/schemas/public_site.py` (MODIFIED)
+- `frontend/app/(public)/components/PropertyFilter.tsx` (NEW)
+- `frontend/app/(public)/unterkuenfte/page.tsx` (MODIFIED)
+- `frontend/app/website/filters/page.tsx` (NEW)
+- `frontend/app/(public)/components/BlockRenderer.tsx` (MODIFIED)
+- `frontend/app/website/lib/block-schemas.ts` (MODIFIED)
+- `frontend/app/website/page.tsx` (MODIFIED)
+
+---
 
 **Current Phase (actual):** (see latest VERIFIED evidence blocks dated 2026-02-01 below)
 
