@@ -221,12 +221,165 @@ If the build script tries `rm -rf .next`, it cannot delete the mounted `.next/ca
 - `build`: Safe for Coolify (doesn't touch cache mount)
 - `build:clean`: For local use only (preserves cache directory)
 
+## Additional Failure Mode: SSR Hydration Error (dynamic imports with ssr:false)
+
+### Symptom
+
+- Public homepage returns HTTP 500
+- Container logs show: `TypeError: Cannot read properties of undefined (reading 'clientModules')`
+- Other routes may work (404) while homepage crashes
+
+### Root Cause
+
+Using `dynamic()` with `ssr: false` directly in a Server Component (like `layout.tsx`) breaks the Server/Client component boundary:
+
+```tsx
+// WRONG - in layout.tsx (Server Component)
+const AuthProvider = dynamic(
+  () => import("./lib/auth-context").then((mod) => mod.AuthProvider),
+  { ssr: false }  // ❌ Breaks SSR hydration
+);
+```
+
+### Fix: Providers Client Component Pattern (Commit 0a13b0e)
+
+1. **Create a Client Component wrapper:**
+
+```tsx
+// frontend/app/components/Providers.tsx
+"use client";
+
+import { AuthProvider } from "../lib/auth-context";
+import { ThemeProvider } from "../lib/theme-provider";
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  return (
+    <AuthProvider>
+      <ThemeProvider>{children}</ThemeProvider>
+    </AuthProvider>
+  );
+}
+```
+
+2. **Use in layout.tsx (Server Component):**
+
+```tsx
+// frontend/app/layout.tsx
+import { Providers } from "./components/Providers";
+
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en">
+      <body>
+        <Providers>{children}</Providers>  {/* ✓ Clean boundary */}
+      </body>
+    </html>
+  );
+}
+```
+
+### Verification
+
+```bash
+# After fix, homepage should return 200 (not 500)
+curl -sS -o /dev/null -w "%{http_code}" https://fewo.kolibri-visions.de/
+# Expected: 200
+```
+
+---
+
+## Additional Failure Mode: Root Route Conflict (duplicate page.tsx)
+
+### Symptom
+
+- Public homepage returns HTTP 404 (not 500)
+- Build succeeds without errors
+- Other routes in `(public)` folder also return 404
+
+### Root Cause
+
+Two pages compete for the root `/` route:
+- `app/page.tsx` (Server Component)
+- `app/(public)/page.tsx` (Client Component)
+
+Route groups like `(public)` don't affect URL paths, so both claim `/`. Next.js may pick one arbitrarily or fail silently.
+
+### Fix: Remove Duplicate (Commit e83301b)
+
+Delete the conflicting `app/page.tsx`:
+
+```bash
+git rm frontend/app/page.tsx
+```
+
+The `app/(public)/page.tsx` now correctly serves `/` with the public layout (header/footer).
+
+### Verification
+
+```bash
+# After fix + redeploy, homepage should return 200
+curl -sS -o /dev/null -w "%{http_code}" https://fewo.kolibri-visions.de/
+# Expected: 200
+
+# Marker should exist
+curl -sS "https://fewo.kolibri-visions.de/?cb=$(date +%s)" | grep -c 'data-testid="public-home"'
+# Expected: 1
+```
+
+---
+
+## Failure Mode: PROD Shows 404 After Fix (Stale Deployment)
+
+### Symptom
+
+- Local build succeeds, routes visible in build output
+- GitHub has correct code (verified via `gh api`)
+- PROD still returns 404 for homepage
+
+### Root Cause
+
+Coolify/Railway deployment not triggered or using cached build.
+
+### Fix
+
+1. **Verify GitHub has correct commit:**
+```bash
+gh api repos/Kolibri-Visions/PMS-Webapp/commits/main --jq '.sha[0:7]'
+# Should match your fix commit
+```
+
+2. **Force redeploy in Coolify:**
+   - Dashboard → Service → Redeploy
+   - Or: Push empty commit to trigger
+
+3. **Verify deployment:**
+```bash
+cd /data/repos/pms-webapp
+EXPECT_COMMIT=e83301b ./backend/scripts/pms_verify_deploy.sh
+# Expected: rc=0
+```
+
+4. **Test after redeploy:**
+```bash
+curl -sS -o /dev/null -w "%{http_code}" "https://fewo.kolibri-visions.de/?cb=$(date +%s)"
+# Expected: 200
+
+PUBLIC_BASE_URL="https://fewo.kolibri-visions.de" \
+  ./backend/scripts/pms_public_homepage_ui_smoke.sh
+# Expected: rc=0
+```
+
+---
+
 ## Prevention
 
 1. **Always pin Node version** in production configs
 2. **Do NOT delete `.next/cache`** in build scripts (Coolify mount)
 3. **Test Node upgrades** in staging before production
 4. **Monitor container logs** for runtime errors
+5. **Use Providers pattern** for client-side context in layouts
+6. **Avoid duplicate routes** - check for conflicting page.tsx files
+7. **Verify deployments** - use pms_verify_deploy.sh after push
 
 ## Related Files
 
@@ -237,6 +390,7 @@ If the build script tries `rm -rf .next`, it cannot delete the mounted `.next/ca
 
 ## Version History
 
+- **2026-02-14**: Add failure modes: SSR Hydration (Providers pattern fix), Root Route Conflict (duplicate page.tsx)
 - **2026-02-13**: Add prebuild guard for "index" folder prevention + website/pages 403 fix
 - **2026-02-13**: Upgrade Next.js 14.1.0 → 14.2.35 to fix clientModules runtime bug
 - **2026-02-14**: Enforce Node 20 via `nixPkgs = ["nodejs_20"]` + runtime version proof in start script

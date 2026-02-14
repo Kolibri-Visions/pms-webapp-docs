@@ -30134,3 +30134,111 @@ export ADMIN_JWT_TOKEN="<<<admin JWT>>>"
 - **DOCS PHASE 1 (2026-01-28)**: Make backend/docs the single source of truth (Phase 1). Goal: Consolidate all documentation under backend/docs/ with modular runbook structure. Changes: (1) Created backend/docs/index.md as canonical entry point with documentation structure map, rules, and key document links. (2) Created backend/docs/meta/ directory with relocated root docs: readme.md, changelog.md, contributing.md, current_state.md, agent_system.md (full content preserved). (3) Created backend/docs/ops/runbook/ modular chapter structure with 5 chapter stubs: 00-golden-paths.md, 01-deployment.md, 02-database.md, 03-auth.md, 04-channel-manager.md. (4) Added RUNBOOK INDEX and GOLDEN PATHS sections to top of runbook.md with rule "New content goes into backend/docs/ops/runbook/* only". (5) Moved docs/design/ to backend/docs/design/ (LuxeStay design files). (6) Replaced root-level docs (README.md, CHANGELOG.md, CONTRIBUTING.md, CURRENT_STATE.md, AGENT_SYSTEM.md) with minimal pointer stubs linking to backend/docs/index.md. Files created: backend/docs/index.md, backend/docs/meta/*.md (5 files), backend/docs/ops/runbook/*.md (5 chapter stubs). Files modified: backend/docs/ops/runbook.md (index section at top), root *.md files (replaced with stubs). Files moved: docs/design/ → backend/docs/design/. Documentation: project_status.md (this entry). QA proofs: /tmp/docs_strict_backend_docs_phase1_proofs.txt. Status: ✅ IMPLEMENTED.
 - **Booking Requests Approve/Decline E2E (2026-01-29)**: End-to-end approve/decline functionality with API + Admin UI + Docs + Smoke. Goal: Staff can approve/decline a booking request in Admin UI, system transitions state correctly without 422/500. **API Audit**: Endpoints already exist in backend/app/api/routes/booking_requests.py - approve at line 511 (POST /{booking_request_id}/approve), decline at line 720 (POST /{booking_request_id}/decline). Features: idempotency (409 for already processed), state validation (only requested/under_review can be approved/declined), agency scoping, internal_note support, decline_reason required for decline. **Admin UI Audit**: Already implemented in frontend/app/booking-requests/page.tsx - handleApprove (lines 230-260) with toast and state refresh, handleDecline (lines 262-302) with modal for decline_reason input, German labels throughout (Genehmigen, Ablehnen, Ablehnungsgrund). **Smoke Script** (backend/scripts/pms_booking_requests_approve_decline_smoke.sh - new file, 265 lines): 6 tests covering full workflow - Test 1: List booking requests with status=requested, Test 2: Approve booking request, Test 3: Verify state after approve (status=confirmed), Test 4: Find another request for decline test, Test 5: Decline booking request with reason, Test 6: Verify state after decline (status=declined). Uses shared smoke_output.sh library, exit codes 0=success/1=test-failure/2=env-missing. **Documentation**: backend/scripts/README.md updated with "Booking Requests Approve/Decline Smoke Test" section (prerequisites, test table, expected output, troubleshooting), backend/docs/ops/runbook/03-auth.md updated with "Booking Requests Approve/Decline" troubleshooting section (symptoms, root causes, verification commands, valid state transitions table). Files created: backend/scripts/pms_booking_requests_approve_decline_smoke.sh. Files modified: backend/scripts/README.md, backend/docs/ops/runbook/03-auth.md. Status: ✅ IMPLEMENTED (awaiting PROD verification: pms_booking_requests_approve_decline_smoke.sh rc=0 with 6/6 tests passed). **Known Issue**: Regression identified in PROD - approve returns 409 but GET still shows status=requested. See BUGFIX below.
 - **BUGFIX: Booking Requests Approve Idempotency Heal V3 (2026-01-29)**: Comprehensive fix for approve endpoint to ALWAYS heal stale status and return 200 idempotent. **Symptom**: PROD smoke failing at Test 3 - approve returns 409 but GET shows status=requested. **Solution**: Rewrote approve healing logic with 5 evidence types checked BEFORE any return: (1) `confirmed_at` set but status != confirmed, (2) Status already confirmed (return idempotent), (3) `approved_booking_id` points to confirmed booking, (4) `inventory_ranges` entry exists with state='active', (5) Related confirmed booking exists (same guest/property/dates). Also added healing in ExclusionViolationError handler - if overlapping booking is for same guest, treat as fulfilled and heal. All healing paths now: UPDATE status to confirmed, set confirmed_at if null, re-SELECT healed row, return HTTP 200 with message including evidence type (e.g., "healed: related_booking_confirmed"). **Regression Tests**: 3 tests added - test_approve_heals_inconsistent_state, test_approve_heals_from_inventory_ranges_evidence, test_approve_heals_when_related_booking_exists. **Files modified**: backend/app/api/routes/booking_requests.py (comprehensive healing ~100 lines), backend/tests/integration/test_booking_requests_approve.py (3 regression tests), backend/docs/ops/runbook/03-auth.md (3 troubleshooting sections), backend/docs/project_status.md. **Verification commands** (after Coolify deploy): `EXPECT_COMMIT=<NEW> ./backend/scripts/pms_verify_deploy.sh` then `./backend/scripts/pms_booking_requests_approve_decline_smoke.sh` expecting 6/6 passed RC=0. Status: ✅ IMPLEMENTED.
+
+---
+
+# Public Website: Providers Boundary + Root Route Conflict Fix
+
+**Implementation Date:** 2026-02-14
+
+**Status:** IMPLEMENTED (awaiting PROD verification after Coolify redeploy)
+
+**Scope:** Fix 500 error on public homepage caused by SSR hydration issues and route conflicts.
+
+## Problem Summary
+
+Public homepage (https://fewo.kolibri-visions.de/) returned HTTP 500 with `clientModules undefined` error.
+
+Root causes identified:
+1. **SSR Hydration Break**: `layout.tsx` used `dynamic()` with `ssr:false` directly in Server Component
+2. **Route Conflict**: Both `app/page.tsx` and `app/(public)/page.tsx` claimed the `/` route
+
+## Fixes Applied
+
+### Commit 0a13b0e — Providers Client Boundary Fix
+
+**Problem:** Using `dynamic()` with `ssr: false` in a Server Component (`layout.tsx`) breaks the Server/Client component boundary.
+
+**Solution:** Create a proper Client Component wrapper (`Providers.tsx`) to contain client-side providers.
+
+**Files Changed:**
+- `frontend/app/components/Providers.tsx` (NEW)
+  - Client Component with `"use client"` directive
+  - Wraps `AuthProvider` and `ThemeProvider`
+  - Clean Server/Client boundary
+
+- `frontend/app/layout.tsx` (MODIFIED)
+  - Removed: `dynamic` imports with `ssr: false`
+  - Added: Import of `Providers` component
+  - Changed: `<AuthProvider><ThemeProvider>` → `<Providers>`
+
+**Effect:** 500 error → 404 (SSR crash fixed, but route still not serving correctly)
+
+### Commit e83301b — Root Route Conflict Fix
+
+**Problem:** Two pages competed for the `/` route:
+- `app/page.tsx` (Server Component with dynamic BlockRenderer)
+- `app/(public)/page.tsx` (Client Component with proper public layout)
+
+Route groups like `(public)` don't affect URL paths, causing a conflict.
+
+**Solution:** Delete `app/page.tsx` so `app/(public)/page.tsx` serves the root route with header/footer.
+
+**Files Changed:**
+- `frontend/app/page.tsx` (DELETED)
+  - 163 lines removed
+  - Was Server Component with dynamic BlockRenderer import
+
+**Effect:** 404 → 200 (after Coolify redeploy)
+
+## Current Status
+
+- ✅ Code pushed to GitHub (commit e83301b)
+- ✅ Local build succeeds (routes `/` and `/unterkuenfte` visible in build output)
+- ⏳ PROD shows 404 (Coolify redeploy required)
+
+## Pending PROD Verification
+
+After Coolify redeploy, run on HOST-SERVER-TERMINAL:
+
+```bash
+# 1. Verify deployment
+cd /data/repos/pms-webapp
+EXPECT_COMMIT=e83301b ./backend/scripts/pms_verify_deploy.sh
+# Expected: rc=0
+
+# 2. Check HTTP status
+curl -k -sS -o /dev/null -w "%{http_code}\n" \
+  "https://fewo.kolibri-visions.de/?cb=$(date +%s)"
+# Expected: 200
+
+# 3. Check marker exists
+curl -k -sS "https://fewo.kolibri-visions.de/?cb=$(date +%s)" \
+  | grep -c 'data-testid="public-home"'
+# Expected: 1
+
+# 4. Run smoke test
+PUBLIC_BASE_URL="https://fewo.kolibri-visions.de" \
+  ./backend/scripts/pms_public_homepage_ui_smoke.sh
+# Expected: rc=0
+```
+
+## Related Documentation
+
+- Runbook: `backend/docs/ops/runbook/24-next-clientmodules-500.md`
+  - Added: "SSR Hydration Error" failure mode
+  - Added: "Root Route Conflict" failure mode
+  - Added: "PROD Shows 404 After Fix" troubleshooting
+
+## Files Changed Summary
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `frontend/app/components/Providers.tsx` | NEW | Client Component wrapper for providers |
+| `frontend/app/layout.tsx` | MODIFIED | Use Providers instead of dynamic imports |
+| `frontend/app/page.tsx` | DELETED | Remove duplicate root route |
+| `backend/docs/ops/runbook/24-next-clientmodules-500.md` | UPDATED | Add failure modes |
+| `backend/docs/project_status.md` | UPDATED | This entry |
+
+**Note:** Status will change to VERIFIED after PROD verification confirms HTTP 200 + marker + smoke rc=0.
+
