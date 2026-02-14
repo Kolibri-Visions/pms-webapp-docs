@@ -30370,3 +30370,34 @@ Database migration and endpoints for saving/reusing block configurations. Deferr
 
 **Status:** IMPLEMENTED (awaiting PROD verification after Coolify redeploy)
 
+## BUGFIX: Preview Panel 404 (a4bba33)
+
+**Date:** 2026-02-14
+
+**Symptom:** Live-Vorschau im Page Editor zeigte 404 obwohl Seite existierte (sowohl veröffentlicht als auch Entwurf).
+
+**Root Cause:** Preview-Panel verwendete relative URL (`/kontakt`) statt absolute URL. Da Admin auf `admin.fewo.kolibri-visions.de` läuft, lud der iframe `admin.fewo.kolibri-visions.de/kontakt` statt `fewo.kolibri-visions.de/kontakt`.
+
+**Fix:** Public Base URL aus Admin-Hostname ableiten:
+
+```typescript
+// Derive public website URL from admin URL (admin.example.com -> example.com)
+useEffect(() => {
+  const hostname = window.location.hostname;
+  const publicHostname = hostname.startsWith("admin.")
+    ? hostname.replace("admin.", "")
+    : hostname;
+  const protocol = window.location.protocol;
+  setPublicBaseUrl(`${protocol}//${publicHostname}`);
+}, []);
+
+// Preview URL is now absolute
+const previewUrl = publicBaseUrl ? `${publicBaseUrl}/${pagePath}` : `/${pagePath}`;
+```
+
+**File Changed:** `frontend/app/website/pages/[id]/preview-panel.tsx`
+
+**Commit:** `a4bba33` - fix(website): use absolute public URL for preview iframe
+
+**Status:** IMPLEMENTED (awaiting PROD verification after Coolify redeploy)
+
