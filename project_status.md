@@ -30242,3 +30242,101 @@ PUBLIC_BASE_URL="https://fewo.kolibri-visions.de" \
 
 **Note:** Status will change to VERIFIED after PROD verification confirms HTTP 200 + marker + smoke rc=0.
 
+---
+
+# Lite Page Builder (Block CMS Enhancement)
+
+**Implementation Date:** 2026-02-14
+
+**Status:** IMPLEMENTED (awaiting PROD verification)
+
+**Scope:** Enhance existing Block CMS to a user-friendly "Lite Page Builder" with drag-drop, visual array editors, live preview, and backend validation.
+
+## Features Implemented
+
+### Phase 1: Drag-Drop Block Reordering
+- Native HTML5 Drag-Drop without external libraries
+- Visual feedback during drag (opacity, border highlight)
+- Arrow buttons retained as accessibility/mobile fallback
+- File: `frontend/app/website/pages/[id]/page.tsx`
+
+### Phase 2: Visual Array Editors
+- Replaced JSON textareas with structured form editors
+- Per-item drag-drop reordering within arrays
+- Typed field schemas (text, textarea, rating, icon-picker, etc.)
+- Files:
+  - `frontend/app/website/lib/block-schemas.ts` (NEW - schema definitions)
+  - `frontend/app/website/components/ArrayItemEditor.tsx` (NEW - visual editor)
+
+### Phase 3: Backend Validation (Security)
+- Server-side Pydantic validation for all block types
+- HTML sanitization (dangerous patterns removed)
+- Field length limits enforced
+- Files:
+  - `backend/app/schemas/block_validation.py` (NEW)
+  - `backend/app/api/routes/website_admin.py` (MODIFIED - validation integration)
+
+### Phase 4: Rich Text Editor
+- Native ContentEditable-based editor
+- Formatting: Bold, Italic, Underline, Lists, Links
+- Keyboard shortcuts (Ctrl+B, Ctrl+I, Ctrl+U, Ctrl+Z)
+- File: `frontend/app/website/components/RichTextEditor.tsx` (NEW)
+
+### Phase 5: Live Preview Panel
+- Split-pane layout with toggle
+- Responsive device modes (Desktop, Tablet, Mobile)
+- Debounced updates (300ms)
+- Iframe-based preview with postMessage communication
+- File: `frontend/app/website/pages/[id]/preview-panel.tsx` (NEW)
+
+## Files Changed Summary
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `frontend/app/website/pages/[id]/page.tsx` | MODIFIED | Drag-drop, array editors, preview integration |
+| `frontend/app/website/lib/block-schemas.ts` | NEW | Block field schemas for visual editors |
+| `frontend/app/website/components/ArrayItemEditor.tsx` | NEW | Visual array item editor with drag-drop |
+| `frontend/app/website/components/RichTextEditor.tsx` | NEW | ContentEditable rich text editor |
+| `frontend/app/website/pages/[id]/preview-panel.tsx` | NEW | Live preview panel component |
+| `backend/app/schemas/block_validation.py` | NEW | Pydantic block validation schemas |
+| `backend/app/api/routes/website_admin.py` | MODIFIED | Block validation integration |
+
+## Supported Block Types (with Visual Editors)
+
+| Block Type | Array Fields | Visual Editor |
+|------------|--------------|---------------|
+| testimonials | testimonials[] | Quote, Author, Rating |
+| faq_accordion | items[] | Question, Answer |
+| trust_indicators | items[] | Icon-picker, Label |
+| offer_cards | offers[] | Title, Discount, Description, Image |
+| location_grid | locations[] | Name, Image, Count, Link |
+
+## Build Verification
+
+```bash
+# Frontend build
+cd frontend && npm run build
+# Expected: Success, /website/pages/[id] route visible in output
+
+# Local test
+npm run dev
+# Navigate to /website/pages/<any-page-id>
+# Verify: Drag-drop, array editors, rich text, preview panel
+```
+
+## PROD Verification (pending)
+
+```bash
+# After Coolify redeploy:
+EXPECT_COMMIT=<NEW_COMMIT> ./backend/scripts/pms_verify_deploy.sh
+# Expected: rc=0
+
+# Website admin smoke test
+./backend/scripts/pms_admin_website_pages_smoke.sh
+# Expected: rc=0
+```
+
+## Phase 6: Block Templates (NOT IMPLEMENTED - Future)
+
+Database migration and endpoints for saving/reusing block configurations. Deferred per plan.
+
