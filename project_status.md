@@ -8,6 +8,30 @@
 
 ---
 
+## Page SEO Robots Meta Directive (2026-02-15) - IMPLEMENTED
+
+**Feature**: Per-page control of search engine indexing behavior (robots meta tag).
+
+**Options**:
+| Value | Meaning |
+|-------|---------|
+| `index, follow` | Standard - indexieren + Links folgen |
+| `noindex, follow` | Nicht indexieren, Links folgen |
+| `index, nofollow` | Indexieren, Links nicht folgen |
+| `noindex, nofollow` | Komplett ausschließen |
+
+**Files Changed**:
+- `supabase/migrations/20260215210000_add_page_robots_meta.sql` (NEW)
+- `backend/app/schemas/public_site.py` (RobotsDirective Literal + 3 schemas)
+- `backend/app/api/routes/website_admin.py` (6 SQL queries extended)
+- `frontend/app/website/pages/[id]/page.tsx` (dropdown in settings)
+
+**Commits**: `47b6501`
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
 ## Static Map Display Fix (2026-02-15) - IMPLEMENTED
 
 **Issue**: Property detail page in Admin showed ~3000+ console errors (`net::ERR_NAME_NOT_RESOLVED`) for static map images.
