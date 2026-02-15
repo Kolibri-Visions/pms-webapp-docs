@@ -12,17 +12,18 @@
 
 **Issue**: `/unterkuenfte` page showed "This page could not be found" with `x-nextjs-cache: HIT`. Next.js ISR cached a 404 from earlier transient backend failures.
 
-**Root Cause**: No `dynamic = "force-dynamic"` on public pages, allowing ISR to cache notFound responses for up to 1 year.
+**Root Cause**: Public pages are Client Components (`"use client"`) which cannot use route segment config exports. Initial attempt to add `dynamic`/`revalidate` exports caused build error: "Invalid revalidate value [object Object]".
 
 **Fix Applied**:
-1. Added `export const dynamic = "force-dynamic"` and `export const revalidate = 0` to all public pages
-2. Added `cache: "no-store"` to all fetch calls
-3. Removed `notFound()` calls on API errors - render error state instead (prevents ISR caching 404)
+1. Removed invalid `export const dynamic`/`revalidate` from Client Components (these only work in Server Components)
+2. Client Components with `useEffect` data fetching naturally avoid ISR caching issues
+3. Removed `notFound()` calls on API errors - render error state instead
+4. Added `cache: "no-store"` to fetch calls for extra safety
 
 **Files Changed**:
-- `frontend/app/(public)/unterkuenfte/page.tsx` (dynamic config)
-- `frontend/app/(public)/[slug]/page.tsx` (dynamic config, error state instead of notFound)
-- `frontend/app/(public)/page.tsx` (dynamic config, no-store fetches)
+- `frontend/app/(public)/unterkuenfte/page.tsx` (client component, removed invalid exports)
+- `frontend/app/(public)/[slug]/page.tsx` (client component, error state instead of notFound)
+- `frontend/app/(public)/page.tsx` (client component, no-store fetches)
 - `backend/scripts/pms_public_unterkuenfte_page_smoke.sh` (NEW)
 - `backend/docs/ops/runbook/27-public-unterkuenfte-next-cache-404.md` (NEW)
 
@@ -31,7 +32,7 @@
 PUBLIC_SITE_URL=https://fewo.kolibri-visions.de ./backend/scripts/pms_public_unterkuenfte_page_smoke.sh
 ```
 
-**Status**: IMPLEMENTED (requires frontend redeployment to clear ISR cache)
+**Status**: IMPLEMENTED (requires frontend redeployment)
 
 ---
 

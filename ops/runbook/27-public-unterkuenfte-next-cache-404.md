@@ -110,15 +110,42 @@ In Coolify:
 
 | File | Change |
 |------|--------|
-| `frontend/app/(public)/unterkuenfte/page.tsx` | Added `dynamic = "force-dynamic"`, `revalidate = 0` |
-| `frontend/app/(public)/[slug]/page.tsx` | Added dynamic config, removed `notFound()`, added error state |
-| `frontend/app/(public)/page.tsx` | Added dynamic config, `cache: "no-store"` on fetches |
+| `frontend/app/(public)/unterkuenfte/page.tsx` | Client component with useEffect data fetching |
+| `frontend/app/(public)/[slug]/page.tsx` | Client component, removed `notFound()`, added error state |
+| `frontend/app/(public)/page.tsx` | Client component, `cache: "no-store"` on fetches |
+
+## Build Pitfall: Invalid revalidate value
+
+**Symptom:**
+```
+Error: Invalid revalidate value "[object Object]" on "/unterkuenfte"
+```
+
+**Cause:**
+Route segment config exports (`export const dynamic`, `export const revalidate`) were added to Client Components (`"use client"`). These exports are **only valid in Server Components**.
+
+**Fix:**
+- Remove `export const dynamic` and `export const revalidate` from Client Components
+- Client Components with `useEffect` data fetching naturally avoid ISR caching
+- If you need route config, use a Server Component wrapper or layout
+
+**Correct pattern for Client Components:**
+```tsx
+"use client";
+// NO route segment config exports here!
+import { useEffect, useState } from "react";
+
+export default function MyPage() {
+  // Data fetched in useEffect is not cached by ISR
+}
+```
 
 ## Prevention
 
 For all new public tenant pages:
 
-1. Always add `export const dynamic = "force-dynamic"` and `export const revalidate = 0`
-2. Use `cache: "no-store"` on all fetch calls
-3. Never call `notFound()` on API errors - render an error state instead
-4. Test with backend unavailable to ensure graceful degradation
+1. **Server Components**: Can use `export const dynamic = "force-dynamic"` and `export const revalidate = 0`
+2. **Client Components**: Do NOT export route segment config; use `useEffect` for data fetching
+3. Use `cache: "no-store"` on server-side fetch calls
+4. Never call `notFound()` on API errors - render an error state instead
+5. Test with backend unavailable to ensure graceful degradation
