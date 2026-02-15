@@ -8,6 +8,33 @@
 
 ---
 
+## Public API Proxy for Public Website (2026-02-15) - IMPLEMENTED
+
+**Issue**: Public website (`fewo.*`) could not access backend API (`api.*`). Pages like `/unterkuenfte` returned 404 because API calls went to wrong host.
+
+**Solution**: Next.js rewrites proxy `/api/v1/public/*` to backend, with security guardrails.
+
+**Security Guardrails**:
+- Rewrite only `/api/v1/public/*` (no admin endpoints)
+- Middleware blocks all other `/api/v1/*` with 404
+- Only GET/HEAD allowed (POST/PUT/etc. return 405)
+- Server-only env var `API_BASE_URL` (not exposed to browser)
+
+**Files Changed**:
+- `frontend/next.config.js` (added rewrites)
+- `frontend/middleware.ts` (added API route protection)
+- `backend/scripts/pms_public_api_proxy_smoke.sh` (NEW)
+- `backend/docs/ops/runbook/26-public-api-proxy.md` (NEW)
+
+**Verification**:
+```bash
+PUBLIC_SITE_URL=https://fewo.kolibri-visions.de ./backend/scripts/pms_public_api_proxy_smoke.sh
+```
+
+**Status**: IMPLEMENTED (awaiting production deployment)
+
+---
+
 ## Website Pages Blocks 500 Fix (2026-02-14) - IMPLEMENTED
 
 **Issue**: `GET /api/v1/website/pages` returned HTTP 500 with Pydantic validation error: "blocks Input should be a valid list ... input_type=str"

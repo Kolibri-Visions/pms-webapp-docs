@@ -42,6 +42,7 @@
 | API returns 503 with schema error | "Schema not installed/out of date" | [Schema Drift](#schema-drift) |
 | Booking detail returns 500 | ResponseValidationError on status field | [Booking Status Validation](#booking-status-validation-error-500) |
 | Website pages returns 500 | "blocks Input should be a valid list" | [Website Pages Blocks 500](./runbook/25-website-pages-blocks-500.md) |
+| Public site API returns 404 | /unterkuenfte shows 404, API not proxied | [Public API Proxy](./runbook/26-public-api-proxy.md) |
 | Smoke script fails | Empty TOKEN/PID, bash errors | [Smoke Script Pitfalls](#smoke-script-pitfalls) |
 
 ---
