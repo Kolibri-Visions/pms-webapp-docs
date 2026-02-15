@@ -8,6 +8,33 @@
 
 ---
 
+## Public /unterkuenfte Cached 404 Fix (2026-02-15) - IMPLEMENTED
+
+**Issue**: `/unterkuenfte` page showed "This page could not be found" with `x-nextjs-cache: HIT`. Next.js ISR cached a 404 from earlier transient backend failures.
+
+**Root Cause**: No `dynamic = "force-dynamic"` on public pages, allowing ISR to cache notFound responses for up to 1 year.
+
+**Fix Applied**:
+1. Added `export const dynamic = "force-dynamic"` and `export const revalidate = 0` to all public pages
+2. Added `cache: "no-store"` to all fetch calls
+3. Removed `notFound()` calls on API errors - render error state instead (prevents ISR caching 404)
+
+**Files Changed**:
+- `frontend/app/(public)/unterkuenfte/page.tsx` (dynamic config)
+- `frontend/app/(public)/[slug]/page.tsx` (dynamic config, error state instead of notFound)
+- `frontend/app/(public)/page.tsx` (dynamic config, no-store fetches)
+- `backend/scripts/pms_public_unterkuenfte_page_smoke.sh` (NEW)
+- `backend/docs/ops/runbook/27-public-unterkuenfte-next-cache-404.md` (NEW)
+
+**Verification**:
+```bash
+PUBLIC_SITE_URL=https://fewo.kolibri-visions.de ./backend/scripts/pms_public_unterkuenfte_page_smoke.sh
+```
+
+**Status**: IMPLEMENTED (requires frontend redeployment to clear ISR cache)
+
+---
+
 ## Public API Proxy for Public Website (2026-02-15) - IMPLEMENTED
 
 **Issue**: Public website (`fewo.*`) could not access backend API (`api.*`). Pages like `/unterkuenfte` returned 404 because API calls went to wrong host.

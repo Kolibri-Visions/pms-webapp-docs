@@ -43,6 +43,7 @@
 | Booking detail returns 500 | ResponseValidationError on status field | [Booking Status Validation](#booking-status-validation-error-500) |
 | Website pages returns 500 | "blocks Input should be a valid list" | [Website Pages Blocks 500](./runbook/25-website-pages-blocks-500.md) |
 | Public site API returns 404 | /unterkuenfte shows 404, API not proxied | [Public API Proxy](./runbook/26-public-api-proxy.md) |
+| Public page cached as 404 | /unterkuenfte shows "not found", x-nextjs-cache: HIT | [Cached 404 Fix](./runbook/27-public-unterkuenfte-next-cache-404.md) |
 | Smoke script fails | Empty TOKEN/PID, bash errors | [Smoke Script Pitfalls](#smoke-script-pitfalls) |
 
 ---
