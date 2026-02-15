@@ -1,10 +1,135 @@
 # PMS-Webapp Project Status
 
-**Last Updated:** 2026-02-14
+**Last Updated:** 2026-02-15
 
-**Last Updated (actual):** 2026-02-14
+**Last Updated (actual):** 2026-02-15
 
 **Current Phase:** Phase 21 - Inventory/Availability Production Hardening
+
+---
+
+## Public Amenities Filter + RLS Policies (2026-02-15) - IMPLEMENTED
+
+**Issue**: Amenities filter on public website (`/unterkuenfte`) showed no amenities despite amenities being assigned to properties in Admin.
+
+**Root Cause (Multi-Part)**:
+1. RLS policies on `amenities` and `property_amenities` tables only allowed `authenticated` role, not `anon`/`public`
+2. SQL query used `ORDER BY a.sort_order` but `sort_order` was not in `SELECT DISTINCT` list (PostgreSQL error)
+3. PropertyFilter component didn't include "amenities" in default expanded sections
+
+**Fix Applied**:
+1. Created restrictive RLS SELECT policies for `anon` and `public` roles
+2. Added `a.sort_order` to SELECT DISTINCT list
+3. Added "amenities" to default `expandedSections` in PropertyFilter
+
+**Security Intent**:
+- RLS policies are **restrictive** (not permissive)
+- Only amenities assigned to `is_public=true AND is_active=true` properties are visible
+- Prevents cross-tenant data leakage
+
+**Files Changed**:
+- `frontend/app/(public)/components/PropertyFilter.tsx` (expandedSections default)
+- `backend/app/api/routes/public_site.py` (sort_order in SELECT, debug logging)
+- `supabase/migrations/20260215201000_add_public_amenities_rls.sql` (NEW)
+- `backend/docs/ops/runbook/10-amenities-admin-ui.md` (added Public Amenities Filter section)
+
+**Commits**: `8884ce7`, `6387aa1`, `555f390`, `730e9d2`
+
+**Verification**:
+```bash
+# Browser: Visit /unterkuenfte, verify amenities filter shows assigned amenities
+# API test:
+curl -s "https://api.fewo.kolibri-visions.de/api/v1/public/properties/filter-options" | jq '.amenities'
+# Expected: Array with amenities, not empty []
+```
+
+**Status**: ✅ IMPLEMENTED (migration must be applied in Supabase)
+
+---
+
+## Extra Services per_unit_night Billing Model (2026-02-15) - IMPLEMENTED
+
+**Issue**: Need billing model for items rented per unit per night (e.g., E-Bike rental: 2 bikes × 3 nights × 15€ = 90€).
+
+**Fix Applied**:
+1. Added `per_unit_night` to BillingUnit Literal type in backend schema
+2. Added UI option "Pro Einheit/Nacht" to extra services dropdowns
+3. Extended CHECK constraint on `extra_services.billing_unit` and `property_extra_services.billing_unit_override`
+
+**Files Changed**:
+- `backend/app/schemas/extra_services.py` (BillingUnit Literal extended)
+- `frontend/app/extra-services/page.tsx` (UI dropdown option)
+- `frontend/app/properties/[id]/extra-services/page.tsx` (UI dropdown option)
+- `supabase/migrations/20260215200000_add_per_unit_night_billing.sql` (NEW)
+- `backend/docs/ops/runbook/16-extra-services.md` (updated billing units table)
+
+**Commits**: `582a076`, `48dab3c`
+
+**Verification**:
+```bash
+# Create extra service with per_unit_night billing via Admin UI
+# Verify save succeeds without 500 error
+```
+
+**Status**: ✅ IMPLEMENTED (migration must be applied in Supabase)
+
+---
+
+## Public Website Inactive Properties Hidden (2026-02-15) - IMPLEMENTED
+
+**Issue**: Properties marked as inactive (`is_active = false`) were still appearing on public website.
+
+**Fix Applied**:
+- Added `p.is_active = true` filter to all public website queries
+- Affects: property list, property detail, filter-options
+
+**Files Changed**:
+- `backend/app/api/routes/public_site.py` (added is_active filter to WHERE clauses)
+- `backend/docs/ops/runbook/29-public-website-visibility.md` (NEW)
+
+**Commits**: `731dfc1`
+
+**Verification**:
+```bash
+curl -s "https://api.fewo.kolibri-visions.de/api/v1/public/properties" | jq '.items[].name'
+# Should NOT include inactive properties
+```
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
+## Property Edit Modal Extended Fields (2026-02-15) - IMPLEMENTED
+
+**Issue**: Many property fields were not editable in Admin UI (size_sqm, beds, booking rules, pricing, owner, address).
+
+**Fix Applied**:
+- Extended property edit modal with new sections: Kapazität, Adresse, Preise, Buchungsregeln, Check-in/out
+- Added owner dropdown with dynamic owner list
+- Added check_in_instructions textarea
+
+**New Editable Fields**:
+| Section | Fields |
+|---------|--------|
+| Kapazität | `size_sqm`, `beds` |
+| Buchungsregeln | `min_nights`, `max_nights` |
+| Preise | `base_price`, `cleaning_fee` |
+| Check-in/out | `check_in_time`, `check_out_time`, `check_in_instructions` |
+| Eigentümer | `owner_id` (dropdown) |
+| Adresse | `street`, `postal_code`, `city`, `country`, `latitude`, `longitude` |
+
+**Files Changed**:
+- `frontend/app/properties/[id]/page.tsx` (modal form extended)
+- `backend/docs/ops/runbook/28-property-edit-extended-fields.md` (NEW)
+
+**Commits**: `c372d62`, `df97474`
+
+**Verification**:
+```bash
+# Manual UI test: Navigate to /properties/[id], click Edit, verify all sections visible
+```
+
+**Status**: ✅ IMPLEMENTED
 
 ---
 
