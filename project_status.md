@@ -8,6 +8,27 @@
 
 ---
 
+## Static Map Display Fix (2026-02-15) - IMPLEMENTED
+
+**Issue**: Property detail page in Admin showed ~3000+ console errors (`net::ERR_NAME_NOT_RESOLVED`) for static map images.
+
+**Root Cause**:
+- Google Maps Static API was using placeholder `YOUR_API_KEY`
+- Fallback `staticmap.openstreetmap.de` had DNS resolution failures
+
+**Fix Applied**:
+- Replaced broken static map services with coordinate placeholder using MapPin icon
+- Google Maps link retained for full map view on click
+
+**Files Changed**:
+- `frontend/app/properties/[id]/page.tsx` (replaced static map img with coordinate display)
+
+**Commits**: `5b577cd`
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
 ## Public Amenities Filter + RLS Policies (2026-02-15) - IMPLEMENTED
 
 **Issue**: Amenities filter on public website (`/unterkuenfte`) showed no amenities despite amenities being assigned to properties in Admin.
