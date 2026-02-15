@@ -294,3 +294,116 @@ Summary: PASS=N, FAIL=0, SKIP=0
 
 - [Backend Amenities Routes](../../api/amenities.md) — API endpoint details
 - [Scripts README](../../../scripts/README.md#pms_amenities_toggle_smokesh) — Smoke test documentation
+
+---
+
+## Public Amenities Filter (RLS)
+
+**Added**: 2026-02-15
+
+### Overview
+
+The public website (`/unterkuenfte`) now includes an amenities filter, allowing guests to filter properties by available amenities (WiFi, Pool, Parking, etc.).
+
+### RLS Security Model
+
+**Migration**: `supabase/migrations/20260215201000_add_public_amenities_rls.sql`
+
+**Policies Created**:
+
+| Policy | Table | Role | Type |
+|--------|-------|------|------|
+| `amenities_select_anon` | `amenities` | `anon` | SELECT (restrictive) |
+| `amenities_select_public` | `amenities` | `public` | SELECT (restrictive) |
+| `property_amenities_select_anon` | `property_amenities` | `anon` | SELECT (restrictive) |
+| `property_amenities_select_public` | `property_amenities` | `public` | SELECT (restrictive) |
+
+**Security Intent**:
+- Policies are **restrictive** (not permissive)
+- Only amenities assigned to `is_public=true AND is_active=true` properties are visible
+- Prevents cross-tenant data leakage
+
+**Policy Logic** (amenities):
+```sql
+USING (
+  EXISTS (
+    SELECT 1
+    FROM property_amenities pa
+    JOIN properties p ON p.id = pa.property_id
+    WHERE pa.amenity_id = amenities.id
+      AND p.is_public = true
+      AND p.is_active = true
+  )
+)
+```
+
+### Common Issues
+
+#### Amenities Filter Empty Despite Assigned Amenities
+
+**Symptom**: `/unterkuenfte` shows no amenities in filter, but Admin shows amenities assigned.
+
+**Possible Causes**:
+
+1. **RLS migration not applied**
+   ```sql
+   -- Check if policies exist
+   SELECT policyname, roles FROM pg_policies
+   WHERE tablename IN ('amenities', 'property_amenities')
+   AND policyname LIKE '%anon%';
+   ```
+
+2. **Properties not public+active**
+   ```sql
+   -- Check property status
+   SELECT p.name, p.is_public, p.is_active, COUNT(pa.amenity_id)
+   FROM properties p
+   LEFT JOIN property_amenities pa ON pa.property_id = p.id
+   GROUP BY p.id, p.name, p.is_public, p.is_active;
+   ```
+
+3. **SQL DISTINCT ORDER BY error** (Fixed in commit `730e9d2`)
+   - Error: `ORDER BY expressions must appear in select list`
+   - Cause: `sort_order` was in ORDER BY but not in SELECT DISTINCT
+   - Fix: Added `a.sort_order` to SELECT list
+
+#### Permission Denied (RLS Block)
+
+**Symptom**: API returns empty array, backend logs show permission error.
+
+**Cause**: RLS policies missing or misconfigured.
+
+**Resolution**:
+```sql
+-- Apply migration
+-- Copy contents of supabase/migrations/20260215201000_add_public_amenities_rls.sql
+-- Execute in Supabase SQL Editor
+```
+
+### Verification
+
+**Browser Test**:
+1. Visit `/unterkuenfte`
+2. Check filter panel shows "Ausstattung" section
+3. Verify amenities checkboxes appear
+
+**API Test**:
+```bash
+curl -s "https://api.fewo.kolibri-visions.de/api/v1/public/properties/filter-options" \
+  -H "Host: fewo.kolibri-visions.de" | jq '.amenities'
+# Should return array of amenities, not empty []
+```
+
+**SQL Test**:
+```sql
+SELECT DISTINCT a.name, a.icon, a.category, a.sort_order
+FROM amenities a
+WHERE a.agency_id = 'YOUR_AGENCY_ID'
+  AND EXISTS (
+    SELECT 1 FROM property_amenities pa
+    JOIN properties p ON p.id = pa.property_id
+    WHERE pa.amenity_id = a.id
+      AND p.is_public = true AND p.is_active = true
+  )
+ORDER BY a.sort_order, a.name;
+```

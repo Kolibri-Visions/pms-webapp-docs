@@ -4,7 +4,7 @@
 
 **Audience**: Ops engineers, developers, on-call
 
-**Last Updated**: 2025-12-30
+**Last Updated**: 2026-02-15
 
 **Important**: This file is MANUALLY MAINTAINED. For historical code-derived snapshots, see [_staging/status-review-v3/](_staging/status-review-v3/PROJECT_STATUS.md).
 
@@ -186,6 +186,99 @@
 
 ---
 
+## Recent Changes (Ledger)
+
+### Property Edit Modal Extended Fields
+
+**Status**: ✅ IMPLEMENTED (2026-02-15)
+
+**What Changed**:
+- Added new editable fields: `size_sqm`, `beds`, `min_nights`, `max_nights`, `base_price`, `cleaning_fee`, `check_in_time`, `check_out_time`, `check_in_instructions`
+- Added owner dropdown (`owner_id`) with dynamic owner list
+- Added address fields (street, postal_code, city, country, coordinates)
+
+**Where**:
+- `frontend/app/properties/[id]/page.tsx` — Modal form extended with new sections
+
+**Commits**: `c372d62`, `df97474`
+
+**Verification Path**: Manual UI test or add smoke script TBD
+
+**Related Docs**: [runbook/28-property-edit-extended-fields.md](ops/runbook/28-property-edit-extended-fields.md)
+
+---
+
+### Public Website — Inactive Properties Hidden
+
+**Status**: ✅ IMPLEMENTED (2026-02-15)
+
+**What Changed**:
+- Properties with `is_active = false` are now excluded from all public website queries
+- Affects: property list, property detail, filter-options
+
+**Where**:
+- `backend/app/api/routes/public_site.py` — Added `p.is_active = true` to WHERE clauses
+
+**Commits**: `731dfc1`
+
+**Verification Path**: `curl /api/v1/public/properties` should not return inactive properties
+
+**Related Docs**: [runbook/29-public-website-visibility.md](ops/runbook/29-public-website-visibility.md)
+
+---
+
+### Extra Services — per_unit_night Billing Model
+
+**Status**: ✅ IMPLEMENTED (2026-02-15)
+
+**What Changed**:
+- Added new billing unit `per_unit_night` (Pro Einheit/Nacht)
+- Use case: E-Bike rental at 15€/unit/night (2 bikes × 3 nights = 90€)
+
+**Where**:
+- `backend/app/schemas/extra_services.py` — BillingUnit Literal extended
+- `frontend/app/extra-services/page.tsx` — UI dropdown option
+- `frontend/app/properties/[id]/extra-services/page.tsx` — UI dropdown option
+
+**Migrations**:
+- `supabase/migrations/20260215200000_add_per_unit_night_billing.sql` — CHECK constraint extended
+
+**Commits**: `582a076`, `48dab3c`
+
+**Verification Path**: Create extra service with `per_unit_night` billing, verify save succeeds
+
+**Related Docs**: [runbook/16-extra-services.md](ops/runbook/16-extra-services.md#billing-units-abrechnungsmodelle)
+
+---
+
+### Public Amenities Filter + RLS Policies
+
+**Status**: ✅ IMPLEMENTED (2026-02-15)
+
+**What Changed**:
+- Amenities filter now appears in public property search (`/unterkuenfte`)
+- Added restrictive RLS SELECT policies for `anon` and `public` roles
+- Fixed SQL DISTINCT ORDER BY compatibility issue (sort_order in SELECT)
+
+**Where**:
+- `frontend/app/(public)/components/PropertyFilter.tsx` — amenities section default expanded
+- `backend/app/api/routes/public_site.py` — Query fix (sort_order in SELECT)
+
+**Migrations**:
+- `supabase/migrations/20260215201000_add_public_amenities_rls.sql` — RLS policies for amenities/property_amenities
+
+**Security**:
+- RLS policies are restrictive: only amenities assigned to `is_public=true AND is_active=true` properties are visible
+- Prevents data leakage across tenants
+
+**Commits**: `8884ce7`, `6387aa1`, `555f390`, `730e9d2`
+
+**Verification Path**: Visit public `/unterkuenfte`, verify amenities filter shows assigned amenities
+
+**Related Docs**: [runbook/10-amenities-admin-ui.md](ops/runbook/10-amenities-admin-ui.md#public-amenities-filter-rls)
+
+---
+
 ## Next Steps (Ops)
 
 ### Immediate Actions
@@ -247,6 +340,6 @@
 
 ---
 
-**Last Updated**: 2025-12-30
+**Last Updated**: 2026-02-15
 **Maintained By**: Backend Team
 **Update Frequency**: Manual (update after significant deployments or config changes)

@@ -23,6 +23,10 @@
 | [03-auth.md](./runbook/03-auth.md) | Authentication, authorization, JWT |
 | [04-channel-manager.md](./runbook/04-channel-manager.md) | Channel integrations, sync ops |
 | [05-direct-booking-hardening.md](./runbook/05-direct-booking-hardening.md) | CORS, Host allowlist, tenant resolution |
+| [10-amenities-admin-ui.md](./runbook/10-amenities-admin-ui.md) | Amenities CRUD, icons, public filter RLS |
+| [16-extra-services.md](./runbook/16-extra-services.md) | Extra services billing units, per_unit_night |
+| [28-property-edit-extended-fields.md](./runbook/28-property-edit-extended-fields.md) | Property edit modal extended fields |
+| [29-public-website-visibility.md](./runbook/29-public-website-visibility.md) | Public website is_active filtering |
 
 ### Golden Paths (Most Common Operations)
 
@@ -45,6 +49,9 @@
 | Public site API returns 404 | /unterkuenfte shows 404, API not proxied | [Public API Proxy](./runbook/26-public-api-proxy.md) |
 | Public page cached as 404 | /unterkuenfte shows "not found", x-nextjs-cache: HIT | [Cached 404 Fix](./runbook/27-public-unterkuenfte-next-cache-404.md) |
 | Smoke script fails | Empty TOKEN/PID, bash errors | [Smoke Script Pitfalls](#smoke-script-pitfalls) |
+| Amenities filter empty | /unterkuenfte filter shows no amenities | [Amenities RLS](./runbook/10-amenities-admin-ui.md#public-amenities-filter-rls) |
+| Extra service billing error | per_unit_night not saving | [Extra Services Migration](./runbook/16-extra-services.md#migration-per_unit_night-2026-02-15) |
+| Property not on public site | Active property missing from /unterkuenfte | [Public Visibility](./runbook/29-public-website-visibility.md) |
 
 ---
 

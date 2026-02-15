@@ -32,6 +32,7 @@ The Extra Services feature allows agencies to:
 | `per_person_per_night` | Pro Person/Nacht | price × nights × guests × quantity |
 | `per_person_per_stay` | Pro Person/Aufenthalt | price × guests × quantity |
 | `per_unit` | Pro Einheit | price × quantity |
+| `per_unit_night` | Pro Einheit/Nacht | price × nights × quantity |
 
 **Examples:**
 
@@ -39,6 +40,29 @@ The Extra Services feature allows agencies to:
 - **Cleaning fee** (`per_stay`): 50€ × 1 = 50€
 - **Breakfast** (`per_person_per_night`): 10€ × 2 guests × 3 nights = 60€
 - **Airport transfer** (`per_unit`): 40€ × 2 = 80€
+- **E-Bike rental** (`per_unit_night`): 15€ × 2 bikes × 3 nights = 90€
+
+### Migration: per_unit_night (2026-02-15)
+
+**Migration file**: `supabase/migrations/20260215200000_add_per_unit_night_billing.sql`
+
+**What it does**:
+- Extends CHECK constraint on `extra_services.billing_unit` to include `per_unit_night`
+- Extends CHECK constraint on `property_extra_services.billing_unit_override` to include `per_unit_night`
+
+**How to apply** (if not yet applied):
+```sql
+-- Copy contents from migration file and run in Supabase SQL Editor
+-- Or use: supabase db push (if using Supabase CLI)
+```
+
+**Verification**:
+```sql
+-- Check constraint exists with new value
+SELECT conname, pg_get_constraintdef(oid)
+FROM pg_constraint
+WHERE conname LIKE '%billing_unit%';
+```
 
 ## Features
 
