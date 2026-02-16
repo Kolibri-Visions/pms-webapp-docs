@@ -30754,3 +30754,119 @@ curl -sS -o /dev/null -w "%{http_code}" "https://fewo.kolibri-visions.de/kontakt
 
 **Status:** IMPLEMENTED (awaiting PROD verification after Coolify redeploy)
 
+---
+
+## HTML Prettification Feature (2026-02-15) - IMPLEMENTED
+
+**Feature**: Optional HTML source prettification for public websites. When enabled, HTML output is formatted with proper indentation instead of minified single-line output.
+
+**Admin Control**: Toggle under `/website/developer` (Entwickler-Einstellungen)
+
+**Implementation Approach**: Middleware-based prettifier using `js-beautify`:
+1. Middleware checks `prettify_html` setting via `/api/v1/public/settings`
+2. If enabled, fetches rendered page and beautifies HTML before returning
+3. Uses `x-pms-prettify-pass` header to prevent infinite loops
+4. Setting cached for 60 seconds to minimize API calls
+
+**Database Changes**:
+- Migration `20260215220000_add_prettify_html_setting.sql`:
+  - Added `prettify_html BOOLEAN DEFAULT false` to `public_site_settings`
+
+**Backend Changes**:
+- `backend/app/schemas/public_site.py`: Added `prettify_html: bool = False` to `SiteSettingsResponse`
+- `backend/app/api/routes/website_admin.py`: Added `/developer-settings` GET/PUT endpoints
+
+**Frontend Changes**:
+- `frontend/app/website/developer/page.tsx` (NEW): Admin UI with toggle switch
+- `frontend/app/website/page.tsx`: Added "Entwickler" section link
+- `frontend/middleware.ts`: Added HTML prettification logic with caching
+- `frontend/package.json`: Added `js-beautify` dependency
+
+**Commits**: `0350956`, `7d368ec` (backwards-compatibility fix)
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
+## BUGFIX: Public Site Anon Grants (2026-02-15/16) - IMPLEMENTED
+
+**Issue**: Public website API endpoints returned HTTP 500 after HTML prettification implementation.
+
+**Affected Endpoints**:
+- `GET /api/v1/public/site/pages/{slug}` → 500
+- `GET /api/v1/public/site/filter-config` → 500
+- `GET /api/v1/public/site/settings` → 200 (worked)
+
+**Root Cause**: Missing PostgreSQL GRANT and RLS policies for `anon` role on public site tables.
+
+**Fix Applied**:
+- Migration `20260215230000_fix_public_site_anon_grants.sql`:
+  - `GRANT SELECT ON public_site_pages TO anon`
+  - `GRANT SELECT ON public_site_settings TO anon`
+  - `GRANT SELECT ON public_site_filter_config TO anon`
+  - Added RLS policies for anon (published pages only) and authenticated (full access)
+
+**Additional Grants Required** (applied manually via SQL Editor):
+- `GRANT SELECT ON properties TO anon` (for property lists)
+- `GRANT SELECT ON amenities TO anon` (for filter options)
+- `GRANT SELECT ON property_amenities TO anon` (for filter options)
+- `GRANT SELECT ON property_media TO anon` (for images)
+- `GRANT SELECT ON agencies TO anon` (for tenant resolution)
+
+**Commits**: `f69abe4`
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
+## BUGFIX: asyncpg JSONB String Parsing (2026-02-16) - IMPLEMENTED
+
+**Issue**: Public site endpoints returned HTTP 500 with Pydantic validation error even after grants were applied.
+
+**Error Message**:
+```
+pydantic_core.ValidationError: 1 validation error for PageResponse
+blocks
+  Input should be a valid list [type=list_type, input_value='[{"type": "hero_fullwidt...', input_type=str]
+```
+
+**Root Cause**: asyncpg returns JSONB columns as **raw JSON strings** when no JSON codec is registered. Pydantic expected Python list/dict but received string.
+
+**Affected Endpoints**:
+- `GET /api/v1/public/site/pages/{slug}` - `blocks` field
+- `GET /api/v1/public/site/filter-config` - `filter_order`, `visible_amenities`, `available_sort_options`, `labels`
+- `GET /api/v1/public/site/settings` - `social_links`, `nav`, `footer_links`, `seo_defaults`
+
+**Fix Applied**:
+- Added `import json` to `public_site.py`
+- Parse JSONB fields explicitly with `json.loads()` before Pydantic validation:
+
+```python
+# Parse JSONB fields that asyncpg returns as strings
+if isinstance(data.get("blocks"), str):
+    data["blocks"] = json.loads(data["blocks"])
+```
+
+**Files Changed**:
+- `backend/app/api/routes/public_site.py`:
+  - Added `import json`
+  - `get_site_settings`: Parse `social_links`, `nav`, `footer_links`, `seo_defaults`
+  - `get_page_by_slug`: Parse `blocks`
+  - `get_public_filter_config`: Parse `filter_order`, `visible_amenities`, `available_sort_options`, `labels`
+
+**Commits**: `15e47a6` (fix), `367c480` (cleanup debug logging)
+
+**Verification**:
+```bash
+curl -sS -o /dev/null -w "%{http_code}" "https://fewo.kolibri-visions.de/api/v1/public/site/pages/home"
+# Result: 200 ✓
+
+curl -sS -o /dev/null -w "%{http_code}" "https://fewo.kolibri-visions.de/api/v1/public/site/filter-config"
+# Result: 200 ✓
+
+curl -sS -o /dev/null -w "%{http_code}" "https://fewo.kolibri-visions.de/unterkuenfte"
+# Result: 200 ✓
+```
+
+**Status**: ✅ IMPLEMENTED (verified via curl tests 2026-02-16)
+
