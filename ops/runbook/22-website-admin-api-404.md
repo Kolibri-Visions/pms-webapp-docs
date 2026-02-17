@@ -92,8 +92,66 @@ Both return the full OpenAPI schema. The alias exists for consistency with `/api
 - `backend/app/api/routes/website_admin.py` - Website admin router
 - `backend/scripts/pms_admin_website_design_smoke.sh` - Smoke test
 
+## Branding Upload 404 (Website Logo System)
+
+### Symptom
+
+- `/api/v1/website/branding/upload` returns 404 Not Found
+- Logo upload in Website Design page fails with "Upload fehlgeschlagen"
+
+### Root Causes (Fixed 2026-02-17)
+
+1. **Invalid Form() parameter** - `Form(..., pattern=...)` is not valid in FastAPI
+   - Fix: Remove `pattern` param, validate manually in function body
+
+2. **Wrong storage bucket** - Code used `property-media` instead of `branding-assets`
+   - Fix: Use dedicated `branding-assets` bucket in `storage.py`
+
+3. **Missing website_admin module** - Module system didn't load router
+   - Fix: Created `backend/app/modules/website_admin.py` + added to bootstrap
+
+4. **Missing internal proxy route** - Frontend called backend directly (CORS/404)
+   - Fix: Created Next.js proxy routes:
+     - `frontend/app/api/internal/website/branding/upload/route.ts`
+     - `frontend/app/api/internal/website/branding/[assetType]/route.ts`
+
+### Request Flow
+
+```
+Browser (design-form.tsx)
+  → /api/internal/website/branding/upload (Next.js proxy)
+  → /api/v1/website/branding/upload (Backend)
+  → Supabase Storage (branding-assets bucket)
+```
+
+### Endpoints
+
+| Purpose | Internal Proxy | Backend Endpoint |
+|---------|----------------|------------------|
+| Upload logo/favicon | `POST /api/internal/website/branding/upload` | `POST /api/v1/website/branding/upload` |
+| Delete logo/favicon | `DELETE /api/internal/website/branding/{type}` | `DELETE /api/v1/website/branding/{type}` |
+
+Asset types: `logo_light`, `logo_dark`, `favicon`
+
+### Storage Path
+
+```
+branding-assets/{agency_id}/{asset_type}.{ext}
+```
+
+Example: `branding-assets/ffd0123a-10b6-40cd-8ad5-.../logo_light.png`
+
+### Related Files
+
+- `backend/app/api/routes/website_admin.py` - Upload/delete endpoints
+- `backend/app/core/storage.py` - `upload_branding_asset()` method
+- `backend/app/modules/website_admin.py` - Module registration
+- `frontend/app/website/design/design-form.tsx` - Logo upload UI
+- `frontend/app/api/internal/website/branding/` - Proxy routes
+
 ## Version History
 
+- **2026-02-17**: Added branding upload endpoints + internal proxy routes for website logo system
 - **2026-02-13**: Fixed PydanticUndefinedAnnotation (NavigationUpdateRequest/SeoUpdateRequest imports)
 - **2026-02-13**: Added `get_authenticated_user` compat alias in deps.py to fix ImportError
 - **2026-02-13**: Added website_admin router failsafe + OpenAPI alias
