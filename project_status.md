@@ -3410,6 +3410,43 @@ WHERE b.id::text LIKE '5e82c599%';
 
 ---
 
+### P5.1a: Booking Requests Detail — Guest/Property Names in Modal ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-18
+
+**Problem:**
+Booking request detail modal showed "—" for guest name, email, property name, and price fields.
+
+**Root Cause:**
+- `GET /api/v1/booking-requests/{id}` (detail endpoint) only returned `property_id` and `guest_id`
+- Frontend modal expected `property_name`, `guest_name`, `guest_email` fields
+- Same issue as P5.1, but for the detail endpoint instead of list endpoint
+
+**Solution:**
+1. Updated `BookingRequestDetail` schema to include:
+   - `property_name: Optional[str]`
+   - `guest_name: Optional[str]`
+   - `guest_email: Optional[str]`
+
+2. Modified `get_booking_request` SQL query:
+   - Added `LEFT JOIN properties p ON p.id = b.property_id`
+   - Added `LEFT JOIN guests g ON g.id = b.guest_id`
+   - Selected `p.name AS property_name`
+   - Selected `CONCAT_WS(' ', g.first_name, g.last_name) AS guest_name`
+   - Selected `g.email AS guest_email`
+
+**Files Changed:**
+- `backend/app/schemas/booking_requests.py` — Added name/email fields to detail schema
+- `backend/app/api/routes/booking_requests.py` — JOIN queries in detail endpoint
+
+**Verification:**
+```bash
+curl -s "https://api.example.com/api/v1/booking-requests/{id}" | jq '.guest_name, .guest_email, .property_name'
+# Returns: "Test test", "test@test.de", "Ferienhaus Düne - Test"
+```
+
+---
+
 ### P5.2: Agency Update 503 Error — Missing updated_at Column ✅ IMPLEMENTED
 
 **Date Completed:** 2026-02-18
