@@ -31139,3 +31139,54 @@ rg "grayscale" frontend/app/\(public\)/components/PropertiesListClient.tsx
 ```
 
 **Status**: ✅ IMPLEMENTED
+
+---
+
+## P5.5a: Property Update 500/403 Errors Fix (2026-02-18) - IMPLEMENTED
+
+**Issue**: Property update endpoint returned HTTP 500 and 403 errors after P5.5 implementation.
+
+**Error Messages**:
+1. `'UUID' object has no attribute 'replace'` (500)
+2. `Owner must be an active member of the agency` (403)
+
+**Root Causes**:
+1. **UUID Handling**: Code tried to call `UUID(value)` on values that were already UUID objects from Pydantic
+2. **Owner Validation**: Frontend sends all fields including unchanged `owner_id`, triggering validation on existing (possibly inactive) owners
+
+**Fixes Applied**:
+
+1. `backend/app/services/property_service.py`:
+   - Robust UUID conversion: `value if isinstance(value, UUID) else UUID(str(value))`
+   - Owner validation only when owner_id actually CHANGES (compare with current DB value)
+   - String conversion for `deactivation_reason` before calling `.strip()`
+
+2. `backend/app/api/routes/properties.py`:
+   - Added `ValidationException` handling (returns 422 instead of being caught as 500)
+   - Improved error logging with full traceback
+
+**Code Changes**:
+```python
+# Before (broken):
+owner_id = UUID(property_data["owner_id"])
+await self._verify_owner_access(owner_id, agency_id)
+
+# After (fixed):
+current_property = await self.get_property(property_id, agency_id)
+current_owner_id = current_property.get("owner_id")
+if property_data.get("owner_id"):
+    new_owner_id = owner_id_val if isinstance(owner_id_val, UUID) else UUID(str(owner_id_val))
+    # Only validate if owner is actually changing
+    if str(new_owner_id) != str(current_owner_id) if current_owner_id else True:
+        await self._verify_owner_access(new_owner_id, agency_id)
+```
+
+**Best Practice Note**:
+- Properties can optionally have an owner (`owner_id`)
+- `owner_id = NULL`: Property belongs directly to the agency
+- `owner_id = user_id`: Property managed for a specific owner (useful for agencies managing multiple property owners)
+- Owner validation only required when changing ownership, not on every update
+
+**Commits**: `39249e4`, `fd81ac0`, `faae3e2`, `e54859b`
+
+**Status**: ✅ IMPLEMENTED
