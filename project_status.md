@@ -3486,6 +3486,84 @@ RETURNING name, updated_at;
 
 ---
 
+### P5.3: Property Update 500 Error — Missing updated_at in Query ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-18
+
+**Problem:**
+PATCH `/api/v1/properties/{id}` returned 500 Internal Server Error when updating property fields (name, description, etc.).
+
+**Root Cause:**
+- `PropertyService.update_property()` built a dynamic UPDATE query
+- The query did NOT include `updated_at = NOW()` in the SET clause
+- PostgreSQL column likely had NOT NULL constraint or trigger expecting update
+
+**Solution:**
+Added `updated_at = NOW()` to the SET clause before executing:
+
+```python
+# backend/app/services/property_service.py
+# Always update updated_at timestamp
+set_clauses.append("updated_at = NOW()")
+```
+
+**Files Changed:**
+- `backend/app/services/property_service.py` — Added updated_at to update query
+
+**Verification:**
+```bash
+curl -X PATCH "https://api.example.com/api/v1/properties/{id}" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"name": "Updated Name"}'
+# Returns: 200 OK with updated property
+```
+
+---
+
+### P5.4: Unlisted Properties Visible on Public Website ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-18
+
+**Problem:**
+Properties marked as "Nicht gelistet" (unlisted) in Admin Panel still appeared on public website `/unterkuenfte`.
+
+**Root Cause:**
+- Admin UI sets `listed_at = NULL` when unlisting a property
+- Public API queries only filtered by `is_public = true` and `is_active = true`
+- Missing filter: `listed_at IS NOT NULL`
+
+**Solution:**
+Added `listed_at IS NOT NULL` filter to ALL public property queries:
+
+```sql
+-- Before
+WHERE p.agency_id = $1 AND p.is_public = true AND p.is_active = true
+
+-- After
+WHERE p.agency_id = $1 AND p.is_public = true AND p.is_active = true AND p.listed_at IS NOT NULL
+```
+
+**Affected Queries in `public_site.py`:**
+1. `list_public_properties` — Main property list
+2. `get_public_property` — Property detail page
+3. `get_filter_options` — Cities dropdown
+4. `get_filter_options` — Property types dropdown
+5. `get_filter_options` — Price/guest ranges
+6. `get_filter_options` — Amenities filter
+
+**Files Changed:**
+- `backend/app/api/routes/public_site.py` — Added listing filter to 6 queries
+
+**Verification:**
+```sql
+-- Property should NOT appear when listed_at IS NULL
+SELECT id, name, listed_at FROM properties
+WHERE agency_id = $1 AND is_public = true AND is_active = true AND listed_at IS NULL;
+-- These should NOT appear on public website
+```
+
+---
+
 ### Option B: Guests CRUD (Admin UI) ✅ VERIFIED
 
 **Date Completed:** 2026-02-01
