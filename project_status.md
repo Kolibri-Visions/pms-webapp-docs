@@ -31190,3 +31190,92 @@ if property_data.get("owner_id"):
 **Commits**: `39249e4`, `fd81ac0`, `faae3e2`, `e54859b`
 
 **Status**: ✅ IMPLEMENTED
+
+---
+
+## P5.6: Missing CRUD Operations Backend (2026-02-18) - IMPLEMENTED
+
+**Issue**: Several API entities lacked complete CRUD operations (missing DELETE, UPDATE endpoints).
+
+**Analysis Results**:
+| Entity | Missing Operations |
+|--------|-------------------|
+| Guests | DELETE |
+| Owners | DELETE |
+| Owner Statements | UPDATE, DELETE |
+| Availability Blocks | UPDATE |
+| Owner Invites | UPDATE |
+| Property Amenities | Individual DELETE |
+
+**Backend Changes**:
+
+1. `backend/app/services/guest_service.py`:
+   - Added `delete_guest()` method (soft delete via `deleted_at`)
+
+2. `backend/app/api/routes/guests.py`:
+   - Added `DELETE /guests/{guest_id}` endpoint
+
+3. `backend/app/api/routes/owners.py`:
+   - Added `DELETE /owners/{owner_id}` endpoint (soft delete, checks for active properties)
+   - Added `PATCH /owner-statements/{statement_id}` endpoint (update draft statements)
+   - Added `DELETE /owner-statements/{statement_id}` endpoint (delete draft statements only)
+   - Added `PATCH /owners/invites/{invite_id}` endpoint (update pending invites)
+
+4. `backend/app/services/availability_service.py`:
+   - Added `update_block()` method with conflict detection via inventory_ranges
+
+5. `backend/app/api/routes/availability.py`:
+   - Added `PATCH /availability/blocks/{block_id}` endpoint
+   - Added `AvailabilityBlockUpdate` schema import
+
+6. `backend/app/schemas/availability.py`:
+   - Added `AvailabilityBlockUpdate` schema (optional start_date, end_date, reason)
+
+7. `backend/app/services/amenity_service.py`:
+   - Added `remove_property_amenity()` method
+
+8. `backend/app/api/routes/amenities.py`:
+   - Added `DELETE /amenities/property/{property_id}/{amenity_id}` endpoint
+
+**Commit**: `3c30adb`
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
+## P5.6a: Missing CRUD Operations Admin Panel UI (2026-02-18) - IMPLEMENTED
+
+**Issue**: Backend CRUD endpoints from P5.6 needed frontend integration.
+
+**Frontend Changes**:
+
+1. `frontend/app/guests/[id]/page.tsx`:
+   - Added delete button with confirmation modal
+   - Soft deletes guest (preserves booking history)
+   - Redirects to guest list after deletion
+
+2. `frontend/app/owners/[ownerId]/page.tsx`:
+   - Added delete button with confirmation modal
+   - Checks for active properties before allowing deletion
+   - Warning message if properties are still assigned
+   - Added delete button for draft statements (status = "generated")
+   - Delete button hidden for finalized/sent statements
+
+3. `frontend/app/properties/[id]/calendar/page.tsx`:
+   - Updated `handleUpdateBlock()` to use new PATCH endpoint
+   - Previously used workaround: delete + create
+   - Now uses proper `PATCH /availability/blocks/{id}`
+
+**UI Features**:
+- All delete actions have confirmation modals
+- Loading states during API calls
+- Error handling with toast notifications
+- German localization
+
+**Notes**:
+- Owner Invites: No frontend UI exists yet (backend ready)
+- Property Amenities: Uses checkbox modal with PUT (replaces all) - works well for UX
+
+**Commit**: `f8d331e`
+
+**Status**: ✅ IMPLEMENTED
