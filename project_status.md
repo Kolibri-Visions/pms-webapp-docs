@@ -3360,6 +3360,95 @@ EXPECT_COMMIT=<sha> ./backend/scripts/pms_verify_deploy.sh
 
 ---
 
+### P5.1: Booking Requests List — Guest/Property Names + Search Fix ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-18
+
+**Problem:**
+1. Booking requests created via public `/buchung` page did not appear in Admin Panel
+2. API returned only `property_id` and `guest_id` without names
+3. Frontend expected `property_name`, `guest_name`, `guest_email` for display and search
+4. No `search` parameter in `list_booking_requests` endpoint
+
+**Root Cause:**
+- SQL query selected only IDs, not joined names
+- Frontend client-side search couldn't work without the name fields
+- Backend endpoint lacked search parameter entirely
+
+**Solution:**
+1. Updated `BookingRequestListItem` schema to include optional fields:
+   - `property_name: Optional[str]`
+   - `guest_name: Optional[str]`
+   - `guest_email: Optional[str]`
+
+2. Modified `list_booking_requests` SQL query:
+   - Added `LEFT JOIN properties p ON p.id = b.property_id`
+   - Added `LEFT JOIN guests g ON g.id = b.guest_id`
+   - Selected `p.name AS property_name`
+   - Selected `CONCAT_WS(' ', g.first_name, g.last_name) AS guest_name`
+   - Selected `g.email AS guest_email`
+   - Updated all WHERE clauses to use `b.` table alias
+
+3. Added `search` query parameter to endpoint:
+   - Searches in `b.booking_reference`, guest name/email, property name
+   - Uses `EXISTS` subqueries for efficient filtering
+
+**Files Changed:**
+- `backend/app/schemas/booking_requests.py` — Added name/email fields to schema
+- `backend/app/api/routes/booking_requests.py` — JOIN queries + search parameter
+
+**Verification:**
+```sql
+-- Booking exists with correct agency_id
+SELECT b.id, b.agency_id, p.name, g.email
+FROM bookings b
+LEFT JOIN properties p ON p.id = b.property_id
+LEFT JOIN guests g ON g.id = b.guest_id
+WHERE b.id::text LIKE '5e82c599%';
+-- Returns: agency_id = ffd0123a-..., property = 'Ferienhaus Düne - Test'
+```
+
+---
+
+### P5.2: Agency Update 503 Error — Missing updated_at Column ✅ IMPLEMENTED
+
+**Date Completed:** 2026-02-18
+
+**Problem:**
+PATCH `/api/v1/agencies/current` returned 503 "Service temporarily unavailable" when updating organisation name.
+
+**Root Cause:**
+- `update_current_agency` endpoint executed: `UPDATE agencies SET name = $1, updated_at = now() WHERE id = $2`
+- `agencies` table lacked `updated_at` column in production database
+- Schema defined column but migration may not have been applied
+
+**Solution:**
+Created idempotent migration to add column if missing:
+
+```sql
+-- supabase/migrations/20260218081000_add_agencies_updated_at.sql
+ALTER TABLE public.agencies
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+```
+
+**Files Changed:**
+- `supabase/migrations/20260218081000_add_agencies_updated_at.sql` — New migration
+
+**Verification:**
+```sql
+-- Check column exists
+SELECT column_name FROM information_schema.columns
+WHERE table_name = 'agencies' AND column_name = 'updated_at';
+-- Should return: updated_at
+
+-- Test update
+UPDATE agencies SET name = 'Test', updated_at = now()
+WHERE id = 'ffd0123a-10b6-40cd-8ad5-66eee9757ab7'
+RETURNING name, updated_at;
+```
+
+---
+
 ### Option B: Guests CRUD (Admin UI) ✅ VERIFIED
 
 **Date Completed:** 2026-02-01
