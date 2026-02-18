@@ -31347,3 +31347,45 @@ if (mediaResponse.ok) {
 **Commit**: `cd4907b`
 
 **Status**: ✅ IMPLEMENTED
+
+---
+
+## P5.7a: Favorites Bugfixes (2026-02-18) - IMPLEMENTED
+
+**Issue 1**: Favoriten auf Property-Detail-Seite wurden nicht in LocalStorage gespeichert.
+
+**Ursache**: `PropertyDetailClient.tsx` hatte einen `isFavorite` State, der nicht mit LocalStorage verbunden war.
+
+**Fix** (`PropertyDetailClient.tsx`):
+- Gleicher LocalStorage-Key wie Listen-Seite (`pms_favorite_properties`)
+- Lädt Favoriten-Status beim Mount
+- `toggleFavorite` Funktion speichert in LocalStorage
+- Button-Text wechselt zwischen "Merken" und "Gemerkt"
+
+**Commit**: `2793610`
+
+---
+
+**Issue 2**: Klick auf Herz-Button in der Listen-Seite navigierte zur Detail-Seite statt Favorit zu togglen.
+
+**Ursache**: Button innerhalb von Next.js `<Link>` - `e.preventDefault()` allein reicht nicht.
+
+**Fix** (`PropertiesListClient.tsx`):
+```typescript
+<button
+  type="button"
+  className="... z-10"
+  onClick={(e) => toggleFavorite(property.id, e)}
+  onMouseDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+>
+
+// In toggleFavorite:
+e.preventDefault();
+e.stopPropagation();
+e.nativeEvent.stopImmediatePropagation();
+```
+
+**Commit**: `2626f2c`
+
+**Status**: ✅ IMPLEMENTED
