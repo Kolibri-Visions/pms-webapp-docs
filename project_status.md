@@ -31074,3 +31074,68 @@ curl -sS -o /dev/null -w "%{http_code}" "https://fewo.kolibri-visions.de/unterku
 
 **Status**: ✅ IMPLEMENTED (verified via curl tests 2026-02-16)
 
+
+---
+
+## P5.5: Property Deactivation with Public Notice (2026-02-18) - IMPLEMENTED
+
+**Feature Request**: When a property is deactivated (`is_active=false`), show it grayed out on the public website with a notice explaining why it's unavailable, instead of hiding it completely.
+
+**User Requirements**:
+1. Deactivation reason = required field when deactivating
+2. Show inactive properties in public list (grayed out at 60% desaturation)
+3. Display deactivation reason on public website
+
+**Database Migration** (`20260218123000_add_property_deactivation_fields.sql`):
+```sql
+ALTER TABLE public.properties ADD COLUMN deactivation_reason TEXT;
+ALTER TABLE public.properties ADD COLUMN deactivated_at TIMESTAMPTZ;
+```
+
+**Backend Changes**:
+
+1. `backend/app/services/property_service.py`:
+   - Added `deactivation_reason` and `deactivated_at` to SELECT queries
+   - Deactivation logic: requires reason when `is_active=false`, clears fields when reactivating
+   - Validation: throws `ValidationException` if reason missing
+
+2. `backend/app/schemas/properties.py`:
+   - `PropertyResponse`: Added `deactivation_reason` and `deactivated_at` fields
+   - `PropertyUpdate`: Added `deactivation_reason` field (max 500 chars)
+
+3. `backend/app/api/routes/public_site.py`:
+   - Removed `is_active=true` filter from all public queries (now shows inactive but listed properties)
+   - Added `is_active` and `deactivation_reason` to SELECT in list and detail endpoints
+   - Updated filter-options queries for consistency
+
+4. `backend/app/schemas/public_site.py`:
+   - `PublicPropertyListItem`: Added `is_active: bool = True`, `deactivation_reason: Optional[str]`
+   - `PublicPropertyDetail`: Added `is_active: bool = True`, `deactivation_reason: Optional[str]`
+
+**Frontend Changes**:
+
+1. `frontend/app/properties/[id]/page.tsx` (Admin Panel):
+   - Added `deactivation_reason` and `deactivated_at` to Property interface
+   - Added textarea for deactivation reason in edit modal (appears when unchecking "Aktiv")
+   - Yellow warning box explains the reason will be shown publicly
+
+2. `frontend/app/(public)/components/PropertiesListClient.tsx`:
+   - Added `is_active` and `deactivation_reason` to Property interface
+   - Applied `grayscale-[60%] opacity-80` CSS classes for inactive properties
+   - Shows amber "Nicht verfügbar" notice with deactivation reason
+
+3. `frontend/app/(public)/components/PropertyDetailClient.tsx`:
+   - Added `is_active` and `deactivation_reason` to Property interface
+   - Shows amber banner at top: "Derzeit nicht verfügbar" with reason
+   - Disabled booking button for inactive properties (grayed out, "Nicht verfügbar")
+
+**Verification**:
+```bash
+# Check list endpoint returns is_active field
+rg "is_active" backend/app/api/routes/public_site.py | head -5
+
+# Check frontend grayscale styling
+rg "grayscale" frontend/app/\(public\)/components/PropertiesListClient.tsx
+```
+
+**Status**: ✅ IMPLEMENTED
