@@ -31279,3 +31279,71 @@ if property_data.get("owner_id"):
 **Commit**: `f8d331e`
 
 **Status**: ✅ IMPLEMENTED
+
+---
+
+## P5.7: Frontend ↔ Backend Verdrahtungen (2026-02-18) - IMPLEMENTED
+
+**Issue**: Zwei TODOs im Frontend-Code für fehlende Funktionalität.
+
+### 5.7.1 Favoriten-Funktionalität
+
+**Datei**: `frontend/app/(public)/components/PropertiesListClient.tsx`
+
+**Vorher**: Heart-Icon auf Property-Karten ohne Funktion
+
+**Implementierung**:
+- LocalStorage-basierte Favoriten (kein Login erforderlich)
+- Speicherung unter Key `pms_favorite_properties`
+- Heart-Icon zeigt gefüllt (rot) wenn favorisiert
+- Persistiert über Browser-Sessions
+
+**Code**:
+```typescript
+const FAVORITES_STORAGE_KEY = "pms_favorite_properties";
+
+// Load on mount
+useEffect(() => {
+  const stored = localStorage.getItem(FAVORITES_STORAGE_KEY);
+  if (stored) setFavorites(new Set(JSON.parse(stored)));
+}, []);
+
+// Toggle function
+const toggleFavorite = (propertyId, e) => {
+  e.preventDefault();
+  setFavorites(prev => {
+    const newFavorites = new Set(prev);
+    newFavorites.has(propertyId)
+      ? newFavorites.delete(propertyId)
+      : newFavorites.add(propertyId);
+    localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify([...newFavorites]));
+    return newFavorites;
+  });
+};
+```
+
+### 5.7.2 Property Image in Booking Detail
+
+**Datei**: `frontend/app/bookings/[id]/page.tsx`
+
+**Vorher**: Grauer Platzhalter mit Home-Icon
+
+**Implementierung**:
+- Lädt Property-Medien von `/api/internal/properties/{id}/media`
+- Zeigt Cover-Bild oder erstes Bild als Hauptbild
+- Fallback auf Platzhalter wenn kein Bild vorhanden
+
+**Code**:
+```typescript
+// Fetch property media for main image
+const mediaResponse = await fetch(`/api/internal/properties/${propertyId}/media`);
+if (mediaResponse.ok) {
+  const mediaData = await mediaResponse.json();
+  const mainImage = mediaData.find(m => m.is_cover) || mediaData[0];
+  if (mainImage?.url) setPropertyImage(mainImage.url);
+}
+```
+
+**Commit**: `cd4907b`
+
+**Status**: ✅ IMPLEMENTED
