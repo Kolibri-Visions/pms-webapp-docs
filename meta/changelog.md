@@ -12,6 +12,39 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - Phase 17A: GitHub Setup (Branching, CI/CD, Templates)
 - Produktspezifikation vollständig (Phase 1-16)
 
+### Added (2026-02-19) - User Profile Management & i18n
+
+#### Profile Pages
+- `/profile` - Profile view page (read-only display)
+- `/profile/edit` - Profile edit page with avatar upload
+- `/profile/security` - Security settings (password change, sessions)
+
+#### Profile API Routes (Session-Based Auth)
+- `GET /api/internal/profile` - Fetch current user's profile data
+- `PATCH /api/internal/profile` - Update profile (explicit INSERT/UPDATE for RLS)
+- `POST /api/internal/profile/avatar` - Upload avatar to Supabase Storage
+- `DELETE /api/internal/profile/avatar` - Remove avatar
+- `POST /api/internal/auth/password` - Change password
+- `GET/DELETE /api/internal/auth/sessions` - Session management
+
+#### Database Migrations
+- `20260219100000_add_avatars_storage.sql` - Create avatars storage bucket with RLS
+- `20260219110000_add_missing_profiles_columns.sql` - Add profile columns to profiles table
+
+#### AdminShell Topbar Updates
+- Profile dropdown shows actual profile data (display_name, first_name, last_name)
+- Avatar image displayed in topbar button and dropdown
+- Removed redundant user info from sidebar bottom
+
+#### i18n
+- Full German/English translations for profile and security sections
+- Translation keys: `profile.*`, `security.*`, `messages.*`
+
+#### Documentation
+- `docs/frontend/profile.md` - Profile management documentation
+
+---
+
 ### Added (2026-02-18) - Permission System & Role Impersonation
 
 #### Frontend Permission Context
