@@ -12,6 +12,26 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - Phase 17A: GitHub Setup (Branching, CI/CD, Templates)
 - Produktspezifikation vollständig (Phase 1-16)
 
+### Added (2026-02-18) - Permission System & Role Impersonation
+
+#### Frontend Permission Context
+- `PermissionContext` für granulare UI-Permission-Checks
+- `usePermissions()` Hook mit `hasPermission()`, `hasAnyPermission()`, `hasAllPermissions()`
+- `NAV_PERMISSION_MAP` für Navigation-Filtering in AdminShell
+- Permission-basierte Button-Visibility auf allen Hauptseiten:
+  - `/bookings`: "Neue Buchung" (`bookings.create`)
+  - `/bookings/[id]`: "Stornieren" (`bookings.delete`), "Bestätigen" (`bookings.update`)
+  - `/properties`: "Neues Objekt" (`properties.create`)
+  - `/guests`: "Neuer Gast" (`guests.create`)
+  - `/team`: "Mitglied einladen" (`team.manage`)
+
+#### Role Impersonation ("Als Rolle ansehen")
+- Admins können andere Rollen simulieren (Frontend-only)
+- `ImpersonationBanner` zeigt aktive Impersonation
+- Navigation und Buttons werden gefiltert basierend auf impersonierter Rolle
+- State wird in `localStorage` persistiert (`pms_impersonated_role`)
+- "Beenden" Button zum Stoppen der Impersonation
+
 ---
 
 ## Produktspezifikation (Frozen Phases)

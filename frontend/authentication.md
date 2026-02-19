@@ -285,6 +285,141 @@ if (!isAdmin) {
 
 ---
 
+## Permission-Based Authorization (PermissionContext)
+
+**Location**: `frontend/app/lib/contexts/PermissionContext.tsx`
+
+**Purpose**: Granular permission checks for UI elements (buttons, menus, pages)
+
+**Added**: 2026-02-18
+
+### Overview
+
+The PermissionContext provides client-side permission checks:
+
+- **Permissions loaded from backend** via `/api/internal/permissions/me`
+- **Admin bypass**: Admins have all permissions (unless impersonating)
+- **Role impersonation**: Admins can preview other roles
+- **Navigation filtering**: AdminShell filters menu items based on permissions
+
+### Usage
+
+```typescript
+import { usePermissions } from "../lib/contexts/PermissionContext";
+
+function MyComponent() {
+  const { hasPermission, isAdmin, isImpersonating } = usePermissions();
+
+  // Check single permission
+  if (!hasPermission("bookings.create")) {
+    return null; // Hide button
+  }
+
+  return <button>Create Booking</button>;
+}
+```
+
+### Permission Codes
+
+Format: `resource.action`
+
+| Permission | Description |
+|------------|-------------|
+| `bookings.read` | View bookings |
+| `bookings.create` | Create new bookings |
+| `bookings.update` | Confirm/modify bookings |
+| `bookings.delete` | Cancel/delete bookings |
+| `properties.read` | View properties |
+| `properties.create` | Create new properties |
+| `properties.update` | Modify properties |
+| `guests.read` | View guests |
+| `guests.create` | Create guests |
+| `team.read` | View team members |
+| `team.manage` | Invite/manage team |
+| `team.roles` | Manage roles & permissions |
+
+### Protected UI Elements
+
+| Page | Button | Permission |
+|------|--------|------------|
+| `/bookings` | "Neue Buchung" | `bookings.create` |
+| `/bookings/[id]` | "Stornieren" | `bookings.delete` |
+| `/bookings/[id]` | "Bestätigen" | `bookings.update` |
+| `/properties` | "Neues Objekt" | `properties.create` |
+| `/guests` | "Neuer Gast" | `guests.create` |
+| `/team` | "Mitglied einladen" | `team.manage` |
+
+### Navigation Filtering
+
+**Location**: `frontend/app/components/AdminShell.tsx`
+
+The sidebar navigation is filtered based on `NAV_PERMISSION_MAP`:
+
+```typescript
+// In PermissionContext.tsx
+export const NAV_PERMISSION_MAP: Record<string, string[]> = {
+  dashboard: [],                              // Everyone
+  availability: ["calendar.read"],
+  bookings: ["bookings.read"],
+  properties: ["properties.read"],
+  guests: ["guests.read"],
+  team: ["team.read"],
+  roles: ["team.roles"],
+  // ... more mappings
+};
+```
+
+**Function**: `canAccessNavItem(navKey, permissions, isAdmin)`
+- Returns `true` if user has ANY of the required permissions
+- Admins always have access (unless impersonating)
+
+---
+
+## Role Impersonation ("Als Rolle ansehen")
+
+**Purpose**: Admins can preview the app as a different role
+
+**Location**: `frontend/app/lib/contexts/PermissionContext.tsx`
+
+### How It Works
+
+1. Admin clicks "Als Rolle ansehen" on `/settings/roles`
+2. `impersonateRole(role)` is called with role data + permissions
+3. State saved to `localStorage` (key: `pms_impersonated_role`)
+4. Navigation and buttons reflect impersonated role's permissions
+5. Banner shows at top of page (ImpersonationBanner component)
+6. Admin clicks "Beenden" to stop impersonation
+
+### State Management
+
+```typescript
+// When impersonating:
+isImpersonating: true
+impersonatedRole: { role_id, role_code, role_name, permissions }
+isAdmin: false        // Disabled during impersonation
+isActualAdmin: true   // True value preserved
+
+// Permissions from impersonated role are used for all checks
+```
+
+### ImpersonationBanner Component
+
+**Location**: `frontend/app/components/ImpersonationBanner.tsx`
+
+Shows when impersonating:
+- Role name and permission count
+- "Beenden" button to stop impersonation
+
+**Styling**: Pink/coral background (`bg-t-accent`)
+
+### Security Notes
+
+- **Frontend-only**: Does NOT affect backend API calls
+- Backend still validates actual user permissions
+- Impersonation is for UI preview only (UX testing)
+
+---
+
 ## Related Documentation
 
 - [Ops Console](ops-console.md) - Frontend `/ops/*` pages
@@ -295,8 +430,11 @@ if (!isAdmin) {
 - `frontend/middleware.ts` - Session refresh middleware
 - `frontend/app/ops/layout.tsx` - Server-side session + role checks
 - `frontend/app/lib/supabase-server.ts` - Supabase server client (assumed)
+- `frontend/app/lib/contexts/PermissionContext.tsx` - Permission context + impersonation
+- `frontend/app/components/ImpersonationBanner.tsx` - Impersonation UI banner
+- `frontend/app/components/AdminShell.tsx` - Navigation filtering
 
 ---
 
-**Last Updated**: 2025-12-30
+**Last Updated**: 2026-02-18
 **Maintained By**: Frontend Team
