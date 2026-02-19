@@ -34,6 +34,41 @@
 
 ---
 
+## Security Audit Remediation Summary (2026-02-19) - DOCUMENTED
+
+**Audit Report**: `../../Audit/Audit-2026-02-19.md`
+
+### Resolved (12/15 findings)
+
+| # | Finding | Severity | Fix |
+|---|---------|----------|-----|
+| 2 | RLS on missing tables | CRITICAL | Migration `20260219120000_enable_missing_rls.sql` |
+| 3 | XSS / DOMPurify | CRITICAL | DOMPurify 3.3.1 in BlockRenderer + RichTextEditor |
+| 14 | Seed data password | CRITICAL | Changed to `DevTest2026!Secure` |
+| 1 | Backend dependencies | HIGH | Updated aiohttp 3.13.3, python-multipart 0.0.22, starlette 0.47.2, h11 0.16.0, sentry-sdk 2.8.0, filelock 3.20.3 |
+| 5 | Security headers | HIGH | X-Frame-Options, HSTS, etc. in next.config.js |
+| 6 | Dynamic SQL | HIGH | Whitelist in epic_a.py |
+| 7 | Next.js version | HIGH | Upgraded to ^15.5.12 |
+| 8 | Password requirements | HIGH | min 12 chars + complexity in config.toml |
+| 9 | IP-based rate limiting | MEDIUM | `check_ip_rate_limit()` in auth_rate_limit.py |
+| 10 | PII in audit logs | MEDIUM | Guest email removed from metadata |
+| 11 | Debug info exposure | MEDIUM | Generic 503 for DB errors |
+| 12 | CORS config | MEDIUM | Explicit origins (no wildcard) |
+| 13 | localStorage tokens | MEDIUM | Removed all localStorage token writes from auth-context.tsx |
+
+### Open (3/15 findings)
+
+| # | Finding | Severity | Status |
+|---|---------|----------|--------|
+| 4 | Webhook signatures (Booking.com, Expedia, FeWo, Google) | HIGH | Deferred — Channel Manager not enabled |
+| 4.3 | PII column encryption | CRITICAL (Audit) | Infrastructure ready, execution deferred (Supabase at-rest encryption sufficient for MVP) |
+| 15 | Smoke cookie httpOnly=false | LOW | By design (5min TTL, CI-only) |
+
+**Commits**: `0a680e5`, `d060f84`, `4eeddf0`, `f7858b9`
+
+**Status**: ✅ DOCUMENTED
+
+---
 
 ## Page SEO Robots Meta Directive (2026-02-15) - IMPLEMENTED
 
