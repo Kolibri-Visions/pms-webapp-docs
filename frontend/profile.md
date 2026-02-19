@@ -34,6 +34,7 @@ User profile management allows authenticated users to:
 
 **Features**:
 - Avatar display (or initials fallback)
+- User ID display (monospace, copyable)
 - Name, email, phone display
 - Language and timezone display
 - Notification preferences summary
@@ -413,6 +414,24 @@ const getUserDisplayName = () => {
 **Dropdown Header**:
 - Shows avatar image or initials circle
 - Display name and role
+
+### System Settings Dropdown (Admin Only)
+
+**Added**: 2026-02-19
+
+**Purpose**: Ops/System pages moved from sidebar to profile dropdown (admin-only access)
+
+**Menu Items**:
+| Label | Route | Icon |
+|-------|-------|------|
+| Systemstatus | `/ops/status` | Activity |
+| Runbook | `/ops/runbook` | BookOpen |
+| Log-Protokoll | `/ops/audit-log` | FileText |
+| Module | `/ops/modules` | Boxes |
+
+**Visibility**: Only shown when `isAdmin === true` (via `usePermissions()`)
+
+**Why Moved**: Ops items are rarely used daily; moving to profile dropdown declutters sidebar navigation for regular users.
 
 ---
 
