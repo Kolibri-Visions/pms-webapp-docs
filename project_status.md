@@ -29729,6 +29729,54 @@ All verification steps passed:
 
 ---
 
+# Season Template Hard Delete with Unlink Option (P2.18.6)
+
+**Implementation Date:** 2026-02-19
+
+**Scope:** Enhanced permanent delete for archived season templates with reference handling.
+
+**Problem:**
+- Archived season templates with linked rate plan seasons could not be permanently deleted
+- API returned 409 Conflict: "X importierte Saisonzeit(en) verweisen darauf"
+- User had no way to resolve the references without manual SQL intervention
+
+**Solution Implemented:**
+
+1. **Backend - References Endpoint** (`GET /season-templates/{id}/references`):
+   - Returns count and details of all rate plans referencing the template
+   - Shows property name, rate plan name, and season count per rate plan
+   - Used by frontend to display affected entities before deletion
+
+2. **Backend - Unlink Parameter** (`DELETE /season-templates/{id}/permanent?unlink_references=true`):
+   - New query parameter `unlink_references` (default: false)
+   - When true: sets `source_template_id = NULL` on all referencing seasons
+   - Also clears: `source_template_period_id`, `source_year`, `source_is_overridden`, `source_overridden_at`, `source_synced_at`
+   - Seasons remain in rate plans but lose template linkage (no more re-sync possible)
+   - When false: returns 409 if references exist (original behavior)
+
+3. **Frontend - Enhanced Hard Delete Modal**:
+   - Fetches references before showing confirmation
+   - If references exist:
+     - Shows warning with list of affected rate plans
+     - Explains that seasons will remain but lose linkage
+     - Button: "Verknüpfungen aufheben & löschen"
+   - If no references: shows simple confirmation (original behavior)
+
+**Files Changed:**
+- `backend/app/api/routes/pricing.py`: Added `get_season_template_references()` endpoint, added `unlink_references` parameter to `hard_delete_season_template()`
+- `frontend/app/pricing/seasons/page.tsx`: Added `TemplateReferences` type, `fetchTemplateReferences()`, enhanced hard delete modal UI
+
+**Smoke Test:**
+```bash
+# 1. Create and archive a template
+# 2. Sync template to a rate plan (creates linked seasons)
+# 3. Try permanent delete → should show references warning
+# 4. Click "Verknüpfungen aufheben & löschen"
+# 5. Verify template deleted, seasons remain but with source_template_id = NULL
+```
+
+---
+
 # Restore Archivierte Saisonvorlagen (P2.19)
 
 **Implementation Date:** 2026-01-25
