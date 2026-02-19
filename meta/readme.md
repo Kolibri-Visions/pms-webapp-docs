@@ -71,9 +71,10 @@ Einsatzbereite Prompts im **wshobson/agents Format**:
 - `backend-channel-manager.md` - Channel-Manager-Integrationen
 - Weitere Agents (backend-core, sync-resilience, security-rls, frontend, qa, devops, documentation)
 
-### 3. **Workflow-Definitionen** (`workflows/`)
-- `development-sequence.md` - Vollständige Entwicklungsreihenfolge mit Checkpoints
-- `done-definitions.md` - Detaillierte Checklisten pro Agent
+### 3. **Prozess-Definitionen** (`backend/docs/process/`)
+- `DEFINITION_OF_DONE.md` - Definition of Done (aktuelle Checkliste)
+- `RELEASE_CADENCE.md` - Release-Rhythmus
+- Siehe auch: `backend/docs/product/PRODUCT_BACKLOG.md` und `RELEASE_PLAN.md`
 
 ---
 
@@ -107,7 +108,7 @@ Einsatzbereite Prompts im **wshobson/agents Format**:
 8. documentation-pms → Technical & Stakeholder Docs
 ```
 
-**Siehe `workflows/development-sequence.md` für vollständige Details.**
+**Siehe `backend/docs/product/PRODUCT_BACKLOG.md` und `backend/docs/product/RELEASE_PLAN.md` für aktuelle Planung.**
 
 ---
 
@@ -129,9 +130,9 @@ PMS-Webapp/
 │   ├── qa-testing-pms.md
 │   ├── devops-pms.md
 │   └── documentation-pms.md
-└── workflows/                         # Workflows & Checklisten
-    ├── development-sequence.md        # Entwicklungsreihenfolge
-    └── done-definitions.md            # Done-Definitionen pro Agent
+└── backend/docs/process/              # Prozess-Definitionen
+    ├── DEFINITION_OF_DONE.md          # Definition of Done
+    └── RELEASE_CADENCE.md             # Release-Rhythmus
 ```
 
 ---
@@ -265,10 +266,10 @@ graph LR
 
 ### 2. Workflow befolgen
 ```
-1. Lies workflows/development-sequence.md
-2. Folge den Checkpoints sequentiell
-3. Validiere Quality-Gates nach jeder Phase
-4. Nutze workflows/done-definitions.md für Checklisten
+1. Lies backend/docs/product/PRODUCT_BACKLOG.md
+2. Folge den Epics und Milestones
+3. Validiere Quality-Gates nach backend/docs/process/DEFINITION_OF_DONE.md
+4. Nutze backend/docs/product/RELEASE_PLAN.md fuer Zeitplanung
 ```
 
 ### 3. Orchestrator nutzen
@@ -337,8 +338,8 @@ Phase 2-6: Implementierung
 
 ### Interne Dokumentation
 - `AGENT_SYSTEM.md` - Agenten-Hierarchie & Kommunikation
-- `workflows/development-sequence.md` - Vollständige Entwicklungsreihenfolge
-- `workflows/done-definitions.md` - Checklisten pro Agent
+- `backend/docs/product/PRODUCT_BACKLOG.md` - Product Backlog (10 Epics)
+- `backend/docs/process/DEFINITION_OF_DONE.md` - Definition of Done
 - `agents/*.md` - Fertige Agent-Prompts
 
 ### Externe Referenzen
@@ -353,7 +354,7 @@ Phase 2-6: Implementierung
 ### Sofort starten
 1. **Lies** `AGENT_SYSTEM.md` für Gesamtübersicht
 2. **Aktiviere** `pms-orchestrator` als Master-Agent
-3. **Folge** `workflows/development-sequence.md` Phase für Phase
+3. **Folge** `backend/docs/product/PRODUCT_BACKLOG.md` Epic fuer Epic
 4. **Nutze** `agents/*.md` Prompts für spezialisierte Agents
 
 ### Phase 1 starten
@@ -365,7 +366,7 @@ Phase 2-6: Implementierung
 # Verwende agents/database-architect-pms.md als Prompt
 
 # 3. Quality-Gates validieren
-# Nutze workflows/done-definitions.md Checklisten
+# Nutze backend/docs/process/DEFINITION_OF_DONE.md Checklisten
 ```
 
 ---
@@ -379,7 +380,7 @@ Phase 2-6: Implementierung
 
 **Maintenance:**
 - Alle Agent-Prompts versioniert in `agents/`
-- Workflows dokumentiert in `workflows/`
+- Prozesse dokumentiert in `backend/docs/process/`
 - ADRs dokumentieren alle Entscheidungen
 - Done-Definitionen als Checklisten
 
@@ -406,9 +407,9 @@ Dieses System ist designed für:
 - **Stakeholder:** PRD / Pflichtenheft nach technischer Implementierung
 
 **Workflow-Anpassungen:**
-- Modifiziere `workflows/development-sequence.md` für Team-Workflows
+- Modifiziere `backend/docs/product/PRODUCT_BACKLOG.md` fuer Team-Workflows
 - Passe Agent-Prompts in `agents/` an spezifische Anforderungen an
-- Erweitere `done-definitions.md` für zusätzliche Quality-Gates
+- Erweitere `backend/docs/process/DEFINITION_OF_DONE.md` fuer zusaetzliche Quality-Gates
 
 ---
 

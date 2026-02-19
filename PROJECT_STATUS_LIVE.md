@@ -4,7 +4,7 @@
 
 **Audience**: Ops engineers, developers, on-call
 
-**Last Updated**: 2026-02-15
+**Last Updated**: 2026-02-19
 
 **Important**: This file is MANUALLY MAINTAINED. For historical code-derived snapshots, see [_staging/status-review-v3/](_staging/status-review-v3/PROJECT_STATUS.md).
 
@@ -279,6 +279,38 @@
 
 ---
 
+## Security Audit Remediation (2026-02-19)
+
+**Audit Report**: `../../../Audit/Audit-2026-02-19.md`
+
+### Resolved (12/15 findings)
+
+| # | Finding | Severity | Fix |
+|---|---------|----------|-----|
+| 2 | RLS on missing tables | CRITICAL | Migration `20260219120000_enable_missing_rls.sql` |
+| 3 | XSS / DOMPurify | CRITICAL | DOMPurify 3.3.1 in BlockRenderer + RichTextEditor |
+| 14 | Seed data password | CRITICAL | Changed to `DevTest2026!Secure` |
+| 1 | Backend dependencies | HIGH | Updated aiohttp, python-multipart, starlette, h11, sentry-sdk, filelock |
+| 5 | Security headers | HIGH | X-Frame-Options, HSTS, etc. in next.config.js |
+| 6 | Dynamic SQL | HIGH | Whitelist in epic_a.py |
+| 7 | Next.js version | HIGH | Upgraded to ^15.5.12 |
+| 8 | Password requirements | HIGH | min 12 chars + complexity in config.toml |
+| 9 | IP-based rate limiting | MEDIUM | `check_ip_rate_limit()` in auth_rate_limit.py |
+| 10 | PII in audit logs | MEDIUM | Guest email removed from metadata |
+| 11 | Debug info exposure | MEDIUM | Generic 503 for DB errors |
+| 12 | CORS config | MEDIUM | Explicit origins (no wildcard) |
+| 13 | localStorage tokens | MEDIUM | Removed all localStorage token writes from auth-context.tsx |
+
+### Open (3/15 findings)
+
+| # | Finding | Severity | Status |
+|---|---------|----------|--------|
+| 4 | Webhook signatures (Booking.com, Expedia, FeWo, Google) | HIGH | Deferred — Channel Manager not enabled |
+| 4.3 | PII column encryption | CRITICAL (Audit) | Infrastructure ready, execution deferred (Supabase at-rest encryption sufficient for MVP) |
+| 15 | Smoke cookie httpOnly=false | LOW | By design (5min TTL, CI-only) |
+
+---
+
 ## Next Steps (Ops)
 
 ### Immediate Actions
@@ -335,11 +367,11 @@
 
 **For code-derived status snapshots** (commit-bound, read-only):
 - [status-review-v3/PROJECT_STATUS.md](_staging/status-review-v3/PROJECT_STATUS.md) - Snapshot at commit `7f34c7d` (2025-12-30 21:01 UTC)
-- [status-review-v2/PROJECT_STATUS.md](_staging/status-review-v2/PROJECT_STATUS.md) - Snapshot at commit `1c42e95` (2025-12-30 20:48 UTC)
-- [status-review-v1/PROJECT_STATUS.md](_staging/status-review-v1/PROJECT_STATUS.md) - Snapshot at commit `393ba8da` (2025-12-30 17:34 UTC)
+- ~~status-review-v2~~ - Deleted (superseded by v3)
+- ~~status-review-v1~~ - Deleted (superseded by v3)
 
 ---
 
-**Last Updated**: 2026-02-15
+**Last Updated**: 2026-02-19
 **Maintained By**: Backend Team
 **Update Frequency**: Manual (update after significant deployments or config changes)

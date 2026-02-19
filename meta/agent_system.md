@@ -244,13 +244,13 @@ graph TD
 
 ## Done-Definitionen (Pro Agent)
 
-Siehe `workflows/done-definitions.md` für detaillierte Checklisten.
+Siehe `../process/DEFINITION_OF_DONE.md` für die aktuelle Definition of Done.
 
 ---
 
 ## Workflow-Sequenz
 
-Siehe `workflows/development-sequence.md` für die vollständige Entwicklungsreihenfolge mit Checkpoints.
+Siehe `../product/PRODUCT_BACKLOG.md` und `../product/RELEASE_PLAN.md` für die aktuelle Entwicklungsplanung.
 
 ---
 

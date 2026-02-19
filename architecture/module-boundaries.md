@@ -177,7 +177,7 @@ except ImportError as e:
 
 ### 4. Update Module Documentation
 
-**File:** `docs/architecture/modules.md`
+**File:** `docs/architecture/modular-monolith.md`
 
 - Add module to "Target Modules (Roadmap)" table
 - Update "Current Flow" diagram if needed
@@ -363,7 +363,7 @@ curl http://localhost:8000/api/v1/bookings  # bookings (depends on inventory)
 - **Module Types:** `app/modules/_types.py`
 - **Bootstrap:** `app/modules/bootstrap.py`
 - **Inventory Contract:** `docs/domain/inventory.md` (date semantics, conflict rules)
-- **Modular Monolith Overview:** `docs/architecture/modules.md`
+- **Modular Monolith Overview:** `docs/architecture/modular-monolith.md`
 
 ---
 

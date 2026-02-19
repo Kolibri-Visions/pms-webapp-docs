@@ -10,7 +10,7 @@
 |------|----------|
 | New developer onboarding | [START_HERE.md](./START_HERE.md) |
 | Run the system locally | [meta/readme.md](./meta/readme.md) |
-| Understand architecture | [architecture.md](./architecture.md) |
+| Understand architecture | [architecture/system-architecture.md](./architecture/system-architecture.md) |
 | Operations & troubleshooting | [ops/runbook.md](./ops/runbook.md) |
 
 ---
@@ -21,7 +21,7 @@
 backend/docs/
 ├── index.md              # This file - canonical entry point
 ├── START_HERE.md         # Developer onboarding
-├── architecture.md       # System architecture overview
+├── architecture/         # Architecture documentation
 ├── project_status.md     # Project status & phase tracking
 │
 ├── meta/                 # Repository meta-documentation
@@ -68,7 +68,7 @@ backend/docs/
 - [Feature Flags](./ops/feature-flags.md) - Feature flag configuration
 
 ### Architecture
-- [System Architecture](./architecture.md) - High-level system design
+- [System Architecture](./architecture/system-architecture.md) - High-level system design
 - [Channel Manager](./channel-manager/channel-manager-architecture.md) - Channel integration
 - [Direct Booking Flow](./direct-booking-engine/direct-booking-flow.md) - Booking engine
 
