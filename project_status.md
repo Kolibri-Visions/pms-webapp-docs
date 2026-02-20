@@ -29775,6 +29775,17 @@ All verification steps passed:
 # 5. Verify template deleted, seasons remain but with source_template_id = NULL
 ```
 
+**Bugfixes (P2.18.6a) - 2026-02-20:**
+
+1. **Missing `Query` Import** - Backend crashed on startup with `NameError: name 'Query' is not defined`
+   - Cause: `Query` from FastAPI was used but not imported in `pricing.py`
+   - Fix: Added `Query` to imports: `from fastapi import APIRouter, Depends, HTTPException, Query`
+
+2. **NOT NULL Constraint Violation** - Unlink failed with 500 "Database error occurred"
+   - Cause: `source_is_overridden` column has `NOT NULL DEFAULT false` constraint
+   - Code tried: `SET source_is_overridden = NULL` which violated constraint
+   - Fix: Changed to `SET source_is_overridden = false` (semantically correct: unlinked season has no override)
+
 ---
 
 # Restore Archivierte Saisonvorlagen (P2.19)
