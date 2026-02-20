@@ -1,10 +1,48 @@
 # PMS-Webapp Project Status
 
-**Last Updated:** 2026-02-19
+**Last Updated:** 2026-02-20
 
-**Last Updated (actual):** 2026-02-19
+**Last Updated (actual):** 2026-02-20
 
 **Current Phase:** Phase 21 - Inventory/Availability Production Hardening
+
+---
+
+## Bookings Page Fixes + Design Token Migration (2026-02-20) - IMPLEMENTED
+
+**Issues Fixed**:
+
+| Issue | Severity | Fix | File |
+|-------|----------|-----|------|
+| Status nicht übersetzt in Liste | HIGH | `getStatusLabel()` hinzugefügt, zeigt jetzt "Bestätigt" statt "confirmed" | frontend/app/bookings/page.tsx |
+| Source-Mapping unvollständig | MEDIUM | `booking_com` und `other` zum Mapping hinzugefügt | frontend/app/bookings/[id]/page.tsx |
+| Grammatikfehler Property-Anzeige | LOW | "Betten" → nur Zahl ohne Suffix (Schlafzimmer steht im Label) | frontend/app/bookings/[id]/page.tsx |
+
+**Design Token Migration** (Priority 1 - Bookings Pages):
+
+| Legacy Token | → Neuer Token | Vorkommen |
+|--------------|---------------|-----------|
+| `bo-surface`, `bo-card` | `surface-elevated` | 7x |
+| `bo-surface-2` | `surface-sunken` | 3x |
+| `bo-border` | `stroke-default` | 8x |
+| `bo-text` | `content-default` | 10x |
+| `bo-text-muted` | `content-muted` | 6x |
+| `shadow-bo-*` | `shadow-sm`, `shadow-md` | 5x |
+| `rounded-bo-xl` | `rounded-xl` | 1x |
+| `luxe-navy` | `content-default` | 15x |
+| `luxe-gray` | `content-muted` | 12x |
+| `luxe-gold` | `t-primary` | 6x |
+| `luxe-cream(-dark)` | `surface-sunken`, `stroke-subtle` | 8x |
+
+**Files Changed**:
+- `frontend/app/bookings/page.tsx` - Status-Übersetzung + bo-* Migration
+- `frontend/app/bookings/[id]/page.tsx` - Source-Mapping + luxe-* Migration
+
+**Remaining Migration** (Priority 2-4, future):
+- `bo-*` Tokens: ~379 Stellen in 7 weiteren Dateien
+- `luxe-*` Tokens: ~101 Stellen in 5 weiteren Dateien
+
+**Status**: ✅ IMPLEMENTED
 
 ---
 
