@@ -61,6 +61,41 @@
 
 ---
 
+## Kurtaxen Property-Zuweisung Bugfix (2026-02-20) - IMPLEMENTED
+
+**Bugfix**: `visitor_tax_location_id` wurde beim Speichern von Property-Updates nicht zurückgegeben.
+
+### Problem
+
+Beim Speichern einer Kurtaxen-Gemeinde-Zuweisung im Property-Edit-Modal:
+1. Wert wurde in DB gespeichert (UPDATE funktionierte)
+2. Aber nach Modal-Schließen erschien wieder "— Keine Zuordnung —"
+3. Ursache: SELECT-Queries in `get_property` und `list_properties` enthielten `visitor_tax_location_id` nicht
+
+### Lösung
+
+`visitor_tax_location_id` zu beiden SELECT-Queries hinzugefügt:
+- `get_property()` - Zeile 315
+- `list_properties()` - Zeile 227
+
+**Dateien**:
+- `backend/app/services/property_service.py`
+
+### Verification Path
+
+```bash
+# 1. Property öffnen, Kurtaxen-Gemeinde zuweisen, speichern
+# 2. Modal erneut öffnen → Zuweisung muss erhalten bleiben
+# 3. API prüfen:
+curl -s "https://api.fewo.kolibri-visions.de/api/v1/properties/{id}" \
+  -H "Authorization: Bearer $TOKEN" | jq '.visitor_tax_location_id'
+# Expected: UUID der zugewiesenen Gemeinde
+```
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
 ## Kurtaxen Responsive UI (2026-02-20) - IMPLEMENTED
 
 **Feature**: Table-to-Card Responsive Pattern für die Kurtaxen-Seite implementiert.
