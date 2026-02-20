@@ -8,6 +8,34 @@
 
 ---
 
+## Bookings Filter HTTP 500 Fix (2026-02-20) - IMPLEMENTED
+
+**Problem**: Filtering bookings by status (e.g., `?status=confirmed`) returned HTTP 500 errors with CORS failure symptoms.
+
+**Root Cause**: Database enum fields (`source`, `status`, `payment_status`) contained values that didn't exactly match the Pydantic Literal types:
+- `source`: "booking.com" statt "booking_com"
+- `status`: Variant Schreibweisen möglich
+- `payment_status`: Legacy-Werte möglich
+
+**Solution**: Field normalization functions in `booking_service.py`:
+
+| Function | Purpose | Fallback |
+|----------|---------|----------|
+| `normalize_source()` | Maps "booking.com" → "booking_com", etc. | "other" |
+| `normalize_status()` | Case-normalization + variant mapping | "inquiry" |
+| `normalize_payment_status()` | Legacy status mapping | "pending" |
+
+**Applied to**:
+- `list_bookings()` - Alle Buchungen in Listenansicht
+- `get_booking()` - Einzelne Buchung im Detail
+
+**Files Changed**:
+- `backend/app/services/booking_service.py`
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
 ## Bookings Page Fixes + Design Token Migration (2026-02-20) - IMPLEMENTED
 
 **Issues Fixed**:
