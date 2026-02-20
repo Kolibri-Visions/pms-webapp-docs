@@ -78,9 +78,39 @@
 - `frontend/app/bookings/page.tsx` - Status-Übersetzung + bo-* Migration
 - `frontend/app/bookings/[id]/page.tsx` - Source-Mapping + luxe-* Migration
 
-**Remaining Migration** (Priority 2-4, future):
-- `bo-*` Tokens: ~379 Stellen in 7 weiteren Dateien
-- `luxe-*` Tokens: ~101 Stellen in 5 weiteren Dateien
+**Status**: ✅ IMPLEMENTED
+
+---
+
+## Luxe Token Elimination (2026-02-20) - IMPLEMENTED
+
+**Objective**: Remove all hardcoded `luxe-*` design tokens and replace with dynamic semantic tokens controlled via `/settings/branding`.
+
+**Design Token Replacement**:
+
+| Legacy Token | → Dynamic Token | Verwendung |
+|--------------|-----------------|------------|
+| `shadow-luxe-md` | `shadow-md` | Card shadows, button elevation |
+| `shadow-luxe` | `shadow-sm` | Subtle element shadows |
+| `luxe-gold` | `t-primary` | Primary action colors |
+| `ring-luxe-gold` | `ring-t-primary` | Focus rings |
+| `bg-luxe-gold/10` | `bg-t-primary/10` | Selected state backgrounds |
+
+**Files Changed**:
+
+| File | Change |
+|------|--------|
+| `app/properties/[id]/media/page.tsx` | 3x `shadow-luxe-md` → `shadow-md` |
+| `app/properties/[id]/page.tsx` | 1x `shadow-luxe` → `shadow-sm` |
+| `app/amenities/components/amenity-icon-picker.tsx` | 5x `luxe-gold` → `t-primary` |
+| `app/bookings/[id]/page.tsx` | Luxe component imports → inline semantic components |
+| `tailwind.config.ts` | Removed `luxe` color definitions (lines 117-130) |
+| `tailwind.config.ts` | Removed `luxe-*` shadow definitions |
+| `app/globals.css` | Removed LuxeStay comment block |
+| `app/components/luxe/` | **DELETED** (Button.tsx, Card.tsx, Input.tsx, index.ts) |
+
+**Remaining Migration** (Priority 3-4, future):
+- `bo-*` Tokens: CSS-Variable-basiert, weniger kritisch da dynamisch
 
 **Status**: ✅ IMPLEMENTED
 
