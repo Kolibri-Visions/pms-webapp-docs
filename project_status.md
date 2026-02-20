@@ -12,18 +12,20 @@
 
 **Problem**: Filtering bookings by status (e.g., `?status=confirmed`) returned HTTP 500 errors with CORS failure symptoms.
 
-**Root Cause**: Database enum fields (`source`, `status`, `payment_status`) contained values that didn't exactly match the Pydantic Literal types:
-- `source`: "booking.com" statt "booking_com"
-- `status`: Variant Schreibweisen möglich
-- `payment_status`: Legacy-Werte möglich
+**Root Cause**:
+1. Database enum fields contained values that didn't exactly match Pydantic Literal types
+2. Required fields in BookingResponse were NULL in database → Pydantic validation failure
 
-**Solution**: Field normalization functions in `booking_service.py`:
+**Solution**: Field normalization + NULL default handling in `booking_service.py`:
 
-| Function | Purpose | Fallback |
-|----------|---------|----------|
+| Fix | Purpose | Default |
+|-----|---------|---------|
 | `normalize_source()` | Maps "booking.com" → "booking_com", etc. | "other" |
 | `normalize_status()` | Case-normalization + variant mapping | "inquiry" |
 | `normalize_payment_status()` | Legacy status mapping | "pending" |
+| Decimal field defaults | nightly_rate, subtotal, total_price, etc. | Decimal("0") |
+| Integer field defaults | num_adults, num_guests, version, etc. | 1 or 0 |
+| String field defaults | currency, booking_reference | "EUR", "UNKNOWN-{id}" |
 
 **Applied to**:
 - `list_bookings()` - Alle Buchungen in Listenansicht
