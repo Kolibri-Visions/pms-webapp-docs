@@ -1,14 +1,45 @@
 # PMS-Webapp Project Status
 
-**Last Updated:** 2026-02-20
+**Last Updated:** 2026-02-21
 
-**Last Updated (actual):** 2026-02-20
+**Last Updated (actual):** 2026-02-21
 
 **Current Phase:** Phase 21 - Inventory/Availability Production Hardening
 
 ---
 
-## Season-Only Min Stay (2026-02-20) - IMPLEMENTED
+## Properties Table-to-Card Responsive UI (2026-02-21) - IMPLEMENTED
+
+**Feature**: Responsive Table-to-Card Pattern für `/properties` Seite gemäß CLAUDE.md §10.
+
+### Änderungen
+
+| Bereich | Desktop (md+) | Mobile (<md) |
+|---------|---------------|--------------|
+| Objekt-Liste | Tabelle mit allen Spalten | Kompakte Karten |
+| Header | Horizontal mit Buttons | Vertikal, Buttons full-width |
+| Pagination | Inline | Gestapelt |
+| Aktionen | 3-Dot-Menü | Text-Links im Card-Footer |
+
+### Mobile-Karten zeigen
+- Thumbnail + Name + Adresse
+- Status-Badge (Aktiv/Inaktiv/Gelöscht)
+- Typ-Badge, Kapazität, Zimmer/Bad
+- Aktionen: Bearbeiten/Archivieren oder Wiederherstellen/Löschen
+
+### Weitere Optimierungen
+- Header: `flex-col sm:flex-row`, Buttons `w-full sm:w-auto`
+- Filter-Bereich: `mx-4 md:mx-0`, `p-4 md:p-6`
+- Pagination: Kompaktere Darstellung auf Mobile
+- Create Modal: `min_stay` Feld entfernt (Season-basiert)
+
+**Dateien**: `frontend/app/properties/page.tsx`
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
+## Season-Only Min Stay (2026-02-21) - IMPLEMENTED
 
 **Feature**: Eliminierung von `properties.min_stay` und Umstellung auf `rate_plan_seasons.min_stay_nights` als einzige Quelle für Mindestaufenthalt.
 
