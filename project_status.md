@@ -8,6 +8,84 @@
 
 ---
 
+## Kurtaxen (Visitor Tax) Management Feature (2026-02-20) - IMPLEMENTED
+
+**Feature**: Verwaltung von Kurtaxen pro Gemeinde mit saisonalen Tarifen und automatischer Property-Zuordnung via PLZ.
+
+### Datenbank-Schema
+
+| Tabelle | Beschreibung |
+|---------|--------------|
+| `visitor_tax_locations` | Gemeinden mit PLZ-Array für Auto-Matching |
+| `visitor_tax_periods` | Saisonale Tarife (Betrag in Cents, Kinder-Freibetrag) |
+| `properties.visitor_tax_location_id` | FK für Property-Zuweisung |
+
+**Migration**: `supabase/migrations/20260220000000_add_visitor_tax.sql`
+- RLS aktiviert mit Policies für SELECT (alle), INSERT/UPDATE/DELETE (admin/manager)
+- GIN-Index auf `postal_codes` Array für effiziente PLZ-Suche
+- Soft-Delete via `archived_at` Timestamp
+
+### Backend API
+
+| Endpoint | Methode | Beschreibung |
+|----------|---------|--------------|
+| `/api/v1/visitor-tax/locations` | GET | Liste aller Gemeinden (mit Perioden) |
+| `/api/v1/visitor-tax/locations` | POST | Gemeinde erstellen (atomar mit Perioden) |
+| `/api/v1/visitor-tax/locations/{id}` | GET | Gemeinde-Detail |
+| `/api/v1/visitor-tax/locations/{id}` | PATCH | Gemeinde aktualisieren |
+| `/api/v1/visitor-tax/locations/{id}` | DELETE | Archivieren (soft) |
+| `/api/v1/visitor-tax/locations/{id}/restore` | POST | Wiederherstellen |
+| `/api/v1/visitor-tax/locations/{id}/permanent` | DELETE | Endgültig löschen |
+| `/api/v1/visitor-tax/locations/{id}/periods` | GET/POST | Perioden verwalten |
+| `/api/v1/visitor-tax/locations/{id}/periods/{pid}` | PATCH/DELETE | Periode bearbeiten/löschen |
+| `/api/v1/visitor-tax/locations/{id}/periods/bulk-delete` | POST | Bulk-Delete |
+| `/api/v1/visitor-tax/suggest?postal_code=XXX` | GET | PLZ-Auto-Match |
+
+**Dateien**:
+- `backend/app/api/routes/visitor_tax.py` (878 Zeilen)
+- `backend/app/schemas/visitor_tax.py`
+
+### Frontend UI
+
+**Route**: `/kurtaxen` (Navigation unter OBJEKTE)
+
+**Features**:
+- Accordion-Liste aller Gemeinden mit expandierbaren Perioden
+- Create/Edit Modal mit Inline-Perioden-Builder
+- "Sylt-Beispiel laden" Button für Schnellstart
+- Bulk-Delete für Perioden (Checkbox-Auswahl)
+- Archive/Restore/Hard-Delete Workflow
+- PLZ-Badges zur visuellen Identifikation
+- Toast-Notifications für Feedback
+
+**Dateien**:
+- `frontend/app/kurtaxen/page.tsx` (1330 Zeilen)
+- `frontend/app/kurtaxen/layout.tsx`
+- `frontend/app/components/AdminShell.tsx` (Nav-Item hinzugefügt)
+- `frontend/app/components/Breadcrumb.tsx` (Breadcrumb-Config)
+- `frontend/app/lib/i18n/translations/de.json` (Übersetzungen)
+
+### Property-Integration
+
+**Änderung**: Dropdown im Property-Edit-Modal zur Kurtaxen-Gemeinde-Zuweisung
+
+**PLZ-Auto-Suggestion**:
+- Backend: `GET /api/v1/visitor-tax/suggest?postal_code=XXX`
+- Frontend: Automatische Erkennung bei PLZ-Eingabe
+
+**Dateien**:
+- `frontend/app/properties/[id]/page.tsx` (Location-Dropdown)
+- `backend/app/schemas/properties.py` (`visitor_tax_location_id` Feld)
+
+### Commits
+
+- `47b767a` - feat: add visitor tax (Kurtaxen) management feature
+- `fa6c355` - feat: add visitor tax location dropdown to property edit modal
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
 ## Bookings Filter HTTP 500 Fix (2026-02-20) - IMPLEMENTED
 
 **Problem**: Filtering bookings by status (e.g., `?status=confirmed`) returned HTTP 500 errors with CORS failure symptoms.
