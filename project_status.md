@@ -8,6 +8,70 @@
 
 ---
 
+## Season-Only Min Stay (2026-02-20) - IMPLEMENTED
+
+**Feature**: Eliminierung von `properties.min_stay` und Umstellung auf `rate_plan_seasons.min_stay_nights` als einzige Quelle für Mindestaufenthalt.
+
+### Änderungsübersicht
+
+| Aspekt | Vorher | Nachher |
+|--------|--------|---------|
+| Min-Stay Quelle | `properties.min_stay` (1 Wert für alle) | `rate_plan_seasons.min_stay_nights` (saisonabhängig) |
+| Flexibilität | Immer gleich | z.B. 7 Nächte Hauptsaison, 2 Nächte Nebensaison |
+| Validierung | Property-Level | Check-in-Datum bestimmt Saison |
+
+### Fallback-Hierarchie
+
+```
+1. rate_plan_seasons.min_stay_nights  (Saison für Check-in-Datum)
+   ↓ falls NULL oder keine Saison
+2. rate_plans.min_stay_nights         (Rate-Plan Default)
+   ↓ falls NULL
+3. Hard-Default: 1 Nacht              (kein Minimum)
+```
+
+### Backend-Änderungen
+
+| Datei | Änderung |
+|-------|----------|
+| `backend/app/services/rate_plan_resolver.py` | Neue Funktion `get_effective_min_stay()` hinzugefügt |
+| `backend/app/services/booking_service.py` | `create_booking()`: Property-Query angepasst, Season-Validierung eingefügt |
+| `backend/app/services/booking_service.py` | `update_booking()`: Property-Query angepasst, Season-Validierung eingefügt |
+
+### Frontend-Änderungen
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/properties/[id]/page.tsx` | Edit Modal: "Min. Nächte" Feld entfernt, Grid von 4 auf 3 Spalten |
+| `frontend/app/properties/[id]/page.tsx` | Display-View: "Min. Aufenthalt" zeigt jetzt "Siehe Preiseinstellungen" |
+
+### Datenbank
+
+Keine Migration nötig. `properties.min_stay` bleibt erhalten für:
+- Rollback-Möglichkeit
+- Historische Daten
+
+### Verification Path
+
+```bash
+# 1. Booking mit weniger Nächten als Season erlaubt
+# → Erwartung: Fehler "Mindestaufenthalt ist X Nächte (Saison: Hauptsaison)"
+
+# 2. Booking ohne Rate Plan
+# → Erwartung: Erlaubt (Default 1 Nacht)
+
+# 3. Frontend prüfen
+# → Property Edit Modal: Kein "Min. Nächte" Feld mehr
+# → Display: "Siehe Preiseinstellungen"
+
+# 4. Rate Plans prüfen
+# → /properties/{id}/rate-plans: "Min. Nächte" Spalte ist die Quelle
+```
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
 ## Rate-Plans Table-to-Card Redesign (2026-02-20) - IMPLEMENTED
 
 **Feature**: Komplettes Redesign der Preiseinstellungen-Seite mit Table-to-Card Pattern (wie Kurtaxen).

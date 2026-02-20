@@ -28,6 +28,7 @@
 | [28-property-edit-extended-fields.md](./runbook/28-property-edit-extended-fields.md) | Property edit modal extended fields |
 | [29-public-website-visibility.md](./runbook/29-public-website-visibility.md) | Public website is_active filtering |
 | [31-kurtaxen-visitor-tax.md](./runbook/31-kurtaxen-visitor-tax.md) | Kurtaxen (Visitor Tax) Management |
+| [32-season-only-min-stay.md](./runbook/32-season-only-min-stay.md) | Season-basierter Mindestaufenthalt |
 
 ### Golden Paths (Most Common Operations)
 
