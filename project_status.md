@@ -8,6 +8,38 @@
 
 ---
 
+## Rate-Plans Responsive UI (2026-02-20) - IMPLEMENTED
+
+**Feature**: Mobile-Optimierungen für die Preiseinstellungen-Seite (/properties/[id]/rate-plans).
+
+### Änderungen
+
+| Bereich | Vorher | Nachher |
+|---------|--------|---------|
+| Page Padding | `space-y-6` | `space-y-4 md:space-y-6 p-4 md:p-0` |
+| Header Buttons | Inline | Full-Width auf Mobile, Inline auf Desktop |
+| Info Box | Immer sichtbar | `hidden sm:block` |
+| Year Header | Feste Größen | Responsive Text (`text-lg sm:text-xl`) |
+| Bulk Action Bar | Centered | Full-Width auf Mobile |
+| Modals | Feste Padding | `p-4 sm:p-6` |
+
+**Dateien**:
+- `frontend/app/properties/[id]/rate-plans/page.tsx`
+
+### Verification Path
+
+```bash
+# Browser-Test:
+# 1. Öffne https://admin.fewo.kolibri-visions.de/properties/{id}/rate-plans
+# 2. Chrome DevTools → Toggle Device Toolbar (Ctrl+Shift+M)
+# 3. Teste bei 375px (Mobile) und 1024px (Desktop)
+# 4. Prüfe: Buttons stacken auf Mobile, Info-Box ausgeblendet
+```
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
 ## Kurtaxen Responsive UI (2026-02-20) - IMPLEMENTED
 
 **Feature**: Table-to-Card Responsive Pattern für die Kurtaxen-Seite implementiert.
