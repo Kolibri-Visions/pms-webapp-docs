@@ -15,6 +15,7 @@
 **Root Cause**:
 1. Database enum fields contained values that didn't exactly match Pydantic Literal types
 2. Required fields in BookingResponse were NULL in database → Pydantic validation failure
+3. `check_in` validator in `BookingBase` rejected past dates → BookingResponse inherited this, failing for existing bookings with past check-in dates
 
 **Solution**: Field normalization + NULL default handling in `booking_service.py`:
 
@@ -26,13 +27,22 @@
 | Decimal field defaults | nightly_rate, subtotal, total_price, etc. | Decimal("0") |
 | Integer field defaults | num_adults, num_guests, version, etc. | 1 or 0 |
 | String field defaults | currency, booking_reference | "EUR", "UNKNOWN-{id}" |
+| Validator relocation | `check_in` date validator moved from `BookingBase` to `BookingCreate` | N/A |
 
 **Applied to**:
 - `list_bookings()` - Alle Buchungen in Listenansicht
 - `get_booking()` - Einzelne Buchung im Detail
 
 **Files Changed**:
-- `backend/app/services/booking_service.py`
+- `backend/app/services/booking_service.py` - Field normalization + NULL defaults
+- `backend/app/schemas/bookings.py` - Moved `check_in` validator to `BookingCreate` only
+- `backend/app/api/routes/bookings.py` - Added try-except + per-item validation logging
+
+**Commits**:
+- `21f5ac0` - add field normalization
+- `e7bd56d` - add NULL default handling
+- `9654c04` - add explicit error handling
+- `a0b5868` - move check_in validator from BookingBase to BookingCreate
 
 **Status**: ✅ IMPLEMENTED
 
