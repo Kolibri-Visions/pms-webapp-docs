@@ -31510,3 +31510,46 @@ e.nativeEvent.stopImmediatePropagation();
 **Commit**: `2626f2c`
 
 **Status**: ✅ IMPLEMENTED
+
+---
+
+# Season Templates Route Migration (P2.22)
+
+**Implementation Date:** 2026-02-20
+
+**Scope:** Move season templates from `/pricing/seasons` to `/seasons` as top-level route.
+
+**Motivation:**
+- Season templates are agency-wide resources, not tied to pricing specifically
+- Better semantic grouping under "OBJEKTE" (Properties) in navigation
+- Cleaner URL structure: `/seasons` instead of `/pricing/seasons`
+
+**Changes Made:**
+
+1. **Route Migration**:
+   - Moved `frontend/app/pricing/seasons/page.tsx` → `frontend/app/seasons/page.tsx`
+   - Removed empty `frontend/app/pricing/seasons/` directory
+
+2. **Navigation Update** (`AdminShell.tsx`):
+   - Removed from "CHANNEL & PREISE" section
+   - Added to "OBJEKTE" section with `href: "/seasons"`
+   - Key changed from `pricing-seasons` to `seasons`
+
+3. **Breadcrumb Update** (`Breadcrumb.tsx`):
+   - Changed from `"/pricing/seasons": [{ href: "/pricing", label: "Preise" }]`
+   - To `"/seasons": [{ href: "/properties", label: "Objekte" }]`
+
+4. **Internal Links** (`properties/[id]/rate-plans/page.tsx`):
+   - Updated empty state link from `/pricing/seasons` to `/seasons`
+
+**Files Changed:**
+- `frontend/app/seasons/page.tsx` (moved from pricing/seasons/)
+- `frontend/app/components/AdminShell.tsx`
+- `frontend/app/components/Breadcrumb.tsx`
+- `frontend/app/properties/[id]/rate-plans/page.tsx`
+
+**Backend API Unchanged:**
+- All `/api/v1/pricing/seasons/...` endpoints remain at same paths
+- No backend changes required
+
+**Status**: ✅ IMPLEMENTED
