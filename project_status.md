@@ -8,6 +8,52 @@
 
 ---
 
+## Kurtaxen Responsive UI (2026-02-20) - IMPLEMENTED
+
+**Feature**: Table-to-Card Responsive Pattern für die Kurtaxen-Seite implementiert.
+
+### Änderungen
+
+| Bereich | Desktop (md+) | Mobile (<md) |
+|---------|---------------|--------------|
+| Perioden-Liste | Tabelle mit Spalten | Kompakte Karten |
+| Location-Header | Text-Buttons | Icon-Buttons |
+| Bulk-Actions | Inline | Gestackt |
+| Modal-Buttons | Inline | Full-Width |
+| Info-Box | Sichtbar | Ausgeblendet |
+
+### Pattern-Regel (claude.md §10)
+
+```tsx
+{/* Desktop: Tabelle */}
+<div className="hidden md:block">
+  <table>...</table>
+</div>
+
+{/* Mobile: Karten */}
+<div className="block md:hidden space-y-3">
+  {items.map(item => <Card />)}
+</div>
+```
+
+**Dateien**:
+- `frontend/app/kurtaxen/page.tsx` - Responsive Layout
+- `claude.md` (lokal) - Regel §10 hinzugefügt
+
+### Verification Path
+
+```bash
+# Browser-Test:
+# 1. Öffne https://admin.fewo.kolibri-visions.de/kurtaxen
+# 2. Chrome DevTools → Toggle Device Toolbar (Ctrl+Shift+M)
+# 3. Teste bei 375px (Mobile) und 1024px (Desktop)
+# 4. Prüfe: Perioden erscheinen als Karten auf Mobile, als Tabelle auf Desktop
+```
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
 ## Kurtaxen (Visitor Tax) Management Feature (2026-02-20) - IMPLEMENTED
 
 **Feature**: Verwaltung von Kurtaxen pro Gemeinde mit saisonalen Tarifen und automatischer Property-Zuordnung via PLZ.
