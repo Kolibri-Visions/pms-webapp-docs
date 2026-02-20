@@ -82,6 +82,23 @@
 - `47b767a` - feat: add visitor tax (Kurtaxen) management feature
 - `fa6c355` - feat: add visitor tax location dropdown to property edit modal
 
+### Verification Path
+
+```bash
+# 1. API Smoke
+curl -s "https://api.fewo.kolibri-visions.de/api/v1/visitor-tax/locations" \
+  -H "Authorization: Bearer $TOKEN" | jq 'length'
+
+# 2. PLZ Suggestion
+curl -s "https://api.fewo.kolibri-visions.de/api/v1/visitor-tax/suggest?postal_code=25999" \
+  -H "Authorization: Bearer $TOKEN" | jq '.postal_code'
+
+# 3. Admin UI
+open https://admin.fewo.kolibri-visions.de/kurtaxen
+```
+
+**Runbook**: [31-kurtaxen-visitor-tax.md](./ops/runbook/31-kurtaxen-visitor-tax.md)
+
 **Status**: ✅ IMPLEMENTED
 
 ---

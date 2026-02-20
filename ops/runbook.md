@@ -27,6 +27,7 @@
 | [16-extra-services.md](./runbook/16-extra-services.md) | Extra services billing units, per_unit_night |
 | [28-property-edit-extended-fields.md](./runbook/28-property-edit-extended-fields.md) | Property edit modal extended fields |
 | [29-public-website-visibility.md](./runbook/29-public-website-visibility.md) | Public website is_active filtering |
+| [31-kurtaxen-visitor-tax.md](./runbook/31-kurtaxen-visitor-tax.md) | Kurtaxen (Visitor Tax) Management |
 
 ### Golden Paths (Most Common Operations)
 
