@@ -31542,8 +31542,13 @@ e.nativeEvent.stopImmediatePropagation();
 4. **Internal Links** (`properties/[id]/rate-plans/page.tsx`):
    - Updated empty state link from `/pricing/seasons` to `/seasons`
 
+5. **Layout File** (`seasons/layout.tsx`):
+   - Created new layout with AdminShell wrapper
+   - Required because page no longer inherits from `pricing/layout.tsx`
+
 **Files Changed:**
 - `frontend/app/seasons/page.tsx` (moved from pricing/seasons/)
+- `frontend/app/seasons/layout.tsx` (new - AdminShell wrapper)
 - `frontend/app/components/AdminShell.tsx`
 - `frontend/app/components/Breadcrumb.tsx`
 - `frontend/app/properties/[id]/rate-plans/page.tsx`
@@ -31551,5 +31556,15 @@ e.nativeEvent.stopImmediatePropagation();
 **Backend API Unchanged:**
 - All `/api/v1/pricing/seasons/...` endpoints remain at same paths
 - No backend changes required
+
+**Bugfixes (P2.22a):**
+
+1. **Relative Import Paths** - Build failed with "Module not found"
+   - Cause: Imports still used `../../lib/...` from old 2-level-deep path
+   - Fix: Changed to `../lib/...` (now 1-level-deep)
+
+2. **Missing AdminShell** - Page rendered without navigation/topbar
+   - Cause: Page no longer inherited layout from `pricing/layout.tsx`
+   - Fix: Created dedicated `frontend/app/seasons/layout.tsx`
 
 **Status**: ✅ IMPLEMENTED
