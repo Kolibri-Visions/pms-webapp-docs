@@ -212,11 +212,11 @@ Property-Fee (property_id = {uuid}, source_template_id = {template})
 
 ---
 
-## Archived Entries
+## Archiv
 
-Historische Einträge vor 2026-02-14 wurden archiviert. Diese Datei enthält nur aktuelle Features der letzten 2 Wochen.
+Historische Einträge (Phase 1-20, vor 2026-02-14) wurden ausgelagert:
 
-Für ältere Phase-Dokumentation siehe Git-History oder die jeweiligen Runbook-Kapitel unter `ops/runbook/`.
+➡️ **[project_status_archive.md](./project_status_archive.md)** - Vollständige Projekthistorie (32.000+ Zeilen)
 
 ---
 
