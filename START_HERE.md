@@ -7,20 +7,19 @@
 ## For Ops / DevOps / On-Call
 
 - **[Runbook](ops/runbook.md)** - Troubleshooting guide for production issues
-  - **[Top 5 Failure Modes](ops/runbook.md#top-5-failure-modes-and-fixes)** - Quick fixes for common failures (DB DNS, JWT auth, Worker/Redis, Schema drift, Smoke script pitfalls)
-- **[Feature Flags](ops/feature-flags.md)** - Central reference for all feature toggles (MODULES_ENABLED, CHANNEL_MANAGER_ENABLED, etc.)
-- **[Live Status](PROJECT_STATUS_LIVE.md)** - Current staging/deploy reality (what's running now, known issues)
+  - **[Top 5 Failure Modes](ops/runbook.md#top-5-failure-modes-and-fixes)** - Quick fixes for common failures
+- **[Feature Flags](ops/feature-flags.md)** - Central reference for all feature toggles
 - **[Schema Drift SOP](database/migrations-guide.md#schema-drift-sop)** - Step-by-step procedure to detect and fix schema drift
-- **[Server-side Smoke Checks](testing/README.md#server-side-smoke-checks-official)** - Official smoke test sequence (health checks, JWT, booking CRUD, availability sync)
+- **[Server-side Smoke Checks](testing/README.md#server-side-smoke-checks-official)** - Official smoke test sequence
 
 ## For Product / Planning
 
-- **[Product Backlog](product/PRODUCT_BACKLOG.md)** - 10 epics (A-J) with features and open tasks
+- **[Product Backlog](product/PRODUCT_BACKLOG.md)** - Epics with features and open tasks
 - **[Release Plan](product/RELEASE_PLAN.md)** - MVP → Beta → Prod-ready milestones
 - **[Changelog](product/CHANGELOG.md)** - Release history (user-facing changes)
-- **[Definition of Done](process/DEFINITION_OF_DONE.md)** - Task completion criteria (includes "docs updated after every task")
-- **[Docs Lifecycle](process/DOCS_LIFECYCLE.md)** - Keep backlog + live status in sync, prevent doc duplication
-- **[Deprecation Map](process/DEPRECATION_MAP.md)** - Safe deletion roadmap (OLD → NEW mappings, deletion gate checklist)
+- **[Definition of Done](process/DEFINITION_OF_DONE.md)** - Task completion criteria
+- **[Docs Lifecycle](process/DOCS_LIFECYCLE.md)** - Keep backlog + live status in sync
+- **[Deprecation Map](process/DEPRECATION_MAP.md)** - Safe deletion roadmap
 - **[Release Cadence](process/RELEASE_CADENCE.md)** - Bi-weekly releases, hotfix process
 
 ## For Developers
@@ -28,10 +27,10 @@
 ### Architecture
 
 - **[Architecture Overview](architecture/)** - System design documentation
-  - [Error Taxonomy](architecture/error-taxonomy.md) - Error codes, typed exceptions (P1-06 done, P1-07 pending)
-  - [Module System](architecture/module-system.md) - Module registry, graceful degradation, MODULES_ENABLED flag
-  - [Modules & Entitlements](architecture/modules-and-entitlements.md) - Module configuration, entitlements
-  - [Channel Manager](architecture/channel-manager.md) - Channel sync architecture (adapters, sync engine, feature gating)
+  - [Error Taxonomy](architecture/error-taxonomy.md) - Error codes, typed exceptions
+  - [Module System](architecture/module-system.md) - Module registry, graceful degradation
+  - [Modules & Entitlements](architecture/modules-and-entitlements.md) - Module configuration
+  - [Channel Manager](architecture/channel-manager.md) - Channel sync architecture
 
 ### Database
 
@@ -39,44 +38,32 @@
   - [Data Integrity](database/data-integrity.md) - Constraints, validation rules
   - [Index Strategy](database/index-strategy.md) - Query optimization, indexing
   - [Migrations Guide](database/migrations-guide.md) - How to create/apply migrations
-  - [EXCLUSION Constraints](database/exclusion-constraints.md) - Double-booking prevention with PostgreSQL EXCLUSION
+  - [EXCLUSION Constraints](database/exclusion-constraints.md) - Double-booking prevention
 
 ### Frontend
 
 - **[Frontend Documentation](frontend/)** - Next.js SSR, authentication, pages
   - [Authentication](frontend/authentication.md) - Supabase SSR, session refresh, role checks
-  - [Ops Console](frontend/ops-console.md) - Frontend /ops/* pages (admin-only, feature flag required)
+  - [Ops Console](frontend/ops-console.md) - Frontend /ops/* pages (admin-only)
 
 ### Testing
 
-- **[Testing Guide](testing/README.md)** - Test organization, workflow (no local tests; server-side smoke only)
+- **[Testing Guide](testing/README.md)** - Test organization, workflow (server-side smoke only)
 
 ---
 
 ## Project Status
 
-### Live Status (Current Staging/Deploy)
-
-➡️ **[PROJECT_STATUS_LIVE.md](PROJECT_STATUS_LIVE.md)** - What is deployed NOW (manually maintained)
-
-### Historical Snapshots (Code-Derived)
-
-📸 **[_staging/status-review-v3/PROJECT_STATUS.md](_staging/status-review-v3/PROJECT_STATUS.md)** - Code-derived snapshot (commit `7f34c7d`, 2025-12-30 21:01 UTC)
-
-**Important Note**:
-- `_staging/status-review-v3/*` is a **historical, code-derived snapshot** (commit-bound, read-only).
-- `PROJECT_STATUS_LIVE.md` reflects **current staging/deploy reality** (manually maintained).
+➡️ **[project_status.md](project_status.md)** - Current feature status and recent changes
 
 ---
 
 ## Additional Resources
 
-- **[Product Backlog](product/PRODUCT_BACKLOG.md)** - 10 epics (A-J) with features and open tasks
+- **[Product Backlog](product/PRODUCT_BACKLOG.md)** - Epics with features and open tasks
 - **[Release Plan](product/RELEASE_PLAN.md)** - MVP → Beta → Prod-ready milestones
-- **[Direct Booking Engine](direct-booking-engine/)** - Stripe integration, email templates (future feature)
-- **[Channel Manager Docs](channel-manager/)** - Channel-specific documentation
 
 ---
 
-**Last Updated**: 2025-12-30
+**Last Updated**: 2026-02-21
 **Maintained By**: Backend Team
