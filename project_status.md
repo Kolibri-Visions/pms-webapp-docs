@@ -4,7 +4,95 @@
 
 **Last Updated (actual):** 2026-02-21
 
-**Current Phase:** Phase 21 - Inventory/Availability Production Hardening
+**Current Phase:** Phase 21 - Fees/Taxes Template-Based Restructuring
+
+---
+
+## Fees/Taxes Umstrukturierung (Template-basiert) (2026-02-21) - IMPLEMENTED
+
+**Feature**: Umstellung der Gebühren-/Steuerverwaltung auf Template-basiertes System. `/gebuehren-steuern` wird zur Agency-Level Template-Verwaltung, Property-Zuweisung erfolgt unter `/properties/[id]/gebuehren`.
+
+### Architektur
+
+| Seite | Zweck |
+|-------|-------|
+| `/gebuehren-steuern` | Agency-weite Fee/Tax-Templates definieren |
+| `/properties/[id]/gebuehren` | Property-spezifische Fees/Templates zuweisen |
+
+### Datenmodell
+
+```
+Agency-Template (property_id = NULL)
+        ↓ "Zuweisen" = Kopie erstellen
+Property-Fee (property_id = {uuid}, source_template_id = {template})
+```
+
+- **Fees**: Template + Kopie-Modell (Property bekommt eigene Kopie)
+- **Steuern**: Nur Agency-Level (keine Property-spezifischen Steuern)
+
+### Backend-Änderungen
+
+| Datei | Änderung |
+|-------|----------|
+| `backend/app/schemas/pricing.py` | Neue Schemas: `PricingFeeTemplateResponse`, `AssignFeeFromTemplateRequest` |
+| `backend/app/api/routes/pricing.py` | Neue Endpoints (siehe unten) |
+| `supabase/migrations/20260221000000_add_pricing_fees_source_template.sql` | Neue Spalte `source_template_id` |
+
+### Neue API Endpoints
+
+| Endpoint | Beschreibung |
+|----------|--------------|
+| `GET /api/v1/pricing/fees/templates` | Nur Agency-Templates mit usage_count |
+| `DELETE /api/v1/pricing/fees/{fee_id}` | Template löschen (nur wenn nicht verwendet) |
+| `GET /api/v1/pricing/properties/{id}/fees` | Property-Fees mit source_template_name |
+| `POST /api/v1/pricing/properties/{id}/fees/from-template` | Fee aus Template zuweisen |
+| `DELETE /api/v1/pricing/properties/{id}/fees/{fee_id}` | Property-Fee entfernen |
+
+### Frontend-Änderungen
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/gebuehren-steuern/page.tsx` | Neue Template-Verwaltungsseite (kein Property-Dropdown) |
+| `frontend/app/properties/[id]/gebuehren/page.tsx` | Neue Property-Gebühren-Seite |
+| `frontend/app/properties/[id]/layout.tsx` | Neuer Tab "Gebühren" |
+| `frontend/app/pricing/page.tsx` | Redirect zu `/gebuehren-steuern` |
+| `frontend/app/components/AdminShell.tsx` | Navigation: `/pricing` → `/gebuehren-steuern` |
+
+### Features
+
+- **Template-Verwaltung**: Gebühren-Vorlagen auf Agency-Level erstellen
+- **"Verwendet in X Objekte"**: Zeigt Usage-Count pro Template
+- **Property-Zuweisung**: Templates kopieren oder eigene Gebühren erstellen
+- **Quelle-Badge**: "Vorlage" vs "Manuell" auf Property-Seite
+- **Table-to-Card**: Responsive Pattern gemäß CLAUDE.md §10
+- **Steuern read-only**: Agency-weite Steuern auf Property-Seite anzeigen
+
+### Verification Path
+
+```bash
+# 1. Templates-Seite
+# → /gebuehren-steuern zeigt nur Agency-Templates
+# → Kein Property-Dropdown mehr
+# → "Verwendet in X Objekte" Spalte
+
+# 2. Property-Seite
+# → /properties/{id}/gebuehren zeigt:
+#    - Zugewiesene Templates (mit "Vorlage" Badge)
+#    - Property-spezifische Fees (mit "Manuell" Badge)
+# → Template zuweisen funktioniert
+# → Custom Fee erstellen funktioniert
+
+# 3. Navigation
+# → Sidebar zeigt "Gebühren & Steuern" → /gebuehren-steuern
+# → /pricing redirected zu /gebuehren-steuern
+```
+
+**Dateien**:
+- Backend: `pricing.py` (routes + schemas)
+- Migration: `20260221000000_add_pricing_fees_source_template.sql`
+- Frontend: `gebuehren-steuern/page.tsx`, `properties/[id]/gebuehren/page.tsx`, `AdminShell.tsx`
+
+**Status**: ✅ IMPLEMENTED
 
 ---
 
