@@ -203,7 +203,7 @@ backend/app/channel_manager/
 - `backend/app/channel_manager/monitoring/metrics.py` - Metrics
 
 **Configuration**:
-- `backend/app/channel_manager/config.py` - Channel Manager config
+- `backend/app/core/config.py` - Zentrale Konfiguration (inkl. Channel Manager Settings)
 
 **Module Registration**:
 - `backend/app/modules/channel_manager.py` - Module definition (assumed)
