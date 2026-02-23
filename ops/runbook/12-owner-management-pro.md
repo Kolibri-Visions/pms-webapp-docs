@@ -462,6 +462,96 @@ Das ursprüngliche `address` Feld enthält unstrukturierte Adressen. Für DAC7-C
 
 ---
 
+## 8. GDPR Hard Delete (Art. 17 Recht auf Löschung)
+
+Permanente Anonymisierung aller personenbezogenen Daten eines Eigentümers.
+
+### Endpoint
+
+```
+DELETE /api/v1/owners/{owner_id}/gdpr-delete?confirm=true
+```
+
+**Authentifizierung:** Nur Admin-Rolle
+
+### Voraussetzungen
+
+1. Owner muss **deaktiviert** sein (soft-delete zuerst)
+2. Owner darf **keine Properties** zugewiesen haben (aktiv oder inaktiv)
+3. `confirm=true` Query-Parameter erforderlich
+
+### Was wird anonymisiert
+
+| Feld | Neuer Wert |
+|------|------------|
+| `first_name` | "GELÖSCHT" |
+| `last_name` | "GELÖSCHT" |
+| `email` | `deleted_xxx@anonymized.local` |
+| `phone` | NULL |
+| `address` | NULL |
+| `street`, `postal_code`, `city`, `country` | NULL |
+| `tax_id`, `vat_id`, `birth_date` | NULL |
+| `iban`, `bic`, `bank_name` | NULL |
+| `notes` | "GDPR Art. 17 - Daten gelöscht am DATUM" |
+
+### Was bleibt erhalten
+
+- `id` — Für Statement-Referenzen
+- `agency_id` — Zugehörigkeit
+- `commission_rate_bps` — Historische Provision
+- `is_active` — Status (false)
+- Statement-Records — Nur Beträge, keine PII
+
+### Ablauf
+
+```bash
+# 1. Properties entfernen (falls vorhanden)
+curl -X PATCH "${API}/api/v1/properties/${PROP_ID}/owner" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"owner_id": null}'
+
+# 2. Soft-Delete
+curl -X DELETE "${API}/api/v1/owners/${OWNER_ID}" \
+  -H "Authorization: Bearer $TOKEN"
+
+# 3. GDPR Hard Delete (IRREVERSIBEL!)
+curl -X DELETE "${API}/api/v1/owners/${OWNER_ID}/gdpr-delete?confirm=true" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+### Response
+
+```json
+{
+  "success": true,
+  "owner_id": "uuid",
+  "action": "gdpr_anonymized",
+  "anonymized_fields": ["first_name", "last_name", "email", "iban", ...],
+  "anonymized_count": 14,
+  "message": "Owner data has been permanently anonymized per GDPR Art. 17.",
+  "preserved": [
+    "owner_id (for statement references)",
+    "commission_rate_bps (historical)",
+    "statement records (amounts only)"
+  ]
+}
+```
+
+### Rechtlicher Hintergrund
+
+- **DSGVO Art. 17**: Recht auf Löschung ("Recht auf Vergessenwerden")
+- **Frist**: "Unverzüglich" (max. 1 Monat)
+- **Ausnahmen**: Aufbewahrungspflichten für Buchhaltung (aggregierte Daten bleiben)
+
+### Audit-Log
+
+Jede GDPR-Löschung wird mit WARNING-Level geloggt:
+```
+GDPR DELETE completed: owner_id=..., anonymized_fields=[...], user_id=...
+```
+
+---
+
 ## Database Schema
 
 ### owners table (updated)

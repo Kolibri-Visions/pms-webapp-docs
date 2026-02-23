@@ -167,6 +167,56 @@ curl -X GET "${API}/api/v1/owner/me/export?format=download" \
 
 ---
 
+## GDPR Hard Delete / Anonymisierung (2026-02-23) - IMPLEMENTED
+
+**Feature**: DSGVO Art. 17 - Recht auf Löschung ("Recht auf Vergessenwerden").
+
+### Endpoint
+
+`DELETE /api/v1/owners/{id}/gdpr-delete?confirm=true`
+
+### Was wird anonymisiert
+
+| Kategorie | Felder | Neuer Wert |
+|-----------|--------|------------|
+| Identität | first_name, last_name | "GELÖSCHT" |
+| Kontakt | email | `deleted_xxx@anonymized.local` |
+| Kontakt | phone | NULL |
+| Adresse | address, street, postal_code, city, country | NULL |
+| Steuerdaten | tax_id, vat_id, birth_date | NULL |
+| Banking | iban, bic, bank_name | NULL |
+
+### Was bleibt erhalten (Buchhaltung)
+
+- Owner-ID (für Statement-Referenzen)
+- commission_rate_bps (historisch)
+- Statement-Records (nur Beträge, keine PII)
+
+### Voraussetzungen
+
+1. Owner muss **deaktiviert** sein (erst `DELETE /owners/{id}`)
+2. Owner darf **keine Properties** zugewiesen haben
+3. Nur **Admin-Rolle** kann ausführen
+4. `confirm=true` erforderlich (Sicherheitscheck)
+
+### Verification Path
+
+```bash
+# 1. Erst soft-delete
+curl -X DELETE "${API}/api/v1/owners/${OWNER_ID}" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+
+# 2. Dann GDPR-Delete
+curl -X DELETE "${API}/api/v1/owners/${OWNER_ID}/gdpr-delete?confirm=true" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+**Runbook:** [12-owner-management-pro.md](./ops/runbook/12-owner-management-pro.md) (Sektion 8: GDPR Hard Delete)
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
 ## Immutable Objekt-ID (internal_name) (2026-02-23) - IMPLEMENTED
 
 **Feature**: `internal_name` (Objekt-ID) ist nach Erstellung unveränderlich.
