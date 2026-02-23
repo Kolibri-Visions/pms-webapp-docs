@@ -37,8 +37,18 @@ Owner Management Pro provides comprehensive owner administration:
 | `is_active` | boolean | Active status (false = deactivated) |
 | `commission_rate_bps` | int | Commission rate in basis points (100 = 1%) |
 | `phone` | string | Phone number (owner-editable) |
-| `address` | string | Address (owner-editable) |
+| `address` | string | Address (legacy, owner-editable) |
 | `notes` | string | Internal notes (staff only) |
+| `tax_id` | string | Steuer-ID (DAC7) |
+| `birth_date` | date | Geburtsdatum (DAC7) |
+| `vat_id` | string | USt-IdNr. (DAC7, nur Gewerbe) |
+| `street` | string | Straße + Hausnummer |
+| `postal_code` | string | PLZ |
+| `city` | string | Ort |
+| `country` | string | Land (ISO 3166-1, Default: DE) |
+| `iban` | string | IBAN |
+| `bic` | string | BIC/SWIFT |
+| `bank_name` | string | Bankname |
 
 **Deactivate/Reactivate Owner:**
 
@@ -235,15 +245,119 @@ JWT_TOKEN="eyJ..." ./backend/scripts/pms_owners_list_smoke.sh
    # Expected: "List owner invites (HTTP 200)"
    ```
 
+## 5. DAC7 Compliance & Banking (2026-02-23)
+
+Die DAC7-Richtlinie (EU Tax Transparency Directive) erfordert, dass Plattformbetreiber bestimmte Daten über Eigentümer an Finanzbehörden melden.
+
+### DAC7 Pflichtfelder
+
+| Feld | Typ | Beschreibung | Beispiel |
+|------|-----|--------------|----------|
+| `tax_id` | string | Steuer-ID (DE: 11-stellig) | 12 345 678 901 |
+| `birth_date` | date | Geburtsdatum | 1980-01-15 |
+| `vat_id` | string | USt-IdNr. (nur Gewerbe) | DE123456789 |
+
+### Banking-Felder (für Auszahlungen)
+
+| Feld | Typ | Beschreibung | Beispiel |
+|------|-----|--------------|----------|
+| `iban` | string | IBAN | DE89 3704 0044 0532 0130 00 |
+| `bic` | string | BIC/SWIFT | COBADEFFXXX |
+| `bank_name` | string | Bankname | Commerzbank |
+
+### Strukturierte Adresse
+
+| Feld | Typ | Beschreibung |
+|------|-----|--------------|
+| `street` | string | Straße + Hausnummer |
+| `postal_code` | string | PLZ |
+| `city` | string | Ort |
+| `country` | string | Land (ISO 3166-1 alpha-2, Default: DE) |
+
+**Hinweis:** Das Legacy-Feld `address` bleibt für Rückwärtskompatibilität erhalten.
+
+### DAC7-Daten aktualisieren
+
+```bash
+curl -X PATCH "${API}/api/v1/owners/${OWNER_ID}" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tax_id": "12345678901",
+    "birth_date": "1980-01-15",
+    "vat_id": "DE123456789",
+    "street": "Musterstraße 123",
+    "postal_code": "12345",
+    "city": "Berlin",
+    "country": "DE",
+    "iban": "DE89370400440532013000",
+    "bic": "COBADEFFXXX",
+    "bank_name": "Commerzbank"
+  }'
+```
+
+### Owner Edit Modal (Admin UI)
+
+Die Owner-Detail-Seite (`/owners/{ownerId}`) enthält ein Drawer-Style Edit Modal:
+
+1. **Öffnen:** "Bearbeiten" Button neben "Löschen"
+2. **Sektionen:**
+   - Name & Kontakt (first_name, last_name, email, phone)
+   - Steuer & DAC7 (tax_id, birth_date, vat_id)
+   - Adresse (street, postal_code, city, country)
+   - Bankverbindung (iban, bic, bank_name)
+   - Provision & Status (commission_rate_bps, is_active)
+   - Interne Notizen
+3. **Speichern:** PATCH auf `/api/v1/owners/{ownerId}`
+
+### Migration
+
+**Datei:** `supabase/migrations/20260223000000_add_owner_dac7_fields.sql`
+
+```sql
+-- DAC7 Felder
+ALTER TABLE owners ADD COLUMN IF NOT EXISTS tax_id TEXT NULL;
+ALTER TABLE owners ADD COLUMN IF NOT EXISTS birth_date DATE NULL;
+ALTER TABLE owners ADD COLUMN IF NOT EXISTS vat_id TEXT NULL;
+
+-- Banking
+ALTER TABLE owners ADD COLUMN IF NOT EXISTS iban TEXT NULL;
+ALTER TABLE owners ADD COLUMN IF NOT EXISTS bic TEXT NULL;
+ALTER TABLE owners ADD COLUMN IF NOT EXISTS bank_name TEXT NULL;
+
+-- Strukturierte Adresse
+ALTER TABLE owners ADD COLUMN IF NOT EXISTS street TEXT NULL;
+ALTER TABLE owners ADD COLUMN IF NOT EXISTS postal_code TEXT NULL;
+ALTER TABLE owners ADD COLUMN IF NOT EXISTS city TEXT NULL;
+ALTER TABLE owners ADD COLUMN IF NOT EXISTS country TEXT NULL DEFAULT 'DE';
+```
+
+**Ausführung:** Via Supabase SQL Editor (Dashboard) als `supabase_admin`.
+
+---
+
 ## Database Schema
 
 ### owners table (updated)
 
 ```sql
+-- Original Pro fields
 ALTER TABLE owners ADD COLUMN commission_rate_bps INT NOT NULL DEFAULT 0;
 ALTER TABLE owners ADD COLUMN phone TEXT NULL;
 ALTER TABLE owners ADD COLUMN address TEXT NULL;
 ALTER TABLE owners ADD COLUMN notes TEXT NULL;
+
+-- DAC7 Compliance (2026-02-23)
+ALTER TABLE owners ADD COLUMN tax_id TEXT NULL;
+ALTER TABLE owners ADD COLUMN birth_date DATE NULL;
+ALTER TABLE owners ADD COLUMN vat_id TEXT NULL;
+ALTER TABLE owners ADD COLUMN street TEXT NULL;
+ALTER TABLE owners ADD COLUMN postal_code TEXT NULL;
+ALTER TABLE owners ADD COLUMN city TEXT NULL;
+ALTER TABLE owners ADD COLUMN country TEXT NULL DEFAULT 'DE';
+ALTER TABLE owners ADD COLUMN iban TEXT NULL;
+ALTER TABLE owners ADD COLUMN bic TEXT NULL;
+ALTER TABLE owners ADD COLUMN bank_name TEXT NULL;
 ```
 
 ### owner_invites table (new)

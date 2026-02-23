@@ -1,8 +1,111 @@
 # PMS-Webapp Project Status
 
-**Last Updated:** 2026-02-21
+**Last Updated:** 2026-02-23
 
-**Current Phase:** Phase 21 - Fees/Taxes Template-Based Restructuring
+**Current Phase:** Phase 22 - Owner DAC7 Compliance & Edit Modal
+
+---
+
+## Owner DAC7 Compliance & Edit Modal (2026-02-23) - IMPLEMENTED
+
+**Feature**: DAC7-Richtlinie Compliance für Eigentümer (EU-Steuertransparenz) mit vollständigem Edit Modal.
+
+### Änderungen
+
+#### 1. DAC7 Pflichtfelder (Migration)
+
+| Feld | Typ | Beschreibung |
+|------|-----|--------------|
+| `tax_id` | TEXT | Steuer-ID (11-stellig für DE) |
+| `birth_date` | DATE | Geburtsdatum (DAC7-Pflicht) |
+| `vat_id` | TEXT | USt-IdNr. (für Gewerbetreibende) |
+
+#### 2. Banking-Felder (für Auszahlungen)
+
+| Feld | Typ | Beschreibung |
+|------|-----|--------------|
+| `iban` | TEXT | IBAN |
+| `bic` | TEXT | BIC/SWIFT |
+| `bank_name` | TEXT | Bankname |
+
+#### 3. Strukturierte Adresse
+
+| Feld | Typ | Beschreibung |
+|------|-----|--------------|
+| `street` | TEXT | Straße + Hausnummer |
+| `postal_code` | TEXT | PLZ |
+| `city` | TEXT | Ort |
+| `country` | TEXT | Land (ISO 3166-1, Default: DE) |
+
+### Dateien
+
+| Bereich | Datei | Änderung |
+|---------|-------|----------|
+| Migration | `supabase/migrations/20260223000000_add_owner_dac7_fields.sql` | Neue Spalten |
+| Backend | `backend/app/schemas/owners.py` | Schemas erweitert |
+| Backend | `backend/app/api/routes/owners.py` | CRUD-Endpoints erweitert |
+| Frontend | `frontend/app/types/owner.ts` | TypeScript-Interface erweitert |
+| Frontend | `frontend/app/owners/[ownerId]/page.tsx` | Detail-Seite + Edit Modal |
+
+### Owner Edit Modal (Drawer-Style)
+
+- Gleitet von rechts ein (Desktop) / von unten (Mobile)
+- Sektionen: Name & Kontakt, Steuer & DAC7, Adresse, Bankverbindung, Provision & Status, Notizen
+- PATCH auf `/api/v1/owners/{ownerId}`
+- Auto-Refresh nach Speichern
+
+### Verification Path
+
+```bash
+# 1. Owner Detail-Seite öffnen
+# → /owners/{ownerId} zeigt alle DAC7-Felder
+
+# 2. Edit Modal öffnen
+# → "Bearbeiten" Button → Drawer öffnet sich
+# → Alle Felder ausfüllen → "Änderungen speichern"
+
+# 3. API-Test
+curl -X PATCH "${API}/api/v1/owners/${OWNER_ID}" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tax_id": "12345678901",
+    "birth_date": "1980-01-15",
+    "iban": "DE89370400440532013000"
+  }'
+```
+
+**Runbook:** [12-owner-management-pro.md](./ops/runbook/12-owner-management-pro.md) (Sektion 5: DAC7 Compliance)
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
+## Immutable Objekt-ID (internal_name) (2026-02-23) - IMPLEMENTED
+
+**Feature**: `internal_name` (Objekt-ID) ist nach Erstellung unveränderlich.
+
+### Änderungen
+
+- `internal_name` aus `allowed_fields` in `property_service.py` entfernt
+- Auto-Generierung bei Erstellung: `OBJ-XXX` Format
+- Migration für bestehende Properties mit leerem internal_name
+
+**Dateien:**
+- `backend/app/services/property_service.py`
+- `backend/scripts/migrate_internal_names.sql`
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
+## Login Redirect zu /dashboard (2026-02-23) - IMPLEMENTED
+
+**Feature**: Nach Login wird zu `/dashboard` statt `/channel-sync` weitergeleitet.
+
+**Datei:** `frontend/app/login/page.tsx`
+
+**Status**: ✅ IMPLEMENTED
 
 ---
 
