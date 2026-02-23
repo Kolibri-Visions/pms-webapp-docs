@@ -2,7 +2,54 @@
 
 **Last Updated:** 2026-02-23
 
-**Current Phase:** Phase 22 - Owner DAC7 Compliance & Edit Modal
+**Current Phase:** Phase 23 - Table-to-Card Responsive UI (Alle Admin-Listen)
+
+---
+
+## Table-to-Card Responsive Pattern - Alle Admin-Listen (2026-02-23) - IMPLEMENTED
+
+**Feature**: Responsive Table-to-Card Pattern gemäß CLAUDE.md §10 auf alle verbleibenden Admin-Listen angewendet.
+
+### Bearbeitete Seiten
+
+| Phase | Seite | Beschreibung |
+|-------|-------|--------------|
+| 1 | `/extra-services` | Zusatzleistungen mit Checkbox-Selektion |
+| 1 | `/guests` | Gästeliste mit VIP/Gesperrt-Badges |
+| 1 | `/owners` | Eigentümerliste mit DAC7-Export-Button |
+| 1 | `/team` | Teammitglieder + Einladungen (2 Tabellen) |
+| 1 | `/seasons` | Saisonvorlagen mit erweiterbaren Perioden |
+| 1 | `/bookings` | Buchungsliste mit Status-Badges |
+| 2 | `/notifications/email-outbox` | E-Mail Outbox mit Status-Anzeige |
+| 2 | `/connections` | Channel-Manager-Verbindungen |
+| 2 | `/channel-sync` | Sync-Logs mit Batch-Links |
+| 2 | `/website/pages` | Website-Seiten mit Template-Badges |
+| 3 | `/ops/modules` | Backend-Module mit Tags/Prefixes |
+| 3 | `/ops/audit-log` | Audit-Log mit Aktions-Badges |
+
+### Implementierung
+
+- **Desktop (md+)**: Tabellen-Layout mit `hidden md:block`
+- **Mobile (<md)**: Karten-Layout mit `block md:hidden`
+- **Breakpoint**: 768px (Tailwind `md`)
+- **Actions**: Alle Aktionen in beiden Layouts verfügbar
+
+### Verification Path
+
+```bash
+# Responsive-Test: Browser-DevTools → Responsive Mode
+# Alle Seiten bei 375px und 1280px Breite prüfen
+
+# Betroffene URLs:
+# /extra-services, /guests, /owners, /team
+# /seasons, /bookings, /notifications/email-outbox
+# /connections, /channel-sync, /website/pages
+# /ops/modules, /ops/audit-log
+```
+
+**Referenz:** CLAUDE.md §10 - Responsive UI Design Pattern
+
+**Status**: ✅ IMPLEMENTED
 
 ---
 
