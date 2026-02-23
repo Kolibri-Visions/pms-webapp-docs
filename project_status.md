@@ -132,6 +132,41 @@ curl -X GET "${API}/api/v1/owner/me/export?format=download" \
 
 ---
 
+## Strukturierte Adress-Migration (2026-02-23) - IMPLEMENTED
+
+**Feature**: Migration von Legacy-`address` Feld zu strukturierten Feldern (street, postal_code, city, country).
+
+### Migrationsskript
+
+**Datei:** `backend/scripts/migrate_owner_addresses.sql`
+
+### Ablauf
+
+1. **Preview** (Step 1): Zeigt betroffene Owners
+2. **Parse Preview** (Step 2): Zeigt was geparst würde
+3. **Execute** (Step 3): Führt Migration aus (manuell auskommentieren)
+4. **Verify** (Step 4): Zeigt Migrationsergebnis
+
+### Unterstützte Formate
+
+- Format A: `"Straße 123, 12345 Stadt"`
+- Format B: `"Straße 123\n12345 Stadt"`
+
+### Verification Path
+
+```bash
+# In Supabase SQL Editor:
+# 1. Öffne backend/scripts/migrate_owner_addresses.sql
+# 2. Führe Step 1 + 2 aus (Preview)
+# 3. Prüfe Ergebnisse
+# 4. Führe Step 3 aus (Migration)
+# 5. Führe Step 4 aus (Verify)
+```
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
 ## Immutable Objekt-ID (internal_name) (2026-02-23) - IMPLEMENTED
 
 **Feature**: `internal_name` (Objekt-ID) ist nach Erstellung unveränderlich.

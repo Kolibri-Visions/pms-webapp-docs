@@ -420,6 +420,48 @@ curl -X GET "${API}/api/v1/owner/me/export?format=download" \
 
 ---
 
+## 7. Strukturierte Adress-Migration
+
+Migration von Legacy-`address` Feld zu strukturierten Feldern.
+
+### Hintergrund
+
+Das ursprüngliche `address` Feld enthält unstrukturierte Adressen. Für DAC7-Compliance werden strukturierte Felder benötigt:
+- `street` — Straße + Hausnummer
+- `postal_code` — PLZ
+- `city` — Ort
+- `country` — Land (ISO 3166-1)
+
+### Migrationsskript
+
+**Datei:** `backend/scripts/migrate_owner_addresses.sql`
+
+### Ausführung
+
+1. Öffne Supabase SQL Editor
+2. Kopiere Inhalt von `migrate_owner_addresses.sql`
+3. **Step 1:** Führe Preview aus (zeigt betroffene Owners)
+4. **Step 2:** Führe Parse-Preview aus (zeigt Parsing-Ergebnis)
+5. **Step 3:** Prüfe Ergebnisse, dann kommentiere UPDATE aus und führe aus
+6. **Step 4:** Verifiziere Ergebnisse
+
+### Unterstützte Adressformate
+
+| Format | Beispiel | Parsing |
+|--------|----------|---------|
+| Deutsch Standard | `Musterstr. 1, 12345 Berlin` | ✅ Vollständig |
+| Ohne Komma | `Musterstr. 1 12345 Berlin` | ✅ PLZ + City |
+| Nur Straße | `Musterstraße 123` | ⚠️ Nur Straße |
+
+### Hinweise
+
+- Legacy `address` Feld wird **nicht gelöscht** (Rückwärtskompatibilität)
+- Nur Owners mit leeren `street` Feldern werden aktualisiert
+- Manuelle Nachbearbeitung für komplexe Adressen empfohlen
+- `country` Default: `DE`
+
+---
+
 ## Database Schema
 
 ### owners table (updated)
