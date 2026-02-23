@@ -217,6 +217,65 @@ curl -X DELETE "${API}/api/v1/owners/${OWNER_ID}/gdpr-delete?confirm=true" \
 
 ---
 
+## DAC7 XML-Export für Finanzamt (2026-02-23) - IMPLEMENTED
+
+**Feature**: XML-Export im OECD DPI-Format für die Meldung an Finanzbehörden gemäß EU DAC7-Richtlinie.
+
+### Endpoint
+
+`GET /api/v1/dac7/export?year=2025`
+
+### XML-Struktur (OECD DPI Schema)
+
+| Element | Beschreibung |
+|---------|--------------|
+| `MessageSpec` | Metadaten (SendingEntity, Timestamp, ReportingPeriod) |
+| `PlatformOperator` | Agency-Daten (Name, Adresse, Land) |
+| `ReportableSeller` | Pro Owner mit Properties und Umsätzen |
+| `ImmovableProperty` | Objekt-Typ (DPI903) mit Adressen |
+| `Consideration` | Quartalweise Umsätze + Jahressumme |
+
+### Exportierte Owner-Daten
+
+| Kategorie | Felder |
+|-----------|--------|
+| Identität | first_name, last_name |
+| Steuer-ID | tax_id (TIN), vat_id |
+| Geburtsdatum | birth_date |
+| Adresse | street, postal_code, city, country |
+
+### Finanzielle Daten
+
+- Quartalweise Aufschlüsselung (Q1-Q4)
+- Umsatz pro Quartal (in EUR)
+- Anzahl Aktivitäten (Buchungen)
+- Jahressumme
+
+### Voraussetzungen
+
+1. Nur **Admin-Rolle** kann exportieren
+2. Owner muss **is_active = true** sein
+3. Owner muss mindestens **ein Property** haben
+4. Properties müssen **Buchungen im Berichtsjahr** haben
+
+### Verification Path
+
+```bash
+# DAC7 XML-Export für 2025 erstellen
+curl -X GET "${API}/api/v1/dac7/export?year=2025" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -o DAC7_Report_2025.xml
+
+# XML validieren (Schema-Check)
+xmllint --noout DAC7_Report_2025.xml
+```
+
+**Runbook:** [12-owner-management-pro.md](./ops/runbook/12-owner-management-pro.md) (Sektion 9: DAC7 XML-Export)
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
 ## Immutable Objekt-ID (internal_name) (2026-02-23) - IMPLEMENTED
 
 **Feature**: `internal_name` (Objekt-ID) ist nach Erstellung unveränderlich.

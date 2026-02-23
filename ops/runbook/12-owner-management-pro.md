@@ -552,6 +552,127 @@ GDPR DELETE completed: owner_id=..., anonymized_fields=[...], user_id=...
 
 ---
 
+## 9. DAC7 XML-Export für Finanzamt
+
+XML-Export im OECD DPI-Format für die Meldung an Finanzbehörden gemäß EU DAC7-Richtlinie (2023/2226/EU).
+
+### Endpoint
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/api/v1/dac7/export?year=YYYY` | DAC7 XML-Report generieren |
+
+### Voraussetzungen
+
+1. **Admin-Rolle** erforderlich
+2. Owner muss `is_active = true` sein
+3. Owner muss mindestens ein aktives Property haben
+4. Properties müssen Buchungen im Berichtsjahr haben
+
+### XML-Struktur (OECD DPI Schema)
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<dpi:DPI_OECD version="1.0" xmlns:dpi="urn:oecd:ties:dpi:v1">
+  <dpi:MessageSpec>
+    <dpi:SendingEntityIN>agency-id</dpi:SendingEntityIN>
+    <dpi:TransmittingCountry>DE</dpi:TransmittingCountry>
+    <dpi:ReceivingCountry>DE</dpi:ReceivingCountry>
+    <dpi:MessageType>DPI</dpi:MessageType>
+    <dpi:MessageRefId>DE2025AGENCYID</dpi:MessageRefId>
+    <dpi:MessageTypeIndic>DPI401</dpi:MessageTypeIndic>
+    <dpi:ReportingPeriod>2025-12-31</dpi:ReportingPeriod>
+    <dpi:Timestamp>2026-01-15T10:30:00</dpi:Timestamp>
+  </dpi:MessageSpec>
+  <dpi:DPIBody>
+    <dpi:PlatformOperator>...</dpi:PlatformOperator>
+    <dpi:ReportableSeller>
+      <dpi:Identity>
+        <dpi:IndividualSeller>
+          <!-- Name, Address, TIN, BirthDate -->
+        </dpi:IndividualSeller>
+      </dpi:Identity>
+      <dpi:RelevantActivities>
+        <dpi:ImmovableProperty>
+          <dpi:PropertyListing>...</dpi:PropertyListing>
+          <dpi:Consideration>
+            <dpi:ConsQ Quarter="Q1">
+              <dpi:ConsidAmount currCode="EUR">12500.00</dpi:ConsidAmount>
+              <dpi:NumberOfActivities>15</dpi:NumberOfActivities>
+            </dpi:ConsQ>
+            <!-- Q2, Q3, Q4 -->
+            <dpi:ConsAnnual>
+              <dpi:ConsidAmount currCode="EUR">52000.00</dpi:ConsidAmount>
+              <dpi:NumberOfActivities>62</dpi:NumberOfActivities>
+            </dpi:ConsAnnual>
+          </dpi:Consideration>
+        </dpi:ImmovableProperty>
+      </dpi:RelevantActivities>
+    </dpi:ReportableSeller>
+  </dpi:DPIBody>
+</dpi:DPI_OECD>
+```
+
+### Gemeldete Daten pro Owner
+
+| Kategorie | Felder | DAC7-Pflicht |
+|-----------|--------|--------------|
+| Identität | first_name, last_name | Ja |
+| Steuer-ID (TIN) | tax_id | Ja |
+| USt-IdNr. | vat_id | Bei Gewerbe |
+| Geburtsdatum | birth_date | Ja |
+| Adresse | street, postal_code, city, country | Ja |
+
+### Finanzielle Daten
+
+| Element | Beschreibung |
+|---------|--------------|
+| `ConsQ` | Quartalsumsatz (Q1-Q4) |
+| `ConsidAmount` | Umsatz in EUR (2 Dezimalstellen) |
+| `NumberOfActivities` | Anzahl Buchungen im Quartal |
+| `ConsAnnual` | Jahressumme |
+
+### Verwendung
+
+```bash
+# DAC7 XML-Export für Berichtsjahr 2025
+curl -X GET "${API}/api/v1/dac7/export?year=2025" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -o DAC7_Report_2025.xml
+
+# XML-Syntax prüfen
+xmllint --noout DAC7_Report_2025.xml
+```
+
+### Response
+
+- **Content-Type**: `application/xml`
+- **Content-Disposition**: `attachment; filename=DAC7_Report_2025_{agency}_{date}.xml`
+
+### Meldepflichten
+
+| Aspekt | Vorgabe |
+|--------|---------|
+| Meldezeitraum | Kalenderjahr (01.01. - 31.12.) |
+| Meldefrist | 31. Januar des Folgejahres |
+| Zuständige Behörde | BZSt (Deutschland) |
+| Min. Umsatz für Meldepflicht | 2.000 EUR/Jahr oder 30 Aktivitäten |
+
+### Fehlende Pflichtfelder
+
+Falls Owner Pflichtfelder nicht ausgefüllt haben, wird eine HTTP 400 Warnung ausgegeben. Vor dem Export sicherstellen:
+
+```bash
+# Owners ohne Steuer-ID finden
+SELECT id, first_name, last_name, email
+FROM owners
+WHERE agency_id = 'your-agency-id'
+  AND is_active = true
+  AND tax_id IS NULL;
+```
+
+---
+
 ## Database Schema
 
 ### owners table (updated)
