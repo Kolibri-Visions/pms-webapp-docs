@@ -81,6 +81,57 @@ curl -X PATCH "${API}/api/v1/owners/${OWNER_ID}" \
 
 ---
 
+## DSGVO Datenexport (Art. 15 Auskunftsrecht) (2026-02-23) - IMPLEMENTED
+
+**Feature**: Eigentümer können alle ihre personenbezogenen Daten exportieren (DSGVO Art. 15).
+
+### Endpoint
+
+`GET /api/v1/owner/me/export`
+
+### Exportierte Daten
+
+| Kategorie | Beschreibung |
+|-----------|--------------|
+| Stammdaten | Name, E-Mail, Telefon |
+| Steuerdaten (DAC7) | tax_id, birth_date, vat_id |
+| Adressdaten | street, postal_code, city, country |
+| Bankverbindung | iban, bic, bank_name |
+| Objektzuweisungen | Alle zugewiesenen Properties |
+| Buchungsdaten | Buchungen für eigene Objekte |
+| Abrechnungen | Finanzielle Statements |
+
+### Dateien
+
+| Bereich | Datei | Änderung |
+|---------|-------|----------|
+| Backend Schema | `backend/app/schemas/owners.py` | `OwnerDataExportResponse` + Hilfs-Schemas |
+| Backend Route | `backend/app/api/routes/owners.py` | `GET /owner/me/export` Endpoint |
+
+### Query Parameter
+
+- `format=json` (default): JSON-Response
+- `format=download`: Datei-Download als `.json`
+
+### Verification Path
+
+```bash
+# Als eingeloggter Owner:
+curl -X GET "${API}/api/v1/owner/me/export" \
+  -H "Authorization: Bearer $OWNER_TOKEN"
+
+# Als Download:
+curl -X GET "${API}/api/v1/owner/me/export?format=download" \
+  -H "Authorization: Bearer $OWNER_TOKEN" \
+  -o dsgvo_export.json
+```
+
+**Runbook:** [12-owner-management-pro.md](./ops/runbook/12-owner-management-pro.md) (Sektion 6: DSGVO Datenexport)
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
 ## Immutable Objekt-ID (internal_name) (2026-02-23) - IMPLEMENTED
 
 **Feature**: `internal_name` (Objekt-ID) ist nach Erstellung unveränderlich.

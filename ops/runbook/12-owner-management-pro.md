@@ -336,6 +336,90 @@ ALTER TABLE owners ADD COLUMN IF NOT EXISTS country TEXT NULL DEFAULT 'DE';
 
 ---
 
+## 6. DSGVO Datenexport (Art. 15 Auskunftsrecht)
+
+Eigentümer können alle ihre personenbezogenen Daten gemäß DSGVO Art. 15 exportieren.
+
+### Endpoint
+
+```
+GET /api/v1/owner/me/export
+```
+
+**Authentifizierung:** Owner-Token erforderlich (Login als Eigentümer)
+
+### Query Parameter
+
+| Parameter | Werte | Beschreibung |
+|-----------|-------|--------------|
+| `format` | `json` (default), `download` | Ausgabeformat |
+
+### Response-Struktur
+
+```json
+{
+  "export_date": "2026-02-23T15:30:00Z",
+  "export_type": "dsgvo_art15",
+  "profile": {
+    "id": "uuid",
+    "email": "owner@example.com",
+    "first_name": "Max",
+    "last_name": "Mustermann",
+    "phone": "+49...",
+    "tax_id": "12345678901",
+    "birth_date": "1980-01-15",
+    "vat_id": "DE123456789",
+    "street": "Musterstr. 1",
+    "postal_code": "12345",
+    "city": "Berlin",
+    "country": "DE",
+    "iban": "DE89...",
+    "bic": "COBADEFF",
+    "bank_name": "Commerzbank",
+    "created_at": "2026-01-01T00:00:00Z"
+  },
+  "properties": [
+    {"id": "uuid", "name": "Ferienwohnung Seeblick", "city": "Berlin"}
+  ],
+  "bookings": [
+    {"id": "uuid", "property_id": "uuid", "date_from": "...", "status": "confirmed"}
+  ],
+  "statements": [
+    {"id": "uuid", "period_start": "2026-01-01", "net_total_cents": 150000}
+  ],
+  "data_categories": [
+    "Stammdaten (Name, Kontakt)",
+    "Steuerdaten (DAC7)",
+    "Adressdaten",
+    "Bankverbindung",
+    "Objektzuweisungen",
+    "Buchungsdaten",
+    "Abrechnungen"
+  ]
+}
+```
+
+### Beispiel-Aufruf
+
+```bash
+# JSON-Response
+curl -X GET "${API}/api/v1/owner/me/export" \
+  -H "Authorization: Bearer $OWNER_TOKEN"
+
+# Datei-Download
+curl -X GET "${API}/api/v1/owner/me/export?format=download" \
+  -H "Authorization: Bearer $OWNER_TOKEN" \
+  -o dsgvo_export.json
+```
+
+### Rechtlicher Hintergrund
+
+- **DSGVO Art. 15**: Auskunftsrecht der betroffenen Person
+- **Frist**: 1 Monat nach Anfrage (Endpoint ermöglicht sofortigen Self-Service)
+- **Format**: Maschinenlesbares Format (JSON) gemäß Art. 20 DSGVO
+
+---
+
 ## Database Schema
 
 ### owners table (updated)
