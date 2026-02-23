@@ -276,6 +276,44 @@ xmllint --noout DAC7_Report_2025.xml
 
 ---
 
+## DAC7 Export UI auf /owners (2026-02-23) - IMPLEMENTED
+
+**Feature**: Admin-UI für DAC7 XML-Export direkt auf der Eigentümer-Seite.
+
+### UI-Komponenten
+
+| Element | Beschreibung |
+|---------|--------------|
+| Export-Button | "DAC7 Export" Button im Header (nur für Admin sichtbar) |
+| Modal | Jahr-Auswahl + Info-Box + Download-Button |
+| Feedback | Erfolgs-/Fehlermeldungen im Modal |
+
+### Funktionen
+
+- Nur für **Admin-Rolle** sichtbar (`getUserRole(user) === "admin"`)
+- Jahr-Dropdown (2024 bis aktuelles Jahr)
+- Zeigt Meldefrist an (31. Januar Folgejahr)
+- Download als XML-Datei
+
+### Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/owners/page.tsx` | DAC7 Export Button + Modal |
+
+### Verification Path
+
+```bash
+# 1. Als Admin einloggen
+# 2. /owners öffnen
+# 3. "DAC7 Export" Button klicken
+# 4. Jahr auswählen → "XML herunterladen"
+```
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
 ## Immutable Objekt-ID (internal_name) (2026-02-23) - IMPLEMENTED
 
 **Feature**: `internal_name` (Objekt-ID) ist nach Erstellung unveränderlich.
