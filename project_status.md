@@ -2,13 +2,84 @@
 
 **Last Updated:** 2026-02-24
 
-**Current Phase:** Phase 24 - Cancellation Policies (Stornierungsregeln)
+**Current Phase:** Phase 25 - Bug Fixes (Kritische Validierungen)
+
+---
+
+## Bug Fixes - Kritische Validierungen (2026-02-24) - IMPLEMENTED
+
+**Scope**: Behebung kritischer Bugs aus PMS-Audit (#3-#6).
+
+### Bug #3: Kurtaxe ignoriert Altersgrenze
+
+**Problem**: `free_under_age` Feld in `visitor_tax_periods` wurde nicht in der Berechnung verwendet.
+
+**Lösung**:
+- Neues Feld `children_taxable` in `QuoteRequest` Schema
+- Erlaubt explizite Angabe wie viele Kinder über der Altersgrenze sind
+- Validator: `children_taxable <= children`
+
+**Dateien**:
+- `backend/app/schemas/pricing.py` - Neues Feld + Validator
+- `backend/app/api/routes/pricing.py` - Berechnung aktualisiert
+
+### Bug #4: Timezone-naive Datetimes
+
+**Problem**: `datetime.utcnow()` erzeugt naive Timestamps ohne Timezone-Info.
+
+**Lösung**: Alle 30 Vorkommen im gesamten Backend durch `datetime.now(timezone.utc)` ersetzt.
+
+**Betroffene Dateien**:
+| Datei | Anzahl |
+|-------|--------|
+| `backend/app/services/booking_service.py` | 8 |
+| `backend/app/api/routes/booking_requests.py` | 14 |
+| `backend/app/core/auth.py` | 3 |
+| `backend/app/api/routers/channel_connections.py` | 2 |
+| `backend/app/services/channel_connection_service.py` | 1 |
+| `backend/app/services/guest_service.py` | 1 |
+| `backend/app/api/routes/notifications.py` | 1 |
+
+### Bug #5: Fehlende max_guests Validierung
+
+**Problem**: Gästeanzahl wurde nicht gegen `properties.max_guests` validiert.
+
+**Lösung**:
+- `max_guests` zu Property-Queries hinzugefügt
+- Validierung in `create_booking()` und `update_booking()` implementiert
+- Fehlermeldung: "Gästeanzahl (X) überschreitet die maximale Kapazität (Y Gäste)"
+
+**Datei**: `backend/app/services/booking_service.py`
+
+### Bug #6: 0-Nacht-Buchung möglich
+
+**Status**: ✅ Bereits abgesichert
+
+**Analyse**: Pydantic-Validator in `BookingBase` (Zeile 92-98) erzwingt `check_out > check_in`.
+
+### Verification Path
+
+```bash
+# Bug #3: Kurtaxe mit children_taxable
+curl -X POST "${API}/api/v1/pricing/quote" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"property_id":"...", "check_in":"2026-03-01", "check_out":"2026-03-03", "adults":2, "children":2, "children_taxable":1}'
+
+# Bug #5: Überbuchung sollte 422 Fehler liefern
+curl -X POST "${API}/api/v1/bookings" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"property_id":"...", "num_adults":10, "num_children":10}'  # > max_guests
+```
+
+**Status**: ✅ IMPLEMENTED
 
 ---
 
 ## Cancellation Policies - Stornierungsfrist-Logik (2026-02-24) - IMPLEMENTED
 
 **Feature**: Konfigurierbare Stornierungsregeln mit automatischer Rückerstattungsberechnung.
+
+**Navigation**: Unter "Objekte" (nicht "Einstellungen") - Pfad `/cancellation-rules`
 
 ### Übersicht
 
@@ -48,9 +119,10 @@
 
 | Seite | Beschreibung |
 |-------|--------------|
-| `/settings/cancellation` | Stornierungsregeln verwalten (CRUD) |
-| Property Edit Modal | Abschnitt "Stornierungsregeln" mit Radio-Auswahl |
-| Booking Cancel Modal | Automatische Refund-Berechnung mit Override-Option |
+| `/cancellation-rules` | Stornierungsregeln verwalten (CRUD) - unter "Objekte" in Navigation |
+| `/properties` (Create Modal) | Stornierungsregel-Auswahl bei neuen Objekten |
+| `/properties/[id]` (Edit Modal) | Abschnitt "Stornierungsregeln" mit Radio-Auswahl |
+| `/bookings/[id]` (Cancel Modal) | Automatische Refund-Berechnung mit Override-Option |
 
 ### Dateien
 
@@ -64,10 +136,13 @@
 | Backend | `backend/app/services/booking_service.py` | calculate_refund() Methode |
 | Frontend | `frontend/app/types/cancellation.ts` | NEU |
 | Frontend | `frontend/app/types/property.ts` | Erweitert |
-| Frontend | `frontend/app/settings/cancellation/page.tsx` | NEU |
-| Frontend | `frontend/app/settings/cancellation/layout.tsx` | NEU |
+| Frontend | `frontend/app/cancellation-rules/page.tsx` | NEU (CRUD UI) |
+| Frontend | `frontend/app/cancellation-rules/layout.tsx` | NEU (Auth-Layout) |
+| Frontend | `frontend/app/properties/page.tsx` | Create Modal erweitert |
 | Frontend | `frontend/app/properties/[id]/page.tsx` | Edit Modal erweitert |
 | Frontend | `frontend/app/bookings/[id]/page.tsx` | Cancel Modal erweitert |
+| Frontend | `frontend/app/components/AdminShell.tsx` | Navigation aktualisiert |
+| Frontend | `frontend/app/components/Breadcrumb.tsx` | Breadcrumb-Labels |
 
 ### Verification Path
 
@@ -81,7 +156,8 @@ curl -X POST /api/v1/cancellation-policies \
   -d '{"name":"Standard","is_default":true,"rules":[{"days_before":14,"refund_percent":100},{"days_before":7,"refund_percent":50},{"days_before":0,"refund_percent":0}]}'
 
 # 3. Frontend prüfen
-# - /settings/cancellation → Regeln erstellen/bearbeiten
+# - /cancellation-rules → Regeln erstellen/bearbeiten (unter "Objekte" in Nav)
+# - /properties → Create Modal → Stornierungsregel auswählen
 # - /properties/[id] → Edit Modal → Stornierungsregeln-Abschnitt
 # - /bookings/[id] → Stornieren → Refund-Berechnung prüfen
 ```
@@ -687,4 +763,4 @@ Historische Einträge (Phase 1-20, vor 2026-02-14) wurden ausgelagert:
 
 ---
 
-*Last updated: 2026-02-21*
+*Last updated: 2026-02-24*
