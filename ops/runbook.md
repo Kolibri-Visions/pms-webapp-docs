@@ -30,6 +30,7 @@
 | [31-kurtaxen-visitor-tax.md](./runbook/31-kurtaxen-visitor-tax.md) | Kurtaxen (Visitor Tax) Management |
 | [32-season-only-min-stay.md](./runbook/32-season-only-min-stay.md) | Season-basierter Mindestaufenthalt |
 | [33-rls-infinite-recursion.md](./runbook/33-rls-infinite-recursion.md) | RLS Bootstrap-Tabellen & SECURITY DEFINER |
+| [34-encryption-tls.md](./runbook/34-encryption-tls.md) | Encryption in Transit (TLS) & at Rest |
 
 ### Golden Paths (Most Common Operations)
 

@@ -1076,6 +1076,49 @@ AND tablename NOT IN ('pms_schema_migrations', 'spatial_ref_sys', 'agency_domain
 
 ---
 
+## Redis TLS & PostgreSQL SSL (2026-02-25) - IMPLEMENTED
+
+**Issue**: Redis-Verbindungen waren unverschlüsselt, PostgreSQL SSL war nicht explizit konfiguriert.
+
+**Lösung**: TLS/SSL-Support für Redis und PostgreSQL implementiert.
+
+**Änderungen**:
+
+1. **Redis TLS** (`backend/app/core/redis.py`):
+   - `_create_ssl_context()`: SSL-Context-Erstellung für TLS-Verbindungen
+   - ConnectionPool akzeptiert nun `ssl` Parameter
+   - Logging für TLS-Status
+
+2. **Config** (`backend/app/core/config.py`):
+   - `REDIS_TLS_ENABLED`: TLS aktivieren (default: false)
+   - `REDIS_TLS_CERT_REQS`: Zertifikat-Validierung (none/optional/required)
+   - `REDIS_TLS_CA_CERTS`: Pfad zu CA-Zertifikat
+
+3. **Dokumentation** (`.env.example`):
+   - PostgreSQL: `?ssl=require` dokumentiert
+   - Redis: `rediss://` Protokoll dokumentiert
+   - Celery: TLS-Konfiguration dokumentiert
+
+**Konfiguration (Production)**:
+```bash
+# PostgreSQL mit SSL
+DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/db?ssl=require
+
+# Redis mit TLS
+REDIS_URL=rediss://:password@redis-host:6379/0
+REDIS_TLS_ENABLED=true
+```
+
+**Verification Path**:
+- Logs prüfen: `docker logs pms-backend | grep -i "redis.*tls"`
+- Health Check: `curl /health/ready` sollte `redis: up` zeigen
+
+**Runbook**: [34-encryption-tls.md](./ops/runbook/34-encryption-tls.md)
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
 ## CSP mit Nonces (2026-02-24) - VERIFIED
 
 **Issue**: Content-Security-Policy verwendete `unsafe-inline` und `unsafe-eval` für Scripts, was XSS-Angriffe ermöglichte.
@@ -1161,4 +1204,4 @@ Historische Einträge (Phase 1-20, vor 2026-02-14) wurden ausgelagert:
 
 ---
 
-*Last updated: 2026-02-25 (CSP mit Nonces VERIFIED)*
+*Last updated: 2026-02-25 (Redis TLS & PostgreSQL SSL)*
