@@ -960,21 +960,51 @@ Property-Fee (property_id = {uuid}, source_template_id = {template})
 
 ## RLS Security Fix (2026-02-24) - IMPLEMENTED
 
-**Issue**: Critical security gap - 8 tables had no Row Level Security (RLS) enabled, allowing potential cross-tenant data access.
+**Issue**: Critical security gap - Multiple tables had no Row Level Security (RLS) enabled, allowing potential cross-tenant data access.
 
-**Tables Fixed**:
-| Table | Risk Level | Has agency_id |
-|-------|------------|---------------|
-| `owners` | 🔴 CRITICAL | Yes |
-| `rate_plans` | 🔴 CRITICAL | Yes |
-| `rate_plan_seasons` | 🔴 CRITICAL | Via rate_plans |
-| `pricing_fees` | 🔴 CRITICAL | Yes |
-| `pricing_taxes` | 🔴 CRITICAL | Yes |
-| `availability_blocks` | 🟠 HIGH | Via properties |
-| `inventory_ranges` | 🟠 HIGH | Via properties |
-| `channel_sync_logs` | 🟡 MEDIUM | Via channel_connections |
-
+### Phase 1: Initial Fix (8 tables)
 **Migration**: `supabase/migrations/20260224120000_add_missing_rls_policies.sql`
+
+| Table | Risk Level |
+|-------|------------|
+| `owners` | 🔴 CRITICAL |
+| `rate_plans` | 🔴 CRITICAL |
+| `rate_plan_seasons` | 🔴 CRITICAL |
+| `pricing_fees` | 🔴 CRITICAL |
+| `pricing_taxes` | 🔴 CRITICAL |
+| `availability_blocks` | 🟠 HIGH |
+| `inventory_ranges` | 🟠 HIGH |
+| `channel_sync_logs` | 🟡 MEDIUM |
+
+### Phase 2: Core Tables Repair (4 tables)
+**Migration**: `supabase/migrations/20260224130000_repair_core_rls_policies.sql`
+
+| Table | Risk Level |
+|-------|------------|
+| `profiles` | 🔴 CRITICAL |
+| `properties` | 🔴 CRITICAL |
+| `invoices` | 🔴 CRITICAL |
+| `payments` | 🔴 CRITICAL |
+
+### Phase 3: Complete Repair (12 tables)
+**Migration**: `supabase/migrations/20260224140000_repair_all_missing_rls.sql`
+
+| Table | Risk Level |
+|-------|------------|
+| `agencies` | 🔴 CRITICAL |
+| `bookings` | 🔴 CRITICAL |
+| `guests` | 🔴 CRITICAL |
+| `team_members` | 🔴 CRITICAL |
+| `channel_connections` | 🟠 HIGH |
+| `direct_bookings` | 🟠 HIGH |
+| `external_bookings` | 🟠 HIGH |
+| `pricing_rules` | 🟠 HIGH |
+| `webhooks` | 🟠 HIGH |
+| `property_media` | 🟡 MEDIUM |
+| `sync_logs` | 🟡 MEDIUM |
+| `public_site_design` | 🟢 LOW |
+
+**Total Tables Fixed**: 24
 
 **Policy Pattern**:
 - SELECT: Staff can read within agency
