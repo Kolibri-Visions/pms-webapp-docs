@@ -1006,6 +1006,54 @@ Property-Fee (property_id = {uuid}, source_template_id = {template})
 
 **Total Tables Fixed**: 24
 
+### Phase 4: Infinite Recursion Fix
+**Migration**: `supabase/migrations/20260224150000_fix_rls_infinite_recursion.sql`
+
+**Problem**: Die RLS Policies referenzierten `team_members` in Subqueries, was zu einer Endlosschleife führte:
+
+```
+User → SELECT FROM team_members
+  → RLS Policy prüft: SELECT FROM team_members (Subquery)
+    → RLS Policy prüft: SELECT FROM team_members (Subquery)
+      → ... Endlosschleife
+        → ERROR: infinite recursion detected in policy for relation "team_members"
+```
+
+**Lösung**: SECURITY DEFINER Funktionen, die RLS umgehen:
+
+```sql
+-- Funktion läuft mit Rechten des Erstellers (postgres), nicht des Users
+-- Dadurch wird RLS umgangen und keine Rekursion ausgelöst
+CREATE FUNCTION get_user_agency_ids()
+RETURNS SETOF UUID
+SECURITY DEFINER  -- ← Umgeht RLS
+AS $$
+  SELECT agency_id FROM team_members WHERE user_id = auth.uid();
+$$;
+
+-- Policy nutzt jetzt die Funktion statt Subquery
+CREATE POLICY "team_members_select" ON team_members
+  USING (agency_id IN (SELECT get_user_agency_ids()));
+```
+
+**Erstellte Helper-Funktionen**:
+| Funktion | Zweck |
+|----------|-------|
+| `get_user_agency_ids()` | Gibt alle Agency-IDs des Users zurück |
+| `user_has_agency_access(UUID)` | Prüft ob User Zugriff auf Agency hat |
+| `get_user_role_in_agency(UUID)` | Gibt Rolle des Users in Agency zurück |
+
+**Aktualisierte Policies** (13 Tabellen):
+- `team_members`, `agencies`, `bookings`, `guests`
+- `properties`, `profiles`, `invoices`, `payments`
+- `owners`, `rate_plans`, `pricing_fees`, `pricing_taxes`
+- `channel_connections`, `cancellation_policies`
+
+**Warum SECURITY DEFINER?**
+- Normale Funktionen laufen mit den Rechten des aufrufenden Users → RLS wird angewandt
+- SECURITY DEFINER Funktionen laufen mit den Rechten des Erstellers (postgres) → RLS wird umgangen
+- Dies ist der Standard-Ansatz für "Basis-Tabellen" wie `team_members`, die selbst die Quelle für Berechtigungsprüfungen sind
+
 **Policy Pattern**:
 - SELECT: Staff can read within agency
 - INSERT/UPDATE: Manager+ for config tables, Staff+ for operational tables
@@ -1013,11 +1061,14 @@ Property-Fee (property_id = {uuid}, source_template_id = {template})
 
 **Verification Path**:
 ```sql
+-- Test Helper-Funktionen:
+SELECT get_user_agency_ids();
+SELECT get_user_role_in_agency('agency-uuid-here');
+
+-- Alle Tabellen sollten RLS aktiviert haben:
 SELECT tablename, rowsecurity FROM pg_tables
 WHERE schemaname = 'public'
-AND tablename IN ('owners', 'rate_plans', 'rate_plan_seasons',
-  'pricing_fees', 'pricing_taxes', 'availability_blocks',
-  'inventory_ranges', 'channel_sync_logs');
+AND tablename NOT IN ('pms_schema_migrations', 'spatial_ref_sys', 'agency_domains', 'amenity_definitions');
 -- Expected: All rows show rowsecurity = true
 ```
 
