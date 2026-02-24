@@ -1076,7 +1076,7 @@ AND tablename NOT IN ('pms_schema_migrations', 'spatial_ref_sys', 'agency_domain
 
 ---
 
-## CSP mit Nonces (2026-02-24) - IMPLEMENTED
+## CSP mit Nonces (2026-02-24) - VERIFIED
 
 **Issue**: Content-Security-Policy verwendete `unsafe-inline` und `unsafe-eval` für Scripts, was XSS-Angriffe ermöglichte.
 
@@ -1106,7 +1106,16 @@ const nonce = headers().get('x-nonce') || '';
 
 **Verification Path**: Browser DevTools → Network → Response Headers → Content-Security-Policy sollte `nonce-` enthalten
 
-**Status**: ✅ IMPLEMENTED
+**PROD Evidence (2026-02-25)**:
+```bash
+$ curl -sI https://admin.fewo.kolibri-visions.de/login | grep -i content-security-policy
+content-security-policy: ... script-src 'self' 'nonce-9FJXs0JHepKHBK969YA+cQ==' 'strict-dynamic' ...
+```
+- Commit: `ee099c4`
+- Deploy: 2026-02-24 22:54 UTC
+- Nonce in CSP Header: ✅ Bestätigt
+
+**Status**: ✅ VERIFIED
 
 ---
 
@@ -1152,4 +1161,4 @@ Historische Einträge (Phase 1-20, vor 2026-02-14) wurden ausgelagert:
 
 ---
 
-*Last updated: 2026-02-24 (CSP mit Nonces)*
+*Last updated: 2026-02-25 (CSP mit Nonces VERIFIED)*
