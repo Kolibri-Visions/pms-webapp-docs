@@ -1076,6 +1076,40 @@ AND tablename NOT IN ('pms_schema_migrations', 'spatial_ref_sys', 'agency_domain
 
 ---
 
+## CSP mit Nonces (2026-02-24) - IMPLEMENTED
+
+**Issue**: Content-Security-Policy verwendete `unsafe-inline` und `unsafe-eval` für Scripts, was XSS-Angriffe ermöglichte.
+
+**Lösung**: Nonce-basiertes CSP implementiert für maximale XSS-Sicherheit.
+
+**Änderungen**:
+- `frontend/middleware.ts`: Nonce-Generierung und CSP-Header-Injection
+  - `generateNonce()`: 16-Byte Zufallswert, base64-encodiert
+  - `buildCspHeader(nonce)`: CSP mit `'nonce-{nonce}'` statt `'unsafe-inline'`
+  - Nonce wird via `x-nonce` Header an Server Components übergeben
+- `frontend/next.config.js`: CSP entfernt (wird nun in middleware gesetzt)
+- `CLAUDE.md`: Sektion 11 hinzugefügt (CSP & Nonces)
+
+**CSP-Direktiven**:
+```
+script-src 'self' 'nonce-{nonce}' 'strict-dynamic'
+style-src 'self' 'nonce-{nonce}' 'unsafe-inline'
+```
+
+**Externe Scripts hinzufügen**:
+```tsx
+import { headers } from 'next/headers';
+import Script from 'next/script';
+const nonce = headers().get('x-nonce') || '';
+<Script src="..." nonce={nonce} strategy="afterInteractive" />
+```
+
+**Verification Path**: Browser DevTools → Network → Response Headers → Content-Security-Policy sollte `nonce-` enthalten
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
 ## Security Audit Fixes (2026-02-19) - IMPLEMENTED
 
 **Audit Reference**: Audit-2026-02-19.md
@@ -1118,4 +1152,4 @@ Historische Einträge (Phase 1-20, vor 2026-02-14) wurden ausgelagert:
 
 ---
 
-*Last updated: 2026-02-24 (RLS Security Fix)*
+*Last updated: 2026-02-24 (CSP mit Nonces)*
