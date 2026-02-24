@@ -318,6 +318,112 @@ SELECT * FROM team_members WHERE user_id = auth.uid();
 
 ---
 
+## Architektur-Einordnung: Workaround oder Best Practice?
+
+### Häufige Frage
+
+> "War SECURITY DEFINER unvermeidlich, oder hätte man das Problem anders lösen können?"
+
+### Antwort: SECURITY DEFINER war UNVERMEIDLICH
+
+Es gibt nur **zwei mögliche Architekturen** für Multi-Tenant RLS:
+
+#### Option A: Ohne SECURITY DEFINER
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  team_members: KEIN RLS                                     │
+│  ─────────────────────────────────────                      │
+│  Alle anderen Tabellen: RLS mit direktem Subquery          │
+│                                                             │
+│  ⚠️  PROBLEM: Jeder User kann ALLE team_members sehen!     │
+│              → Sicherheitslücke (Agency-Daten exposed)     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Option B: Mit SECURITY DEFINER (unsere Lösung)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Helper-Funktionen: SECURITY DEFINER                        │
+│  ─────────────────────────────────────                      │
+│  team_members: RLS (nutzt Helper-Funktionen)               │
+│  Alle anderen Tabellen: RLS (nutzt Helper-Funktionen)      │
+│                                                             │
+│  ✅ ERGEBNIS: Vollständige Datenisolation                  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Entscheidungsmatrix
+
+| Frage | Antwort |
+|-------|---------|
+| War SECURITY DEFINER von Anfang an nötig? | **JA** — sobald RLS auf team_members gewünscht |
+| Gibt es eine Alternative ohne SECURITY DEFINER? | **NEIN** — nicht wenn team_members geschützt sein soll |
+| Ist unsere Lösung ein "Workaround"? | **NEIN** — es ist Best Practice |
+| Brauchen wir Refactoring? | **NEIN** — die Struktur ist jetzt korrekt |
+
+### Was wäre am Projektanfang anders gewesen?
+
+**Nur die Reihenfolge der Implementierung:**
+
+```sql
+-- ════════════════════════════════════════════════════════════
+-- IDEALE REIHENFOLGE (Projektstart)
+-- ════════════════════════════════════════════════════════════
+
+-- SCHRITT 1: Helper-Funktionen ZUERST (bevor irgendwelche Policies)
+CREATE FUNCTION get_user_agency_ids() ... SECURITY DEFINER;
+CREATE FUNCTION get_user_role_in_agency() ... SECURITY DEFINER;
+
+-- SCHRITT 2: DANN alle RLS Policies (inkl. team_members)
+CREATE POLICY "team_members_select" ... USING (agency_id IN (SELECT get_user_agency_ids()));
+CREATE POLICY "bookings_select" ... USING (agency_id IN (SELECT get_user_agency_ids()));
+-- usw. für alle Tabellen
+```
+
+**Was tatsächlich passiert ist:**
+
+```sql
+-- ════════════════════════════════════════════════════════════
+-- TATSÄCHLICHE REIHENFOLGE (reaktiv)
+-- ════════════════════════════════════════════════════════════
+
+-- SCHRITT 1: RLS Policies mit direkten Subqueries (funktionierte zunächst)
+CREATE POLICY "bookings_select" ... USING (agency_id IN (SELECT ... FROM team_members));
+
+-- SCHRITT 2: Monate/Jahre später RLS auf team_members aktivieren
+-- → BOOM: Rekursion
+
+-- SCHRITT 3: Nachträglich Helper-Funktionen erstellen + alle Policies umschreiben
+```
+
+### Fazit: Kein Refactoring nötig
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                                                             │
+│  Die aktuelle Struktur IST die korrekte Struktur.          │
+│                                                             │
+│  Wir haben sie reaktiv statt proaktiv erreicht,            │
+│  aber das Endergebnis ist IDENTISCH zu dem,                │
+│  was wir am Projektanfang gebaut hätten.                   │
+│                                                             │
+│  ✅ Kein Refactoring erforderlich                          │
+│  ✅ Struktur ist produktionsreif                           │
+│  ✅ Performance ist optimal (STABLE = Query-Cache)         │
+│  ✅ Sicherheit ist vollständig gewährleistet               │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Lektion für zukünftige Projekte
+
+> **Tag-1-Regel:** Bei jedem neuen Multi-Tenant-Projekt mit Supabase/PostgreSQL:
+> Helper-Funktionen mit SECURITY DEFINER **VOR** der ersten RLS-Policy erstellen.
+
+---
+
 ## Zusammenfassung
 
 | Aspekt | Details |
@@ -326,4 +432,5 @@ SELECT * FROM team_members WHERE user_id = auth.uid();
 | **Lösung** | SECURITY DEFINER Helper-Funktionen |
 | **Sicherheit** | Sicher bei korrekter Implementierung |
 | **Prävention** | Helper-Funktionen ZUERST erstellen |
+| **Refactoring nötig?** | NEIN — aktuelle Struktur ist korrekt |
 | **Status** | ✅ Implementiert (2026-02-24) |
