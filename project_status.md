@@ -162,6 +162,7 @@ refund_amount_cents = int(refund_decimal.quantize(Decimal("1"), rounding=ROUND_H
 | H2 | HOCH | SQL f-Strings statt Parametern | `booking_requests.py` | Parameterisierte Queries |
 | H3 | HOCH | Race Condition in update_booking() | `booking_service.py` | Advisory Lock + Double-Check |
 | M1 | MITTEL | Type Coercion bei Geldwerten | `owners.py:942-943` | Explizite None-Prüfung |
+| N1 | NIEDRIG | Bare Exceptions ohne Logging | 3 Dateien | `as e` + `logger.debug()` |
 
 ### K1: Commission-Rundungsfehler
 
@@ -242,6 +243,28 @@ async with self.db.transaction():
     # UPDATE durchführen
 ```
 
+### N1: Bare Exceptions ohne Logging
+
+**Problem:** `except Exception:` ohne `as e` fängt Fehler ab, aber loggt nichts - Debugging wird unmöglich.
+
+**Vorher:**
+```python
+except Exception:
+    return "unknown"  # Was ist passiert? Keine Ahnung!
+```
+
+**Nachher:**
+```python
+except Exception as e:
+    logger.debug(f"Frame introspection failed: {e}")
+    return "unknown"
+```
+
+**Betroffene Dateien:**
+- `backend/app/channel_manager/adapters/base_adapter.py` - Connection validation
+- `backend/app/core/health.py` - Settings import fallback
+- `backend/app/core/database.py` - Frame/URL/Module introspection (3×)
+
 ### Dateien
 
 | Datei | Änderung |
@@ -251,6 +274,9 @@ async with self.db.transaction():
 | `backend/app/modules/registry.py` | Safe remove Pattern |
 | `backend/app/api/routes/booking_requests.py` | 4× SQL-Parameter statt f-Strings |
 | `backend/app/services/booking_service.py` | Advisory Lock + Double-Check in update_booking() |
+| `backend/app/channel_manager/adapters/base_adapter.py` | Bare Exception + Logging |
+| `backend/app/core/health.py` | Bare Exception + Logging |
+| `backend/app/core/database.py` | 3× Bare Exception + Logging |
 
 **Status**: ✅ IMPLEMENTED
 
