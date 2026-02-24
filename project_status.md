@@ -958,6 +958,43 @@ Property-Fee (property_id = {uuid}, source_template_id = {template})
 
 ---
 
+## RLS Security Fix (2026-02-24) - IMPLEMENTED
+
+**Issue**: Critical security gap - 8 tables had no Row Level Security (RLS) enabled, allowing potential cross-tenant data access.
+
+**Tables Fixed**:
+| Table | Risk Level | Has agency_id |
+|-------|------------|---------------|
+| `owners` | 🔴 CRITICAL | Yes |
+| `rate_plans` | 🔴 CRITICAL | Yes |
+| `rate_plan_seasons` | 🔴 CRITICAL | Via rate_plans |
+| `pricing_fees` | 🔴 CRITICAL | Yes |
+| `pricing_taxes` | 🔴 CRITICAL | Yes |
+| `availability_blocks` | 🟠 HIGH | Via properties |
+| `inventory_ranges` | 🟠 HIGH | Via properties |
+| `channel_sync_logs` | 🟡 MEDIUM | Via channel_connections |
+
+**Migration**: `supabase/migrations/20260224120000_add_missing_rls_policies.sql`
+
+**Policy Pattern**:
+- SELECT: Staff can read within agency
+- INSERT/UPDATE: Manager+ for config tables, Staff+ for operational tables
+- DELETE: Admin only for critical tables
+
+**Verification Path**:
+```sql
+SELECT tablename, rowsecurity FROM pg_tables
+WHERE schemaname = 'public'
+AND tablename IN ('owners', 'rate_plans', 'rate_plan_seasons',
+  'pricing_fees', 'pricing_taxes', 'availability_blocks',
+  'inventory_ranges', 'channel_sync_logs');
+-- Expected: All rows show rowsecurity = true
+```
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
 ## Security Audit Fixes (2026-02-19) - IMPLEMENTED
 
 **Audit Reference**: Audit-2026-02-19.md
@@ -1000,4 +1037,4 @@ Historische Einträge (Phase 1-20, vor 2026-02-14) wurden ausgelagert:
 
 ---
 
-*Last updated: 2026-02-24*
+*Last updated: 2026-02-24 (RLS Security Fix)*
