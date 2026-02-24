@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-02-24
 
-**Current Phase:** Phase 25 - Bug Fixes (Kritische Validierungen)
+**Current Phase:** Phase 26 - Logic Bug Fixes (Berechnungsfehler)
 
 ---
 
@@ -91,6 +91,58 @@ curl -X POST "${API}/api/v1/bookings" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"property_id":"...", "num_adults":10, "num_children":10}'  # > max_guests
 ```
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
+## Logic Bug Fixes - Berechnungs- und Validierungsfehler (2026-02-24) - IMPLEMENTED
+
+**Scope**: Behebung von Logikfehlern bei Preis- und Rückerstattungsberechnungen.
+
+### Übersicht der Fixes
+
+| # | Problem | Datei | Fix |
+|---|---------|-------|-----|
+| L1 | Refund-Berechnung trunciert statt rundet | `booking_service.py` | `ROUND_HALF_UP` verwenden |
+| L2 | Preis-Konvertierung (€→Cents) trunciert | `booking_service.py` | `ROUND_HALF_UP` verwenden |
+| L3 | Refund auf 0€-Buchung erlaubt | `booking_service.py` | ValidationException werfen |
+| L4 | Fee-Berechnung bei fehlenden Werten silent | `pricing_totals.py` | Warnings loggen |
+
+### L1: Refund-Rundungsfehler
+
+**Vorher (falsch):**
+```python
+refund_amount_cents = int(total_price_cents * refund_percent / 100)
+# 9999 × 12% = 1199.88 → int() = 1199 cents
+```
+
+**Nachher (korrekt):**
+```python
+refund_decimal = (Decimal(total_price_cents) * Decimal(refund_percent)) / Decimal("100")
+refund_amount_cents = int(refund_decimal.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+# 9999 × 12% = 1199.88 → ROUND_HALF_UP = 1200 cents
+```
+
+### L2: Preis-Konvertierung
+
+**Vorher:** `int(Decimal(price) * 100)` - trunciert bei 99.995 → 9999
+**Nachher:** `quantize(Decimal("1"), rounding=ROUND_HALF_UP)` - rundet zu 10000
+
+### L3: Validierung bei fehlender Buchungssumme
+
+**Neu:** Wenn `total_price_cents = 0`, wird eine `ValidationException` geworfen statt Refund auf 0€ zu berechnen.
+
+### L4: Fee-Berechnungen mit Warnings
+
+**Neu:** Wenn `per_stay`, `per_night` oder `per_person` Fees keine `value_cents` haben, wird ein Warning geloggt statt silent 0 zu berechnen.
+
+### Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `backend/app/services/booking_service.py` | ROUND_HALF_UP Import, Refund/Preis-Rundung, Validierung |
+| `backend/app/services/pricing_totals.py` | Fee-Validierung mit Warnings |
 
 **Status**: ✅ IMPLEMENTED
 
