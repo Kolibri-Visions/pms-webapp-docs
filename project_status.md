@@ -160,6 +160,7 @@ refund_amount_cents = int(refund_decimal.quantize(Decimal("1"), rounding=ROUND_H
 | K2 | KRITISCH | Altersberechnung falsch (`days // 365`) | `guests.py:185` | Korrekte Datum-basierte Berechnung |
 | H1 | HOCH | List.remove() kann ValueError werfen | `registry.py:80` | Existenz-Prüfung vor remove |
 | H2 | HOCH | SQL f-Strings statt Parametern | `booking_requests.py` | Parameterisierte Queries |
+| H3 | HOCH | Race Condition in update_booking() | `booking_service.py` | Advisory Lock + Double-Check |
 | M1 | MITTEL | Type Coercion bei Geldwerten | `owners.py:942-943` | Explizite None-Prüfung |
 
 ### K1: Commission-Rundungsfehler
@@ -210,6 +211,37 @@ params.extend([DB_STATUS_REQUESTED, DB_STATUS_INQUIRY])
 param_idx += 2
 ```
 
+### H3: Race Condition in update_booking()
+
+**Problem:** `update_booking()` prüfte Verfügbarkeit VOR Transaktion. Zwei gleichzeitige Updates konnten beide die Verfügbarkeitsprüfung bestehen, aber überlappende Buchungen erstellen.
+
+**Szenario:**
+```
+Thread A: Liest Buchung X (01.-05. März)    Thread B: Liest Buchung Y (10.-15. März)
+Thread A: check_availability() → OK         Thread B: check_availability() → OK
+Thread A: UPDATE X zu 01.-12. März          Thread B: UPDATE Y zu 08.-15. März
+→ OVERLAP bei 08.-12. März!
+```
+
+**Lösung:**
+1. Advisory Lock am Anfang der Transaktion (serialisiert alle Updates pro Property)
+2. Double-Check Pattern: Verfügbarkeit wird NACH Lock-Erwerb erneut geprüft
+
+```python
+async with self.db.transaction():
+    # Lock verhindert parallele Updates
+    await self.db.execute(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+        str(current["property_id"])
+    )
+    # Verfügbarkeit erneut prüfen (andere Transaktion könnte inzwischen geändert haben)
+    if dates_changed or status_changed:
+        is_available = await self.check_availability(...)
+        if not is_available:
+            raise ConflictException("Property is already booked")
+    # UPDATE durchführen
+```
+
 ### Dateien
 
 | Datei | Änderung |
@@ -218,6 +250,7 @@ param_idx += 2
 | `backend/app/schemas/guests.py` | Korrekte Altersberechnung |
 | `backend/app/modules/registry.py` | Safe remove Pattern |
 | `backend/app/api/routes/booking_requests.py` | 4× SQL-Parameter statt f-Strings |
+| `backend/app/services/booking_service.py` | Advisory Lock + Double-Check in update_booking() |
 
 **Status**: ✅ IMPLEMENTED
 
