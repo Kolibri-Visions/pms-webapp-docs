@@ -29,6 +29,7 @@
 | [29-public-website-visibility.md](./runbook/29-public-website-visibility.md) | Public website is_active filtering |
 | [31-kurtaxen-visitor-tax.md](./runbook/31-kurtaxen-visitor-tax.md) | Kurtaxen (Visitor Tax) Management |
 | [32-season-only-min-stay.md](./runbook/32-season-only-min-stay.md) | Season-basierter Mindestaufenthalt |
+| [33-rls-infinite-recursion.md](./runbook/33-rls-infinite-recursion.md) | RLS Bootstrap-Tabellen & SECURITY DEFINER |
 
 ### Golden Paths (Most Common Operations)
 
@@ -54,6 +55,7 @@
 | Amenities filter empty | /unterkuenfte filter shows no amenities | [Amenities RLS](./runbook/10-amenities-admin-ui.md#public-amenities-filter-rls) |
 | Extra service billing error | per_unit_night not saving | [Extra Services Migration](./runbook/16-extra-services.md#migration-per_unit_night-2026-02-15) |
 | Property not on public site | Active property missing from /unterkuenfte | [Public Visibility](./runbook/29-public-website-visibility.md) |
+| RLS infinite recursion | "infinite recursion detected in policy" | [RLS Bootstrap-Tabellen](./runbook/33-rls-infinite-recursion.md) |
 
 ---
 
