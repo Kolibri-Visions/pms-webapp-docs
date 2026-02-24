@@ -19,6 +19,7 @@
 - [Booking Requests: Detail/CSV Consistency + Review Queue UX (P2.21.4.8n)](#booking-requests-detailcsv-consistency--review-queue-ux-p221-4-8n)
 - [Booking Requests: Review Queue Zero + Bulk Actions (P2.21.4.8o)](#booking-requests-review-queue-zero--bulk-actions-p221-4-8o)
 - [Idempotency-Key Support (P3.1)](#idempotency-key-support-p31)
+- [Password Handling & Hashing (Supabase Auth)](#password-handling--hashing-supabase-auth)
 
 ---
 
@@ -1484,5 +1485,116 @@ LIMIT 20;
 -- Delete expired records (normally automatic)
 DELETE FROM idempotency_keys WHERE expires_at < NOW();
 ```
+
+---
+
+## Password Handling & Hashing (Supabase Auth)
+
+### Übersicht
+
+**Passwörter werden NICHT im eigenen Code gehandhabt.** Alle Passwort-Operationen laufen über **Supabase Auth**, das bcrypt für sicheres Hashing verwendet.
+
+### Architektur
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  PASSWORT-FLOW                                                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  User                                                                   │
+│    ↓ (Email + Passwort)                                                │
+│  Frontend (/auth/login)                                                 │
+│    ↓ (supabase.auth.signInWithPassword)                                │
+│  Supabase Auth Service                                                  │
+│    ↓ (bcrypt verify gegen auth.users)                                  │
+│  JWT Token zurück                                                       │
+│    ↓                                                                    │
+│  Backend (validiert nur JWT-Signatur, sieht NIE das Passwort)          │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Wo werden Passwörter gespeichert?
+
+| Ort | Passwort? |
+|-----|-----------|
+| Eigene DB (`properties`, `bookings`, etc.) | ❌ Nein |
+| Supabase `auth.users` Tabelle | ✅ Ja (bcrypt-gehasht) |
+| Backend-Code | ❌ Kein Passwort-Handling |
+| Frontend-Code | ❌ Nur Weiterleitung an Supabase |
+
+### Hashing-Details
+
+- **Algorithmus:** bcrypt mit Salt (Supabase-Standard)
+- **Salt Rounds:** 10 (Supabase Default)
+- **Passwörter im Klartext:** NIE gespeichert
+- **Backend-Zugriff auf Passwörter:** UNMÖGLICH (nur Supabase hat Zugriff)
+
+### Code-Referenzen
+
+**Login (Frontend):**
+```typescript
+// frontend/app/auth/login/route.ts
+const { data, error } = await supabase.auth.signInWithPassword({
+  email,
+  password,  // Wird direkt an Supabase gesendet, nie lokal gespeichert
+});
+```
+
+**Passwort-Änderung (Frontend):**
+```typescript
+// frontend/app/api/internal/auth/password/route.ts
+// 1. Validierung: min. 8 Zeichen, 1 Großbuchstabe, 1 Ziffer
+// 2. Aktuelles Passwort verifizieren via signInWithPassword
+// 3. Update via supabase.auth.updateUser({ password: newPassword })
+```
+
+**JWT-Validierung (Backend):**
+```python
+# backend/app/core/auth.py:275-312
+# Backend validiert nur JWT-Signatur - kein Passwort-Zugriff
+payload = jwt.decode(token, settings.effective_jwt_secret, algorithms=["HS256"])
+user_id = payload.get("sub")  # User ID aus Token, NICHT Passwort
+```
+
+### Sicherheits-Features
+
+| Feature | Status | Implementierung |
+|---------|--------|-----------------|
+| bcrypt Hashing | ✅ | Supabase Auth |
+| Salt pro User | ✅ | Supabase Auth |
+| Passwort nie im Backend | ✅ | Architektur |
+| HTTPOnly Cookies | ✅ | Supabase SSR |
+| Secure Flag | ✅ | Production Mode |
+| Rate-Limiting (Login) | ✅ | auth_rate_limit.py |
+
+### Troubleshooting
+
+**Symptom:** User kann sich nicht einloggen
+
+```bash
+# 1. Prüfe Supabase Auth Logs (Supabase Dashboard → Authentication → Logs)
+# 2. Prüfe ob User existiert:
+curl -X POST "https://sb-pms.kolibri-visions.de/auth/v1/token?grant_type=password" \
+  -H "apikey: $ANON_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"test"}'
+# 400 = falsches Passwort, 200 = erfolgreich
+```
+
+**Symptom:** Passwort-Reset funktioniert nicht
+
+```bash
+# Prüfe ob E-Mail versendet wurde (Supabase Dashboard → Authentication → Logs)
+# Manueller Reset (Admin):
+# Supabase Dashboard → Authentication → Users → User auswählen → "Send password recovery"
+```
+
+### Wichtige Hinweise
+
+1. **Kein eigenes Passwort-Hashing implementieren** – Supabase übernimmt das
+2. **Keine Passwörter in Logs** – Frontend/Backend loggen NIE Passwörter
+3. **JWT Secret ≠ User-Passwort** – JWT_SECRET ist für Token-Signatur, nicht für User-Auth
+4. **Supabase Service Role Key** – Ermöglicht Admin-Operationen, aber NICHT Passwort-Zugriff
 
 ---
