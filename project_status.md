@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-02-24
 
-**Current Phase:** Phase 26 - Logic Bug Fixes (Berechnungsfehler)
+**Current Phase:** Phase 27 - Codebase Audit & Logic Bug Fixes Phase 2
 
 ---
 
@@ -143,6 +143,81 @@ refund_amount_cents = int(refund_decimal.quantize(Decimal("1"), rounding=ROUND_H
 |-------|----------|
 | `backend/app/services/booking_service.py` | ROUND_HALF_UP Import, Refund/Preis-Rundung, Validierung |
 | `backend/app/services/pricing_totals.py` | Fee-Validierung mit Warnings |
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
+## Logic Bug Fixes Phase 2 - Codebase Audit (2026-02-24) - IMPLEMENTED
+
+**Scope**: Umfassende Code-Analyse und Behebung weiterer Logikfehler.
+
+### Übersicht der Fixes
+
+| # | Schweregrad | Problem | Datei | Fix |
+|---|-------------|---------|-------|-----|
+| K1 | KRITISCH | Commission-Berechnung trunciert | `owners.py:944` | `ROUND_HALF_UP` verwenden |
+| K2 | KRITISCH | Altersberechnung falsch (`days // 365`) | `guests.py:185` | Korrekte Datum-basierte Berechnung |
+| H1 | HOCH | List.remove() kann ValueError werfen | `registry.py:80` | Existenz-Prüfung vor remove |
+| H2 | HOCH | SQL f-Strings statt Parametern | `booking_requests.py` | Parameterisierte Queries |
+| M1 | MITTEL | Type Coercion bei Geldwerten | `owners.py:942-943` | Explizite None-Prüfung |
+
+### K1: Commission-Rundungsfehler
+
+**Vorher (falsch):**
+```python
+commission_cents = int(gross_total_cents * commission_rate_bps / 10000)
+# 10001 × 500 / 10000 = 500.05 → int() = 500 cents (sollte 500 sein, aber 500.5 → 501)
+```
+
+**Nachher (korrekt):**
+```python
+commission_decimal = (Decimal(str(gross_total_cents)) * Decimal(str(commission_rate_bps))) / Decimal("10000")
+commission_cents = int(commission_decimal.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+```
+
+### K2: Altersberechnungsfehler
+
+**Vorher (falsch):**
+```python
+age = (date.today() - v).days // 365
+# 01.01.2000 bis 01.01.2025 = 9131 Tage / 365 = 24 Jahre (FALSCH! Sollte 25 sein)
+```
+
+**Nachher (korrekt):**
+```python
+age = today.year - v.year
+if (today.month, today.day) < (v.month, v.day):
+    age -= 1  # Geburtstag noch nicht erreicht
+```
+
+### H1: Registry Safe Remove
+
+**Vorher:** `.remove()` konnte `ValueError` werfen wenn Element nicht in Liste
+**Nachher:** Existenz-Prüfung vor `remove()` + `.pop(key, None)` statt `.pop(key)`
+
+### H2: SQL Parameterisierung
+
+**Vorher (Anti-Pattern):**
+```python
+where_clauses.append(f"b.status IN ('{DB_STATUS_REQUESTED}', '{DB_STATUS_INQUIRY}')")
+```
+
+**Nachher (Best Practice):**
+```python
+where_clauses.append(f"b.status IN (${param_idx}, ${param_idx + 1})")
+params.extend([DB_STATUS_REQUESTED, DB_STATUS_INQUIRY])
+param_idx += 2
+```
+
+### Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `backend/app/api/routes/owners.py` | ROUND_HALF_UP Import, Commission-Berechnung, None-Handling |
+| `backend/app/schemas/guests.py` | Korrekte Altersberechnung |
+| `backend/app/modules/registry.py` | Safe remove Pattern |
+| `backend/app/api/routes/booking_requests.py` | 4× SQL-Parameter statt f-Strings |
 
 **Status**: ✅ IMPLEMENTED
 
