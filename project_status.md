@@ -163,6 +163,7 @@ refund_amount_cents = int(refund_decimal.quantize(Decimal("1"), rounding=ROUND_H
 | H3 | HOCH | Race Condition in update_booking() | `booking_service.py` | Advisory Lock + Double-Check |
 | M1 | MITTEL | Type Coercion bei Geldwerten | `owners.py:942-943` | Explizite None-Prüfung |
 | N1 | NIEDRIG | Bare Exceptions ohne Logging | 3 Dateien | `as e` + `logger.debug()` |
+| N2 | NIEDRIG | Money-Parsing Heuristik fehlerhaft | `money.py` | Robuste Format-Erkennung |
 
 ### K1: Commission-Rundungsfehler
 
@@ -265,6 +266,34 @@ except Exception as e:
 - `backend/app/core/health.py` - Settings import fallback
 - `backend/app/core/database.py` - Frame/URL/Module introspection (3×)
 
+### N2: Money-Parsing Heuristik
+
+**Problem:** `to_decimal()` konnte deutsche Zahlenformate nicht korrekt erkennen.
+
+**Vorher (fehlerhaft):**
+```python
+# "1.234,56" (German) → wurde nicht unterstützt!
+# "1,234" → wurde als 1.234 interpretiert (falsch für US-Tausender)
+```
+
+**Nachher (robust):**
+```python
+# Format-Erkennung basierend auf Position von Komma/Punkt:
+# "1.234,56" (DE) → Punkt vor Komma → 1234.56
+# "1,234.56" (US) → Komma vor Punkt → 1234.56
+# "10,50" → nur Komma, nicht 3 Ziffern → Dezimal → 10.50
+# "1,234" → nur Komma, genau 3 Ziffern → Tausender → 1234
+```
+
+**Test-Ergebnisse:**
+| Eingabe | Erwartet | Ergebnis |
+|---------|----------|----------|
+| `1.234,56` | 1234.56 | ✅ 1234.56 |
+| `1,234.56` | 1234.56 | ✅ 1234.56 |
+| `10,50` | 10.50 | ✅ 10.50 |
+| `1,234` | 1234 | ✅ 1234 |
+| `€ 1.234,56` | 1234.56 | ✅ 1234.56 |
+
 ### Dateien
 
 | Datei | Änderung |
@@ -277,6 +306,7 @@ except Exception as e:
 | `backend/app/channel_manager/adapters/base_adapter.py` | Bare Exception + Logging |
 | `backend/app/core/health.py` | Bare Exception + Logging |
 | `backend/app/core/database.py` | 3× Bare Exception + Logging |
+| `backend/app/core/money.py` | Robuste Format-Erkennung für DE/US Zahlenformate |
 
 **Status**: ✅ IMPLEMENTED
 
