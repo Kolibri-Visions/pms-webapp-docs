@@ -8,7 +8,28 @@
 
 ## Bug Fixes - Kritische Validierungen (2026-02-24) - IMPLEMENTED
 
-**Scope**: Behebung kritischer Bugs aus PMS-Audit (#3-#6).
+**Scope**: Behebung kritischer Bugs aus PMS-Audit (#1, #3-#6).
+
+### Bug #1: Doppelbuchungen (Race Condition)
+
+**Problem**: `update_booking_status()` hatte keinen Advisory Lock. Bei gleichzeitiger Bestätigung zweier Anfragen für dieselben Daten konnte eine Race Condition auftreten.
+
+**Szenario**:
+```
+Thread 1: inquiry → confirmed (liest Status, validiert, bestätigt)
+Thread 2: inquiry → confirmed (liest Status, validiert, bestätigt)
+→ Beide sehen "inquiry", beide versuchen zu bestätigen
+```
+
+**Lösung**:
+- Advisory Lock `pg_advisory_xact_lock` zu `update_booking_status()` hinzugefügt
+- Lock wird auf Property-ID gesetzt (serialisiert alle Status-Änderungen pro Property)
+- Status wird NACH Lock-Erwerb erneut geprüft (Double-Check Pattern)
+
+**Datei**: `backend/app/services/booking_service.py`
+
+**Vorher**: ⚠️ Teilweise geschützt (nur DB-Constraint)
+**Nachher**: ✅ Vollständig geschützt (Lock + Constraint)
 
 ### Bug #3: Kurtaxe ignoriert Altersgrenze
 
