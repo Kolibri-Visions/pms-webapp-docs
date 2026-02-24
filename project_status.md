@@ -1,8 +1,92 @@
 # PMS-Webapp Project Status
 
-**Last Updated:** 2026-02-23
+**Last Updated:** 2026-02-24
 
-**Current Phase:** Phase 23 - Table-to-Card Responsive UI (Alle Admin-Listen)
+**Current Phase:** Phase 24 - Cancellation Policies (Stornierungsregeln)
+
+---
+
+## Cancellation Policies - Stornierungsfrist-Logik (2026-02-24) - IMPLEMENTED
+
+**Feature**: Konfigurierbare Stornierungsregeln mit automatischer Rückerstattungsberechnung.
+
+### Übersicht
+
+- **Agency-Level**: Custom Regeln (Tage vor Check-in → Rückerstattung%)
+- **Property-Level**: Optional eigene Regel oder Agency-Default verwenden
+- **Booking-Level**: Automatische Rückerstattungsberechnung bei Stornierung
+
+### Neue Tabelle: `cancellation_policies`
+
+| Feld | Typ | Beschreibung |
+|------|-----|--------------|
+| `id` | UUID | Primary Key |
+| `agency_id` | UUID | FK zu agencies |
+| `name` | VARCHAR(100) | Name der Regel (z.B. "Standard", "Flexibel") |
+| `is_default` | BOOLEAN | Ist Default für Agency |
+| `rules` | JSONB | Array von `{days_before, refund_percent}` |
+
+### Properties-Erweiterung
+
+| Feld | Typ | Beschreibung |
+|------|-----|--------------|
+| `cancellation_policy_id` | UUID | FK zu cancellation_policies |
+| `use_agency_default_cancellation` | BOOLEAN | true = Agency-Default verwenden |
+
+### API Endpoints
+
+| Method | Endpoint | Beschreibung | Rollen |
+|--------|----------|--------------|--------|
+| GET | `/api/v1/cancellation-policies` | Liste aller Policies | staff+ |
+| POST | `/api/v1/cancellation-policies` | Neue Policy erstellen | manager+ |
+| GET | `/api/v1/cancellation-policies/{id}` | Policy Details | staff+ |
+| PATCH | `/api/v1/cancellation-policies/{id}` | Policy bearbeiten | manager+ |
+| DELETE | `/api/v1/cancellation-policies/{id}` | Policy löschen | admin |
+| GET | `/api/v1/bookings/{id}/calculate-refund` | Refund berechnen | staff+ |
+
+### Frontend-Seiten
+
+| Seite | Beschreibung |
+|-------|--------------|
+| `/settings/cancellation` | Stornierungsregeln verwalten (CRUD) |
+| Property Edit Modal | Abschnitt "Stornierungsregeln" mit Radio-Auswahl |
+| Booking Cancel Modal | Automatische Refund-Berechnung mit Override-Option |
+
+### Dateien
+
+| Bereich | Datei | Aktion |
+|---------|-------|--------|
+| Migration | `supabase/migrations/20260224000000_add_cancellation_policies.sql` | NEU |
+| Backend | `backend/app/schemas/cancellation_policies.py` | NEU |
+| Backend | `backend/app/schemas/properties.py` | Erweitert |
+| Backend | `backend/app/api/routes/cancellation_policies.py` | NEU |
+| Backend | `backend/app/api/routes/bookings.py` | calculate-refund Endpoint |
+| Backend | `backend/app/services/booking_service.py` | calculate_refund() Methode |
+| Frontend | `frontend/app/types/cancellation.ts` | NEU |
+| Frontend | `frontend/app/types/property.ts` | Erweitert |
+| Frontend | `frontend/app/settings/cancellation/page.tsx` | NEU |
+| Frontend | `frontend/app/settings/cancellation/layout.tsx` | NEU |
+| Frontend | `frontend/app/properties/[id]/page.tsx` | Edit Modal erweitert |
+| Frontend | `frontend/app/bookings/[id]/page.tsx` | Cancel Modal erweitert |
+
+### Verification Path
+
+```bash
+# 1. DB Migration anwenden
+supabase db push
+
+# 2. Backend starten und API testen
+curl -X POST /api/v1/cancellation-policies \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"name":"Standard","is_default":true,"rules":[{"days_before":14,"refund_percent":100},{"days_before":7,"refund_percent":50},{"days_before":0,"refund_percent":0}]}'
+
+# 3. Frontend prüfen
+# - /settings/cancellation → Regeln erstellen/bearbeiten
+# - /properties/[id] → Edit Modal → Stornierungsregeln-Abschnitt
+# - /bookings/[id] → Stornieren → Refund-Berechnung prüfen
+```
+
+**Status**: ✅ IMPLEMENTED
 
 ---
 
