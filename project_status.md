@@ -1,8 +1,66 @@
 # PMS-Webapp Project Status
 
-**Last Updated:** 2026-02-24
+**Last Updated:** 2026-02-25
 
 **Current Phase:** Phase 27 - Codebase Audit & Logic Bug Fixes Phase 2
+
+---
+
+## UI Fixes & Cancellation Policy (2026-02-25) - IMPLEMENTED
+
+**Scope**: UI-Verbesserungen und Backend-Fix für Stornierungsregeln.
+
+### Übersicht der Fixes
+
+| # | Problem | Datei | Fix |
+|---|---------|-------|-----|
+| U1 | Datumsformat ohne führende Nullen (3.1.2026) | `properties/[id]/page.tsx` | `toLocaleString()` mit `day: "2-digit"` |
+| U2 | Dashboard-Icon passt nicht zum Branding | `dashboard/page.tsx` | AlertTriangle → Clock Icon |
+| U3 | Stornierungsregel wird nicht gespeichert | `property_service.py` | Felder zu `allowed_fields` hinzugefügt |
+
+### U1: Datumsformat mit führenden Nullen
+
+**Vorher:** `3.1.2026 14:5:3`
+**Nachher:** `03.01.2026 14:05:03`
+
+**Lösung:** `toLocaleString("de-DE", { day: "2-digit", month: "2-digit", ... })`
+
+### U2: Dashboard-Icon Konsistenz
+
+**Vorher:** AlertTriangle-Icon für "Offene Buchungsanfragen" (wirkt wie Warnung)
+**Nachher:** Clock-Icon (passt besser zum Konzept "wartend")
+
+### U3: Stornierungsregel speichern
+
+**Problem:** Bei Property-Edit wurde "Andere vordefinierte verwenden" nicht persistiert.
+
+**Ursache:** `cancellation_policy_id` und `use_agency_default_cancellation` fehlten in `allowed_fields` Dictionary.
+
+**Lösung:** Beide Felder zu `allowed_fields` in `property_service.py` hinzugefügt.
+
+### Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/properties/[id]/page.tsx` | `formatDateTime()` mit 2-digit Formatierung |
+| `frontend/app/dashboard/page.tsx` | Clock statt AlertTriangle Import/Verwendung |
+| `backend/app/services/property_service.py` | `cancellation_policy_id`, `use_agency_default_cancellation` zu allowed_fields |
+
+### Verification Path
+
+```bash
+# U1: Datumsformat prüfen
+# Property-Detail Seite öffnen, Buchungshistorie prüfen
+
+# U2: Dashboard-Icon prüfen
+# Dashboard öffnen, "Offene Buchungsanfragen" Karte prüfen
+
+# U3: Stornierungsregel speichern
+# Property bearbeiten → Stornierungsregeln → "Andere vordefinierte verwenden" → Speichern → Reload
+```
+
+**Commit:** `0783ea3`
+**Status:** ✅ IMPLEMENTED
 
 ---
 
