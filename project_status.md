@@ -34,9 +34,15 @@
 
 **Problem:** Bei Property-Edit wurde "Andere vordefinierte verwenden" nicht persistiert.
 
-**Ursache:** `cancellation_policy_id` und `use_agency_default_cancellation` fehlten in `allowed_fields` Dictionary.
+**Ursachen (3 Fehler):**
+1. `cancellation_policy_id` und `use_agency_default_cancellation` fehlten in `allowed_fields` Dictionary
+2. `cancellation_policy_id` wurde nicht von String zu UUID konvertiert
+3. `cancellation_policy_id` und `use_agency_default_cancellation` fehlten in den SELECT-Queries
 
-**Lösung:** Beide Felder zu `allowed_fields` in `property_service.py` hinzugefügt.
+**Lösung:**
+1. Beide Felder zu `allowed_fields` in `property_service.py` hinzugefügt
+2. UUID-Konvertierung für `cancellation_policy_id` (wie bei `owner_id`) + NULL-Handling für leere Strings
+3. Beide Felder zu `list_properties` und `get_property` SELECT-Queries hinzugefügt
 
 ### Dateien
 
@@ -44,7 +50,7 @@
 |-------|----------|
 | `frontend/app/properties/[id]/page.tsx` | `formatDateTime()` mit 2-digit Formatierung |
 | `frontend/app/dashboard/page.tsx` | Clock statt AlertTriangle Import/Verwendung |
-| `backend/app/services/property_service.py` | `cancellation_policy_id`, `use_agency_default_cancellation` zu allowed_fields |
+| `backend/app/services/property_service.py` | allowed_fields, UUID-Konvertierung, SELECT-Queries |
 
 ### Verification Path
 
@@ -59,7 +65,11 @@
 # Property bearbeiten → Stornierungsregeln → "Andere vordefinierte verwenden" → Speichern → Reload
 ```
 
-**Commit:** `0783ea3`
+**Commits:**
+- `0783ea3` - allowed_fields fix
+- `2613266` - UUID conversion fix
+- `cce652c` - SELECT queries fix
+
 **Status:** ✅ IMPLEMENTED
 
 ---
