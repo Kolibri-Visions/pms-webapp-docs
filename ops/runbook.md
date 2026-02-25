@@ -31,6 +31,7 @@
 | [32-season-only-min-stay.md](./runbook/32-season-only-min-stay.md) | Season-basierter Mindestaufenthalt |
 | [33-rls-infinite-recursion.md](./runbook/33-rls-infinite-recursion.md) | RLS Bootstrap-Tabellen & SECURITY DEFINER |
 | [34-encryption-tls.md](./runbook/34-encryption-tls.md) | Encryption in Transit (TLS) & at Rest |
+| [35-web-vitals-monitoring.md](./runbook/35-web-vitals-monitoring.md) | Web Vitals Performance Monitoring |
 
 ### Golden Paths (Most Common Operations)
 
@@ -57,6 +58,8 @@
 | Extra service billing error | per_unit_night not saving | [Extra Services Migration](./runbook/16-extra-services.md#migration-per_unit_night-2026-02-15) |
 | Property not on public site | Active property missing from /unterkuenfte | [Public Visibility](./runbook/29-public-website-visibility.md) |
 | RLS infinite recursion | "infinite recursion detected in policy" | [RLS Bootstrap-Tabellen](./runbook/33-rls-infinite-recursion.md) |
+| Web Vitals 500 error | "badly formed hexadecimal UUID string" | [Web Vitals Monitoring](./runbook/35-web-vitals-monitoring.md#problem-500-badly-formed-hexadecimal-uuid-string) |
+| Web Vitals 0 Messungen | Daten in DB aber nicht angezeigt | [Web Vitals Monitoring](./runbook/35-web-vitals-monitoring.md#problem-0-messungen-trotz-daten-in-db) |
 
 ---
 

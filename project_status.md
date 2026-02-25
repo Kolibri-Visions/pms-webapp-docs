@@ -6,6 +6,113 @@
 
 ---
 
+## Web Vitals Performance Monitoring (2026-02-25) - IMPLEMENTED
+
+**Scope**: Core Web Vitals Monitoring für Public Websites mit Admin-Dashboard.
+
+### Features
+
+| Feature | Beschreibung |
+|---------|-------------|
+| Datenerfassung | Automatische Erfassung von LCP, FCP, CLS, FID, INP, TTFB via `sendBeacon` |
+| Admin-Dashboard | `/ops/web-vitals` - Aggregierte Metriken mit Rating-Anzeige |
+| Langsamste Seiten | Top 5 Seiten nach LCP-Wert |
+| Zeitfilter | 24h, 7d, 30d Perioden-Auswahl |
+| Auto-Cleanup | Trigger löscht Einträge älter als 30 Tage, max 10.000 pro Agency |
+
+### Architektur
+
+```
+[Public Website] → sendBeacon → [Frontend Proxy] → [Backend API] → [Supabase]
+                                 /api/internal/      POST /vitals
+                                 analytics/vitals    (public, no auth)
+
+[Admin Panel] → apiClient → [Backend API] → [Supabase]
+                            GET /vitals/summary
+                            (admin only, JWT auth)
+```
+
+### Implementierte Komponenten
+
+| Komponente | Datei | Beschreibung |
+|------------|-------|--------------|
+| DB Migration | `supabase/migrations/20260225110000_add_web_vitals_metrics.sql` | Tabelle + Trigger + RLS |
+| RLS Fix | `supabase/migrations/20260225160000_fix_web_vitals_rls.sql` | Public INSERT Policy |
+| Backend Routes | `backend/app/api/routes/analytics.py` | POST + GET Endpoints |
+| Backend Schemas | `backend/app/schemas/analytics.py` | Pydantic Models |
+| Frontend Proxy | `frontend/app/api/internal/analytics/vitals/route.ts` | sendBeacon Proxy |
+| Admin UI | `frontend/app/ops/web-vitals/page.tsx` | Dashboard-Seite |
+| WebVitals Hook | `frontend/app/components/WebVitals.tsx` | Metric Collection |
+| Agency Resolver | `backend/app/api/routes/public_site.py` | `/agency-by-domain` Endpoint |
+
+### Gelöste Probleme (Debugging-Prozess)
+
+| # | Problem | Ursache | Lösung |
+|---|---------|---------|--------|
+| 1 | 404 auf `/api/v1/analytics/vitals/summary` | Router nicht gemountet bei `MODULES_ENABLED=true` | Failsafe-Mount in `main.py` hinzugefügt |
+| 2 | 403 "Not authenticated" | Frontend sendete kein Auth-Token | `accessToken` aus `useAuth()` an apiClient übergeben |
+| 3 | Build Error "Property 'token' does not exist" | AuthContextType verwendet `accessToken`, nicht `token` | Variable umbenannt |
+| 4 | 500 "NoneType has no attribute 'acquire'" | `get_pool()` gibt None zurück bei Startup | `get_db` Dependency statt `get_pool()` verwenden |
+| 5 | 500 "invalid input for query argument $2" | asyncpg benötigt `timedelta` für Interval, nicht String | `timedelta(hours=24)` statt `"24 hours"` |
+| 6 | 403 Host Allowlist Check Failed | `/agency-by-domain` wurde von Admin-Domain aufgerufen | Separaten Router ohne Host-Allowlist erstellt |
+| 7 | "Database pool not available" Warning | POST Endpoint nutzte `get_pool()` | `get_db` Dependency verwenden |
+| 8 | Daten nicht angezeigt (0 Messungen) trotz 144 Einträgen | RLS Policy blockierte SELECT | Permissive SELECT Policy hinzugefügt |
+| 9 | Daten immer noch 0 trotz korrekter RLS | `agency_id` Typ-Mismatch (String vs UUID) | `ensure_uuid()` Funktion für Konvertierung |
+| 10 | 500 "badly formed hexadecimal UUID string" | JWT enthält kein `agency_id` Claim | `resolve_agency_id()` Funktion mit Auto-Pick aus `team_members` |
+
+### Key Learnings
+
+1. **Supabase JWT enthält kein `agency_id`**: Multi-Tenant Apps müssen Agency aus `team_members` Tabelle auflösen
+2. **asyncpg Interval-Type**: PostgreSQL Intervals müssen als `timedelta` übergeben werden, nicht als String
+3. **RLS für Backend-Zugriff**: Backend nutzt Service Role Key, aber RLS Policies müssen trotzdem korrekt sein
+4. **sendBeacon + Auth**: `sendBeacon` kann keine Auth-Header senden → Public Endpoint erforderlich
+5. **Host Allowlist**: Nicht alle Public Endpoints sollen auf bestimmte Domains beschränkt sein
+
+### Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `supabase/migrations/20260225110000_*.sql` | NEU - DB Schema |
+| `supabase/migrations/20260225160000_*.sql` | NEU - RLS Fix |
+| `backend/app/api/routes/analytics.py` | NEU - API Routes |
+| `backend/app/schemas/analytics.py` | NEU - Schemas |
+| `backend/app/api/routes/public_site.py` | `agency_domain_router` hinzugefügt |
+| `backend/app/main.py` | Failsafe Mounts für analytics + agency_domain_router |
+| `frontend/app/api/internal/analytics/vitals/route.ts` | NEU - Proxy |
+| `frontend/app/ops/web-vitals/page.tsx` | NEU - Admin UI |
+| `frontend/app/ops/web-vitals/layout.tsx` | NEU - Auth Layout |
+| `frontend/app/components/AdminShell.tsx` | Navigation Link hinzugefügt |
+
+### Verification Path
+
+```bash
+# 1. Public Website besuchen (generiert Web Vitals Daten)
+curl -I https://www.syltwerker.de/
+
+# 2. Admin Panel → Einstellungen → Performance aufrufen
+# Erwartet: Metriken-Karten mit LCP, FCP, CLS, FID, INP, TTFB
+
+# 3. Zeitfilter wechseln (7 Tage, 30 Tage)
+# Erwartet: Daten werden aktualisiert
+
+# 4. Backend Logs prüfen
+# Erwartet: "Auto-picked agency for user ... " bei GET Request
+```
+
+### Commits
+
+- `1c134af` - fix: allow anonymous inserts for web vitals metrics
+- `3effc86` - fix: use get_db dependency instead of get_pool()
+- `65562da` - fix: use separate router for agency-by-domain
+- `eb02d5e` - fix: ensure agency_id is UUID type for web vitals queries
+- `b701770` - fix: add agency_id resolution for web vitals endpoint
+
+**Status:** ✅ IMPLEMENTED
+
+**Runbook:** [35-web-vitals-monitoring.md](ops/runbook/35-web-vitals-monitoring.md)
+
+---
+
 ## UI Fixes & Cancellation Policy (2026-02-25) - IMPLEMENTED
 
 **Scope**: UI-Verbesserungen und Backend-Fix für Stornierungsregeln.
