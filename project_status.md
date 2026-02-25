@@ -1119,46 +1119,47 @@ REDIS_TLS_ENABLED=true
 
 ---
 
-## CSP mit Nonces (2026-02-24) - VERIFIED
+## CSP (Content-Security-Policy) (2026-02-25) - IMPLEMENTED
 
-**Issue**: Content-Security-Policy verwendete `unsafe-inline` und `unsafe-eval` für Scripts, was XSS-Angriffe ermöglichte.
+**Issue**: CSP mit Nonces blockierte alle Next.js Scripts, da Next.js 15 keine automatische Nonce-Injection unterstützt.
 
-**Lösung**: Nonce-basiertes CSP implementiert für maximale XSS-Sicherheit.
+**Ursprünglicher Ansatz (2026-02-24)**: Nonce-basiertes CSP implementiert.
+- Problem: Next.js 15 injiziert Hydration-Scripts ohne Nonce
+- Resultat: Public Website komplett blank (alle JS blockiert)
+
+**Aktuelle Lösung (2026-02-25)**: CSP mit `'unsafe-inline'` für script-src.
 
 **Änderungen**:
-- `frontend/middleware.ts`: Nonce-Generierung und CSP-Header-Injection
-  - `generateNonce()`: 16-Byte Zufallswert, base64-encodiert
-  - `buildCspHeader(nonce)`: CSP mit `'nonce-{nonce}'` statt `'unsafe-inline'`
-  - Nonce wird via `x-nonce` Header an Server Components übergeben
-- `frontend/next.config.js`: CSP entfernt (wird nun in middleware gesetzt)
-- `CLAUDE.md`: Sektion 11 hinzugefügt (CSP & Nonces)
+- `frontend/middleware.ts`: CSP ohne Nonces
+  - `script-src 'self' 'unsafe-inline' 'unsafe-eval'` (für Next.js Hydration)
+  - `style-src 'self' 'unsafe-inline'`
+- `CLAUDE.md`: Sektion 11 aktualisiert
 
 **CSP-Direktiven**:
 ```
-script-src 'self' 'nonce-{nonce}' 'strict-dynamic'
-style-src 'self' 'nonce-{nonce}' 'unsafe-inline'
+default-src 'self'
+script-src 'self' 'unsafe-inline' 'unsafe-eval'
+style-src 'self' 'unsafe-inline'
+img-src 'self' data: blob: https://*.supabase.co ...
+connect-src 'self' https://*.supabase.co ...
+frame-ancestors 'none'
+form-action 'self'
+base-uri 'self'
+object-src 'none'
 ```
 
-**Externe Scripts hinzufügen**:
-```tsx
-import { headers } from 'next/headers';
-import Script from 'next/script';
-const nonce = headers().get('x-nonce') || '';
-<Script src="..." nonce={nonce} strategy="afterInteractive" />
-```
+**Verbleibende Schutzmaßnahmen**:
+- `frame-ancestors 'none'` → Clickjacking-Schutz
+- `object-src 'none'` → Flash/Plugin-Schutz
+- HSTS, X-Frame-Options, X-Content-Type-Options → Aktiv
+- Supabase Auth mit bcrypt → Passwort-Sicherheit
 
-**Verification Path**: Browser DevTools → Network → Response Headers → Content-Security-Policy sollte `nonce-` enthalten
+**Warum kein Nonce-CSP mit Next.js 15?**
+- Next.js generiert interne Scripts ohne Nonce-Attribut
+- `'strict-dynamic'` erfordert, dass initiale Scripts Nonces haben
+- Kein offizieller Next.js 15 Support für automatische Nonces
 
-**PROD Evidence (2026-02-25)**:
-```bash
-$ curl -sI https://admin.fewo.kolibri-visions.de/login | grep -i content-security-policy
-content-security-policy: ... script-src 'self' 'nonce-9FJXs0JHepKHBK969YA+cQ==' 'strict-dynamic' ...
-```
-- Commit: `ee099c4`
-- Deploy: 2026-02-24 22:54 UTC
-- Nonce in CSP Header: ✅ Bestätigt
-
-**Status**: ✅ VERIFIED
+**Status**: ✅ IMPLEMENTED
 
 ---
 
