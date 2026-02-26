@@ -603,6 +603,57 @@ The smoke test includes a navigation CSS variables test that verifies:
 [PASS] All navigation CSS variables are defined
 ```
 
+## Topbar & Content Styling (2026-02-26)
+
+Die folgenden Felder ermöglichen die Anpassung von Topbar und Content-Bereich:
+
+### Neue Felder
+
+| Feld | Typ | Beschreibung | CSS-Variable |
+|------|-----|--------------|--------------|
+| `topbar_bg_color` | hex | Topbar-Hintergrundfarbe | `--surface-header` |
+| `topbar_border_color` | hex | Topbar-Rahmenfarbe | `--surface-header-border` |
+| `content_bg_color` | hex | Content-Bereich Hintergrund | `--surface-content` |
+
+### DB-Migration
+
+```sql
+-- Migration: 20260226234133_add_branding_topbar_body_colors.sql
+ALTER TABLE branding ADD COLUMN IF NOT EXISTS topbar_bg_color TEXT;
+ALTER TABLE branding ADD COLUMN IF NOT EXISTS topbar_border_color TEXT;
+ALTER TABLE branding ADD COLUMN IF NOT EXISTS content_bg_color TEXT;
+```
+
+### API Beispiel
+
+```json
+// PUT /api/v1/branding
+{
+  "topbar_bg_color": "#1E293B",
+  "topbar_border_color": "#334155",
+  "content_bg_color": "#F1F5F9"
+}
+```
+
+### Browser-Verifikation
+
+```javascript
+// CSS-Variablen prüfen
+getComputedStyle(document.documentElement).getPropertyValue('--surface-header')
+getComputedStyle(document.documentElement).getPropertyValue('--surface-header-border')
+getComputedStyle(document.documentElement).getPropertyValue('--surface-content')
+```
+
+### Troubleshooting: Topbar/Content Farben nicht angewendet
+
+**Symptom:** Farben werden gespeichert aber nicht angezeigt.
+
+**Ursachen & Lösungen:**
+
+1. **Browser-Cache:** Hard refresh (Ctrl+Shift+R)
+2. **Theme-Provider nicht geladen:** Console auf Fehler prüfen
+3. **CSS-Variable überschrieben:** Spezifischere Tailwind-Klassen können CSS-Variablen überschreiben
+
 ## Related Documentation
 
 - [Admin UI Design System](./19-admin-theming.md) — Design tokens and theming

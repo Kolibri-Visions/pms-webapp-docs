@@ -254,6 +254,56 @@ Die DB-Migration `20260226163000_add_branding_nav_behavior.sql` fügte 8 neue Sp
 
 ---
 
+## Branding Topbar & Body Styling (2026-02-26) - IMPLEMENTED
+
+**Scope**: Einheitliche Gestaltungsoptionen für Topbar und Content-Bereich, Bugfixes, UX-Verbesserungen.
+
+### Neue Features
+
+| Feature | Beschreibung |
+|---------|-------------|
+| `topbar_bg_color` | Hintergrundfarbe des Topbars (Admin Header) |
+| `topbar_border_color` | Rahmenfarbe des Topbars |
+| `content_bg_color` | Hintergrundfarbe des Content-Bereichs (Body) |
+| Gradient in "Marke"-Tab | Gradient-Farben von "Erweitert" nach "Marke" verschoben |
+| `hover_text` UI | Fehlender Color-Picker für Hover-Textfarbe hinzugefügt |
+
+### Behobene Issues
+
+| # | Problem | Lösung |
+|---|---------|--------|
+| 1 | Topbar verwendete hardcoded Tailwind-Klassen | CSS-Variablen `--surface-header`, `--surface-header-border` |
+| 2 | Content-Bereich nicht anpassbar | CSS-Variable `--surface-content` |
+| 3 | `hover_text` in Schema aber nicht im UI | Color-Picker in branding-form.tsx hinzugefügt |
+| 4 | Gradient in "Erweitert"-Tab versteckt | Nach "Marke"-Tab verschoben |
+| 5 | Leerer "Erweitert"-Tab | Tab entfernt (nur noch "Marke" und "Navigation") |
+| 6 | Font-Family nicht überall angewendet | `--font-family` CSS-Variable global + inherit-Regel |
+| 7 | `width_pct` Label unklar | Label zeigt jetzt `{value}rem ({px}px)` |
+
+### Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `supabase/migrations/20260226234133_add_branding_topbar_body_colors.sql` | Neue Spalten |
+| `backend/app/schemas/branding.py` | 3 neue Felder + Validator |
+| `backend/app/api/routes/branding.py` | GET/PUT für neue Felder |
+| `frontend/app/lib/theme-provider.tsx` | CSS-Variablen für Topbar/Content |
+| `frontend/app/components/AdminShell.tsx` | Topbar/Content mit CSS-Variablen statt hardcoded |
+| `frontend/app/(admin)/settings/branding/branding-form.tsx` | Neue UI-Sektion, Tab-Struktur, Bugfixes |
+| `frontend/app/globals.css` | `--font-family` Variable + inherit-Regel |
+
+### Verification Path
+
+```bash
+# 1. Topbar-Farbe: /settings/branding → "Topbar & Content" Sektion → Topbar-Hintergrund setzen → Speichern → Topbar ändert Farbe
+# 2. Body-Farbe: /settings/branding → Content-Hintergrund setzen → Speichern → Content-Bereich ändert Farbe
+# 3. Gradient: /settings/branding → Tab "Marke" → Gradient-Sektion ist sichtbar (nicht mehr in "Erweitert")
+# 4. Font: /settings/branding → Schriftart ändern → Speichern → Topbar, Content und Navigation nutzen gleiche Schriftart
+# 5. hover_text: /settings/branding → Tab "Navigation" → Sidebar-Farben → "Hover Text" Feld vorhanden
+```
+
+---
+
 ## Admin Route Group Architektur (2026-02-26) - IMPLEMENTED
 
 **Scope**: Refaktorierung der Frontend-Route-Struktur für stabiles AdminShell-Verhalten.
