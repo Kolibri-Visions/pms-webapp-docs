@@ -44,6 +44,9 @@ This backlog tracks the PMS-Webapp (Property Management System) product evolutio
 1. 📋 Complete error taxonomy implementation (P1-06 done, P1-07 pending)
 2. 📋 Add structured logging (JSON logs with trace IDs)
 3. 📋 Implement rate limiting (per-user, per-agency)
+   - Sessions API: `/api/internal/auth/sessions` (DELETE) - max 10 req/min/user
+   - Login API: `/auth/login` - brute-force protection
+   - Public APIs: per-IP rate limiting
 4. 📋 Security audit (pen test, vulnerability scan)
 5. 📋 Add monitoring/alerting (Prometheus, Grafana, or equivalent)
 6. 📋 Database backup/restore procedure documented
@@ -396,5 +399,5 @@ This backlog tracks the PMS-Webapp (Property Management System) product evolutio
 
 ---
 
-**Last Updated**: 2025-12-31
+**Last Updated**: 2026-02-26
 **Maintained By**: Product Owner + Engineering Team
