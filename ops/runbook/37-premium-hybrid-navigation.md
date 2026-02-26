@@ -521,7 +521,22 @@ Neue UI-Sektionen in `/settings/branding`:
 |-------------|------------|
 | `enable_favorites` | Favoriten-Sektion + Star-Toggles ausgeblendet |
 | `enable_command_palette` | Search-Button + ⌘K Shortcut deaktiviert |
+| `enable_collapsible_groups` | Gruppen werden fest angezeigt (nicht einklappbar) |
+| `default_sidebar_collapsed` | Sidebar startet collapsed wenn kein localStorage-Wert |
 | `mobile_bottom_tabs_enabled` | Bottom Tab Bar auf Mobile ausgeblendet |
+
+### Bugfixes (2026-02-26)
+
+Folgende Issues wurden nach dem initialen Phase 6 Release behoben:
+
+| Problem | Lösung |
+|---------|--------|
+| `enable_collapsible_groups` wirkungslos | AdminShell prüft jetzt die Einstellung |
+| `default_sidebar_collapsed` wirkungslos | Neuer useEffect respektiert Branding-Default |
+| `font_family` wirkungslos | theme-provider.tsx setzt `--font-family` CSS-Variable |
+| Navigation CSS-Variablen nicht synchron | Variable-Namen zwischen theme-provider und AdminShell synchronisiert |
+| `ALLOWED_NAV_KEYS` veraltet | Backend-Schema aktualisiert (26 Keys, neue Seiten) |
+| Gradient-Reset löscht DB nicht | Leere Werte werden als `null` gesendet |
 
 ### Verwendung
 

@@ -126,6 +126,52 @@ cd frontend && npm run build
 
 ---
 
+## Branding-Einstellungen Bugfixes (2026-02-26) - IMPLEMENTED
+
+**Scope**: Behebung von 9 Issues in der Branding-UI (`/settings/branding`) - Einstellungen ohne Wirkung und Bugs.
+
+### Behobene Issues
+
+| # | Problem | Lösung |
+|---|---------|--------|
+| 1 | `enable_collapsible_groups` hatte keine Wirkung | AdminShell.tsx prüft jetzt `branding.enable_collapsible_groups` |
+| 2 | `default_sidebar_collapsed` hatte keine Wirkung | Neuer useEffect respektiert Branding-Default wenn kein localStorage |
+| 3 | `font_family` hatte keine Wirkung | theme-provider.tsx setzt jetzt `--font-family` CSS-Variable |
+| 4 | Nav `hover_text` Farbe wirkungslos | CSS-Variable-Namen synchronisiert (`--nav-item-text-hover`) |
+| 5 | Nav `width_pct` wirkungslos | Beide Variable-Namen gesetzt (legacy + premium) |
+| 6 | Nav `icon_size_px`/`item_gap_px` wirkungslos | AdminShell nutzt jetzt CSS-Variablen statt hardcoded Werte |
+| 7 | Nav-Farbeinstellungen teilweise wirkungslos | Alle CSS-Variablen-Namen zwischen theme-provider und AdminShell synchronisiert |
+| 8 | `ALLOWED_NAV_KEYS` veraltet | Backend-Schema aktualisiert (26 Keys statt 24, korrekte Namen) |
+| 9 | Gradient-Reset löscht DB-Werte nicht | `handleSubmit` sendet jetzt `null` für leere Gradient-Felder |
+
+### Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/components/AdminShell.tsx` | `isGroupCollapsible` Check, `default_sidebar_collapsed` useEffect, CSS-Variablen |
+| `frontend/app/lib/theme-provider.tsx` | `applyFontFamily()`, erweiterte `applyNavCssVariables()` |
+| `frontend/app/settings/branding/branding-form.tsx` | Gradient-Reset sendet null |
+| `backend/app/schemas/branding.py` | `ALLOWED_NAV_KEYS` aktualisiert |
+
+### Verification Path
+
+```bash
+# 1. Frontend Build
+cd frontend && npm run build
+
+# 2. Backend Schema Check
+cd backend && python3 -c "from app.schemas.branding import ALLOWED_NAV_KEYS; print(len(ALLOWED_NAV_KEYS), 'keys')"
+# Erwartet: 26 keys
+
+# 3. PROD-Verifikation
+# - /settings/branding: "Einklappbare Gruppen" deaktivieren → Gruppen nicht mehr einklappbar
+# - /settings/branding: "Sidebar standardmäßig eingeklappt" aktivieren → localStorage löschen → Sidebar startet collapsed
+# - /settings/branding: Font ändern → Text ändert Schriftart
+# - /settings/branding: Gradient zurücksetzen + speichern → Gradient wird entfernt
+```
+
+---
+
 ## Multi-Device Session Tracking (2026-02-26) - VERIFIED
 
 **Scope**: Anzeige und Verwaltung aller aktiven Sitzungen eines Benutzers auf verschiedenen Geräten.
