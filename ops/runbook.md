@@ -33,6 +33,7 @@
 | [34-encryption-tls.md](./runbook/34-encryption-tls.md) | Encryption in Transit (TLS) & at Rest |
 | [35-web-vitals-monitoring.md](./runbook/35-web-vitals-monitoring.md) | Web Vitals Performance Monitoring |
 | [36-multi-device-sessions.md](./runbook/36-multi-device-sessions.md) | Multi-Device Session Tracking |
+| [37-premium-hybrid-navigation.md](./runbook/37-premium-hybrid-navigation.md) | Premium Hybrid Navigation System |
 
 ### Golden Paths (Most Common Operations)
 

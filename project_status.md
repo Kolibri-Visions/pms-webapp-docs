@@ -6,6 +6,126 @@
 
 ---
 
+## Premium Hybrid Navigation - Phase 1+2 (2026-02-26) - IMPLEMENTED
+
+**Scope**: CSS-Variablen-System und Navigation-Komponenten für moderne, responsive Admin-Navigation.
+
+### Phase 1: CSS-Variablen-System
+
+- **globals.css**: 80+ neue CSS-Variablen für Brand Gradient, Surface, Interactive, Navigation-specific, Component-specific (Search, Palette, Flyout), Mobile
+- **theme-provider.tsx**: Neue Interfaces (`ApiBrandConfig`, `ApiNavBehavior`) und Funktion `applyPremiumNavCssVariables()` für dynamisches Setzen der Variablen
+- **Dark Mode**: Vollständige Overrides für alle neuen Variablen in `[data-theme="dark"]` und `[data-theme="system"]`
+
+### Phase 2: Navigation-Komponenten
+
+- **Flyout-Menüs**: Im collapsed Mode zeigt Hover über Gruppen ein Flyout mit allen Items
+- **Item Count Badges**: Jede Gruppe zeigt Anzahl der sichtbaren Items
+- **Animierte Transitions**: Smooth Expand/Collapse mit CSS-Variablen-basierter Duration
+- **Premium Hybrid Design**: Weiße Sidebar, Gradient Logo, Icon Container mit aktiven Gradients
+
+### Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/globals.css` | +80 CSS-Variablen, Animation Utilities |
+| `frontend/app/lib/theme-provider.tsx` | +2 Interfaces, +2 Funktionen |
+| `frontend/app/components/AdminShell.tsx` | Flyouts, Badges, Premium Design |
+| `backend/docs/ops/runbook/37-premium-hybrid-navigation.md` | Dokumentation |
+
+### Abwärtskompatibilität
+
+- Alle bestehenden `--t-*` und `--nav-*` Variablen bleiben unverändert
+- Neue Variablen haben Fallback-Werte in globals.css
+- Keine Breaking Changes
+
+### Verification Path
+
+```bash
+# 1. Lokaler Syntax-Check (keine Fehler)
+cd frontend && npm run lint
+
+# 2. Build-Test
+npm run build
+
+# 3. PROD-Verifikation nach Deploy
+# - Browser: Sidebar Collapse/Expand testen
+# - Browser: Hover über Gruppe im collapsed Mode → Flyout erscheint
+# - Browser: Expand-Gruppen zeigen Item Count Badges
+```
+
+### Nächste Phasen
+
+- ~~Phase 3: Favoriten-System~~ ✅
+- ~~Phase 4: Command Palette~~ ✅
+- ~~Phase 5: Mobile Responsiveness~~ ✅
+- ~~Phase 6: Branding-UI Erweiterung~~ ✅
+
+---
+
+## Premium Hybrid Navigation - Phase 3-6 (2026-02-26) - IMPLEMENTED
+
+**Scope**: Favoriten-System, Command Palette, Mobile Responsiveness, Branding-UI Erweiterung.
+
+### Phase 3: Favoriten-System
+
+- **LocalStorage-Persistenz**: Tenant-isoliert via `pms-nav-favorites` Key
+- **Favoriten-Sektion**: Erscheint automatisch bei ≥1 Favorit
+- **Star-Toggle**: An allen Nav-Items (Hover-State, Amber-Farbe)
+- **Max-Limit**: 5 Favoriten (konfigurierbar via FAVORITES_MAX_COUNT)
+
+### Phase 4: Command Palette
+
+- **Komponente**: `frontend/app/components/CommandPalette.tsx`
+- **Keyboard Shortcut**: ⌘K (Mac) / Ctrl+K (Windows/Linux)
+- **Recent Searches**: LocalStorage-Persistenz (`pms-command-palette-recent`)
+- **Sektionen**: Favoriten, Zuletzt besucht, Suchergebnisse
+- **Keyboard Navigation**: ↑/↓ + Enter + ESC
+
+### Phase 5: Mobile Responsiveness
+
+- **Bottom Tab Bar**: Fixiert am unteren Rand (< 1024px)
+- **Mobile Drawer**: Vollständige Navigation mit Touch UX
+- **iOS Safe Area**: `env(safe-area-inset-*)` Support
+- **Touch Targets**: Min. 44px, `active:scale-95`
+
+### Phase 6: Branding-UI Erweiterung
+
+- **DB-Migration**: `supabase/migrations/20260226163000_add_branding_nav_behavior.sql`
+- **Backend Schema**: `BrandingUpdate` + `BrandingResponse` mit neuen Feldern
+- **Branding-Form UI**: Toggles für enable_favorites, enable_command_palette, enable_collapsible_groups, default_sidebar_collapsed
+- **Gradient Colors**: 3 Color Picker mit Live-Vorschau
+- **Mobile Settings**: Toggle für mobile_bottom_tabs_enabled
+- **AdminShell Integration**: Respektiert alle neuen Branding-Einstellungen
+
+### Dateien (Phase 3-6)
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/components/AdminShell.tsx` | Favorites, Mobile Drawer, Bottom Tabs, Branding Checks |
+| `frontend/app/components/CommandPalette.tsx` | Neue Komponente |
+| `frontend/app/lib/theme-provider.tsx` | Phase 6 Felder, CSS-Variablen |
+| `frontend/app/settings/branding/branding-form.tsx` | Neue UI-Sektionen |
+| `backend/app/schemas/branding.py` | Phase 6 Felder |
+| `supabase/migrations/20260226163000_add_branding_nav_behavior.sql` | Neue Spalten |
+
+### Verification Path
+
+```bash
+# 1. DB-Migration
+supabase db diff  # Zeigt neue Spalten
+
+# 2. Frontend Build
+cd frontend && npm run build
+
+# 3. PROD-Verifikation
+# - /settings/branding: Neue Sektionen vorhanden
+# - Toggle "Favoriten-System" deaktivieren → Sterne verschwinden
+# - Toggle "Befehlspalette" deaktivieren → ⌘K funktioniert nicht mehr
+# - Mobile: Bottom Tab Bar ausblenden via Toggle
+```
+
+---
+
 ## Multi-Device Session Tracking (2026-02-26) - VERIFIED
 
 **Scope**: Anzeige und Verwaltung aller aktiven Sitzungen eines Benutzers auf verschiedenen Geräten.
