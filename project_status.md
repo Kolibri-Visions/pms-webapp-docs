@@ -172,6 +172,52 @@ cd backend && python3 -c "from app.schemas.branding import ALLOWED_NAV_KEYS; pri
 
 ---
 
+## Backend Branding API Fix - Phase 6 Felder (2026-02-26) - IMPLEMENTED
+
+**Scope**: Kritischer Bugfix - Backend `/api/v1/branding` Route ignorierte alle Phase 6 Felder.
+
+### Root Cause
+
+Die DB-Migration `20260226163000_add_branding_nav_behavior.sql` fügte 8 neue Spalten hinzu, aber die Backend-Route `branding.py` wurde **nie aktualisiert**:
+
+1. **GET Route** selektierte Phase 6 Spalten nicht aus der DB
+2. **PUT Route** hatte keine Handler für Phase 6 Felder
+3. **BrandingResponse** Konstruktion populierte Phase 6 Felder nicht
+
+### Auswirkung
+
+- User speicherte Phase 6 Einstellungen → Daten wurden **nie in DB geschrieben**
+- GET Route gab nur Schema-Defaults zurück (nicht die gespeicherten Werte)
+- Folge: enable_favorites, enable_command_palette, enable_collapsible_groups, default_sidebar_collapsed, gradient_from/via/to, mobile_bottom_tabs_enabled hatten **keine Wirkung**
+
+### Fix
+
+| Stelle | Änderung |
+|--------|----------|
+| GET SELECT | +8 Phase 6 Spalten |
+| GET BrandingResponse | +8 Felder aus row[] |
+| PUT Handlers | +8 `if updates.xxx is not None:` Blöcke |
+| PUT RETURNING | +8 Phase 6 Spalten |
+| PUT BrandingResponse | +8 Felder aus row[] |
+
+### Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `backend/app/api/routes/branding.py` | GET/PUT Phase 6 Support |
+
+### Verification Path
+
+```bash
+# 1. PROD-Verifikation nach Deploy
+# - /settings/branding: "Favoriten-System" deaktivieren → Speichern → Page Reload → Bleibt deaktiviert
+# - /settings/branding: "Sidebar eingeklappt" aktivieren → Speichern → Logout → Login → Sidebar startet collapsed
+# - /settings/branding: Gradient setzen → Speichern → Sidebar Logo zeigt Gradient
+# - API Check: GET /api/v1/branding liefert Phase 6 Felder (nicht mehr null/default)
+```
+
+---
+
 ## Multi-Device Session Tracking (2026-02-26) - VERIFIED
 
 **Scope**: Anzeige und Verwaltung aller aktiven Sitzungen eines Benutzers auf verschiedenen Geräten.
