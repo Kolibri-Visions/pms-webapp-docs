@@ -619,9 +619,9 @@ Die folgenden Felder ermöglichen die Anpassung von Topbar und Content-Bereich:
 
 ```sql
 -- Migration: 20260226234133_add_branding_topbar_body_colors.sql
-ALTER TABLE branding ADD COLUMN IF NOT EXISTS topbar_bg_color TEXT;
-ALTER TABLE branding ADD COLUMN IF NOT EXISTS topbar_border_color TEXT;
-ALTER TABLE branding ADD COLUMN IF NOT EXISTS content_bg_color TEXT;
+ALTER TABLE tenant_branding ADD COLUMN IF NOT EXISTS topbar_bg_color TEXT;
+ALTER TABLE tenant_branding ADD COLUMN IF NOT EXISTS topbar_border_color TEXT;
+ALTER TABLE tenant_branding ADD COLUMN IF NOT EXISTS content_bg_color TEXT;
 ```
 
 ### API Beispiel
