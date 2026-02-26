@@ -1,8 +1,51 @@
 # PMS-Webapp Project Status
 
-**Last Updated:** 2026-02-26
+**Last Updated:** 2026-02-27
 
 **Current Phase:** Phase 27 - Codebase Audit & Logic Bug Fixes Phase 2
+
+---
+
+## Branding-Einstellungen Integritätsfixes (2026-02-27) - IMPLEMENTED
+
+**Scope**: Behebung von CSS-Variablen die gesetzt aber nicht verwendet wurden, fehlende Fonts, überlappende Optionen.
+
+### Behobene Issues
+
+| # | Problem | Lösung |
+|---|---------|--------|
+| 1 | Fonts (Roboto, Open Sans, Poppins) nicht geladen | `layout.tsx`: Google Fonts Import hinzugefügt |
+| 2 | `topbar_height_px` CSS-Variable nicht verwendet | AdminShell.tsx: `minHeight: var(--topbar-height)` auf Header |
+| 3 | `button_border_radius` ignoriert | globals.css: Button nutzt `--button-radius` mit Fallback |
+| 4 | `logo_position` nicht implementiert | AdminShell.tsx: Center/Left Positionierung via Flexbox |
+| 5 | `shadow_intensity` ohne Wirkung | globals.css: Data-Attribute-basierte Shadow-Overrides |
+| 6 | `nav_border_radius` nicht angewendet | globals.css: Nav-Elemente nutzen `--nav-radius` |
+| 7 | `radius_scale` vs individuelle Radius-Optionen unklar | branding-form.tsx: Beschreibungstexte hinzugefügt |
+| 8 | `background_color` vs `content_bg_color` unklar | branding-form.tsx: Hinweistexte und Hints |
+
+### Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/layout.tsx` | Roboto, Open_Sans, Poppins Imports |
+| `frontend/app/globals.css` | Shadow Intensity, Border Radius, Button Radius CSS |
+| `frontend/app/lib/theme-provider.tsx` | Font-Variablen, Shadow Data-Attribute |
+| `frontend/app/components/AdminShell.tsx` | Topbar Height, Logo Position, Shadow CSS |
+| `frontend/app/(admin)/settings/branding/branding-form.tsx` | UI-Beschreibungen/Hints |
+
+### Verification Path
+
+```bash
+# Frontend Build
+cd frontend && npm run build
+
+# PROD-Verifikation
+# - /settings/branding > Marke: Fonts (Roboto, Poppins, Open Sans) testen
+# - /settings/branding > Erweitert: Topbar-Höhe Slider testen
+# - /settings/branding > Erweitert: Logo-Position (Links/Zentriert) testen
+# - /settings/branding > Erweitert: Schatten-Intensität testen (none/subtle/normal/strong)
+# - /settings/branding > Erweitert: Border-Radius pro Komponente testen
+```
 
 ---
 
