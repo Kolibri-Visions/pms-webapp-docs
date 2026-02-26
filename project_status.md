@@ -218,6 +218,42 @@ Die DB-Migration `20260226163000_add_branding_nav_behavior.sql` fügte 8 neue Sp
 
 ---
 
+## Branding UX Verbesserungen (2026-02-26) - IMPLEMENTED
+
+**Scope**: Navigation und Branding-Einstellungen Bugfixes + UX-Verbesserungen.
+
+### Behobene Issues
+
+| # | Problem | Lösung |
+|---|---------|--------|
+| 1 | Sidebar-Breite (width_pct) wirkungslos | `--nav-width-expanded` wird jetzt in `applyNavCssVariables()` gesetzt, nicht mehr überschrieben |
+| 2 | Sidebar-Hintergrund nicht anpassbar | Neues Feld `nav_bg_color` hinzugefügt (DB, Schema, API, Form, CSS) |
+| 3 | Sidebar flackert beim Navigieren | `useState` Initializer liest localStorage synchron statt in useEffect |
+| 4 | Suchfeld zu nah am Logo | `paddingTop: 16px` hinzugefügt |
+| 5 | Branding-Seite zu schmal | Container von `max-w-2xl` auf `max-w-5xl` erweitert |
+
+### Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `supabase/migrations/20260226175739_add_branding_nav_bg_color.sql` | Neue Spalte nav_bg_color |
+| `backend/app/schemas/branding.py` | nav_bg_color Feld + Validator |
+| `backend/app/api/routes/branding.py` | GET/PUT nav_bg_color Support |
+| `frontend/app/lib/theme-provider.tsx` | nav_bg_color → --surface-sidebar, width sync |
+| `frontend/app/components/AdminShell.tsx` | Flicker-Fix, Logo-Search-Spacing |
+| `frontend/app/settings/branding/branding-form.tsx` | nav_bg_color UI, breiteres Layout |
+
+### Verification Path
+
+```bash
+# 1. Sidebar-Breite: /settings/branding → Slider ändern → Sidebar ändert Breite
+# 2. Sidebar-Hintergrund: /settings/branding → Sidebar-Hintergrund Farbe setzen → Speichern → Sidebar ändert Farbe
+# 3. Flicker-Fix: Zwischen Seiten navigieren → Sidebar bleibt stabil (kein collapse/expand flicker)
+# 4. Layout: /settings/branding aufrufen → Seite nutzt mehr Breite
+```
+
+---
+
 ## Multi-Device Session Tracking (2026-02-26) - VERIFIED
 
 **Scope**: Anzeige und Verwaltung aller aktiven Sitzungen eines Benutzers auf verschiedenen Geräten.
