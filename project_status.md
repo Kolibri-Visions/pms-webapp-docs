@@ -254,6 +254,58 @@ Die DB-Migration `20260226163000_add_branding_nav_behavior.sql` fügte 8 neue Sp
 
 ---
 
+## Admin Route Group Architektur (2026-02-26) - IMPLEMENTED
+
+**Scope**: Refaktorierung der Frontend-Route-Struktur für stabiles AdminShell-Verhalten.
+
+### Problem
+
+AdminShell wurde bei jeder Navigation zwischen Admin-Seiten neu gemountet, da jede Route ihr eigenes Layout mit AdminShell hatte. Dies verursachte:
+- Sidebar-Flicker durch Hydration-Mismatch
+- Verlust des Sidebar-States (collapsed, expanded groups, favorites)
+- Redundante Auth-Checks (25x pro Session statt 1x)
+- Performance-Overhead durch ständiges Remounting
+
+### Lösung
+
+Zentrale `(admin)` Route Group mit einmaligem AdminShell:
+
+```
+app/
+  (admin)/                    ← Route Group
+    layout.tsx                ← AdminShell EINMAL hier
+    properties/
+      page.tsx
+      [id]/
+        layout.tsx            ← Nur Tabs (kein AdminShell)
+    guests/
+      page.tsx
+    ...
+```
+
+### Änderungen
+
+| Typ | Anzahl | Beschreibung |
+|-----|--------|--------------|
+| Gelöscht | 22 | Einfache AdminShell-Wrapper-Layouts |
+| Aktualisiert | 3 | Authorization-Layouts (ohne AdminShell) |
+| Neu | 1 | Zentrales `(admin)/layout.tsx` |
+| Import-Fixes | ~50+ | Relative → Absolute Pfade (`@/app/...`) |
+
+### Verification Path
+
+```bash
+# Build testen
+cd frontend && npm run build
+# Erwartung: Build erfolgreich
+```
+
+### Dokumentation
+
+- Runbook: `backend/docs/ops/runbook/38-admin-route-group-architecture.md`
+
+---
+
 ## Multi-Device Session Tracking (2026-02-26) - VERIFIED
 
 **Scope**: Anzeige und Verwaltung aller aktiven Sitzungen eines Benutzers auf verschiedenen Geräten.
