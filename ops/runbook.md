@@ -4,7 +4,7 @@
 
 **Audience**: Ops engineers, DevOps, on-call responders.
 
-**Last Updated**: 2026-01-28
+**Last Updated**: 2026-02-26
 
 ---
 
@@ -32,6 +32,7 @@
 | [33-rls-infinite-recursion.md](./runbook/33-rls-infinite-recursion.md) | RLS Bootstrap-Tabellen & SECURITY DEFINER |
 | [34-encryption-tls.md](./runbook/34-encryption-tls.md) | Encryption in Transit (TLS) & at Rest |
 | [35-web-vitals-monitoring.md](./runbook/35-web-vitals-monitoring.md) | Web Vitals Performance Monitoring |
+| [36-multi-device-sessions.md](./runbook/36-multi-device-sessions.md) | Multi-Device Session Tracking |
 
 ### Golden Paths (Most Common Operations)
 
@@ -60,6 +61,8 @@
 | RLS infinite recursion | "infinite recursion detected in policy" | [RLS Bootstrap-Tabellen](./runbook/33-rls-infinite-recursion.md) |
 | Web Vitals 500 error | "badly formed hexadecimal UUID string" | [Web Vitals Monitoring](./runbook/35-web-vitals-monitoring.md#problem-500-badly-formed-hexadecimal-uuid-string) |
 | Web Vitals 0 Messungen | Daten in DB aber nicht angezeigt | [Web Vitals Monitoring](./runbook/35-web-vitals-monitoring.md#problem-0-messungen-trotz-daten-in-db) |
+| Session nicht als beendet markiert | Ghost-Session nach Logout | [Multi-Device Sessions](./runbook/36-multi-device-sessions.md#problem-session-wird-nicht-als-beendet-markiert) |
+| Revoked Session bleibt eingeloggt | Anderes Gerät nach Revoke noch aktiv | [Multi-Device Sessions](./runbook/36-multi-device-sessions.md#problem-revoked-session-bleibt-eingeloggt) |
 
 ---
 

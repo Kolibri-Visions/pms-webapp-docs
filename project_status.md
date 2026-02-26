@@ -6,7 +6,7 @@
 
 ---
 
-## Multi-Device Session Tracking (2026-02-26) - IMPLEMENTED
+## Multi-Device Session Tracking (2026-02-26) - VERIFIED
 
 **Scope**: Anzeige und Verwaltung aller aktiven Sitzungen eines Benutzers auf verschiedenen Geräten.
 
@@ -25,18 +25,22 @@ Eigene `user_sessions` Tabelle mit Session-Tracking bei Login/Logout.
 | Phase | Beschreibung | Dateien |
 |-------|-------------|---------|
 | 1 | DB-Migration mit `user_sessions` Tabelle | `supabase/migrations/20260226100000_add_user_sessions.sql` |
-| 2 | Shared User-Agent Parser | `frontend/app/lib/user-agent.ts` (NEU) |
-| 3 | Login: Session erstellen + Cookie setzen | `frontend/app/auth/login/route.ts` |
-| 4 | Logout: Session beenden + Cookie löschen | `frontend/app/auth/logout/route.ts` |
-| 5 | Sessions API: Alle Sessions abrufen + Revoke | `frontend/app/api/internal/auth/sessions/route.ts` |
-| 6 | Frontend: Revoke-Button aktiviert | `frontend/app/profile/security/page.tsx` |
+| 2 | RLS Fix + SECURITY DEFINER Funktionen | `supabase/migrations/20260226120000_fix_user_sessions_rls.sql` |
+| 3 | IDOR Security Fix | `supabase/migrations/20260226140000_fix_session_functions_idor.sql` |
+| 4 | Shared User-Agent Parser | `frontend/app/lib/user-agent.ts` (NEU) |
+| 5 | Login: Session erstellen + Cookie setzen | `frontend/app/auth/login/route.ts` |
+| 6 | Logout: Session beenden (scope: local) | `frontend/app/auth/logout/route.ts` |
+| 7 | Client Logout: Redirect zu Server-Route | `frontend/app/lib/logout.ts` |
+| 8 | Sessions API: GET/DELETE mit UUID-Validation | `frontend/app/api/internal/auth/sessions/route.ts` |
+| 9 | Middleware: Revoked Session Detection | `frontend/middleware.ts` |
+| 10 | Frontend: Revoke-Button aktiviert | `frontend/app/profile/security/page.tsx` |
 
 ### Datenbank-Schema
 
 ```sql
 CREATE TABLE user_sessions (
     id UUID PRIMARY KEY,
-    agency_id UUID NOT NULL,
+    agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
     user_id UUID NOT NULL,
     device_type TEXT DEFAULT 'Desktop',
     browser TEXT,
@@ -46,9 +50,19 @@ CREATE TABLE user_sessions (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     last_activity_at TIMESTAMPTZ DEFAULT NOW(),
     ended_at TIMESTAMPTZ,
-    ended_by TEXT,  -- 'user', 'revoked', 'expired'
+    ended_by TEXT,  -- 'user', 'revoked', 'new_login', 'expired'
     is_active BOOLEAN GENERATED ALWAYS AS (ended_at IS NULL) STORED
 );
+```
+
+### SECURITY DEFINER Funktionen
+
+```sql
+-- Beendet einzelne Session mit auth.uid() Validierung
+end_user_session(p_session_id UUID, p_user_id UUID, p_ended_by TEXT) → BOOLEAN
+
+-- Beendet alle Sessions mit auth.uid() Validierung
+end_all_user_sessions(p_user_id UUID, p_ended_by TEXT) → INTEGER
 ```
 
 ### Datenfluss
@@ -62,35 +76,69 @@ Security Page:
        → [Show all sessions, mark current via cookie]
 
 Revoke Session:
-[User] → DELETE /api/internal/auth/sessions {session_id} → [Update ended_at, ended_by='revoked']
+[User] → DELETE /api/internal/auth/sessions {session_id}
+       → [end_user_session() mit auth.uid() Check]
+       → [Anderes Gerät: Middleware erkennt revoked → Redirect zu Logout]
 
-Logout:
-[User] → GET /auth/logout → [Update ended_at, ended_by='user'] → [Clear Cookie]
+Logout (nur aktuelles Gerät):
+[User] → performLogout() → GET /auth/logout
+       → [end_user_session()] → [signOut({ scope: 'local' })] → [Clear Cookie]
+
+"Alle Sitzungen beenden":
+[User] → DELETE /api/internal/auth/sessions {all_others: true}
+       → [end_all_user_sessions()] → [signOut({ scope: 'global' })]
 ```
+
+### Security Features
+
+| Feature | Implementierung |
+|---------|-----------------|
+| Cookie Security | `httpOnly`, `secure`, `sameSite='strict'` |
+| UUID Validation | Regex-Check vor DB-Queries |
+| IDOR Prevention | `auth.uid()` Check in SECURITY DEFINER |
+| Revoked Detection | Middleware prüft `ended_at` bei jedem Admin-Request |
+| Local Logout | `signOut({ scope: 'local' })` → Nur aktuelles Gerät |
+| User-Agent Parser | iOS/iPad vor macOS prüfen (enthält "Mac OS") |
 
 ### RLS Policies
 
 - SELECT: Nur eigene Sessions (`user_id = auth.uid()`)
-- INSERT: Nur eigene Sessions
-- UPDATE: Nur eigene Sessions
+- INSERT: Nur eigene Sessions (`WITH CHECK`)
+- UPDATE: Nur eigene Sessions (`WITH CHECK`)
+
+### Commits
+
+```
+d00ab68 security: fix IDOR vulnerability in session functions
+8026ec5 feat: add session validity check in middleware
+159a9ee fix: redirect client logout to server route
+e6ba0c9 fix: use local scope in client-side logout utility
+6826681 fix: detect iOS/iPad before macOS in user-agent parser
+55130ed fix: remove aggressive session cleanup on login
+871da89 feat: change logout to local scope
+c5bdf9a fix: clean up orphaned sessions on login
+8d48dfd fix: use SECURITY DEFINER functions for session management
+```
 
 ### Verification Path
 
 ```bash
-# 1. Migration anwenden
-# Supabase Dashboard → SQL Editor → Migration ausführen
+# 1. Migrations anwenden (3 SQL-Dateien)
+# Supabase Dashboard → SQL Editor
 
-# 2. Login von Desktop → Prüfen: Session in DB erstellt
-# SELECT * FROM user_sessions WHERE user_id = '<user_id>';
-
-# 3. Login von Handy → Prüfen: Zweite Session in DB
-
-# 4. Security-Seite öffnen → Beide Sessions werden angezeigt
-
-# 5. Handy-Session revoken → Session verschwindet aus Liste
+# 2. Login von Desktop → Session in DB erstellt
+# 3. Login von Handy → Zweite Session in DB
+# 4. Security-Seite → Beide Sessions angezeigt
+# 5. Handy abmelden → Desktop bleibt eingeloggt ✓
+# 6. Security-Seite → Handy-Session verschwunden ✓
+# 7. Session von Desktop revoken → Handy wird bei nächstem Request ausgeloggt ✓
 ```
 
-**Status:** ✅ IMPLEMENTED
+**Security Audit:** ✅ Bestanden (2026-02-26)
+
+**Status:** ✅ VERIFIED
+
+**Runbook:** [36-multi-device-sessions.md](./ops/runbook/36-multi-device-sessions.md)
 
 ---
 
@@ -1542,4 +1590,4 @@ Historische Einträge (Phase 1-20, vor 2026-02-14) wurden ausgelagert:
 
 ---
 
-*Last updated: 2026-02-25 (Redis TLS & PostgreSQL SSL)*
+*Last updated: 2026-02-26 (Multi-Device Session Tracking VERIFIED)*
