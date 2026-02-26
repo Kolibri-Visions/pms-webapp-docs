@@ -203,17 +203,22 @@ SELECT DISTINCT agency_id, COUNT(*) FROM web_vitals_metrics GROUP BY agency_id;
 
 **Lösung:** `agency_id` vor Query zu UUID konvertieren.
 
-### Problem: POST gibt 422 mit agency_id=None
+### Problem: POST gibt 422 mit agency_id=None (historisch, behoben 2026-02-26)
 
-**Ursache:** Hostname-zu-Agency Mapping fehlgeschlagen.
+**Ursache (alt):** Backend gab `{"agency_id": "None"}` (String) statt 404 zurück.
 
-**Prüfung:**
+**Status:** ✅ Behoben - Backend gibt jetzt 404 zurück, Frontend ignoriert dies korrekt.
+
+**Erwartetes Verhalten:**
+- Public Domains (`fewo.kolibri-visions.de`): Web Vitals werden erfasst
+- Admin Domains (`admin.fewo.kolibri-visions.de`): Web Vitals werden still ignoriert (kein Fehler)
+
+**Falls neues Domain-Mapping benötigt:**
 ```sql
--- Domain-Mapping prüfen
-SELECT * FROM agency_domains WHERE domain = 'www.example.de';
+-- Domain-Mapping hinzufügen
+INSERT INTO agency_domains (agency_id, domain)
+VALUES ('uuid-hier', 'www.neue-domain.de');
 ```
-
-**Lösung:** Domain in `agency_domains` Tabelle eintragen.
 
 ### Problem: asyncpg "invalid input for query argument"
 

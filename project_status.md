@@ -1,8 +1,82 @@
 # PMS-Webapp Project Status
 
-**Last Updated:** 2026-02-25
+**Last Updated:** 2026-02-26
 
 **Current Phase:** Phase 27 - Codebase Audit & Logic Bug Fixes Phase 2
+
+---
+
+## Supabase Auth & Web Vitals Logging Fixes (2026-02-26) - IMPLEMENTED
+
+**Scope**: Behebung von Supabase Security-Warnungen und Web Vitals Log-Spam.
+
+### Übersicht der Fixes
+
+| # | Problem | Ursache | Lösung |
+|---|---------|---------|--------|
+| S1 | Supabase `getSession()` Warning im Log | `getSession()` validiert JWT nicht serverseitig | `getUser()` vor `getSession()` aufrufen |
+| S2 | Web Vitals 422 Fehler | Backend gab `{"agency_id": "None"}` zurück | 404 statt 200 mit null-Wert zurückgeben |
+| S3 | Frontend Log-Spam `[WebVitals] Could not determine agency_id` | Warning für jede Metrik auf Admin-Domain | Warning entfernt (erwartetes Verhalten) |
+| S4 | Backend Log-Spam `WARNING - Could not resolve agency_id` | WARNING Level für Admin-Domains | Log-Level zu DEBUG reduziert |
+
+### S1: Supabase `getSession()` Security Warning
+
+**Problem:** Supabase loggte Warnung: "Using supabase.auth.getSession() could be vulnerable to session spoofing"
+
+**Ursache:** `getSession()` liest nur Cookies ohne JWT-Validierung. Für Server-Side Auth sollte `getUser()` verwendet werden.
+
+**Lösung:**
+1. Neue Helper-Funktion `getValidatedSession()` in `frontend/app/lib/server-auth.ts`
+2. Pattern: Erst `getUser()` für JWT-Validierung, dann `getSession()` für `access_token`
+3. 33 Dateien aktualisiert (6 Layouts, 26 API Routes, 1 Helper)
+
+**Geänderte Dateien:**
+- `frontend/app/lib/server-auth.ts` - Neue `getValidatedSession()` Funktion
+- `frontend/app/*/layout.tsx` (6 Dateien) - `getSession()` → `getUser()`
+- `frontend/app/api/internal/*/route.ts` (26 Dateien) - Two-step Auth Pattern
+
+### S2: Web Vitals 422 Fehler
+
+**Problem:** Backend gab HTTP 200 mit `{"agency_id": "None"}` zurück wenn Domain nicht gemappt
+
+**Ursache:** `str(None)` in Python wird zu String `"None"`, nicht `null`
+
+**Lösung:** Explizite Prüfung auf `None` und 404-Response in `backend/app/api/routes/public_site.py`
+
+```python
+if agency_id is None:
+    raise HTTPException(status_code=404, detail="Agency not found for domain")
+```
+
+### S3 & S4: Log-Spam Bereinigung
+
+**Problem:** Hunderte Warn-Logs für erwartetes Verhalten (Admin-Domain ohne Agency-Mapping)
+
+**Lösung:**
+- Frontend: Warning komplett entfernt (silent OK return)
+- Backend: Log-Level von WARNING zu DEBUG in `tenant_domain.py`
+
+### Commits
+
+- `db24d18` - fix: use getUser() for JWT validation before getSession()
+- `42ffac9` - fix: return 404 instead of "None" string for unknown agency domains
+- `dac6e93` - chore: remove noisy WebVitals warning for admin domains
+- `eb8ed38` - chore: reduce tenant_domain log level from warning to debug
+
+### Verification Path
+
+```bash
+# 1. Prüfen dass keine getSession Warnings mehr im Frontend Log erscheinen
+# Coolify → pms-admin → Logs → Keine "getSession" Warnungen
+
+# 2. Prüfen dass keine 422 Fehler mehr für Web Vitals
+# Coolify → pms-admin → Logs → Keine "[WebVitals] Backend returned error: 422"
+
+# 3. Prüfen dass Backend keine WARNING-Spam mehr für tenant_domain
+# Coolify → pms-backend → Logs → "Could not resolve agency_id" nur noch auf DEBUG Level
+```
+
+**Status:** ✅ IMPLEMENTED
 
 ---
 
