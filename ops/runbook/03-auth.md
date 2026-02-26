@@ -9,6 +9,7 @@
 - [Token Validation (apikey Header)](#token-validation-apikey-header)
 - [Fresh JWT (Supabase)](#fresh-jwt-supabase)
 - [CORS Errors (Admin Console Blocked)](#cors-errors-admin-console-blocked)
+- [Multi-Device Session Tracking](#multi-device-session-tracking)
 - [Booking Requests Approve/Decline](#booking-requests-approvedecline)
 - [Admin UI Tab Count Issues](#admin-ui-tab-count-issues)
 - [Public Booking vs Direct Booking](#public-booking-vs-direct-booking-definitionen--datenfluss)
@@ -254,6 +255,221 @@ If env var is not set, these defaults will be used.
 - Always include admin and frontend origins in `ALLOWED_ORIGINS`
 - Test CORS with `curl -X OPTIONS` before deploying frontend changes
 - Document required origins in deployment checklist
+
+---
+
+## Multi-Device Session Tracking
+
+**When to use:** User sessions on multiple devices, "Aktive Sitzungen" feature in `/profile/security`.
+
+### Übersicht
+
+Benutzer können ihre aktiven Sitzungen auf verschiedenen Geräten (Desktop, Handy, Tablet) sehen und einzelne Sitzungen widerrufen.
+
+### Architektur
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  SESSION-TRACKING-FLOW                                                  │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  Login (Desktop)                                                        │
+│    ↓ POST /auth/login                                                   │
+│    ↓ → user_sessions INSERT (device=Desktop, browser=Chrome, os=macOS) │
+│    ↓ → Set pms_session_id Cookie                                        │
+│                                                                         │
+│  Login (Handy)                                                          │
+│    ↓ POST /auth/login                                                   │
+│    ↓ → user_sessions INSERT (device=Mobile, browser=Safari, os=iOS)    │
+│    ↓ → Set pms_session_id Cookie (different session)                    │
+│                                                                         │
+│  Security Page (GET /api/internal/auth/sessions)                        │
+│    ↓ → Query user_sessions WHERE ended_at IS NULL                       │
+│    ↓ → Return all active sessions                                       │
+│    ↓ → Mark current session via pms_session_id Cookie                   │
+│                                                                         │
+│  Revoke Session (DELETE /api/internal/auth/sessions)                    │
+│    ↓ → Update user_sessions SET ended_at=NOW(), ended_by='revoked'     │
+│                                                                         │
+│  Logout                                                                 │
+│    ↓ GET /auth/logout                                                   │
+│    ↓ → Update user_sessions SET ended_at=NOW(), ended_by='user'        │
+│    ↓ → Clear pms_session_id Cookie                                      │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Datenbank-Schema
+
+```sql
+CREATE TABLE user_sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    agency_id UUID NOT NULL REFERENCES agencies(id),
+    user_id UUID NOT NULL,
+    device_type TEXT DEFAULT 'Desktop',  -- 'Desktop', 'Mobile', 'Tablet'
+    browser TEXT,                        -- 'Chrome', 'Firefox', 'Safari', ...
+    os TEXT,                             -- 'Windows', 'macOS', 'iOS', 'Android', ...
+    user_agent TEXT,                     -- Full User-Agent string
+    ip_address INET,                     -- Client IP
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    last_activity_at TIMESTAMPTZ DEFAULT NOW(),
+    ended_at TIMESTAMPTZ,               -- NULL = active, timestamp = ended
+    ended_by TEXT,                      -- 'user', 'revoked', 'expired'
+    is_active BOOLEAN GENERATED ALWAYS AS (ended_at IS NULL) STORED
+);
+```
+
+### API-Endpunkte
+
+**GET /api/internal/auth/sessions**
+
+Listet alle aktiven Sitzungen des Benutzers.
+
+```bash
+curl -H "Cookie: pms_session_id=<uuid>" \
+  https://admin.fewo.kolibri-visions.de/api/internal/auth/sessions
+```
+
+Response:
+```json
+{
+  "sessions": [
+    {
+      "id": "uuid-session-1",
+      "is_current": true,
+      "browser": "Chrome",
+      "os": "macOS",
+      "device": "Desktop",
+      "ip_address": "192.168.1.1",
+      "last_active": "2026-02-26T10:00:00Z",
+      "created_at": "2026-02-26T08:00:00Z"
+    },
+    {
+      "id": "uuid-session-2",
+      "is_current": false,
+      "browser": "Safari",
+      "os": "iOS",
+      "device": "Mobile",
+      "ip_address": "192.168.1.2",
+      "last_active": "2026-02-26T09:30:00Z",
+      "created_at": "2026-02-26T09:00:00Z"
+    }
+  ],
+  "current_session_id": "uuid-session-1"
+}
+```
+
+**DELETE /api/internal/auth/sessions** (Revoke specific)
+
+```bash
+curl -X DELETE \
+  -H "Content-Type: application/json" \
+  -d '{"session_id": "uuid-session-2"}' \
+  https://admin.fewo.kolibri-visions.de/api/internal/auth/sessions
+```
+
+Response:
+```json
+{
+  "success": true,
+  "message": "Session revoked successfully"
+}
+```
+
+**DELETE /api/internal/auth/sessions** (End all)
+
+```bash
+curl -X DELETE \
+  -H "Content-Type: application/json" \
+  -d '{"all_others": true}' \
+  https://admin.fewo.kolibri-visions.de/api/internal/auth/sessions
+```
+
+Response:
+```json
+{
+  "success": true,
+  "message": "All sessions have been signed out. Please log in again.",
+  "requires_reauth": true
+}
+```
+
+### RLS Policies
+
+```sql
+-- Benutzer können nur ihre eigenen Sessions sehen/ändern
+POLICY "user_sessions_select" ON user_sessions FOR SELECT
+  USING (user_id = auth.uid());
+
+POLICY "user_sessions_insert" ON user_sessions FOR INSERT
+  WITH CHECK (user_id = auth.uid());
+
+POLICY "user_sessions_update" ON user_sessions FOR UPDATE
+  USING (user_id = auth.uid());
+```
+
+### Troubleshooting
+
+**Symptom:** Keine Sessions werden angezeigt
+
+```sql
+-- Prüfen ob Sessions existieren
+SELECT id, device_type, browser, os, created_at, ended_at
+FROM user_sessions
+WHERE user_id = '<user_uuid>'
+ORDER BY created_at DESC;
+```
+
+**Mögliche Ursachen:**
+- Migration noch nicht angewandt (`user_sessions` Tabelle existiert nicht)
+- Alte Logins vor Implementierung (keine Session-Records)
+- Logout löscht alle Sessions (→ neu einloggen)
+
+**Symptom:** Handy-Session nicht sichtbar auf Desktop
+
+**Prüfschritte:**
+1. Session auf Handy existiert in DB?
+   ```sql
+   SELECT * FROM user_sessions
+   WHERE device_type = 'Mobile' AND ended_at IS NULL;
+   ```
+2. User-Agent wird korrekt geparst?
+3. Handy-Login war nach Migration?
+
+**Symptom:** Revoke funktioniert nicht
+
+```bash
+# Prüfen ob Session-ID valide ist
+curl -X GET https://admin.fewo.kolibri-visions.de/api/internal/auth/sessions
+# → Session-ID aus Response nehmen
+
+# Revoke mit korrekter ID
+curl -X DELETE \
+  -H "Content-Type: application/json" \
+  -d '{"session_id": "<session-id-from-above>"}' \
+  https://admin.fewo.kolibri-visions.de/api/internal/auth/sessions
+```
+
+### Migration anwenden
+
+```bash
+# Supabase CLI
+supabase db push
+
+# Oder manuell im SQL Editor:
+# Datei: supabase/migrations/20260226100000_add_user_sessions.sql
+```
+
+### Dateien
+
+| Datei | Beschreibung |
+|-------|-------------|
+| `supabase/migrations/20260226100000_add_user_sessions.sql` | DB Schema |
+| `frontend/app/lib/user-agent.ts` | User-Agent Parser |
+| `frontend/app/auth/login/route.ts` | Session bei Login erstellen |
+| `frontend/app/auth/logout/route.ts` | Session bei Logout beenden |
+| `frontend/app/api/internal/auth/sessions/route.ts` | Sessions API |
+| `frontend/app/profile/security/page.tsx` | Security Page UI |
 
 ---
 

@@ -6,6 +6,94 @@
 
 ---
 
+## Multi-Device Session Tracking (2026-02-26) - IMPLEMENTED
+
+**Scope**: Anzeige und Verwaltung aller aktiven Sitzungen eines Benutzers auf verschiedenen Geräten.
+
+### Problem
+
+Bisher zeigte die Security-Seite (`/profile/security`) nur die aktuelle Sitzung des Geräts an, von dem die Seite aufgerufen wird. Login von einem anderen Gerät (z.B. Handy) wurde nicht als separate Sitzung angezeigt.
+
+**Ursache:** Supabase Auth bietet keine API zum Abrufen aller aktiven Sessions eines Benutzers.
+
+### Lösung
+
+Eigene `user_sessions` Tabelle mit Session-Tracking bei Login/Logout.
+
+### Implementierung
+
+| Phase | Beschreibung | Dateien |
+|-------|-------------|---------|
+| 1 | DB-Migration mit `user_sessions` Tabelle | `supabase/migrations/20260226100000_add_user_sessions.sql` |
+| 2 | Shared User-Agent Parser | `frontend/app/lib/user-agent.ts` (NEU) |
+| 3 | Login: Session erstellen + Cookie setzen | `frontend/app/auth/login/route.ts` |
+| 4 | Logout: Session beenden + Cookie löschen | `frontend/app/auth/logout/route.ts` |
+| 5 | Sessions API: Alle Sessions abrufen + Revoke | `frontend/app/api/internal/auth/sessions/route.ts` |
+| 6 | Frontend: Revoke-Button aktiviert | `frontend/app/profile/security/page.tsx` |
+
+### Datenbank-Schema
+
+```sql
+CREATE TABLE user_sessions (
+    id UUID PRIMARY KEY,
+    agency_id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    device_type TEXT DEFAULT 'Desktop',
+    browser TEXT,
+    os TEXT,
+    user_agent TEXT,
+    ip_address INET,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    last_activity_at TIMESTAMPTZ DEFAULT NOW(),
+    ended_at TIMESTAMPTZ,
+    ended_by TEXT,  -- 'user', 'revoked', 'expired'
+    is_active BOOLEAN GENERATED ALWAYS AS (ended_at IS NULL) STORED
+);
+```
+
+### Datenfluss
+
+```
+Login:
+[User] → POST /auth/login → [Create user_sessions Record] → [Set pms_session_id Cookie]
+
+Security Page:
+[User] → GET /api/internal/auth/sessions → [Query user_sessions WHERE ended_at IS NULL]
+       → [Show all sessions, mark current via cookie]
+
+Revoke Session:
+[User] → DELETE /api/internal/auth/sessions {session_id} → [Update ended_at, ended_by='revoked']
+
+Logout:
+[User] → GET /auth/logout → [Update ended_at, ended_by='user'] → [Clear Cookie]
+```
+
+### RLS Policies
+
+- SELECT: Nur eigene Sessions (`user_id = auth.uid()`)
+- INSERT: Nur eigene Sessions
+- UPDATE: Nur eigene Sessions
+
+### Verification Path
+
+```bash
+# 1. Migration anwenden
+# Supabase Dashboard → SQL Editor → Migration ausführen
+
+# 2. Login von Desktop → Prüfen: Session in DB erstellt
+# SELECT * FROM user_sessions WHERE user_id = '<user_id>';
+
+# 3. Login von Handy → Prüfen: Zweite Session in DB
+
+# 4. Security-Seite öffnen → Beide Sessions werden angezeigt
+
+# 5. Handy-Session revoken → Session verschwindet aus Liste
+```
+
+**Status:** ✅ IMPLEMENTED
+
+---
+
 ## Supabase Auth & Web Vitals Logging Fixes (2026-02-26) - IMPLEMENTED
 
 **Scope**: Behebung von Supabase Security-Warnungen und Web Vitals Log-Spam.
