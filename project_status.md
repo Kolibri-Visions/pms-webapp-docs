@@ -19,7 +19,8 @@
 | 3 | **HIGH** | JWT Secret Generation in Development | Verbesserte Warnung + .env.example Update |
 | 4 | **HIGH** | Fehlende Rate Limiting für Auth Endpoints | Middleware-basiertes Rate Limiting |
 | 5 | **HIGH** | Custom CSS Injection | CSS Sanitizer mit Dangerous Pattern Blocking |
-| 6 | **MEDIUM** | Trust Proxy Headers Default True | Default auf False geändert |
+| 6 | **HIGH** | Unvollständige RBAC Enforcement | RBAC an 22 Endpoints nachgerüstet |
+| 7 | **MEDIUM** | Trust Proxy Headers Default True | Default auf False geändert |
 | 7 | **MEDIUM** | CORS x-http-method-override erlaubt | Header entfernt (Method Tampering) |
 | 8 | **MEDIUM** | Encryption Key ohne Validierung | Validation Property + Warnungen |
 | 9 | **MEDIUM** | Redis TLS ohne Validierung | Warnung bei unsicherer Konfiguration |
@@ -91,6 +92,27 @@
 **Betroffene Dateien:**
 - `backend/app/core/css_sanitizer.py` (NEU)
 - `backend/app/api/routes/branding.py` (Validator integriert)
+
+#### 6. RBAC Enforcement für alle Admin-Endpoints
+
+**Problem:** Mehrere Admin-Endpoints hatten nur Basic Auth (`get_current_user`) ohne Rollen-Prüfung. Jeder authentifizierte User konnte sensible Operationen durchführen.
+
+**Betroffene Endpoints (vorher ohne RBAC):**
+- `extra_services.py`: 8 Endpoints (Katalog CRUD + Property Assignments)
+- `website_admin.py`: 12 Endpoints (Design, Pages, Branding, Navigation, SEO)
+- `public_domain_admin.py`: 3 Endpoints (Domain Management)
+- `roles.py`: 4 Endpoints (Permissions/Roles Read)
+
+**Lösung:** `require_agency_roles()` Dependency zu allen Endpoints hinzugefügt:
+- **DELETE**: Nur `admin`
+- **POST/PATCH/PUT**: `admin`, `manager`
+- **GET (sensibel)**: `staff`, `manager`, `admin`
+
+**Betroffene Dateien:**
+- `backend/app/api/routes/extra_services.py` (8 Endpoints)
+- `backend/app/api/routes/website_admin.py` (12 Endpoints)
+- `backend/app/api/routes/public_domain_admin.py` (3 Endpoints)
+- `backend/app/api/routes/roles.py` (4 Endpoints)
 
 ### Verification Path
 
