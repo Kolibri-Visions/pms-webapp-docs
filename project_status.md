@@ -6,9 +6,9 @@
 
 ---
 
-## Security Fixes - Rate Limiting & Smoke Auth (2026-02-27) - IMPLEMENTED
+## Security Fixes - Audit Findings (2026-02-27) - IMPLEMENTED
 
-**Scope**: Behebung kritischer und hoher Security-Findings aus dem Security Audit.
+**Scope**: Behebung kritischer, hoher und mittlerer Security-Findings aus dem Security Audit.
 
 ### Behobene Issues
 
@@ -19,6 +19,10 @@
 | 3 | **HIGH** | JWT Secret Generation in Development | Verbesserte Warnung + .env.example Update |
 | 4 | **HIGH** | Fehlende Rate Limiting für Auth Endpoints | Middleware-basiertes Rate Limiting |
 | 5 | **HIGH** | Custom CSS Injection | CSS Sanitizer mit Dangerous Pattern Blocking |
+| 6 | **MEDIUM** | Trust Proxy Headers Default True | Default auf False geändert |
+| 7 | **MEDIUM** | CORS x-http-method-override erlaubt | Header entfernt (Method Tampering) |
+| 8 | **MEDIUM** | Encryption Key ohne Validierung | Validation Property + Warnungen |
+| 9 | **MEDIUM** | Redis TLS ohne Validierung | Warnung bei unsicherer Konfiguration |
 
 ### Änderungen im Detail
 
