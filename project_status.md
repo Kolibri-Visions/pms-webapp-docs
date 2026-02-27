@@ -8,7 +8,7 @@
 
 ## Security Fixes - Rate Limiting & Smoke Auth (2026-02-27) - IMPLEMENTED
 
-**Scope**: Behebung kritischer Security-Findings aus dem Security Audit.
+**Scope**: Behebung kritischer und hoher Security-Findings aus dem Security Audit.
 
 ### Behobene Issues
 
@@ -16,6 +16,9 @@
 |---|-------------|---------|--------|
 | 1 | **CRITICAL** | Rate Limiting Fail-Open bei Redis-Ausfall | In-Memory Fallback implementiert |
 | 2 | **HIGH** | Smoke Auth Bypass ohne Production-Disable | `SMOKE_AUTH_BYPASS_ENABLED` Flag hinzugefügt |
+| 3 | **HIGH** | JWT Secret Generation in Development | Verbesserte Warnung + .env.example Update |
+| 4 | **HIGH** | Fehlende Rate Limiting für Auth Endpoints | Middleware-basiertes Rate Limiting |
+| 5 | **HIGH** | Custom CSS Injection | CSS Sanitizer mit Dangerous Pattern Blocking |
 
 ### Änderungen im Detail
 
@@ -45,6 +48,45 @@
 
 **Betroffene Dateien:**
 - `frontend/middleware.ts` (Flag-Check hinzugefügt)
+
+#### 3. JWT Secret Warning Verbesserung
+
+**Problem:** In Development wird JWT Secret generiert, aber die Warnung war nicht klar genug über die Konsequenzen (Session-Verlust nach Restart).
+
+**Lösung:**
+- Verbesserte Warnung mit konkreten Konsequenzen
+- `.env.example` mit Generierungs-Kommando und Erklärung aktualisiert
+
+**Betroffene Dateien:**
+- `backend/app/core/config.py` (Verbesserte Warnung)
+- `backend/.env.example` (Dokumentation)
+
+#### 4. Auth Rate Limiting Middleware
+
+**Problem:** Die meisten authentifizierten Endpoints (100+) hatten kein Rate Limiting. Nur `get_current_user_rate_limited()` war geschützt.
+
+**Lösung:** Neue Middleware `AuthRateLimitMiddleware`:
+- Automatisches Rate Limiting für ALLE authentifizierten Requests
+- User-basierte Limits (aus JWT)
+- IP-basierte Limits als zusätzlicher Schutz
+- Exempt Paths für Health/Docs
+
+**Betroffene Dateien:**
+- `backend/app/core/auth_rate_limit_middleware.py` (NEU)
+- `backend/app/main.py` (Middleware registriert)
+
+#### 5. Custom CSS Sanitizer
+
+**Problem:** `custom_css` Feld erlaubte potenziell gefährliche CSS Konstrukte (url(), @import, expression()).
+
+**Lösung:** Neuer CSS Sanitizer mit Dangerous Pattern Blocking:
+- Blockiert: `url()`, `@import`, `expression()`, `javascript:`, `behavior:`
+- Blockiert: `position:fixed` (UI Overlay), Unicode Escapes
+- Logging bei Validation Failures
+
+**Betroffene Dateien:**
+- `backend/app/core/css_sanitizer.py` (NEU)
+- `backend/app/api/routes/branding.py` (Validator integriert)
 
 ### Verification Path
 
