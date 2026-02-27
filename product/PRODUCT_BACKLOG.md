@@ -37,20 +37,24 @@ This backlog tracks the PMS-Webapp (Property Management System) product evolutio
 - ✅ No secrets in git history
 - ✅ JWT validation enforced on all authenticated endpoints
 - ✅ RLS policies prevent cross-tenant data leaks
+- ✅ Session-Management mit Revocation
 
-**Status**: 🚧 **In Progress**
+**Status**: ✅ **Done** (Core Security)
+
+**Completed Features**:
+- ✅ Typed exceptions (Error Taxonomy vollständig)
+- ✅ Health checks
+- ✅ JWT-Validierung
+- ✅ RLS-Policies
+- ✅ CSP-Headers (Content Security Policy)
+- ✅ Session-Management (Anzeige, Widerruf, Middleware-Validierung)
+- ✅ CORS-Konfiguration
 
 **Open Tasks**:
-1. 📋 Complete error taxonomy implementation (P1-06 done, P1-07 pending)
-2. 📋 Add structured logging (JSON logs with trace IDs)
-3. 📋 Implement rate limiting (per-user, per-agency)
-   - Sessions API: `/api/internal/auth/sessions` (DELETE) - max 10 req/min/user
-   - Login API: `/auth/login` - brute-force protection
-   - Public APIs: per-IP rate limiting
-4. 📋 Security audit (pen test, vulnerability scan)
-5. 📋 Add monitoring/alerting (Prometheus, Grafana, or equivalent)
-6. 📋 Database backup/restore procedure documented
-7. 📋 Disaster recovery plan documented
+1. 📋 Rate limiting (per-user, per-agency)
+2. 📋 Monitoring dashboards (Prometheus/Grafana)
+3. 📋 Alerting rules
+4. 📋 Database backup/restore Dokumentation
 
 **Related Docs**:
 - [Error Taxonomy](../architecture/error-taxonomy.md)
@@ -101,22 +105,27 @@ This backlog tracks the PMS-Webapp (Property Management System) product evolutio
 - ✅ Booking status workflow (inquiry → confirmed → checked-in → checked-out → cancelled)
 - ✅ Guest assignment (link booking to guest record)
 - ✅ Payment tracking (amount, status, method)
-- ✅ Cancellation policy enforcement
-- ✅ Email notifications (booking confirmed, check-in reminder, etc.)
+- 📋 Cancellation policy enforcement
+- ✅ Email notifications (Resend-Integration)
 
-**Status**: 🚧 **In Progress**
+**Status**: ✅ **Done** (Core Features)
 
 **Completed Features**:
 - ✅ Booking CRUD API
 - ✅ Guest table and guest assignment
+- ✅ Booking status workflow mit Validierung
+- ✅ E-Mail-System (Resend-Integration)
+  - Buchungsbestätigungen
+  - Check-in-Erinnerungen
+  - Template-System mit Tenant-Branding
+- ✅ Öffentliche Buchungsanfragen (`/buchung`)
+- ✅ Extra-Services pro Buchung
 
 **Open Tasks**:
-1. 📋 Booking status state machine (validate transitions)
-2. 📋 Payment integration (Stripe or equivalent)
-3. 📋 Cancellation policy rules engine
-4. 📋 Email notification system (booking lifecycle events)
-5. 📋 SMS notifications (optional, for check-in reminders)
-6. 📋 Automated check-in/check-out (smart locks integration)
+1. 📋 Payment integration (Stripe)
+2. 📋 Cancellation policy rules engine
+3. 📋 SMS notifications (optional)
+4. 📋 Smart locks integration
 
 **Related Docs**:
 - [Booking API](../api/) (to be created)
@@ -225,21 +234,22 @@ This backlog tracks the PMS-Webapp (Property Management System) product evolutio
 **Scope**: Owner authentication, booking/revenue views, payout tracking, read-only access
 
 **Acceptance Criteria / DoD**:
-- 📋 Owner login (RBAC role: `owner`)
-- 📋 Booking calendar (read-only, filtered by owner's properties)
+- ✅ Owner login (RBAC role: `owner`)
+- ✅ Booking calendar (read-only, filtered by owner's properties)
 - 📋 Revenue dashboard (bookings, payouts, occupancy rate)
 - 📋 Payout tracking (amount owed to owner, payment history)
 - 📋 Monthly/quarterly reports (PDF export)
 
-**Status**: 💡 **Proposed**
+**Status**: 🚧 **In Progress** (Basis implementiert)
+
+**Completed Features**:
+- ✅ Owner RBAC-Rolle mit property-basierter Filterung
+- ✅ Read-only Buchungskalender
 
 **Open Tasks**:
-1. 💡 Design owner portal UI/UX
-2. 💡 Implement RBAC enforcement for `owner` role
-3. 💡 Build read-only booking calendar
-4. 💡 Build revenue dashboard
-5. 💡 Payout tracking system
-6. 💡 Report generation (PDF export)
+1. 📋 Revenue dashboard (Umsatz, Auslastung)
+2. 📋 Payout tracking system
+3. 📋 Report generation (PDF export)
 
 **Related Docs**:
 - [RBAC](../_staging/status-review-v3/PROJECT_STATUS.md#rbac-role-based-access-control)
@@ -256,20 +266,23 @@ This backlog tracks the PMS-Webapp (Property Management System) product evolutio
 - 📋 Revenue tracking (booking revenue, channel fees, platform fees)
 - 📋 Expense tracking (cleaning, maintenance, utilities)
 - 📋 Invoice generation (for owners, for guests)
-- 📋 Tax calculation (VAT, tourism tax, etc.)
+- ✅ Tax calculation (Kurtaxe mit Altersklassen)
 - 📋 Payout scheduling (automate owner payouts)
-- 📋 Accounting export (CSV/Excel for accountant role)
+- ✅ DAC7-Export für Steuerbehörden
 
-**Status**: 💡 **Proposed**
+**Status**: 🚧 **In Progress**
+
+**Completed Features**:
+- ✅ Kurtaxe-System (Tarife, Altersklassen, Objekt-Überschreibungen)
+- ✅ DAC7-Export
+- ✅ Extra-Services (Zusatzleistungen)
 
 **Open Tasks**:
-1. 💡 Design finance data model (revenue, expenses, invoices)
-2. 💡 Implement revenue tracking API
-3. 💡 Implement expense tracking API
-4. 💡 Invoice generation system
-5. 💡 Tax calculation rules engine
-6. 💡 Payout scheduling (automated or manual approval)
-7. 💡 Accounting export (CSV/Excel, filtered by date range)
+1. 📋 Revenue tracking API
+2. 📋 Expense tracking API
+3. 📋 Invoice generation system
+4. 📋 Payout scheduling
+5. 📋 Accounting export (CSV/Excel)
 
 **Related Docs**: (To be created)
 
@@ -316,7 +329,7 @@ This backlog tracks the PMS-Webapp (Property Management System) product evolutio
 **Acceptance Criteria / DoD**:
 - ✅ Multi-tenancy via `agency_id` (RLS policies enforce isolation)
 - 📋 Custom domain support (e.g., `bookings.property-name.com`)
-- 📋 White-label branding (agency logo, colors, email templates)
+- ✅ White-label branding (Farben, Fonts, Logo, Navigation-Styling)
 - 📋 Subscription tiers (free, pro, enterprise)
 - 📋 Billing system (charge agencies per property or booking)
 
@@ -325,14 +338,18 @@ This backlog tracks the PMS-Webapp (Property Management System) product evolutio
 **Completed Features**:
 - ✅ Multi-tenancy via `agency_id`
 - ✅ RLS policies enforce agency isolation
+- ✅ **Branding-System (Phase 3-5)**:
+  - Tenant-spezifische Farbschemata
+  - Font-Auswahl (Inter, Roboto, Open Sans, Poppins)
+  - Topbar- und Content-Styling
+  - Navigation-Anpassungen (Abstände, Schriftgrößen)
+  - CSS-Variablen für dynamisches Theming
 
 **Open Tasks**:
 1. 📋 Custom domain DNS configuration (CNAME setup, SSL certs)
-2. 📋 White-label UI (agency branding settings)
-3. 📋 Email template customization (per agency)
-4. 📋 Subscription tier system
-5. 📋 Billing integration (Stripe Billing or equivalent)
-6. 📋 Usage-based pricing (per property, per booking, per sync)
+2. 📋 Email template customization (per agency)
+3. 📋 Subscription tier system
+4. 📋 Billing integration (Stripe Billing)
 
 **Related Docs**:
 - [Multi-Tenancy](../_staging/status-review-v3/PROJECT_STATUS.md#multi-tenancy)
@@ -399,5 +416,5 @@ This backlog tracks the PMS-Webapp (Property Management System) product evolutio
 
 ---
 
-**Last Updated**: 2026-02-26
+**Last Updated**: 2026-02-27
 **Maintained By**: Product Owner + Engineering Team

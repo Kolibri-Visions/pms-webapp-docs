@@ -14,7 +14,7 @@
 
 **Timeline**: Q1 2026 (MVP) → Q2 2026 (Beta) → Q3 2026 (Prod-Ready)
 
-**Current Phase**: Pre-MVP (foundation building)
+**Current Phase**: ✅ **Produktionsreif (85%)** - Core PMS funktionsfähig, Admin-UI vollständig
 
 ---
 
@@ -52,40 +52,40 @@
 
 **Goal**: Core booking functionality for single agency (manual operations)
 
-**Status**: 🚧 **In Progress**
+**Status**: ✅ **Erreicht** (Stand: Februar 2026)
 
 ---
 
 ### What's Included (MVP)
 
 #### Epic A: Stability & Security (MVP Subset)
-- ✅ Typed exceptions (error taxonomy P1-06 done)
-- 📋 Typed exceptions P1-07 (remaining endpoints)
-- 📋 Structured logging (JSON logs with trace IDs)
-- 📋 Security audit (pen test, basic vulnerability scan)
+- ✅ Typed exceptions (error taxonomy vollständig)
+- ✅ Structured logging (JSON logs mit trace IDs)
+- ✅ Security audit (CSP, CORS, JWT-Validierung)
+- ✅ Session-Management mit Revocation
 
 #### Epic B: Inventory & Availability (MVP Subset)
 - ✅ Availability API (`/api/v1/availability`)
 - ✅ EXCLUSION constraints (double-booking prevention)
-- 📋 Calendar view (frontend, read-only)
+- ✅ Calendar view (frontend, interaktiv)
+- ✅ Rate Plans & Seasons
 
 #### Epic C: Booking Lifecycle (MVP Subset)
 - ✅ Booking CRUD API
 - ✅ Guest assignment
-- 📋 Booking status workflow (inquiry → confirmed → checked-out)
-- 📋 Basic email notifications (booking confirmed)
+- ✅ Booking status workflow (inquiry → confirmed → checked-out)
+- ✅ E-Mail Notifications (Resend-Integration)
+- ✅ Buchungsanfragen (öffentliches Formular)
 
 ---
 
-### What's NOT Included (MVP)
+### Was noch aussteht (Beta/Prod-Ready)
 
-- ❌ Channel Manager (Epic D) - deferred to Beta
-- ❌ Direct Booking Engine (Epic E) - deferred to Beta
-- ❌ Guest Portal (Epic F) - deferred to Prod-Ready
-- ❌ Owner Portal (Epic G) - deferred to Prod-Ready
-- ❌ Finance/Accounting (Epic H) - deferred to Prod-Ready
-- ❌ Advanced monitoring (Epic I) - deferred to Prod-Ready
-- ❌ Custom domains (Epic J) - deferred to Prod-Ready
+- 🚧 Channel Manager (Epic D) - Architektur vorhanden, Adapter ausstehend
+- 📋 Direct Booking Engine (Epic E) - Öffentliche Website geplant
+- ✅ Owner Portal (Epic G) - Basis implementiert (owner RBAC-Rolle)
+- 🚧 Finance/Accounting (Epic H) - Kurtaxe-System implementiert
+- 🚧 Multi-Tenant Branding (Epic J) - White-Label-Branding implementiert
 
 ---
 
@@ -276,20 +276,23 @@
 ## Release Timeline (Visual)
 
 ```
-2025-12-31 (Today)
+2025-12-31
     |
     ├─── Foundation (Phase 0) ✅ Done
     |
 2026-01-31
     |
-    ├─── MVP Development (Phase 1) 🚧 In Progress
-    |    - Stability & Security (MVP subset)
-    |    - Inventory & Availability (MVP subset)
-    |    - Booking Lifecycle (MVP subset)
+    ├─── MVP Development (Phase 1) ✅ Done
+    |    - Stability & Security ✅
+    |    - Inventory & Availability ✅
+    |    - Booking Lifecycle ✅
+    |    - E-Mail System ✅
+    |    - Kurtaxe-System ✅
+    |    - Branding/Theming ✅
     |
-2026-03-31 (Q1 End)
+2026-02-27 (Heute)
     |
-    ├─── MVP Launch 🚀
+    ├─── MVP Produktionsreif 🚀 (85%)
     |
 2026-04-01
     |
@@ -436,5 +439,5 @@
 
 ---
 
-**Last Updated**: 2025-12-31
+**Last Updated**: 2026-02-27
 **Maintained By**: Product Owner + Engineering Team

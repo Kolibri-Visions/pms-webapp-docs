@@ -6,6 +6,36 @@
 
 ---
 
+## Dokumentations-Bereinigung (2026-02-27) - IMPLEMENTED
+
+**Scope**: Abgleich der Dokumentation mit aktuellem Codebase-Stand basierend auf Audit-Reports.
+
+### Aktualisierte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `RELEASE_PLAN.md` | Status "Pre-MVP" → "Produktionsreif (85%)", Timeline aktualisiert |
+| `CHANGELOG.md` | Fehlende Versionen 0.4.0-0.6.0 hinzugefügt |
+| `PRODUCT_BACKLOG.md` | Epic-Status korrigiert (A, C, G, H, J) |
+
+### Korrigierte Epic-Status
+
+- **Epic A (Stability)**: 🚧 → ✅ Done (Session-Management, CSP implementiert)
+- **Epic C (Booking)**: 🚧 → ✅ Done (E-Mail-System, Buchungsanfragen)
+- **Epic G (Owner Portal)**: 💡 Proposed → 🚧 In Progress (RBAC-Rolle funktioniert)
+- **Epic H (Finance)**: 💡 Proposed → 🚧 In Progress (Kurtaxe, DAC7 implementiert)
+- **Epic J (Branding)**: Branding-System als vollständig dokumentiert
+
+### Neue CHANGELOG-Einträge
+
+- **v0.6.0** (2026-02-27): Branding-System Phase 3-5, Font-Optimierung
+- **v0.5.0** (2026-02-15): Kurtaxe, DSGVO/DAC7, Extra-Services
+- **v0.4.0** (2026-01-31): E-Mail-System, Session-Management
+
+**Verification Path**: `git diff HEAD~1 backend/docs/product/`
+
+---
+
 ## Security Fixes - Audit Findings (2026-02-27) - IMPLEMENTED
 
 **Scope**: Behebung kritischer, hoher und mittlerer Security-Findings aus dem Security Audit.

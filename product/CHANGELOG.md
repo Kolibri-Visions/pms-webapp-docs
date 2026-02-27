@@ -13,15 +13,74 @@
 ## [Unreleased]
 
 ### Added
-- Product backlog with 10 epics (A-J)
-- Release plan (MVP → Beta → Prod-ready)
-- Process documentation (DoD, Docs Lifecycle, Release Cadence)
+- Navigation Schriftgrößen-Anpassung (Gruppen/Items separat)
 
 ### Changed
 - (None)
 
 ### Fixed
 - (None)
+
+---
+
+## [0.6.0] - 2026-02-27
+
+### Added
+- **Branding-System (Phase 3-5)**:
+  - Tenant-spezifische Farbschemata und Fonts
+  - Topbar- und Content-Area-Anpassungen
+  - Navigation-Styling (Abstände, Schriftgrößen)
+  - CSS-Variablen für dynamisches Theming
+- Font-Optimierung: On-demand Loading für Google Fonts
+
+### Fixed
+- CSP font-src für Google Fonts korrigiert
+- API-Client HTTPS-Upgrade bei Runtime (nicht Build-Time)
+- 307-Redirects mit korrektem Protokoll
+
+---
+
+## [0.5.0] - 2026-02-15
+
+### Added
+- **Kurtaxe-System**:
+  - Kurtaxe-Tarife mit Altersklassen-Berechnung
+  - Pro-Objekt-Überschreibungen
+  - Automatische Berechnung bei Buchungen
+  - Admin-UI für Kurtaxen-Verwaltung
+- **DSGVO/DAC7 Compliance**:
+  - Datenschutzerklärung im Public Footer
+  - Cookie-Consent-Banner
+  - DAC7-Export für Steuerbehörden
+- Extra-Services (Zusatzleistungen pro Buchung)
+- Responsive Table-to-Card Pattern für Mobile
+
+### Changed
+- Admin-UI komplett responsive (Mobile-First)
+- Rate Plans mit Seasons-Integration
+
+---
+
+## [0.4.0] - 2026-01-31
+
+### Added
+- **E-Mail-System (Resend-Integration)**:
+  - Buchungsbestätigungs-E-Mails
+  - Check-in-Erinnerungen
+  - Template-System mit Tenant-Branding
+- **Session-Management**:
+  - Aktive Sessions anzeigen/widerrufen
+  - Session-Revocation via Middleware
+  - Security-Seite in Admin-UI
+- Öffentliche Buchungsanfragen (`/buchung`)
+- AdminShell mit stabiler Route-Group-Struktur
+
+### Changed
+- Login-Flow mit Session-Tracking
+- Middleware mit Session-Validierung
+
+### Fixed
+- Supabase SSR Cookie-Handling
 
 ---
 
@@ -118,6 +177,9 @@ Security-related changes (CVEs, vulnerability fixes)
 
 | Version | Release Date | Phase | Description |
 |---------|--------------|-------|-------------|
+| 0.6.0   | 2026-02-27   | MVP+ | Branding-System, Font-Optimierung |
+| 0.5.0   | 2026-02-15   | MVP | Kurtaxe, DSGVO/DAC7, Extra-Services |
+| 0.4.0   | 2026-01-31   | MVP | E-Mail-System, Session-Management |
 | 0.3.0   | 2025-12-30   | Pre-MVP | Documentation overhaul |
 | 0.2.0   | 2025-12-25   | Phase 17B | Availability inventory system |
 | 0.1.0   | 2025-12-15   | Foundation | Core PMS functionality |
@@ -190,5 +252,5 @@ git commit -m "docs: update CHANGELOG for v0.4.0 - add email notifications"
 
 ---
 
-**Last Updated**: 2025-12-31
+**Last Updated**: 2026-02-27
 **Maintained By**: Product Owner + Engineering Team
