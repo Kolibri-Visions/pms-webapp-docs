@@ -198,6 +198,62 @@ cd backend && pytest tests/core/test_memory_rate_limit.py -v
 
 Keine Datenbank-Migrationen erforderlich.
 
+### Post-Deploy Bug Fixes (2026-02-27)
+
+Nach dem initialen Deploy der RBAC-Änderungen traten 500-Fehler auf. Die folgenden Fixes wurden angewendet:
+
+#### Fix 1: RBAC Exception-Handling + x-agency-id Header (`9fecb70`)
+
+**Problem:** Extra Services Seite zeigte "Datenbank-Fehler: Tabellen möglicherweise nicht vorhanden"
+
+**Ursachen:**
+1. Backend `require_agency_roles()` fing nur `HTTPException`, andere DB-Fehler (z.B. `asyncpg.UndefinedTableError`) wurden als unbehandelter 500 weitergegeben
+2. Frontend API Proxy Routes sendeten keinen `x-agency-id` Header, wodurch Tenant-Resolution fehlschlug
+
+**Lösung:**
+- **Backend `auth.py`**: Erweiterte Exception-Behandlung in `require_agency_roles`:
+  - `asyncpg.UndefinedTableError/UndefinedColumnError` → graceful fallback (RBAC wird übersprungen)
+  - Andere Exceptions → 500 mit Details zur Diagnose
+- **Frontend `extra-services/page.tsx`**: Zeigt echte Backend-Fehlermeldungen und 403 RBAC-Fehler an
+- **Frontend alle 4 extra-services API Routes**: Senden `x-agency-id` Header via `getAgencyIdFromSession()` Helper
+
+**Betroffene Dateien:**
+- `backend/app/core/auth.py`
+- `frontend/app/(admin)/extra-services/page.tsx`
+- `frontend/app/api/internal/extra-services/route.ts`
+- `frontend/app/api/internal/extra-services/[id]/route.ts`
+- `frontend/app/api/internal/properties/[id]/extra-services/route.ts`
+- `frontend/app/api/internal/properties/[id]/extra-services/[assignmentId]/route.ts`
+
+#### Fix 2: UUID Type Mismatch (`0690a28`)
+
+**Problem:** Nach Fix 1 trat ein neuer Fehler auf:
+```
+AttributeError: 'UUID' object has no attribute 'replace'
+```
+
+**Ursache:**
+- `deps.py` → `get_current_agency_id()` gibt `UUID`-Objekt zurück (Zeile 80: `-> UUID:`)
+- Routes annotierten `agency_id: str` und riefen dann `UUID(agency_id)` auf
+- Python kann `UUID(uuid_object)` nicht verarbeiten - erwartet String
+
+**Lösung:**
+- `agency_id: str` → `agency_id: UUID` in allen betroffenen Endpoints
+- Entfernte redundante `UUID(agency_id)` Konvertierungen
+
+**Betroffene Dateien:**
+- `backend/app/api/routes/extra_services.py` (9 Endpoints)
+- `backend/app/api/routes/public_domain_admin.py` (3 Endpoints)
+
+### Commits
+
+| Commit | Beschreibung |
+|--------|--------------|
+| `c7a1da6` | RBAC enforcement für 27 Endpoints |
+| `23531b6` | Reliable audit logging mit Redis Queue |
+| `9fecb70` | RBAC 500-error fix (Exception-Handling + x-agency-id) |
+| `0690a28` | UUID type mismatch fix |
+
 ---
 
 ## Branding-Einstellungen Integritätsfixes (2026-02-27) - IMPLEMENTED
