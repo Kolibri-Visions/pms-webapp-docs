@@ -6,6 +6,64 @@
 
 ---
 
+## Security Fixes - Rate Limiting & Smoke Auth (2026-02-27) - IMPLEMENTED
+
+**Scope**: Behebung kritischer Security-Findings aus dem Security Audit.
+
+### Behobene Issues
+
+| # | Schweregrad | Problem | Lösung |
+|---|-------------|---------|--------|
+| 1 | **CRITICAL** | Rate Limiting Fail-Open bei Redis-Ausfall | In-Memory Fallback implementiert |
+| 2 | **HIGH** | Smoke Auth Bypass ohne Production-Disable | `SMOKE_AUTH_BYPASS_ENABLED` Flag hinzugefügt |
+
+### Änderungen im Detail
+
+#### 1. In-Memory Rate Limiting Fallback
+
+**Problem:** Bei Redis-Ausfall wurden alle Requests durchgelassen (Fail-Open). Dies ermöglichte DDoS und Brute-Force Angriffe.
+
+**Lösung:** Neues Modul `memory_rate_limit.py` mit In-Memory Token Bucket als Fallback:
+- Sliding Window Counter Algorithmus
+- Thread-safe für async Operations
+- Automatisches Cleanup abgelaufener Einträge
+- `X-RateLimit-Fallback: memory` Header zur Observability
+
+**Betroffene Dateien:**
+- `backend/app/core/memory_rate_limit.py` (NEU)
+- `backend/app/core/public_anti_abuse.py` (Fallback integriert)
+- `backend/app/core/auth_rate_limit.py` (Fallback integriert)
+
+#### 2. Smoke Auth Bypass Production Flag
+
+**Problem:** Der Smoke Test Auth Bypass in `middleware.ts` konnte nicht in Production deaktiviert werden.
+
+**Lösung:** Neues Environment Flag `SMOKE_AUTH_BYPASS_ENABLED`:
+- Default: `true` (Backwards-Kompatibilität)
+- In Production: `SMOKE_AUTH_BYPASS_ENABLED=false` setzen
+- Deaktiviert x-pms-smoke Header Auth-Bypass
+
+**Betroffene Dateien:**
+- `frontend/middleware.ts` (Flag-Check hinzugefügt)
+
+### Verification Path
+
+```bash
+# Backend Unit Tests für Memory Rate Limiter
+cd backend && pytest tests/core/test_memory_rate_limit.py -v
+
+# Manuelle Verifikation:
+# 1. Redis stoppen, API-Request senden -> sollte 429 nach Limit zurückgeben
+# 2. X-RateLimit-Fallback: memory Header prüfen
+# 3. SMOKE_AUTH_BYPASS_ENABLED=false setzen -> x-pms-smoke Bypass sollte nicht funktionieren
+```
+
+### Migrationen
+
+Keine Datenbank-Migrationen erforderlich.
+
+---
+
 ## Branding-Einstellungen Integritätsfixes (2026-02-27) - IMPLEMENTED
 
 **Scope**: Behebung von CSS-Variablen die gesetzt aber nicht verwendet wurden, fehlende Fonts, überlappende Optionen.

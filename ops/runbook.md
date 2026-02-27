@@ -35,6 +35,7 @@
 | [36-multi-device-sessions.md](./runbook/36-multi-device-sessions.md) | Multi-Device Session Tracking |
 | [37-premium-hybrid-navigation.md](./runbook/37-premium-hybrid-navigation.md) | Premium Hybrid Navigation System |
 | [38-admin-route-group-architecture.md](./runbook/38-admin-route-group-architecture.md) | Admin Route Group Architektur |
+| [40-rate-limiting-security.md](./runbook/40-rate-limiting-security.md) | Rate Limiting Security & Fallback |
 
 ### Golden Paths (Most Common Operations)
 
