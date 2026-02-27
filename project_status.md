@@ -21,9 +21,10 @@
 | 5 | **HIGH** | Custom CSS Injection | CSS Sanitizer mit Dangerous Pattern Blocking |
 | 6 | **HIGH** | Unvollständige RBAC Enforcement | RBAC an 22 Endpoints nachgerüstet |
 | 7 | **MEDIUM** | Trust Proxy Headers Default True | Default auf False geändert |
-| 7 | **MEDIUM** | CORS x-http-method-override erlaubt | Header entfernt (Method Tampering) |
-| 8 | **MEDIUM** | Encryption Key ohne Validierung | Validation Property + Warnungen |
-| 9 | **MEDIUM** | Redis TLS ohne Validierung | Warnung bei unsicherer Konfiguration |
+| 8 | **MEDIUM** | CORS x-http-method-override erlaubt | Header entfernt (Method Tampering) |
+| 9 | **MEDIUM** | Encryption Key ohne Validierung | Validation Property + Warnungen |
+| 10 | **MEDIUM** | Redis TLS ohne Validierung | Warnung bei unsicherer Konfiguration |
+| 11 | **MEDIUM** | Audit Log Best-Effort | Redis-basierte Retry Queue implementiert |
 
 ### Änderungen im Detail
 
@@ -113,6 +114,73 @@
 - `backend/app/api/routes/website_admin.py` (12 Endpoints)
 - `backend/app/api/routes/public_domain_admin.py` (3 Endpoints)
 - `backend/app/api/routes/roles.py` (4 Endpoints)
+
+#### 7. Reliable Audit Logging mit Redis Queue
+
+**Problem:** Audit Events wurden "best-effort" geschrieben. Bei DB-Fehlern wurden Events verloren. Dies gefährdet Compliance-Anforderungen (GDPR, SOC2).
+
+**Lösung:** Redis-basierte Retry-Queue für fehlgeschlagene Audit Events:
+- Primary: Direkter DB-Write (Fast Path, ~1ms)
+- On Failure: Event wird in Redis Queue eingereiht
+- Background Worker: Verarbeitet Queue periodisch
+- Dead Letter Queue: Nach 3 Retries für manuelle Review
+
+**Architektur:**
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  RELIABLE AUDIT LOGGING                                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Request → emit_audit_event()                                   │
+│                │                                                │
+│                ▼                                                │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  1. DB Write (Primary)                                  │   │
+│  │     ✓ Success → Event logged                            │   │
+│  │     ✗ Failure → Continue to step 2                      │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                │ (on failure)                                   │
+│                ▼                                                │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  2. Redis Queue (Fallback)                              │   │
+│  │     Event → pms:audit:failed_events                     │   │
+│  │     retry_count, last_error, created_at                 │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                │ (background)                                   │
+│                ▼                                                │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  3. Queue Worker (Periodic)                             │   │
+│  │     Pop event → Retry DB write                          │   │
+│  │     ✓ Success → Done                                    │   │
+│  │     ✗ Failure (retry < 3) → Re-queue                    │   │
+│  │     ✗ Failure (retry >= 3) → Dead Letter Queue          │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Konfiguration:**
+```bash
+# .env
+AUDIT_QUEUE_ENABLED=true          # Enable/disable queue fallback
+AUDIT_QUEUE_MAX_RETRIES=3         # Retries before DLQ
+AUDIT_QUEUE_RETRY_DELAY=60        # Seconds between retries
+```
+
+**Health Check:**
+```bash
+# Enable audit queue health check
+ENABLE_AUDIT_QUEUE_HEALTHCHECK=true
+
+# Check status
+curl -s localhost:8000/health/ready | jq '.components.audit_queue'
+```
+
+**Betroffene Dateien:**
+- `backend/app/core/audit.py` (erweitert mit Queue-Integration)
+- `backend/app/core/audit_queue.py` (NEU - Queue Manager)
+- `backend/app/core/config.py` (Queue-Konfiguration)
+- `backend/app/core/health.py` (Queue Health Check)
 
 ### Verification Path
 
