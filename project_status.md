@@ -1966,6 +1966,48 @@ object-src 'none'
 
 ---
 
+## Brand-Gradient Entfernung (2026-02-27) - IMPLEMENTED
+
+**Issue**: Separate Gradient-Felder (`gradient_from`, `gradient_via`, `gradient_to`) führten zu Verwirrung mit der Akzentfarbe. Beide hatten ähnliche Auswirkung auf Logo-Hintergrund und aktive Navigation.
+
+**Lösung**: Brand-Gradient-Felder komplett entfernt, Gradient wird nun ausschließlich aus der Akzentfarbe (`accent_color`) abgeleitet.
+
+**Änderungen**:
+
+1. **branding-form.tsx**:
+   - Interface-Felder `gradient_from`, `gradient_via`, `gradient_to` entfernt
+   - FormData defaults entfernt
+   - useEffect-Mapping entfernt
+   - Payload-Zeilen entfernt
+   - Komplette "Brand-Gradient" UI-Sektion entfernt
+
+2. **theme-provider.tsx**:
+   - `ApiBrandConfig` Interface entfernt
+   - `applyPremiumNavCssVariables()` vereinfacht - nutzt nur noch `accentColor`:
+     ```typescript
+     const gradientFrom = accentColor || "#f59e0b";
+     const gradientVia = darkenColor(gradientFrom, 5);
+     const gradientTo = darkenColor(gradientFrom, 15);
+     ```
+   - `BrandingConfig` Interface bereinigt
+   - Alle Funktionsaufrufe angepasst
+
+**Dateien**:
+- `frontend/app/(admin)/settings/branding/branding-form.tsx`
+- `frontend/app/lib/theme-provider.tsx`
+
+**Auswirkung**: Akzentfarbe steuert nun konsistent Logo-Hintergrund und aktive Navigation. Keine separate Gradient-Konfiguration mehr nötig.
+
+**Verification Path**:
+- Browser: Settings > Branding > Akzentfarbe ändern
+- CSS-Variablen prüfen: `--brand-primary-from` sollte der Akzentfarbe entsprechen
+
+**Runbook**: [20-navigation-branding.md](./ops/runbook/20-navigation-branding.md#gradient-vereinfachung-2026-02-27)
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
 ## Status Semantics
 
 | Status | Bedeutung |
@@ -1983,4 +2025,4 @@ Historische Einträge (Phase 1-20, vor 2026-02-14) wurden ausgelagert:
 
 ---
 
-*Last updated: 2026-02-26 (Multi-Device Session Tracking VERIFIED)*
+*Last updated: 2026-02-27 (Brand-Gradient Entfernung IMPLEMENTED)*

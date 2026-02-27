@@ -654,6 +654,63 @@ getComputedStyle(document.documentElement).getPropertyValue('--surface-content')
 2. **Theme-Provider nicht geladen:** Console auf Fehler prüfen
 3. **CSS-Variable überschrieben:** Spezifischere Tailwind-Klassen können CSS-Variablen überschreiben
 
+## Gradient-Vereinfachung (2026-02-27)
+
+### Hintergrund
+
+Vor dieser Änderung gab es separate Felder für den Brand-Gradient (`gradient_from`, `gradient_via`, `gradient_to`) neben der Akzentfarbe (`accent_color`). Dies führte zu Verwirrung, da beide ähnliche visuelle Auswirkungen hatten.
+
+### Aktuelle Architektur
+
+Der Gradient wird **ausschließlich** aus der Akzentfarbe abgeleitet:
+
+```typescript
+// theme-provider.tsx - applyPremiumNavCssVariables()
+const gradientFrom = accentColor || "#f59e0b";
+const gradientVia = darkenColor(gradientFrom, 5);   // 5% dunkler
+const gradientTo = darkenColor(gradientFrom, 15);   // 15% dunkler
+```
+
+### CSS-Variablen
+
+Die folgenden CSS-Variablen werden automatisch aus der Akzentfarbe berechnet:
+
+| Variable | Beschreibung | Berechnung |
+|----------|--------------|------------|
+| `--brand-primary-from` | Gradient-Start | = Akzentfarbe |
+| `--brand-primary-via` | Gradient-Mitte | Akzentfarbe -5% Helligkeit |
+| `--brand-primary-to` | Gradient-Ende | Akzentfarbe -15% Helligkeit |
+| `--brand-gradient` | Vollständiger Gradient | linear-gradient(...) |
+| `--brand-shadow` | Marken-Schatten | 30% Opacity von via-Farbe |
+
+### Betroffene UI-Elemente
+
+- Logo-Hintergrund in der Sidebar
+- Aktive Navigation (Hover/Active-States)
+- Favoriten-Highlights
+- Interaktive Akzent-Elemente
+
+### Troubleshooting: Gradient zeigt Standardfarbe
+
+**Symptom:** Gradient ist orange (#f59e0b) obwohl eine andere Akzentfarbe gesetzt wurde.
+
+**Ursachen & Lösungen:**
+
+1. **Akzentfarbe nicht gesetzt:** In Settings > Branding > Markenfarben > Akzent prüfen
+2. **Browser-Cache:** Hard refresh (Ctrl+Shift+R)
+3. **CSS-Variable prüfen:**
+   ```javascript
+   getComputedStyle(document.documentElement).getPropertyValue('--brand-primary-from')
+   // Sollte der Akzentfarbe entsprechen
+   ```
+
+### Migration von alten Gradient-Werten
+
+Falls ein Tenant bisher manuelle Gradient-Werte hatte:
+- Die DB-Spalten `gradient_from`, `gradient_via`, `gradient_to` existieren noch im Backend
+- Frontend ignoriert diese Werte nun und nutzt nur `accent_color`
+- Für konsistentes Aussehen: Akzentfarbe auf gewünschte Primärfarbe des alten Gradients setzen
+
 ## Related Documentation
 
 - [Admin UI Design System](./19-admin-theming.md) — Design tokens and theming
