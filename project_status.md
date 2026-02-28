@@ -74,6 +74,20 @@
 
 **Verification Path:** Admin → Website → Seiten → Block hinzufügen → CTA-Banner → Speichern → Public Site prüfen
 
+### Fix 5: Block Style Overrides nicht angewendet
+
+| Problem | Lösung |
+|---------|--------|
+| Admin speichert `style_overrides` (snake_case) | Renderer prüft jetzt beide: `styleOverrides` und `style_overrides` |
+| Block-Styling (Hintergrund, Padding, etc.) wurde ignoriert | `const styleOverrides = block.styleOverrides || block.style_overrides` |
+
+**Dateien:**
+- `frontend/app/(public)/components/BlockRenderer.tsx`
+
+**Commit:** `1d64c02`
+
+**Verification Path:** Admin → Website → Seiten → Block → Styling-Tab → Hintergrundfarbe setzen → Speichern → Public Site prüfen (Farbe sichtbar)
+
 ---
 
 ## CMS Performance & Polish - Phase 8 (2026-02-28) - IMPLEMENTED
