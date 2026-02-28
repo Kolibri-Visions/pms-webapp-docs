@@ -40,22 +40,24 @@
 
 **Commit:** `e6681f3`
 
-### Fix 3: SEO Endpoint 500 Error (2 Bugs)
+### Fix 3: SEO Endpoint 500 Error (3 Bugs)
 
 | Problem | Lösung |
 |---------|--------|
 | `get_seo()` ohne `agency_id` aufgerufen | `agency_id=agency_id` Parameter hinzugefügt |
 | `.model_dump()` auf dict aufgerufen | `seo_defaults` ist bereits dict nach `model_dump()` |
+| asyncpg liefert JSONB als String | `_parse_seo_row()` Helper parst JSON-String zu dict |
 
 **Betroffene Stellen:**
 - Zeile 1026: Fallback wenn keine set_clauses
 - Zeile 1055: Fallback nach leerem Query-Result
 - Zeile 1018: `seo_defaults` ist bereits dict, nicht Pydantic model
+- Zeile 979, 1063: `SeoResponse(**dict(row))` → `SeoResponse(**_parse_seo_row(row))`
 
 **Dateien:**
-- `backend/app/api/routes/website_admin.py` (update_seo)
+- `backend/app/api/routes/website_admin.py` (get_seo, update_seo, _parse_seo_row)
 
-**Commits:** `964bbe0`, `2459c66`
+**Commits:** `964bbe0`, `2459c66`, `7508118`
 
 ### Fix 4: Block Templates API
 
