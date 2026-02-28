@@ -92,17 +92,31 @@
 
 | Problem | Lösung |
 |---------|--------|
-| TrustIndicatorsBlock setzte eigene `backgroundColor` | Hardcoded Background entfernt, Wrapper handled Styling |
-| Wrapper styleOverrides wurden durch inneren Block überdeckt | Block ist jetzt "transparent", Background vom Wrapper |
+| 10 Blöcke setzten eigene `backgroundColor` auf Main-Container | Hardcoded Background entfernt, Wrapper handled Styling via styleOverrides |
+| Wrapper styleOverrides wurden durch inneren Block überdeckt | Blöcke sind jetzt "transparent", Background wird vom Wrapper gesetzt |
 
-**Betroffene Blöcke:**
-- `TrustIndicatorsBlock` - gefixt
-- Weitere Blöcke haben möglicherweise dasselbe Problem (bei Bedarf fixen)
+**Betroffene Blöcke (alle gefixt):**
+- `TrustIndicatorsBlock` ✅
+- `SearchFormBlock` ✅
+- `OfferCardsBlock` ✅
+- `LocationGridBlock` ✅
+- `PropertyShowcaseBlock` ✅
+- `PropertySearchBlock` ✅
+- `TestimonialsBlock` ✅
+- `ImageTextBlock` ✅
+- `FAQAccordionBlock` ✅
+- `ContactSectionBlock` ✅
+
+**Nicht geänderte Blöcke (korrekt):**
+- `CTABannerBlock` - behält bgColor aus props (gewolltes Banner-Design)
+- Innere Elemente (Cards, Buttons, Icons) - behalten ihre Farben
 
 **Dateien:**
 - `frontend/app/(public)/components/BlockRenderer.tsx`
 
-**Commit:** `97fc39e`
+**Commits:** `97fc39e`, `81b78ab`
+
+**Verification Path:** Admin → Website → Seiten → beliebigen Block → Styling-Tab → Hintergrundfarbe setzen → Speichern → Public Site prüfen (Block-Hintergrund ist custom Farbe)
 
 ---
 
