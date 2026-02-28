@@ -1,7 +1,7 @@
 # 41 - CMS Server-Side Rendering & SEO
 
 **Erstellt:** 2026-02-28
-**Phase:** CMS Upgrade Roadmap Phase -1, 0 & 1
+**Phase:** CMS Upgrade Roadmap Phase -1, 0, 1 & 2
 
 ---
 
@@ -201,6 +201,80 @@ rg "type.*section" frontend/app/(admin)/website/pages/\\[id\\]/page.tsx
 - **Kein Drag-Drop für Widgets in Spalten** - Widgets werden per JSON editiert
 - **Keine Live-Vorschau-Updates** - Vorschau muss manuell aktualisiert werden
 - **Max. 3 Verschachtelungsebenen** - Tiefere Sections werden abgelehnt
+
+---
+
+## Phase 2: Widget-Library (Atomare Blöcke)
+
+### Übersicht
+
+Phase 2 fügt 6 atomare Widget-Typen hinzu, die in Sections oder standalone verwendet werden können.
+
+| Widget | Beschreibung | Use Case |
+|--------|--------------|----------|
+| button | CTA-Button mit Varianten | Links, Aktionen |
+| headline | Überschrift (h1-h6) | Titel, Abschnitte |
+| paragraph | Text mit HTML-Unterstützung | Fließtext, Beschreibungen |
+| spacer | Vertikaler Abstand | Layout-Spacing |
+| divider | Horizontale Trennlinie | Visuelle Trennung |
+| icon_box | Icon mit Titel/Beschreibung | Features, USPs |
+
+### Widget-Optionen
+
+**Button:**
+- Varianten: primary, secondary, outline, ghost
+- Größen: sm, md, lg
+- Icon-Position: left, right
+- Full-width Option
+
+**Headline:**
+- Tags: h1-h6
+- Alignment: left, center, right
+- Custom Color, Font Size
+
+**Paragraph:**
+- Alignment: left, center, right, justify
+- Font Sizes: sm, base, lg, xl
+- Line Heights: tight, normal, relaxed, loose
+
+**Spacer:**
+- Presets: sm (2rem), md (4rem), lg (6rem), xl (8rem)
+- Custom Height in px
+- Mobile/Desktop Visibility
+
+**Divider:**
+- Styles: solid, dashed, dotted
+- Thickness: thin, normal, thick
+- Width: 0-100%
+- Alignment: left, center, right
+
+**Icon Box:**
+- Icon: Lucide Icon Name
+- Layout: vertical, horizontal
+- Icon Size: sm, md, lg, xl
+- Custom Icon/Background Color
+
+### Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/types/website.ts` | Widget Props Interfaces |
+| `backend/app/schemas/block_validation.py` | Widget Validators |
+| `frontend/app/(public)/components/BlockRenderer.tsx` | Widget Renderer |
+| `frontend/app/(admin)/website/pages/[id]/page.tsx` | Widget Block-Typen, Editor |
+
+### Verifikation Phase 2
+
+```bash
+# 1. Backend-Validierung prüfen
+rg "class ButtonWidgetProps" backend/app/schemas/block_validation.py
+
+# 2. Frontend-Renderer prüfen
+rg "function ButtonWidget" frontend/app/(public)/components/BlockRenderer.tsx
+
+# 3. Admin-Editor prüfen
+rg "type.*button.*Widget" frontend/app/(admin)/website/pages/\\[id\\]/page.tsx
+```
 
 ---
 

@@ -2,7 +2,51 @@
 
 **Last Updated:** 2026-02-28
 
-**Current Phase:** CMS Upgrade Roadmap - Phase 1 (Container-System)
+**Current Phase:** CMS Upgrade Roadmap - Phase 2 (Widget-Library)
+
+---
+
+## CMS Widget-Library - Phase 2 (2026-02-28) - IMPLEMENTED
+
+**Scope**: Atomare Widget-Blöcke für flexible Seitengestaltung.
+
+### Widget-Typen
+
+| Widget | Beschreibung | Optionen |
+|--------|--------------|----------|
+| button | CTA-Button | primary/secondary/outline/ghost, sm/md/lg, icon |
+| headline | Überschrift | h1-h6, alignment, color, fontSize |
+| paragraph | Textabsatz | HTML-Unterstützung, alignment, fontSize |
+| spacer | Vertikaler Abstand | Presets (sm-2xl) oder Custom px |
+| divider | Trennlinie | solid/dashed/dotted, thickness, width |
+| icon_box | Icon mit Text | Lucide Icons, vertical/horizontal layout |
+
+### Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/types/website.ts` | 6 Widget Props Interfaces |
+| `backend/app/schemas/block_validation.py` | 6 Widget Validators mit Sanitierung |
+| `frontend/app/(public)/components/BlockRenderer.tsx` | 6 Widget Renderer Komponenten |
+| `frontend/app/(admin)/website/pages/[id]/page.tsx` | Widget Block-Typen, Kategorie "Widget" |
+
+### Widget JSON-Beispiel
+
+```json
+{
+  "type": "button",
+  "props": {
+    "text": "Jetzt buchen",
+    "href": "/kontakt",
+    "variant": "primary",
+    "size": "md",
+    "icon": "arrow-right",
+    "iconPosition": "right"
+  }
+}
+```
+
+**Verification Path**: Admin → Website → Seiten → Widget hinzufügen → Props bearbeiten
 
 ---
 
