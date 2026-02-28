@@ -40,20 +40,22 @@
 
 **Commit:** `e6681f3`
 
-### Fix 3: SEO Endpoint 500 Error
+### Fix 3: SEO Endpoint 500 Error (2 Bugs)
 
 | Problem | Lösung |
 |---------|--------|
-| `get_seo()` ohne `agency_id` aufgerufen → 500 Error | `agency_id=agency_id` Parameter hinzugefügt |
+| `get_seo()` ohne `agency_id` aufgerufen | `agency_id=agency_id` Parameter hinzugefügt |
+| `.model_dump()` auf dict aufgerufen | `seo_defaults` ist bereits dict nach `model_dump()` |
 
 **Betroffene Stellen:**
 - Zeile 1026: Fallback wenn keine set_clauses
 - Zeile 1055: Fallback nach leerem Query-Result
+- Zeile 1018: `seo_defaults` ist bereits dict, nicht Pydantic model
 
 **Dateien:**
 - `backend/app/api/routes/website_admin.py` (update_seo)
 
-**Commit:** `964bbe0`
+**Commits:** `964bbe0`, `2459c66`
 
 ### Fix 4: Block Templates API
 
