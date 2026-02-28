@@ -88,6 +88,22 @@
 
 **Verification Path:** Admin → Website → Seiten → Block → Styling-Tab → Hintergrundfarbe setzen → Speichern → Public Site prüfen (Farbe sichtbar)
 
+### Fix 6: Block-Komponenten überschreiben Wrapper-Styling
+
+| Problem | Lösung |
+|---------|--------|
+| TrustIndicatorsBlock setzte eigene `backgroundColor` | Hardcoded Background entfernt, Wrapper handled Styling |
+| Wrapper styleOverrides wurden durch inneren Block überdeckt | Block ist jetzt "transparent", Background vom Wrapper |
+
+**Betroffene Blöcke:**
+- `TrustIndicatorsBlock` - gefixt
+- Weitere Blöcke haben möglicherweise dasselbe Problem (bei Bedarf fixen)
+
+**Dateien:**
+- `frontend/app/(public)/components/BlockRenderer.tsx`
+
+**Commit:** `97fc39e`
+
 ---
 
 ## CMS Performance & Polish - Phase 8 (2026-02-28) - IMPLEMENTED
