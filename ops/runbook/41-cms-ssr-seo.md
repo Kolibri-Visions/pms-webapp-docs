@@ -491,6 +491,77 @@ rg "autoSaveStatus|autoSaveTimerRef" frontend/app/(admin)/website/pages/\\[id\\]
 
 ---
 
+## Phase 6: Block Templates
+
+### Übersicht
+
+Phase 6 ermöglicht das Speichern und Wiederverwenden von Block-Konfigurationen.
+
+| Feature | Beschreibung |
+|---------|--------------|
+| Template-Speicherung | Block mit Props/Styles als Vorlage speichern |
+| Template-Library | Tabs im Block-Picker (Blöcke / Vorlagen) |
+| Kategorien | Custom, Hero, Content, Marketing, Contact, Layout, Widget |
+| Template anwenden | Click → neuer Block mit allen Einstellungen |
+
+### Dateien
+
+**Database:**
+- `supabase/migrations/20260228182604_add_block_templates.sql` - Schema
+
+**Backend:**
+- `backend/app/schemas/block_templates.py` - Pydantic Models
+- `backend/app/api/routes/block_templates.py` - REST API
+
+**Frontend:**
+- `frontend/app/(admin)/website/pages/[id]/page.tsx` - UI Integration
+
+### API Endpoints
+
+| Methode | Endpoint | Beschreibung |
+|---------|----------|--------------|
+| GET | `/api/v1/website/block-templates` | Templates auflisten |
+| GET | `/api/v1/website/block-templates/{id}` | Template abrufen |
+| POST | `/api/v1/website/block-templates` | Template erstellen |
+| PUT | `/api/v1/website/block-templates/{id}` | Template aktualisieren |
+| DELETE | `/api/v1/website/block-templates/{id}` | Template löschen |
+
+### Template-Struktur
+
+```json
+{
+  "id": "uuid",
+  "name": "Hero Banner Blau",
+  "category": "hero",
+  "block_type": "hero_fullwidth",
+  "block_props": {
+    "title": "Willkommen",
+    "subtitle": "...",
+    "background_image": "..."
+  },
+  "style_overrides": {
+    "padding_top": "xl",
+    "background_color": "#2563eb"
+  },
+  "is_section": false
+}
+```
+
+### Verifikation Phase 6
+
+```bash
+# 1. DB Migration prüfen
+ls supabase/migrations/*block_templates*
+
+# 2. API Route prüfen
+rg "block-templates" backend/app/api/routes/block_templates.py
+
+# 3. Frontend UI prüfen
+rg "showSaveTemplateModal|applyTemplate" frontend/app/(admin)/website/pages/\\[id\\]/page.tsx
+```
+
+---
+
 ## Troubleshooting
 
 ### Problem: CMS-Seite zeigt 404

@@ -2,7 +2,49 @@
 
 **Last Updated:** 2026-02-28
 
-**Current Phase:** CMS Upgrade Roadmap - Phase 5 (Undo/Redo & Auto-Save)
+**Current Phase:** CMS Upgrade Roadmap - Phase 6 (Block Templates)
+
+---
+
+## CMS Block Templates - Phase 6 (2026-02-28) - IMPLEMENTED
+
+**Scope**: Wiederverwendbare Block-Vorlagen speichern und anwenden.
+
+### Phase 6.1: Datenstruktur & API
+
+| Feature | Beschreibung |
+|---------|--------------|
+| Supabase Migration | `block_templates` Tabelle mit RLS |
+| Pydantic Schemas | Create, Update, Response Models |
+| REST API | CRUD Endpoints unter `/api/v1/website/block-templates` |
+
+### Phase 6.2: Template-Library UI
+
+| Feature | Beschreibung |
+|---------|--------------|
+| Tabs im Block-Picker | "Neue Blöcke" / "Vorlagen" |
+| Kategorie-Filter | All, Custom, Hero, Content, Marketing, Contact, Layout, Widget |
+| Template-Karten | Name, Block-Typ, Löschen-Button |
+
+### Phase 6.3: Template Anwenden
+
+| Feature | Beschreibung |
+|---------|--------------|
+| "Als Vorlage speichern" Button | BookmarkPlus Icon bei jedem Block |
+| Save-Modal | Name, Kategorie, Block-Typ Anzeige |
+| Template einfügen | Click auf Template → neuer Block mit Props/Styles |
+
+### Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `supabase/migrations/20260228182604_add_block_templates.sql` | NEU: DB Schema |
+| `backend/app/schemas/block_templates.py` | NEU: Pydantic Models |
+| `backend/app/api/routes/block_templates.py` | NEU: CRUD Endpoints |
+| `backend/app/main.py` | Router registriert |
+| `frontend/app/(admin)/website/pages/[id]/page.tsx` | Template UI |
+
+**Verification Path**: Admin → Website → Seiten → Block → Als Vorlage speichern → Block-Picker → Vorlagen-Tab
 
 ---
 
