@@ -1,7 +1,7 @@
 # 41 - CMS Server-Side Rendering & SEO
 
 **Erstellt:** 2026-02-28
-**Phase:** CMS Upgrade Roadmap Phase -1, 0, 1 & 2
+**Phase:** CMS Upgrade Roadmap Phase -1, 0, 1, 2 & 3
 
 ---
 
@@ -274,6 +274,62 @@ rg "function ButtonWidget" frontend/app/(public)/components/BlockRenderer.tsx
 
 # 3. Admin-Editor prüfen
 rg "type.*button.*Widget" frontend/app/(admin)/website/pages/\\[id\\]/page.tsx
+```
+
+---
+
+## Phase 3: Drag-Drop in Sections
+
+### Übersicht
+
+Phase 3 fügt Drag-Drop-Funktionalität für Widgets in Section-Spalten hinzu.
+
+| Feature | Beschreibung |
+|---------|--------------|
+| @dnd-kit | Moderne Drag-Drop-Library für React |
+| Drop-Zones | Jede Spalte ist eine Drop-Zone |
+| Widget Picker | Click-to-Add für neue Widgets |
+| Sortierung | Widgets per Drag-Drop neu anordnen |
+| Spalten-Transfer | Widgets zwischen Spalten verschieben |
+
+### Komponenten
+
+| Komponente | Funktion |
+|------------|----------|
+| `SectionColumnsEditor` | Hauptcontainer mit DndContext |
+| `DroppableColumn` | Drop-Zone für eine Spalte |
+| `SortableWidgetItem` | Draggable Widget in einer Spalte |
+| `DragOverlay` | Visuelles Feedback beim Ziehen |
+
+### Verwendung
+
+1. Section-Block im Editor öffnen
+2. Im "Spalten-Inhalt" Bereich:
+   - "+ Widget" klicken → Widget-Typ wählen
+   - Widgets per Drag-Handle verschieben
+   - Widgets zwischen Spalten ziehen
+
+### Dependencies
+
+```json
+{
+  "@dnd-kit/core": "^6.x",
+  "@dnd-kit/sortable": "^8.x",
+  "@dnd-kit/utilities": "^3.x"
+}
+```
+
+### Verifikation Phase 3
+
+```bash
+# 1. Library installiert prüfen
+grep "@dnd-kit" frontend/package.json
+
+# 2. SectionColumnsEditor vorhanden
+rg "function SectionColumnsEditor" frontend/app/(admin)/website/pages/\\[id\\]/page.tsx
+
+# 3. DndContext verwendet
+rg "DndContext" frontend/app/(admin)/website/pages/\\[id\\]/page.tsx
 ```
 
 ---

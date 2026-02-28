@@ -2,7 +2,41 @@
 
 **Last Updated:** 2026-02-28
 
-**Current Phase:** CMS Upgrade Roadmap - Phase 2 (Widget-Library)
+**Current Phase:** CMS Upgrade Roadmap - Phase 3 (Drag-Drop)
+
+---
+
+## CMS Drag-Drop in Sections - Phase 3 (2026-02-28) - IMPLEMENTED
+
+**Scope**: Drag-Drop-Funktionalität für Widgets in Section-Spalten.
+
+### Features
+
+| Feature | Beschreibung |
+|---------|--------------|
+| @dnd-kit Library | Moderne React Drag-Drop Library |
+| Drop-Zones | Jede Spalte ist eine Drop-Zone für Widgets |
+| Widget Picker | Click-to-Add UI für neue Widgets |
+| Sortierung | Widgets per Drag-Drop neu anordnen |
+| Spalten-Transfer | Widgets zwischen Spalten verschieben |
+| Drag Overlay | Visuelles Feedback beim Ziehen |
+
+### Neue Komponenten
+
+| Komponente | Funktion |
+|------------|----------|
+| `SectionColumnsEditor` | DndContext Container für Spalten |
+| `DroppableColumn` | Drop-Zone mit Widget-Picker |
+| `SortableWidgetItem` | Draggable Widget Item |
+
+### Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/package.json` | @dnd-kit Dependencies |
+| `frontend/app/(admin)/website/pages/[id]/page.tsx` | SectionColumnsEditor, DroppableColumn, SortableWidgetItem |
+
+**Verification Path**: Admin → Website → Seiten → Section bearbeiten → Widgets in Spalten ziehen
 
 ---
 
