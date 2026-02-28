@@ -6,6 +6,72 @@
 
 ---
 
+## CMS Bug Fixes (2026-02-28) - IMPLEMENTED
+
+**Scope**: Kritische Fixes nach CMS Phase 8 Deployment.
+
+### Fix 1: TrustIndicatorItem Alias
+
+| Problem | Lösung |
+|---------|--------|
+| Frontend sendet `text`, Backend erwartet `label` | Pydantic `alias="text"` + `populate_by_name=True` |
+
+**Dateien:**
+- `backend/app/schemas/block_validation.py` (TrustIndicatorItem)
+
+**Commit:** `5b48466`
+
+### Fix 2: CTABannerBlock Feldnamen
+
+| Problem | Lösung |
+|---------|--------|
+| Admin speichert camelCase (`buttonText`), Renderer erwartet snake_case (`cta_text`) | Renderer akzeptiert beide Konventionen |
+
+**Mapping:**
+| Admin (camelCase) | Renderer (snake_case) |
+|-------------------|----------------------|
+| `buttonText` | `cta_text` |
+| `buttonLink` | `cta_href` |
+| `backgroundColor` | `background_color` |
+| `subtitle` | `text` |
+
+**Dateien:**
+- `frontend/app/(public)/components/BlockRenderer.tsx` (CTABannerBlock)
+
+**Commit:** `e6681f3`
+
+### Fix 3: SEO Endpoint 500 Error
+
+| Problem | Lösung |
+|---------|--------|
+| `get_seo()` ohne `agency_id` aufgerufen → 500 Error | `agency_id=agency_id` Parameter hinzugefügt |
+
+**Betroffene Stellen:**
+- Zeile 1026: Fallback wenn keine set_clauses
+- Zeile 1055: Fallback nach leerem Query-Result
+
+**Dateien:**
+- `backend/app/api/routes/website_admin.py` (update_seo)
+
+**Commit:** `964bbe0`
+
+### Fix 4: Block Templates API
+
+| Problem | Lösung |
+|---------|--------|
+| `block_templates.py` nutzte nicht existierendes `get_supabase` | Komplett auf asyncpg umgestellt |
+| Migration referenzierte `tenants` statt `agencies` | Migration korrigiert |
+| Router nicht gemountet bei `MODULES_ENABLED=true` | Failsafe-Mounting in `main.py` |
+
+**Dateien:**
+- `backend/app/api/routes/block_templates.py` (Komplettes Rewrite)
+- `backend/app/main.py` (Failsafe-Mounting)
+- `supabase/migrations/20260228182604_add_block_templates.sql`
+
+**Verification Path:** Admin → Website → Seiten → Block hinzufügen → CTA-Banner → Speichern → Public Site prüfen
+
+---
+
 ## CMS Performance & Polish - Phase 8 (2026-02-28) - IMPLEMENTED
 
 **Scope**: Performance-Optimierungen, Skeleton-Loader und Accessibility-Verbesserungen.
