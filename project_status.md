@@ -2,7 +2,47 @@
 
 **Last Updated:** 2026-02-28
 
-**Current Phase:** CMS Upgrade Roadmap - Phase 4 (Block-Styling-Panel)
+**Current Phase:** CMS Upgrade Roadmap - Phase 5 (Undo/Redo & Auto-Save)
+
+---
+
+## CMS Undo/Redo & Auto-Save - Phase 5 (2026-02-28) - IMPLEMENTED
+
+**Scope**: History-Management für Block-Änderungen mit Undo/Redo und automatischem Speichern.
+
+### Phase 5.1: History-Stack
+
+| Feature | Beschreibung |
+|---------|--------------|
+| useHistory Hook | Custom Hook für State-History |
+| Max 50 Einträge | Begrenzte History-Größe |
+| Deep-Clone | JSON.stringify/parse für State-Vergleich |
+
+### Phase 5.2: Undo/Redo UI & Shortcuts
+
+| Feature | Beschreibung |
+|---------|--------------|
+| Toolbar Buttons | Undo/Redo Buttons mit Tooltips |
+| Ctrl+Z | Rückgängig machen |
+| Ctrl+Y / Ctrl+Shift+Z | Wiederholen |
+| Status-Anzeige | Anzahl verfügbarer Schritte |
+
+### Phase 5.3: Auto-Save
+
+| Feature | Beschreibung |
+|---------|--------------|
+| 30-Sekunden-Timer | Automatisches Speichern bei Änderungen |
+| Status-Indikator | "Speichert..." / "Automatisch gespeichert" |
+| Error-Handling | Fehlermeldung bei fehlgeschlagenem Save |
+
+### Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/(admin)/website/pages/[id]/use-history.ts` | NEU: useHistory & useHistoryKeyboard Hooks |
+| `frontend/app/(admin)/website/pages/[id]/page.tsx` | History-Integration, UI-Buttons, Auto-Save |
+
+**Verification Path**: Admin → Website → Seiten → Blocks bearbeiten → Ctrl+Z testen → 30s warten → Auto-Save prüfen
 
 ---
 

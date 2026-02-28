@@ -427,6 +427,70 @@ rg "Typografie|Rahmen & Schatten|Animation" frontend/app/(admin)/website/pages/\
 
 ---
 
+## Phase 5: Undo/Redo & Auto-Save
+
+### Übersicht
+
+Phase 5 fügt History-Management und automatisches Speichern hinzu.
+
+| Feature | Beschreibung |
+|---------|--------------|
+| History-Stack | Max 50 Einträge, JSON-basierter State-Vergleich |
+| Undo/Redo | Toolbar-Buttons + Keyboard Shortcuts |
+| Auto-Save | 30-Sekunden-Timer bei Änderungen |
+
+### Dateien
+
+**Custom Hooks:**
+- `frontend/app/(admin)/website/pages/[id]/use-history.ts` - useHistory, useHistoryKeyboard
+
+**Editor Integration:**
+- `frontend/app/(admin)/website/pages/[id]/page.tsx` - History-State, UI-Buttons, Auto-Save Logic
+
+### useHistory Hook API
+
+```typescript
+const {
+  state,           // Aktueller State
+  setState,        // State ändern (fügt zur History hinzu)
+  undo,            // Rückgängig machen
+  redo,            // Wiederholen
+  canUndo,         // boolean
+  canRedo,         // boolean
+  historyLength,   // Anzahl Undo-Schritte
+  clear,           // History leeren
+} = useHistory<Block[]>(initialBlocks, { maxHistory: 50 });
+```
+
+### Keyboard Shortcuts
+
+| Shortcut | Aktion |
+|----------|--------|
+| Ctrl+Z / Cmd+Z | Rückgängig |
+| Ctrl+Y / Cmd+Shift+Z | Wiederholen |
+
+### Auto-Save Verhalten
+
+1. Änderung erkannt → 30s Timer startet
+2. Weitere Änderungen → Timer wird zurückgesetzt
+3. Nach 30s ohne Änderung → Automatisch speichern
+4. Status-Anzeige: "Speichert..." → "Automatisch gespeichert"
+
+### Verifikation Phase 5
+
+```bash
+# 1. useHistory Hook prüfen
+rg "export function useHistory" frontend/app/(admin)/website/pages/\\[id\\]/use-history.ts
+
+# 2. Undo/Redo Buttons prüfen
+rg "Undo2|Redo2" frontend/app/(admin)/website/pages/\\[id\\]/page.tsx
+
+# 3. Auto-Save Logic prüfen
+rg "autoSaveStatus|autoSaveTimerRef" frontend/app/(admin)/website/pages/\\[id\\]/page.tsx
+```
+
+---
+
 ## Troubleshooting
 
 ### Problem: CMS-Seite zeigt 404
