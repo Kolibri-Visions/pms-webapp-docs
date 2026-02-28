@@ -1,8 +1,36 @@
 # PMS-Webapp Project Status
 
-**Last Updated:** 2026-02-27
+**Last Updated:** 2026-02-28
 
-**Current Phase:** Phase 27 - Codebase Audit & Logic Bug Fixes Phase 2
+**Current Phase:** CMS Upgrade Roadmap - Phase -1 (Security Hardening)
+
+---
+
+## CMS Security Hardening - Phase -1 (2026-02-28) - IMPLEMENTED
+
+**Scope**: Security-Hardening des bestehenden CMS vor dem Elementor-Upgrade.
+
+### Änderungen
+
+| Task | Beschreibung | Datei(en) |
+|------|--------------|-----------|
+| CSS-Validierung | `sanitize_css_strict()` für `custom_css` aktiviert | `website_admin.py` |
+| Block-Validatoren | 8 fehlende Block-Typen hinzugefügt | `block_validation.py` |
+| Unknown Blocks ablehnen | Strict-Mode für API-Endpunkte | `block_validation.py`, `website_admin.py` |
+
+### Neue Block-Validatoren (19 total)
+
+**Neu:** `search_form`, `property_search`
+
+**Legacy:** `hero_search`, `usp_grid`, `rich_text`, `contact_cta`, `faq`, `featured_properties`
+
+### Security-Verbesserungen
+
+- Ungültiges CSS löst `400 Bad Request` aus
+- Unbekannte Block-Typen werden mit Fehlermeldung abgelehnt
+- `validate_blocks_strict()` für API-Endpunkte (kein silent pass-through)
+
+**Verification Path**: Manuelle Tests über Admin-Panel → Website → Seiten bearbeiten
 
 ---
 
