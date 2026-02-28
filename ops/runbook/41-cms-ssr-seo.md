@@ -1,7 +1,7 @@
 # 41 - CMS Server-Side Rendering & SEO
 
 **Erstellt:** 2026-02-28
-**Phase:** CMS Upgrade Roadmap Phase -1 bis 7
+**Phase:** CMS Upgrade Roadmap Phase -1 bis 8 (COMPLETE)
 
 ---
 
@@ -658,6 +658,95 @@ rg "showQuickActions" frontend/app/(admin)/website/pages/\[id\]/page.tsx
 
 # 4. Shortcuts Modal prüfen
 rg "showShortcutsHelp" frontend/app/(admin)/website/pages/\[id\]/page.tsx
+```
+
+---
+
+## Phase 8: Performance & Polish
+
+### Übersicht
+
+Phase 8 fügt Performance-Optimierungen, Skeleton-Loader und Accessibility-Verbesserungen hinzu.
+
+| Feature | Beschreibung |
+|---------|--------------|
+| React.memo | Memoized Components für reduzierte Re-Renders |
+| Skeleton Loader | Layoutgetreuer Placeholder beim Laden |
+| Accessibility | ARIA Labels, Roles, Live-Regions |
+
+### Dateien
+
+**Frontend:**
+- `frontend/app/(admin)/website/pages/[id]/page.tsx` - Performance & Accessibility
+
+### Performance-Optimierungen
+
+**Memoized Components:**
+```typescript
+// Components wrapped with React.memo()
+const SectionPropsEditor = memo(function SectionPropsEditor({ ... }) { ... });
+const BlockStyleEditor = memo(function BlockStyleEditor({ ... }) { ... });
+const SortableWidgetItem = memo(function SortableWidgetItem({ ... }) { ... });
+```
+
+**useCallback für Clipboard:**
+```typescript
+const copyBlock = useCallback((index: number) => { ... }, [page, toast]);
+const cutBlock = useCallback((index: number) => { ... }, [page, updateBlocks, editingBlockIndex, toast]);
+const pasteBlock = useCallback((targetIndex?: number) => { ... }, [page, clipboard, updateBlocks, toast]);
+```
+
+### Skeleton Loader
+
+Der Skeleton-Loader zeigt beim Laden eine layoutgetreue Platzhalter-UI:
+
+```tsx
+if (loading) {
+  return (
+    <div className="animate-pulse" role="status" aria-label="Seite wird geladen">
+      {/* Header Skeleton */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="h-7 w-48 bg-surface-sunken rounded" />
+        ...
+      </div>
+      {/* Editor Skeleton */}
+      <div className="flex-1 flex gap-4">
+        {/* Blocks Panel Skeleton */}
+        {/* Editor Panel Skeleton */}
+      </div>
+      <span className="sr-only">Laden...</span>
+    </div>
+  );
+}
+```
+
+### Accessibility-Verbesserungen
+
+**ARIA Attributes:**
+
+| Element | Attribute | Wert |
+|---------|-----------|------|
+| Shortcuts Modal | role="dialog" | aria-modal="true" |
+| Quick Actions | role="menu" | aria-haspopup="menu" |
+| Menu Items | role="menuitem" | - |
+| Status-Indikatoren | role="status" | aria-live="polite" |
+| Icon-Buttons | aria-label | Beschreibender Text |
+| Decorative Icons | aria-hidden | "true" |
+
+### Verifikation Phase 8
+
+```bash
+# 1. memo Wrapping prüfen
+rg "= memo\(function" frontend/app/(admin)/website/pages/\[id\]/page.tsx
+
+# 2. Skeleton Loader prüfen
+rg "animate-pulse.*role=\"status\"" frontend/app/(admin)/website/pages/\[id\]/page.tsx
+
+# 3. ARIA Labels prüfen
+rg "aria-label=" frontend/app/(admin)/website/pages/\[id\]/page.tsx | wc -l
+
+# 4. ARIA Roles prüfen
+rg "role=\"(dialog|menu|menuitem|status)\"" frontend/app/(admin)/website/pages/\[id\]/page.tsx
 ```
 
 ---

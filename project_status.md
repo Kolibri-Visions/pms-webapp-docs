@@ -2,7 +2,47 @@
 
 **Last Updated:** 2026-02-28
 
-**Current Phase:** CMS Upgrade Roadmap - Phase 7 (Copy/Paste & Quick Actions)
+**Current Phase:** CMS Upgrade Roadmap - Phase 8 (Performance & Polish) ✅ COMPLETE
+
+---
+
+## CMS Performance & Polish - Phase 8 (2026-02-28) - IMPLEMENTED
+
+**Scope**: Performance-Optimierungen, Skeleton-Loader und Accessibility-Verbesserungen.
+
+### Phase 8.1: Performance-Optimierungen
+
+| Feature | Beschreibung |
+|---------|--------------|
+| React.memo | Memoized Components: SectionPropsEditor, BlockStyleEditor, SortableWidgetItem |
+| useCallback | Clipboard-Funktionen (copyBlock, cutBlock, pasteBlock) |
+| Reduced Re-renders | Komponenten werden nur bei Props-Änderungen neu gerendert |
+
+### Phase 8.2: Skeleton Loader
+
+| Feature | Beschreibung |
+|---------|--------------|
+| Skeleton UI | Layoutgetreuer Placeholder während des Ladens |
+| Animate Pulse | Sanfte Animation für visuelles Feedback |
+| ARIA Status | role="status" mit aria-label für Screenreader |
+
+### Phase 8.3: Accessibility & Polish
+
+| Feature | Beschreibung |
+|---------|--------------|
+| ARIA Labels | Alle Buttons mit aria-label für Screenreader |
+| ARIA Roles | role="dialog", role="menu", role="menuitem", role="status" |
+| aria-hidden | Icons für Screenreader ausgeblendet |
+| aria-live | Status-Indikatoren für Auto-Save und Clipboard |
+| aria-haspopup | Dropdown-Buttons korrekt annotiert |
+
+### Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/(admin)/website/pages/[id]/page.tsx` | memo, Skeleton, ARIA |
+
+**Verification Path**: Admin → Website → Seiten → Loading prüfen (Skeleton sichtbar) → Screenreader-Test
 
 ---
 
