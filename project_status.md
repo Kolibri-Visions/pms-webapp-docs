@@ -2,7 +2,58 @@
 
 **Last Updated:** 2026-02-28
 
-**Current Phase:** CMS Upgrade Roadmap - Phase 0 (SSR/SEO)
+**Current Phase:** CMS Upgrade Roadmap - Phase 1 (Container-System)
+
+---
+
+## CMS Container-System - Phase 1 (2026-02-28) - IMPLEMENTED
+
+**Scope**: Elementor-inspiriertes Container-System mit Sections und flexiblen Spalten.
+
+### Section-Block Features
+
+| Feature | Beschreibung |
+|---------|--------------|
+| Spalten-Layouts | 1-col, 2-col, 2-col-wide, 3-col, 4-col |
+| Layout-Varianten | full (volle Breite), boxed (container), narrow |
+| Gap-Optionen | none, sm, md, lg, xl |
+| Mobile-Reverse | Spaltenreihenfolge auf Mobil umkehren |
+| Vertical Align | top, center, bottom, stretch |
+| Rekursive Tiefe | Max. 3 Ebenen (Section in Section in Section) |
+
+### Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/types/website.ts` | ColumnConfig, SectionBlockProps, SectionPreset Types |
+| `backend/app/schemas/block_validation.py` | ColumnConfig, SectionBlockProps Validatoren, rekursive Validierung |
+| `frontend/app/(public)/components/BlockRenderer.tsx` | SectionBlock Renderer mit CSS Grid |
+| `frontend/app/(admin)/website/pages/[id]/page.tsx` | Section Block-Typ, SectionPropsEditor UI |
+
+### Section-Block JSON-Struktur
+
+```json
+{
+  "type": "section",
+  "props": {
+    "layout": "boxed",
+    "gap": "md",
+    "columns": [
+      { "width": 66.67, "widgets": [] },
+      { "width": 33.33, "widgets": [] }
+    ],
+    "mobileReverse": false,
+    "verticalAlign": "top"
+  }
+}
+```
+
+### Einschränkungen Phase 1
+
+- Widgets in Spalten werden per JSON editiert (kein Drag-Drop)
+- Vorschau muss manuell aktualisiert werden
+
+**Verification Path**: Admin → Website → Seiten → Section hinzufügen → Spalten-Preset wählen
 
 ---
 

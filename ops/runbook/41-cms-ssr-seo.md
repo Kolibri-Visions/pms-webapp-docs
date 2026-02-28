@@ -1,7 +1,7 @@
 # 41 - CMS Server-Side Rendering & SEO
 
 **Erstellt:** 2026-02-28
-**Phase:** CMS Upgrade Roadmap Phase -1 & 0
+**Phase:** CMS Upgrade Roadmap Phase -1, 0 & 1
 
 ---
 
@@ -121,6 +121,86 @@ curl -s https://example.com/robots.txt
 # 4. Structured Data prüfen
 curl -s https://example.com | grep -o 'application/ld+json'
 ```
+
+---
+
+## Phase 1: Container-System (Sections & Columns)
+
+### Übersicht
+
+Phase 1 führt ein Elementor-inspiriertes Container-System ein: **Sections** mit flexiblen **Spalten**.
+
+| Feature | Beschreibung |
+|---------|--------------|
+| Sections | Container-Blöcke mit 1-6 Spalten |
+| Spalten-Presets | 1-col, 2-col, 2-col-wide, 3-col, 4-col |
+| Layout-Varianten | full, boxed, narrow |
+| Gap-Optionen | none, sm, md, lg, xl |
+| Mobile-Reverse | Spaltenreihenfolge auf Mobile umkehren |
+| Rekursive Tiefe | Max. 3 Ebenen (Section in Section) |
+
+### Dateien
+
+**TypeScript Types:**
+- `frontend/app/types/website.ts` - ColumnConfig, SectionBlockProps, SectionPreset
+
+**Backend Validierung:**
+- `backend/app/schemas/block_validation.py` - ColumnConfig, SectionBlockProps, rekursive Validierung
+
+**Frontend Renderer:**
+- `frontend/app/(public)/components/BlockRenderer.tsx` - SectionBlock Komponente
+
+**Admin Editor:**
+- `frontend/app/(admin)/website/pages/[id]/page.tsx` - SectionPropsEditor, Block-Typ "section"
+
+### Section-Block Struktur
+
+```json
+{
+  "type": "section",
+  "props": {
+    "layout": "boxed",
+    "gap": "md",
+    "columns": [
+      { "width": 66.67, "widgets": [/* Blöcke */] },
+      { "width": 33.33, "widgets": [/* Blöcke */] }
+    ],
+    "mobileReverse": false,
+    "verticalAlign": "top"
+  }
+}
+```
+
+### Spalten-Presets
+
+| Preset | Spaltenbreiten |
+|--------|----------------|
+| 1-col | 100% |
+| 2-col | 50% / 50% |
+| 2-col-wide | 66.67% / 33.33% |
+| 2-col-narrow | 33.33% / 66.67% |
+| 3-col | 33.33% / 33.33% / 33.33% |
+| 3-col-wide | 50% / 25% / 25% |
+| 4-col | 25% / 25% / 25% / 25% |
+
+### Verifikation Phase 1
+
+```bash
+# 1. Backend-Validierung prüfen
+rg "class SectionBlockProps" backend/app/schemas/block_validation.py
+
+# 2. Frontend-Renderer prüfen
+rg "function SectionBlock" frontend/app/(public)/components/BlockRenderer.tsx
+
+# 3. Admin-Editor prüfen
+rg "type.*section" frontend/app/(admin)/website/pages/\\[id\\]/page.tsx
+```
+
+### Einschränkungen Phase 1
+
+- **Kein Drag-Drop für Widgets in Spalten** - Widgets werden per JSON editiert
+- **Keine Live-Vorschau-Updates** - Vorschau muss manuell aktualisiert werden
+- **Max. 3 Verschachtelungsebenen** - Tiefere Sections werden abgelehnt
 
 ---
 
