@@ -334,6 +334,99 @@ rg "DndContext" frontend/app/(admin)/website/pages/\\[id\\]/page.tsx
 
 ---
 
+## Phase 4: Block-Styling-Panel (erweitert)
+
+### Übersicht
+
+Phase 4 erweitert den BlockStyleEditor um professionelle Styling-Optionen.
+
+| Feature | Beschreibung |
+|---------|--------------|
+| Extended Backgrounds | Gradient, Position, Size, Repeat, Attachment |
+| Typography | Color, Size, Weight, Line-Height, Align, Spacing |
+| Border & Shadow | Radius, Width, Color, Style, Box-Shadow |
+| Animation | Einblendanimationen, Hover-Effekte, Transitions |
+
+### Dateien
+
+**TypeScript Types:**
+- `frontend/app/types/website.ts` - BlockStyleOverrides erweitert
+
+**Backend Validierung:**
+- `backend/app/schemas/block_validation.py` - Neue Felder validiert
+
+**Frontend Editor:**
+- `frontend/app/(admin)/website/pages/[id]/page.tsx` - BlockStyleEditor UI
+
+**Public Renderer:**
+- `frontend/app/(public)/components/BlockRenderer.tsx` - Style-Mapping
+
+**CSS Animations:**
+- `frontend/app/globals.css` - Keyframes für Animationen
+
+### Style-Optionen im Detail
+
+**Background (erweitert):**
+```typescript
+{
+  background_gradient: "linear-gradient(180deg, #fff, #f0f0f0)",
+  background_position: "center",
+  background_size: "cover",
+  background_repeat: "no-repeat",
+  background_attachment: "fixed"  // Parallax
+}
+```
+
+**Typography:**
+```typescript
+{
+  text_color: "#333333",
+  font_size: "lg",        // xs, sm, base, lg, xl, 2xl, 3xl, 4xl
+  font_weight: "semibold", // normal, medium, semibold, bold
+  line_height: "relaxed", // tight, normal, relaxed, loose
+  text_align: "center",   // left, center, right, justify
+  letter_spacing: "wide"  // tighter, tight, normal, wide, wider
+}
+```
+
+**Border & Shadow:**
+```typescript
+{
+  border_radius: "lg",    // none, sm, md, lg, xl, 2xl, full
+  border_width: "2",      // 0, 1, 2, 4, 8
+  border_color: "#e5e7eb",
+  border_style: "solid",  // solid, dashed, dotted, none
+  box_shadow: "lg"        // none, sm, md, lg, xl, 2xl
+}
+```
+
+**Animation:**
+```typescript
+{
+  animation: "slide-up",      // fade-in, slide-up, slide-down, scale-in, bounce
+  hover_effect: "lift",       // lift, glow, scale, darken
+  transition_duration: "normal" // fast, normal, slow
+}
+```
+
+### Verifikation Phase 4
+
+```bash
+# 1. Backend-Validierung prüfen
+rg "background_gradient|text_color|border_radius|animation" backend/app/schemas/block_validation.py
+
+# 2. Frontend Types prüfen
+rg "Phase 4" frontend/app/types/website.ts
+
+# 3. Animation Keyframes prüfen
+rg "animate-fade-in|animate-slide-up" frontend/app/globals.css
+
+# 4. BlockStyleEditor UI prüfen
+rg "Typografie|Rahmen & Schatten|Animation" frontend/app/(admin)/website/pages/\\[id\\]/page.tsx
+```
+
+---
+
 ## Troubleshooting
 
 ### Problem: CMS-Seite zeigt 404

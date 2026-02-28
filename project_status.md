@@ -2,7 +2,64 @@
 
 **Last Updated:** 2026-02-28
 
-**Current Phase:** CMS Upgrade Roadmap - Phase 3 (Drag-Drop)
+**Current Phase:** CMS Upgrade Roadmap - Phase 4 (Block-Styling-Panel)
+
+---
+
+## CMS Block-Styling-Panel - Phase 4 (2026-02-28) - IMPLEMENTED
+
+**Scope**: Erweitertes Styling-Panel für jeden Block mit Background-, Typography-, Border- und Animation-Optionen.
+
+### Phase 4.1: Erweiterte Background-Optionen
+
+| Option | Beschreibung |
+|--------|--------------|
+| Gradient | CSS-Gradienten (linear/radial) |
+| Position | center, top, bottom, left, right, Kombinationen |
+| Size | cover, contain, auto, 100% auto, auto 100% |
+| Repeat | no-repeat, repeat, repeat-x, repeat-y |
+| Attachment | scroll, fixed (Parallax-Effekt) |
+
+### Phase 4.2: Typography-Optionen
+
+| Option | Werte |
+|--------|-------|
+| Text Color | Hex-Farbe |
+| Font Size | xs, sm, base, lg, xl, 2xl, 3xl, 4xl |
+| Font Weight | normal, medium, semibold, bold |
+| Line Height | tight, normal, relaxed, loose |
+| Text Align | left, center, right, justify |
+| Letter Spacing | tighter, tight, normal, wide, wider |
+
+### Phase 4.3: Border & Shadow
+
+| Option | Werte |
+|--------|-------|
+| Border Radius | none, sm, md, lg, xl, 2xl, full |
+| Border Width | 0, 1, 2, 4, 8 px |
+| Border Color | Hex-Farbe |
+| Border Style | solid, dashed, dotted, none |
+| Box Shadow | none, sm, md, lg, xl, 2xl |
+
+### Phase 4.4: Animation & Hover-Effekte
+
+| Option | Werte |
+|--------|-------|
+| Animation | fade-in, slide-up, slide-down, scale-in, bounce |
+| Hover Effect | lift, glow, scale, darken |
+| Transition Duration | fast (150ms), normal (300ms), slow (500ms) |
+
+### Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/types/website.ts` | BlockStyleOverrides erweitert |
+| `backend/app/schemas/block_validation.py` | Neue Style-Felder validiert |
+| `frontend/app/(admin)/website/pages/[id]/page.tsx` | BlockStyleEditor UI erweitert |
+| `frontend/app/(public)/components/BlockRenderer.tsx` | Style-Klassen und CSS-Verarbeitung |
+| `frontend/app/globals.css` | Animation Keyframes |
+
+**Verification Path**: Admin → Website → Seiten → Block bearbeiten → Styling-Tab → Optionen testen
 
 ---
 
