@@ -36,6 +36,7 @@
 | [37-premium-hybrid-navigation.md](./runbook/37-premium-hybrid-navigation.md) | Premium Hybrid Navigation System |
 | [38-admin-route-group-architecture.md](./runbook/38-admin-route-group-architecture.md) | Admin Route Group Architektur |
 | [40-rate-limiting-security.md](./runbook/40-rate-limiting-security.md) | Rate Limiting Security & Fallback |
+| [41-cms-ssr-seo.md](./runbook/41-cms-ssr-seo.md) | CMS Server-Side Rendering & SEO |
 
 ### Golden Paths (Most Common Operations)
 
@@ -66,6 +67,8 @@
 | Web Vitals 0 Messungen | Daten in DB aber nicht angezeigt | [Web Vitals Monitoring](./runbook/35-web-vitals-monitoring.md#problem-0-messungen-trotz-daten-in-db) |
 | Session nicht als beendet markiert | Ghost-Session nach Logout | [Multi-Device Sessions](./runbook/36-multi-device-sessions.md#problem-session-wird-nicht-als-beendet-markiert) |
 | Revoked Session bleibt eingeloggt | Anderes Gerät nach Revoke noch aktiv | [Multi-Device Sessions](./runbook/36-multi-device-sessions.md#problem-revoked-session-bleibt-eingeloggt) |
+| CMS-Seite zeigt Loading Skeleton | View-Source zeigt kein HTML-Content | [CMS SSR/SEO](./runbook/41-cms-ssr-seo.md#verifikation-phase-0) |
+| Sitemap leer oder 500 | /sitemap.xml zeigt Fehler | [CMS SSR/SEO](./runbook/41-cms-ssr-seo.md#problem-sitemap-leer) |
 
 ---
 
