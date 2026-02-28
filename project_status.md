@@ -2,7 +2,59 @@
 
 **Last Updated:** 2026-02-28
 
-**Current Phase:** CMS Upgrade Roadmap - Phase 6 (Block Templates)
+**Current Phase:** CMS Upgrade Roadmap - Phase 7 (Copy/Paste & Quick Actions)
+
+---
+
+## CMS Copy/Paste & Quick Actions - Phase 7 (2026-02-28) - IMPLEMENTED
+
+**Scope**: Clipboard-Funktionen und Schnellzugriff für effizientes Block-Management.
+
+### Phase 7.1: Clipboard-System
+
+| Feature | Beschreibung |
+|---------|--------------|
+| Copy Block | Block in Zwischenablage kopieren |
+| Cut Block | Block ausschneiden (wird beim Einfügen entfernt) |
+| Paste Block | Block aus Zwischenablage einfügen (unterhalb ausgewähltem Block) |
+| Keyboard Shortcuts | Ctrl+C, Ctrl+X, Ctrl+V |
+
+### Phase 7.2: Quick Actions Menü
+
+| Feature | Beschreibung |
+|---------|--------------|
+| Dropdown-Menü | Schnellzugriff-Dropdown pro Block |
+| Aktionen | Kopieren, Ausschneiden, Einfügen, Nach oben, Nach unten, Als Vorlage, Löschen |
+| Touch-Optimiert | Größere Klickflächen für Mobile |
+
+### Phase 7.3: Keyboard Shortcuts Overlay
+
+| Feature | Beschreibung |
+|---------|--------------|
+| Help-Modal | Vollständige Shortcut-Übersicht |
+| Kategorien | Allgemein, Block-Aktionen, Navigation |
+| Toggle | `?` Taste oder Help-Button |
+
+### Keyboard Shortcuts
+
+| Shortcut | Aktion |
+|----------|--------|
+| Ctrl+C | Block kopieren |
+| Ctrl+X | Block ausschneiden |
+| Ctrl+V | Block einfügen |
+| Ctrl+Z | Rückgängig |
+| Ctrl+Y / Ctrl+Shift+Z | Wiederholen |
+| Ctrl+S | Speichern |
+| Escape | Auswahl aufheben |
+| ? | Shortcuts-Hilfe anzeigen |
+
+### Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/(admin)/website/pages/[id]/page.tsx` | Clipboard-State, Quick Actions UI, Shortcuts Modal |
+
+**Verification Path**: Admin → Website → Seiten → Block auswählen → Ctrl+C → Ctrl+V testen → Quick Actions Dropdown → `?` für Shortcuts-Hilfe
 
 ---
 

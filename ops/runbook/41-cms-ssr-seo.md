@@ -1,7 +1,7 @@
 # 41 - CMS Server-Side Rendering & SEO
 
 **Erstellt:** 2026-02-28
-**Phase:** CMS Upgrade Roadmap Phase -1, 0, 1, 2 & 3
+**Phase:** CMS Upgrade Roadmap Phase -1 bis 7
 
 ---
 
@@ -558,6 +558,106 @@ rg "block-templates" backend/app/api/routes/block_templates.py
 
 # 3. Frontend UI prüfen
 rg "showSaveTemplateModal|applyTemplate" frontend/app/(admin)/website/pages/\\[id\\]/page.tsx
+```
+
+---
+
+## Phase 7: Copy/Paste & Quick Actions
+
+### Übersicht
+
+Phase 7 fügt Clipboard-Funktionen und Schnellzugriff-Menüs für effizientes Block-Management hinzu.
+
+| Feature | Beschreibung |
+|---------|--------------|
+| Clipboard | Copy, Cut, Paste für Blöcke |
+| Quick Actions | Dropdown-Menü mit allen Block-Aktionen |
+| Keyboard Shortcuts | Vollständige Tastatur-Steuerung |
+| Shortcuts Overlay | Hilfe-Modal mit allen Shortcuts |
+
+### Dateien
+
+**Frontend:**
+- `frontend/app/(admin)/website/pages/[id]/page.tsx` - Clipboard-State, Quick Actions UI, Shortcuts Modal
+
+### Clipboard-System
+
+**State:**
+```typescript
+const [clipboard, setClipboard] = useState<{
+  block: Block;
+  isCut: boolean
+} | null>(null);
+```
+
+**Funktionen:**
+- `copyBlock(index)` - Deep-Clone des Blocks in Clipboard
+- `cutBlock(index)` - Block markieren (wird bei Paste entfernt)
+- `pasteBlock(afterIndex)` - Block einfügen mit neuer ID
+
+### Quick Actions Menü
+
+Das Dropdown erscheint pro Block mit folgenden Aktionen:
+
+| Aktion | Icon | Shortcut |
+|--------|------|----------|
+| Kopieren | Copy | Ctrl+C |
+| Ausschneiden | Scissors | Ctrl+X |
+| Einfügen | ClipboardPaste | Ctrl+V |
+| Nach oben | ArrowUp | - |
+| Nach unten | ArrowDown | - |
+| Als Vorlage | BookmarkPlus | - |
+| Löschen | Trash2 | Delete |
+
+### Keyboard Shortcuts
+
+| Shortcut | Aktion | Bedingung |
+|----------|--------|-----------|
+| Ctrl+C | Kopieren | Block ausgewählt |
+| Ctrl+X | Ausschneiden | Block ausgewählt |
+| Ctrl+V | Einfügen | Clipboard nicht leer |
+| Ctrl+Z | Rückgängig | History vorhanden |
+| Ctrl+Y | Wiederholen | Future vorhanden |
+| Ctrl+Shift+Z | Wiederholen (Alt) | Future vorhanden |
+| Ctrl+S | Speichern | Änderungen vorhanden |
+| Escape | Auswahl aufheben | Block ausgewählt |
+| ? | Shortcuts-Hilfe | Nicht in Textfeld |
+
+### Shortcuts Overlay
+
+Das Hilfe-Modal zeigt alle verfügbaren Shortcuts gruppiert nach Kategorien:
+
+**Allgemein:**
+- Ctrl+S → Speichern
+- Ctrl+Z → Rückgängig
+- Ctrl+Y → Wiederholen
+- Escape → Auswahl aufheben
+- ? → Shortcuts anzeigen
+
+**Block-Aktionen:**
+- Ctrl+C → Block kopieren
+- Ctrl+X → Block ausschneiden
+- Ctrl+V → Block einfügen
+- Delete → Block löschen
+
+**Navigation:**
+- Click → Block auswählen
+- Quick Actions → Dropdown öffnen
+
+### Verifikation Phase 7
+
+```bash
+# 1. Clipboard State prüfen
+rg "clipboard.*setClipboard" frontend/app/(admin)/website/pages/\[id\]/page.tsx
+
+# 2. Copy/Cut/Paste Funktionen prüfen
+rg "copyBlock|cutBlock|pasteBlock" frontend/app/(admin)/website/pages/\[id\]/page.tsx
+
+# 3. Quick Actions Menu prüfen
+rg "showQuickActions" frontend/app/(admin)/website/pages/\[id\]/page.tsx
+
+# 4. Shortcuts Modal prüfen
+rg "showShortcutsHelp" frontend/app/(admin)/website/pages/\[id\]/page.tsx
 ```
 
 ---
