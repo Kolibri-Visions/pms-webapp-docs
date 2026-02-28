@@ -2,7 +2,47 @@
 
 **Last Updated:** 2026-02-28
 
-**Current Phase:** CMS Upgrade Roadmap - Phase -1 (Security Hardening)
+**Current Phase:** CMS Upgrade Roadmap - Phase 0 (SSR/SEO)
+
+---
+
+## CMS SSR & SEO - Phase 0 (2026-02-28) - IMPLEMENTED
+
+**Scope**: Server-Side Rendering und SEO-Optimierung für Public Website.
+
+### Server-Side Rendering
+
+| Änderung | Beschreibung | Datei(en) |
+|----------|--------------|-----------|
+| Homepage SSR | Server Component mit prefetched data | `(public)/page.tsx` |
+| CMS-Seiten SSR | Server Component mit generateStaticParams | `(public)/[slug]/page.tsx` |
+| Design API | `fetchDesign()` für Server-Side fetch | `(public)/lib/api.ts` |
+| Client Components entfernt | `HomePageClient`, `CmsPageClient` gelöscht | - |
+
+### Technical SEO
+
+| Feature | Beschreibung | Datei |
+|---------|--------------|-------|
+| Sitemap | Dynamische XML Sitemap für CMS + Properties | `app/sitemap.ts` |
+| Robots.txt | Dynamisches robots.txt mit Sitemap-Link | `app/robots.ts` |
+| Canonical URLs | Automatische canonical links | `(public)/lib/metadata.ts` |
+| ISR | 60 Sekunden Revalidierung | `page.tsx` files |
+
+### Structured Data (Schema.org)
+
+| Schema | Verwendung | Datei |
+|--------|------------|-------|
+| BreadcrumbList | Alle CMS-Seiten | `(public)/lib/structured-data.tsx` |
+| FAQPage | Seiten mit FAQ-Blocks | `(public)/lib/structured-data.tsx` |
+
+### SEO-Verbesserungen
+
+- Full HTML content für Crawler sichtbar (kein Loading Skeleton)
+- Open Graph & Twitter Cards in Metadaten
+- Canonical URLs verhindern Duplikate
+- ISR für schnelle Updates bei CMS-Änderungen
+
+**Verification Path**: View-Source auf Public Website → HTML-Content sichtbar
 
 ---
 
