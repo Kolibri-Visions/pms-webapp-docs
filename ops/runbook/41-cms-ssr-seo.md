@@ -68,6 +68,28 @@ rg "sanitize_css_strict" backend/app/api/routes/website_admin.py
 - `frontend/app/(public)/components/HomePageClient.tsx`
 - `frontend/app/(public)/components/CmsPageClient.tsx`
 
+### Layout SSR (2026-03-01)
+
+Das Public Layout wurde von `"use client"` zu einer Server Component konvertiert.
+
+**Vorher:** Layout war Client Component → `useEffect` fetchte Settings/Design → leerer `<body>` bis JS lud.
+
+**Nachher:** Layout ist Server Component → `fetchSiteSettings()` + `fetchDesign()` serverseitig → vollständiges HTML (Header, Nav, Footer) im SSR-Response.
+
+**Neue Dateien:**
+- `frontend/app/(public)/components/HeaderClient.tsx` - Client Component (Mobile Menu + Scroll)
+- `frontend/app/(public)/components/FooterServer.tsx` - Server Component (statischer Footer)
+
+**Geänderte Dateien:**
+- `frontend/app/(public)/layout.tsx` - `"use client"` entfernt, async Server Component
+- `frontend/app/(public)/lib/api.ts` - `SiteSettings` Interface, `defaultSiteSettings`, erweiterte `fetchSiteSettings()`
+
+**Architektur-Entscheidungen:**
+- Header braucht Client Component wegen: Mobile-Menu-Toggle (`useState`), Scroll-Detection (`useEffect`)
+- Footer ist rein statisch → Server Component (kein JS zum Client geschickt)
+- `DesignProvider` bleibt Client Component (React Context), bekommt Daten als Props vom Server
+- `revalidate = 60` im Layout für ISR-Caching
+
 ### ISR-Konfiguration
 
 ```typescript

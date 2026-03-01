@@ -6,6 +6,64 @@
 
 ---
 
+## Public Layout SSR - Server-Side Rendering für Header/Footer (2026-03-01) - IMPLEMENTED
+
+**Scope**: Public Website Layout von Client Component (`"use client"`) zu Server Component umgebaut, damit Header, Navigation und Footer als echtes HTML im SSR-Response enthalten sind.
+
+### Problem (vorher)
+
+Das gesamte Public Layout war ein Client Component mit `useEffect`-basiertem Datenfetching. Der Server lieferte nur leere `<body>`-Tags mit React-Hydration-Scripts. Crawler und Browser sahen keinen Inhalt bis JavaScript geladen und ausgeführt war.
+
+### Lösung (nachher)
+
+| Komponente | Vorher | Nachher |
+|------------|--------|---------|
+| `layout.tsx` | `"use client"` + `useEffect` fetch | Server Component + `async/await` fetch |
+| Header | Im Layout (client) | Eigene `HeaderClient.tsx` (nur Interaktivität) |
+| Footer | Im Layout (client) | Eigene `FooterServer.tsx` (rein Server) |
+| `SiteSettings` | Lokales Interface im Layout | Exportiert aus `lib/api.ts` |
+| `fetchSiteSettings()` | Nur `{ site_name }` | Vollständiges `SiteSettings`-Interface mit Fallback-Defaults |
+| Design-Tokens | Client-Fetch per `useEffect` | Server-Fetch per `fetchDesign()` |
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/(public)/layout.tsx` | Server Component, kein `"use client"` mehr |
+| `frontend/app/(public)/lib/api.ts` | `SiteSettings` Interface + `defaultSiteSettings` + erweiterte `fetchSiteSettings()` |
+| `frontend/app/(public)/components/HeaderClient.tsx` | NEU: Client Component nur für Mobile-Menu + Scroll-Detection |
+| `frontend/app/(public)/components/FooterServer.tsx` | NEU: Server Component für Footer-Rendering |
+
+### Architektur
+
+```
+Server Component (layout.tsx)
+  ├── fetchSiteSettings() ─── server-side, cached 5 min
+  ├── fetchDesign() ───────── server-side, cached 1 min
+  ├── HeaderClient ─────────── "use client" (useState, useEffect)
+  │   ├── Mobile menu toggle
+  │   └── Scroll detection (sticky shadow)
+  ├── DesignProvider ────────── "use client" (Context für Kinder)
+  │   └── children (Seiten-Content)
+  └── FooterServer ─────────── Server Component (kein JS)
+```
+
+### Verification Path
+
+```bash
+# 1. SSR HTML prüfen - View Source sollte Header/Nav/Footer zeigen
+curl -s https://fewo.example.com | grep -o '<header[^>]*>' | head -1
+curl -s https://fewo.example.com | grep -o '<footer[^>]*>' | head -1
+
+# 2. Navigation im SSR-HTML sichtbar
+curl -s https://fewo.example.com | grep 'Unterkünfte'
+
+# 3. Build prüft Kompilation (lokal verifiziert, rc=0)
+cd frontend && npx next build
+```
+
+---
+
 ## German Translation Fixes - Website Admin UI (2026-03-01) - IMPLEMENTED
 
 **Scope**: Englische Texte und Variablen-Namen durch deutsche Bezeichnungen ersetzt.
