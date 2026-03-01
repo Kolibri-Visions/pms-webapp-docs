@@ -6,6 +6,46 @@
 
 ---
 
+## Block Height Control (min_height_vh) (2026-03-01) - IMPLEMENTED
+
+**Scope**: Einstellbare Mindesthöhe (vh) für alle Design-Blöcke der Public Website.
+
+### Feature
+
+| Komponente | Beschreibung |
+|------------|--------------|
+| Slider UI | Mindesthöhe-Slider im Styling-Tab (0-100vh) |
+| Backend-Validierung | `min_height_vh` Feld in `BlockStyleOverrides` |
+| Rendering | Flex-Container für korrekte Höhenausfüllung |
+
+### Funktionsweise
+
+- Wert 0 = automatische Höhe (Standard)
+- Wert 1-100 = Mindesthöhe in Viewport-Height-Einheiten (vh)
+- Wrapper verwendet Flex-Layout damit innerer Block die Höhe ausfüllt
+- Gilt für ALLE Block-Typen (Hero, Section, CTA, etc.)
+
+### Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `backend/app/schemas/block_validation.py` | `min_height_vh: Optional[int]` (0-100) |
+| `frontend/app/types/website.ts` | Interface erweitert |
+| `frontend/app/(admin)/website/lib/block-schemas.ts` | Schema erweitert |
+| `frontend/app/(admin)/website/pages/[id]/page.tsx` | Slider UI im Styling-Tab |
+| `frontend/app/(public)/components/BlockRenderer.tsx` | Flex-Wrapper + minHeight Style |
+
+### Commits
+
+- `49305db` feat: add min_height_vh setting for all design blocks
+- `391a13d` fix: min_height_vh now properly fills block height
+
+### Verification Path
+
+Admin → Website → Seiten → Block auswählen → Styling-Tab → Mindesthöhe auf 100vh → Speichern → Public Website → Block hat 100vh Höhe
+
+---
+
 ## Developer Settings Admin UI (2026-03-01) - IMPLEMENTED
 
 **Scope**: Admin-UI für Website-Entwickler-Einstellungen.
