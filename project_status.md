@@ -6,6 +6,40 @@
 
 ---
 
+## Developer Settings Admin UI (2026-03-01) - IMPLEMENTED
+
+**Scope**: Admin-UI für Website-Entwickler-Einstellungen.
+
+### Features
+
+| Einstellung | Feld | Beschreibung |
+|-------------|------|--------------|
+| HTML formatieren | `prettify_html` | Generiertes HTML wird formatiert (Debugging) |
+| Debug-Modus | `debug_mode` | Zusätzliche Debug-Infos in Konsole |
+| Cache deaktivieren | `disable_cache` | Browser-Caching für Entwicklung deaktivieren |
+
+### API-Endpoints
+
+| Endpoint | Methode | Beschreibung |
+|----------|---------|--------------|
+| `/api/v1/website/developer-settings` | GET | Einstellungen abrufen |
+| `/api/v1/website/developer-settings` | PUT | Einstellungen speichern |
+
+### Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/(admin)/website/developer/page.tsx` | UI komplett neu implementiert |
+| `backend/app/api/routes/website_admin.py` | PUT-Endpoint erweitert mit Pydantic Body |
+| `supabase/migrations/20260301132546_add_developer_settings_fields.sql` | NEU: `debug_mode`, `disable_cache` Spalten |
+| `frontend/app/components/AdminShell.tsx` | Nav-Eintrag + Code Icon |
+| `frontend/app/lib/i18n/translations/de.json` | `nav.developer` |
+| `frontend/app/lib/i18n/translations/en.json` | `nav.developer` |
+
+**Verification Path:** Admin → Website → Entwickler → Toggle ändern → Speichern → Seite neu laden → Einstellung persistiert
+
+---
+
 ## Domain Management Admin UI (2026-03-01) - IMPLEMENTED
 
 **Scope**: Admin-UI fuer Public Website Domain-Einrichtung.
@@ -29,8 +63,13 @@
 
 ### Dateien
 
-- `frontend/app/(admin)/website/domain/page.tsx` (Neue Admin-UI)
-- `backend/app/api/routes/public_domain_admin.py` (Backend, bereits vorhanden)
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/(admin)/website/domain/page.tsx` | NEU: Admin-UI |
+| `backend/app/api/routes/public_domain_admin.py` | Backend, bereits vorhanden |
+| `frontend/app/components/AdminShell.tsx` | Nav-Eintrag + Globe2 Icon |
+| `frontend/app/lib/i18n/translations/de.json` | `nav.domain` |
+| `frontend/app/lib/i18n/translations/en.json` | `nav.domain` |
 
 ### Verification Path
 
