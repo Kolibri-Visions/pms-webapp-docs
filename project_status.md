@@ -170,6 +170,26 @@
 
 **Verification Path:** Admin → Website → Seiten → beliebigen Block (z.B. Angebots-Karten, Standort-Raster, Kundenstimmen) → Inhalte eingeben → Speichern → Public Site prüfen (alle Inhalte sichtbar)
 
+### Fix 9: Filter-Konfiguration 500 Error
+
+| Problem | Lösung |
+|---------|--------|
+| GET/PUT `/api/v1/website/filter-config` liefert 500 | JSON-Parsing für asyncpg JSONB-Felder hinzugefügt |
+| asyncpg liefert JSONB als String, Pydantic erwartet dict/list | `_parse_filter_config_row()` Helper parst JSON-Strings |
+
+**Betroffene Felder (JSONB):**
+- `filter_order` (List[str])
+- `visible_amenities` (Optional[List[str]])
+- `available_sort_options` (List[str])
+- `labels` (Dict[str, str])
+
+**Dateien:**
+- `backend/app/api/routes/website_admin.py` (get_filter_config, update_filter_config, _parse_filter_config_row)
+
+**Commit:** `2eb3211`
+
+**Verification Path:** Admin → Website → Filter → Einstellungen ändern → Speichern (kein 500 Error)
+
 ---
 
 ## CMS Performance & Polish - Phase 8 (2026-02-28) - IMPLEMENTED
