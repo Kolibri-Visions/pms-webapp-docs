@@ -118,6 +118,58 @@
 
 **Verification Path:** Admin → Website → Seiten → beliebigen Block → Styling-Tab → Hintergrundfarbe setzen → Speichern → Public Site prüfen (Block-Hintergrund ist custom Farbe)
 
+### Fix 7: TrustIndicatorsBlock Text nicht sichtbar
+
+| Problem | Lösung |
+|---------|--------|
+| Admin speichert `item.label` | Renderer akzeptiert jetzt `label` ODER `text` |
+| Renderer suchte nur nach `item.text` | `const indicatorText = item.label \|\| item.text` |
+
+**Symptom:** Icons wurden angezeigt, aber Texte wie "4.9/5 Bewertung" fehlten.
+
+**Dateien:**
+- `frontend/app/(public)/components/BlockRenderer.tsx` (TrustIndicatorsBlock)
+
+**Commit:** `8fe59e1`
+
+**Verification Path:** Admin → Website → Seiten → Vertrauens-Indikatoren Block → Text eingeben → Speichern → Public Site prüfen (Text unter Icons sichtbar)
+
+### Fix 8: Block-Feldnamen Kompatibilität (5 Blöcke)
+
+| Problem | Lösung |
+|---------|--------|
+| Admin speichert camelCase/andere Feldnamen | Renderer akzeptiert beide Konventionen |
+| Blöcke zeigten keine Inhalte | Dual-Naming-Support für alle Array- und Einzelfelder |
+
+**Betroffene Blöcke und Mappings:**
+
+| Block | Admin-Feld | Renderer akzeptiert |
+|-------|------------|---------------------|
+| **OfferCardsBlock** | `offers` | `offers` ODER `items` |
+| | `discount` | `discount` ODER `badge` |
+| | `description` | `description` ODER `subtitle` |
+| | `image` | `image` ODER `image_url` |
+| **LocationGridBlock** | `locations` | `locations` ODER `items` |
+| | `image` | `image` ODER `image_url` |
+| | `count` | `count` ODER `property_count` |
+| **TestimonialsBlock** | `testimonials` | `testimonials` ODER `items` |
+| | `text` | `text` ODER `quote` |
+| **ImageTextBlock** | `image` | `image` ODER `image_url` |
+| | `imagePosition` | `imagePosition` ODER `image_position` |
+
+**Bereits korrekt konfiguriert (keine Änderung nötig):**
+- `HeroFullwidthBlock` - hatte schon Dual-Naming
+- `FAQAccordionBlock` - `items`, `question`, `answer` stimmen überein
+- `ContactSectionBlock` - `phone`, `email` stimmen überein
+- `IconBoxWidget` - `icon`, `title`, `description` stimmen überein
+
+**Dateien:**
+- `frontend/app/(public)/components/BlockRenderer.tsx`
+
+**Commit:** `c67333a`
+
+**Verification Path:** Admin → Website → Seiten → beliebigen Block (z.B. Angebots-Karten, Standort-Raster, Kundenstimmen) → Inhalte eingeben → Speichern → Public Site prüfen (alle Inhalte sichtbar)
+
 ---
 
 ## CMS Performance & Polish - Phase 8 (2026-02-28) - IMPLEMENTED
