@@ -6,6 +6,65 @@
 
 ---
 
+## Multiple Root Layouts — SSR Public Website (2026-03-01) — IMPLEMENTED
+
+**Scope**: Root Layout (`app/layout.tsx`) aufgelöst in 4 eigenständige Root Layouts per Route Group für echtes HTML-SSR auf der Public Website.
+
+### Problem (vorher)
+
+Das globale Root Layout wrappte ALLE Routen in `<Providers>` (`"use client"`), was HTML-SSR für die gesamte App verhinderte. Der `<body>` enthielt nur RSC Flight Payload Scripts statt echtem HTML. Zusätzlich hatte die Public Website `<html lang="en">` (falsch) und den Admin-Titel "PMS Channel Sync Console".
+
+### Lösung (nachher)
+
+| Route Group | Root Layout | Providers | Rendering |
+|-------------|-------------|-----------|-----------|
+| `(public)` | `<html><body>` + DesignProvider | KEINE globalen Providers | SSR/ISR (echtes HTML) |
+| `(admin)` | `<html><body>` + Providers + AdminShell | Auth, Permission, Language, Theme | Dynamic (Client) |
+| `(auth)` | `<html><body>` minimal | KEINE | Dynamic |
+| `(owner)` | `<html><body>` + Providers | Auth, Permission, Language, Theme | Dynamic (Client) |
+
+### Geänderte Dateien
+
+| Datei | Aktion |
+|-------|--------|
+| `app/fonts.ts` | NEU — Shared Font-Instanz für alle Layouts |
+| `app/(public)/layout.tsx` | GEÄNDERT — `<html lang="de"><body>` hinzugefügt, OHNE Providers |
+| `app/(admin)/layout.tsx` | GEÄNDERT — `<html lang="de"><body>` + Providers + Metadata hinzugefügt |
+| `app/(auth)/layout.tsx` | NEU — Minimales Root Layout für Login |
+| `app/(owner)/layout.tsx` | NEU — Root Layout mit Providers für Owner Portal |
+| `app/layout.tsx` | GELÖSCHT — Ersetzt durch 4 eigenständige Root Layouts |
+| `app/login/` → `app/(auth)/login/` | VERSCHOBEN |
+| `app/owner/` → `app/(owner)/owner/` | VERSCHOBEN |
+| `app/(public)/components/BlockRenderer.tsx` | FIX — DOMPurify server-safe gemacht |
+
+### Bonus-Fixes (automatisch durch die Trennung)
+
+- `<html lang="en">` → `<html lang="de">` (SEO-Korrektur)
+- `title: "PMS Channel Sync Console"` nur noch auf Admin, nicht mehr auf Public
+- Public JS-Bundle ~50% kleiner (keine Auth/Permission/Theme Provider)
+- DOMPurify server-safe fix für Static Build
+
+### Verification Path
+
+```bash
+# 1. Build muss durchlaufen
+cd frontend && npm run build
+# Erwartung: rc=0, keine "Missing root layout" Warnings
+
+# 2. Public Website — muss echtes HTML enthalten
+curl -s https://fewo.kolibri-visions.de/ | grep -o '<header\|<nav\|<footer\|<main'
+# Erwartung: HTML-Elemente gefunden
+
+# 3. lang-Attribut korrekt
+curl -s https://fewo.kolibri-visions.de/ | grep -o 'lang="[^"]*"' | head -1
+# Erwartung: lang="de"
+
+# 4. Login funktioniert
+curl -s https://admin.fewo.kolibri-visions.de/login | grep -o '<form\|<input'
+```
+
+---
+
 ## Public Layout SSR - Server-Side Rendering für Header/Footer (2026-03-01) - IMPLEMENTED
 
 **Scope**: Public Website Layout von Client Component (`"use client"`) zu Server Component umgebaut, damit Header, Navigation und Footer als echtes HTML im SSR-Response enthalten sind.

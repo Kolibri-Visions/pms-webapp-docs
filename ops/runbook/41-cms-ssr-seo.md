@@ -90,6 +90,29 @@ Das Public Layout wurde von `"use client"` zu einer Server Component konvertiert
 - `DesignProvider` bleibt Client Component (React Context), bekommt Daten als Props vom Server
 - `revalidate = 60` im Layout für ISR-Caching
 
+### Multiple Root Layouts (2026-03-01)
+
+Das globale Root Layout (`app/layout.tsx`) wurde aufgelöst. Jede Route Group hat nun ein eigenständiges Root Layout mit `<html>` und `<body>`.
+
+**Architektur:**
+| Route Group | Root Layout | Providers | Rendering |
+|-------------|-------------|-----------|-----------|
+| `(public)` | `<html><body>` + DesignProvider | KEINE globalen Providers | SSR/ISR (echtes HTML) |
+| `(admin)` | `<html><body>` + Providers + AdminShell | Auth, Permission, Language, Theme | Dynamic (Client) |
+| `(auth)` | `<html><body>` minimal | KEINE | Dynamic |
+| `(owner)` | `<html><body>` + Providers | Auth, Permission, Language, Theme | Dynamic (Client) |
+
+**Warum:** Das globale Root Layout wrappte alle Routen in `<Providers>` (`"use client"`),
+was HTML-SSR für die Public Website verhinderte. Der `<body>` enthielt nur RSC Flight Payload Scripts.
+
+**Shared Resources:**
+- `app/fonts.ts` — Inter Font (1x gehostet, von allen Layouts importiert)
+- `app/globals.css` — von jedem Root Layout importiert
+- `app/components/Providers.tsx` — unverändert, nur von `(admin)` und `(owner)` importiert
+
+**Bekannte Einschränkung:** Navigation zwischen Route Groups löst Full Page Reload aus.
+Irrelevant, da Public und Admin auf verschiedenen Hosts laufen.
+
 ### ISR-Konfiguration
 
 ```typescript
