@@ -6,6 +6,30 @@
 
 ---
 
+## German Translation Fixes - Website Admin UI (2026-03-01) - IMPLEMENTED
+
+**Scope**: Englische Texte und Variablen-Namen durch deutsche Bezeichnungen ersetzt.
+
+### Änderungen
+
+| Datei | Fix |
+|-------|-----|
+| `design-form.tsx` | Logo (Hell/Dunkel), Fixierter Header statt Sticky Header |
+| `templates/page.tsx` | Block-Vorlagen, Neue Vorlage, korrigierte Umlaute |
+| `navigation/page.tsx` | placeholder "Bezeichnung" statt "Label" |
+| `filters/page.tsx` | placeholder "Filtername" statt "Filter" |
+| `pages/[id]/page.tsx` | FIELD_LABELS Mapping für dynamische Block-Felder |
+
+### Commits
+
+- `cc7c3ff` fix: German translations for website admin UI
+
+### Verification Path
+
+Admin → Website → beliebige Unterseite → Labels prüfen → alle in Deutsch
+
+---
+
 ## Block Height Control (min_height_vh) (2026-03-01) - IMPLEMENTED
 
 **Scope**: Einstellbare Mindesthöhe (vh) für alle Design-Blöcke der Public Website.
