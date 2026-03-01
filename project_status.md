@@ -1,8 +1,40 @@
 # PMS-Webapp Project Status
 
-**Last Updated:** 2026-02-28
+**Last Updated:** 2026-03-01
 
 **Current Phase:** CMS Upgrade Roadmap - Phase 8 (Performance & Polish) ✅ COMPLETE
+
+---
+
+## Domain Management Admin UI (2026-03-01) - IMPLEMENTED
+
+**Scope**: Admin-UI fuer Public Website Domain-Einrichtung.
+
+### Feature
+
+| Komponente | Beschreibung |
+|------------|--------------|
+| Domain-Eingabe | Input-Feld zum Speichern der eigenen Domain |
+| Status-Anzeige | Verifizierungsstatus (verifiziert/pending/nicht konfiguriert) |
+| Verifizierung | Button zum Pruefen der Domain-Erreichbarkeit |
+| DNS-Anleitung | CNAME/A-Record Setup-Instruktionen |
+
+### API-Endpoints (bereits vorhanden)
+
+| Endpoint | Methode | Beschreibung |
+|----------|---------|--------------|
+| `/api/v1/public-site/domain` | GET | Domain-Status abrufen |
+| `/api/v1/public-site/domain` | PUT | Domain speichern |
+| `/api/v1/public-site/domain/verify` | POST | Domain verifizieren |
+
+### Dateien
+
+- `frontend/app/(admin)/website/domain/page.tsx` (Neue Admin-UI)
+- `backend/app/api/routes/public_domain_admin.py` (Backend, bereits vorhanden)
+
+### Verification Path
+
+Admin → Website → Domain → Domain eingeben → Speichern → DNS einrichten → Verifizieren
 
 ---
 
@@ -368,6 +400,18 @@
 | Kategorie-Filter | All, Custom, Hero, Content, Marketing, Contact, Layout, Widget |
 | Template-Karten | Name, Block-Typ, Löschen-Button |
 
+### Phase 6.4: Block Templates Admin UI (2026-03-01)
+
+| Feature | Beschreibung |
+|---------|--------------|
+| Admin-Seite `/website/templates` | Vollstandige CRUD-UI fur Block-Templates |
+| Kategorie-Filter | Dropdown mit allen 7 Kategorien |
+| Suche | Durchsucht Name, Beschreibung und Block-Typ |
+| Responsive Layout | Tabelle (Desktop) / Karten (Mobile) |
+| Create/Edit Modal | JSON-Editoren fur block_props und style_overrides |
+| Delete Confirmation | useConfirm Dialog |
+| Navigation | Neuer Eintrag in Sidebar unter Website-Gruppe |
+
 ### Phase 6.3: Template Anwenden
 
 | Feature | Beschreibung |
@@ -385,8 +429,12 @@
 | `backend/app/api/routes/block_templates.py` | NEU: CRUD Endpoints |
 | `backend/app/main.py` | Router registriert |
 | `frontend/app/(admin)/website/pages/[id]/page.tsx` | Template UI |
+| `frontend/app/(admin)/website/templates/page.tsx` | NEU: Admin UI fur Templates |
+| `frontend/app/components/AdminShell.tsx` | Navigation + LayoutTemplate Icon |
+| `frontend/app/lib/i18n/translations/de.json` | nav.templates |
+| `frontend/app/lib/i18n/translations/en.json` | nav.templates |
 
-**Verification Path**: Admin → Website → Seiten → Block → Als Vorlage speichern → Block-Picker → Vorlagen-Tab
+**Verification Path**: Admin → Website → Templates → Liste sichtbar → Neues Template → Erstellen → Bearbeiten → Loschen
 
 ---
 
