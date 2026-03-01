@@ -223,6 +223,37 @@
 
 **Verification Path:** Public Site → /unterkuenfte → Horizontaler Filter → Inputs lesbar (weiß), Ausstattung als Dropdown
 
+### Fix 11: Footer voll dynamisch aus Admin-Einstellungen
+
+| Problem | Lösung |
+|---------|--------|
+| Footer-Spalten hardcodiert (nicht alle Admin-Einstellungen wurden angezeigt) | Dynamisches `FooterColumns` Component iteriert über alle `footer_links` Keys |
+
+**Änderungen:**
+1. **FooterColumns Component**: Neue Komponente rendert alle Spalten basierend auf Admin `footer_links`
+2. **Keine hardcodierten Spalten**: Statt fester Spalten (Service, Legal, etc.) werden alle Keys aus `footer_links` dynamisch gerendert
+3. **Kontakt-Spalte**: Wird nur angezeigt wenn `phone`, `email`, `address` oder `social_links` vorhanden sind
+4. **Spalten-Titel Mapping**: `columnTitles` Map übersetzt Keys in deutsche Bezeichnungen (fallback: capitalize)
+
+**Vorher:**
+```
+[Kontakt] [Reiseziele] [Service] [Rechtliches]
+    ↑ Hardcodiert, ignoriert Admin "owner" Spalte
+```
+
+**Nachher:**
+```
+[Kontakt] [Service] [Rechtliches] [Eigentümer] [Reiseziele]
+    ↑ Dynamisch aus Admin footer_links, alle Spalten sichtbar
+```
+
+**Dateien:**
+- `frontend/app/(public)/layout.tsx` (FooterColumns Component)
+
+**Commit:** `7104116`
+
+**Verification Path:** Admin → Website → Einstellungen → Footer Links (z.B. owner Spalte) → Speichern → Public Site Footer prüfen (alle konfigurierten Spalten sichtbar)
+
 ---
 
 ## CMS Performance & Polish - Phase 8 (2026-02-28) - IMPLEMENTED
