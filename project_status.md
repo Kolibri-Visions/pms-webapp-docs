@@ -190,6 +190,39 @@
 
 **Verification Path:** Admin → Website → Filter → Einstellungen ändern → Speichern (kein 500 Error)
 
+### Fix 10: Horizontaler Filter UX-Verbesserungen
+
+| Problem | Lösung |
+|---------|--------|
+| Dunkle Eingabefelder (schwer lesbar) | Explizites Light-Styling mit `backgroundColor: #ffffff` |
+| Ausstattung-Filter bricht Layout | Kompakter Popover/Dropdown statt inline Checkboxen |
+
+**Änderungen:**
+1. **Input-Styling**: Alle Dropdowns/Inputs haben jetzt weiße Hintergründe mit `getInputStyle(design)` Helper
+2. **Amenities-Popover**: Im horizontalen Layout zeigt ein Button "X gewählt" an und öffnet ein Dropdown mit Checkboxen
+
+**Vorher:**
+```
+[Ort ▾] [Gäste ▾] [Schlafzimmer ▾] [Min] [Max]
+☐ Einzelbetten
+☐ Kamin          ← Bricht das Layout
+☐ Mikrowelle
+...
+```
+
+**Nachher:**
+```
+[Ort ▾] [Gäste ▾] [Schlafzimmer ▾] [Min] [Max] [Ausstattung (2) ▾]
+                                              ↓ Klick öffnet Popover
+```
+
+**Dateien:**
+- `frontend/app/(public)/components/PropertyFilter.tsx`
+
+**Commit:** `5c90150`
+
+**Verification Path:** Public Site → /unterkuenfte → Horizontaler Filter → Inputs lesbar (weiß), Ausstattung als Dropdown
+
 ---
 
 ## CMS Performance & Polish - Phase 8 (2026-02-28) - IMPLEMENTED
