@@ -2,7 +2,172 @@
 
 **Last Updated:** 2026-03-02
 
-**Current Phase:** CMS Upgrade Roadmap - Phase 8 (Performance & Polish) ✅ COMPLETE
+**Current Phase:** Media Library Implementation - Phase 5 ✅ IMPLEMENTED
+
+---
+
+## Media Library - Phase 1: Backend Foundation (2026-03-02) — IMPLEMENTED
+
+**Scope**:
+WordPress-style Media Library für zentrales File-Management mit höchster Sicherheit.
+
+### Was wurde implementiert
+
+1. **Datenbank-Struktur** (Migration: `20260302155624_create_media_tables.sql`)
+   - `media_folders`: Ordner mit Tenant-Isolation, Hierarchie via `parent_id`
+   - `media_files`: Dateien mit Metadaten, Thumbnails, Audit-Trail
+   - `media_audit_log`: Audit-Logging für alle Media-Operationen
+   - RLS-Policies für strikte Tenant-Isolation
+
+2. **Backend Services**
+   - `file_validator.py`: Magic-Bytes Validierung (KEIN Content-Type Trust!)
+   - `image_processor.py`: Thumbnail-Generierung (sm/md/lg) + WebP-Konvertierung
+   - `media.py`: Service mit strikter Tenant-Isolation
+
+3. **API Endpoints** (`/api/v1/media`)
+   - `POST /upload`: Datei-Upload mit Validierung + Thumbnails
+   - `GET /`: Liste mit Pagination + Filter
+   - `GET /{id}`, `PATCH /{id}`, `DELETE /{id}`: CRUD
+   - `POST /bulk-delete`, `POST /move`: Bulk-Operationen
+   - `GET /folders`, `POST /folders`, etc.: Ordner-Management
+
+4. **Sicherheitsfeatures**
+   - Magic-Bytes Validierung (PNG, JPEG, WebP, GIF, SVG, PDF, MP4, WebM)
+   - SVG Sanitization (Script-Tags, Event-Handler, externe URLs entfernt)
+   - XSS-Schutz via Bleach in Pydantic-Schemas
+   - Tenant-Isolation auf ALLEN DB-Queries
+   - Permission-basierte Zugriffskontrolle
+   - Audit-Logging für Upload/Delete
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `supabase/migrations/20260302155624_create_media_tables.sql` | NEU: Tabellen + RLS |
+| `backend/app/schemas/media.py` | NEU: Pydantic-Schemas mit XSS-Schutz |
+| `backend/app/services/file_validator.py` | NEU: Magic-Bytes + SVG-Sanitization |
+| `backend/app/services/image_processor.py` | NEU: Thumbnails + WebP |
+| `backend/app/services/media.py` | NEU: Media Service |
+| `backend/app/api/routes/media.py` | NEU: REST API Endpoints |
+| `backend/app/modules/media.py` | NEU: Module-System Integration |
+| `backend/app/modules/bootstrap.py` | GEÄNDERT: Media Module Import |
+| `backend/app/main.py` | GEÄNDERT: Failsafe Router Registration |
+
+### Verification Path
+
+```bash
+# Nach Migration + Deploy:
+# 1. Health Check
+curl https://api.fewo.kolibri-visions.de/health
+
+# 2. Upload Test (mit Auth Token)
+curl -X POST https://api.fewo.kolibri-visions.de/api/v1/media/upload \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@test.png"
+
+# 3. Liste abrufen
+curl https://api.fewo.kolibri-visions.de/api/v1/media \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Nächste Schritte (Phase 6)
+
+- Phase 3: ~~ImagePicker Component~~ ✅ (in Phase 2 integriert)
+- Phase 4: Image Editor (Crop, Rotate, Resize) - Optional
+- Phase 5: ~~Admin Media Page~~ ✅
+- Phase 6: Integration in bestehende Formulare (Properties, Branding, etc.)
+
+---
+
+## Media Library - Phase 5: Admin Page (2026-03-02) — IMPLEMENTED
+
+**Scope**: Vollständige Admin-Seite für Medienverwaltung unter `/media`.
+
+### Was wurde implementiert
+
+1. **Admin Media Page** (`frontend/app/(admin)/media/page.tsx`)
+   - Vollbild-Layout mit Sidebar (Ordner) und Content (Grid)
+   - Upload-Dialog mit Drag & Drop
+   - File Details Sidebar mit Metadaten-Bearbeitung
+   - Bulk-Operationen (Multi-Select, Löschen)
+   - Search & Filter (Typ, Suche)
+   - View Mode Toggle (Grid/List - List noch TODO)
+
+2. **Navigation Integration**
+   - Neuer Nav-Link "Medien" unter Website-Sektion
+   - Übersetzungen (DE/EN) hinzugefügt
+   - Icon: ImageIcon von Lucide
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/(admin)/media/page.tsx` | NEU: Admin Page |
+| `frontend/app/components/AdminShell.tsx` | GEÄNDERT: Media Nav-Link |
+| `frontend/app/lib/i18n/translations/de.json` | GEÄNDERT: +nav.media |
+| `frontend/app/lib/i18n/translations/en.json` | GEÄNDERT: +nav.media |
+
+### Verification Path
+
+```bash
+# Frontend Build
+cd frontend && npm run build
+
+# Navigate to /media in Admin UI
+# - Folder Tree should load
+# - Upload button should work
+# - File selection + details should work
+```
+
+---
+
+## Media Library - Phase 2: Frontend Components (2026-03-02) — IMPLEMENTED
+
+**Scope**: Core Frontend Components für Media Library UI.
+
+### Was wurde implementiert
+
+1. **TypeScript Types** (`frontend/app/types/media.ts`)
+   - MediaFile, MediaFolder, MediaFolderTree Interfaces
+   - Helper-Funktionen (formatFileSize, getFileTypeIcon)
+   - Konstanten für Dateitypen und Größenlimits
+
+2. **API Client** (`frontend/app/lib/api/media.ts`)
+   - uploadFile mit Progress-Tracking
+   - listFiles, getFile, updateFile, deleteFile
+   - Folder-Operationen (list, tree, create, delete)
+   - bulkDeleteFiles, moveFiles
+
+3. **Core Components** (`frontend/app/components/media/`)
+   - **MediaGrid**: Grid-Ansicht mit Multi-Selection (Shift/Ctrl-Click)
+   - **MediaModal**: Dialog zum Durchsuchen/Auswählen mit Tabs
+   - **FolderTree**: Hierarchische Navigation mit Context-Menu
+   - **MediaUploader**: Drag & Drop mit Progress-Anzeige
+   - **ImagePicker**: Ersatz für URL-Eingabefelder
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/types/media.ts` | NEU: TypeScript Types |
+| `frontend/app/lib/api/media.ts` | NEU: API Client |
+| `frontend/app/components/media/MediaGrid.tsx` | NEU: Grid Component |
+| `frontend/app/components/media/MediaModal.tsx` | NEU: Modal Component |
+| `frontend/app/components/media/FolderTree.tsx` | NEU: Folder Navigation |
+| `frontend/app/components/media/MediaUploader.tsx` | NEU: Upload Component |
+| `frontend/app/components/media/ImagePicker.tsx` | NEU: Image Picker |
+| `frontend/app/components/media/index.ts` | NEU: Re-exports |
+
+### Verification Path
+
+```bash
+# TypeScript-Compilation prüfen
+cd frontend && npm run build
+
+# Component-Import testen
+# In beliebiger Admin-Seite:
+# import { ImagePicker } from '@/app/components/media';
+```
 
 ---
 
@@ -123,6 +288,18 @@ psql -c "SELECT phone, address, social_links FROM agencies LIMIT 1;"
 ```
 
 **Status:** ✅ IMPLEMENTED
+
+### Sicherheitsentscheidung: CSP (2026-03-02)
+
+Security Headers Scan ergab Grade A. Die `unsafe-inline` Warnung für `script-src` betrifft ausschließlich Next.js-interne Hydration-Scripts, nicht eigenen Code. Nach Evaluierung wurde entschieden, die aktuelle Konfiguration beizubehalten:
+
+- **Entscheidung:** Keine Nonce-Implementierung
+- **Begründung:**
+  - Grade A bereits erreicht
+  - XSS-Schutz durch React automatisch (keine raw HTML Injection)
+  - Nonce-Implementierung würde bei Next.js Updates brechen können
+  - Komplexität/Nutzen-Verhältnis ungünstig
+- **Bestehende Schutzmechanismen:** HSTS, X-Frame-Options, frame-ancestors 'none', CSP
 
 ---
 
