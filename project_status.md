@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-03-02
 
-**Current Phase:** Media Library Implementation - Phase 6.2 ✅ IMPLEMENTED (Responsive & UX)
+**Current Phase:** Media Library Implementation - Phase 7 ✅ IMPLEMENTED (Form Integration)
 
 ---
 
@@ -76,7 +76,7 @@ curl https://api.fewo.kolibri-visions.de/api/v1/media \
 - Phase 4: Image Editor (Crop, Rotate, Resize) - Optional
 - Phase 5: ~~Admin Media Page~~ ✅
 - Phase 6: ~~Unified Media Architecture~~ ✅
-- Phase 7: Integration in bestehende Formulare (Properties, Branding, etc.)
+- Phase 7: ~~Integration in bestehende Formulare~~ ✅
 
 ---
 
@@ -219,6 +219,74 @@ Signed URLs für private Bucket Files implementiert.
 # → Thumbnail bleibt intakt nach Save
 
 # 3. FAB Button sollte immer sichtbar sein (unten rechts)
+```
+
+### Status: ✅ IMPLEMENTED
+
+---
+
+## Media Library - Phase 7: Form Integration (2026-03-02) — IMPLEMENTED
+
+**Scope**: Integration der Media Library in bestehende Formulare via ImagePicker-Komponente.
+
+### Was wurde implementiert
+
+1. **Settings Branding** (`/settings/branding`)
+   - Logo-Upload ersetzt durch ImagePicker
+   - Favicon-Upload ersetzt durch ImagePicker
+   - Vereinfachte Upload-Logik ohne lokale File-Handling
+
+2. **Website Design** (`/website/design`)
+   - Logo Light/Dark: ImagePicker statt alte LogoUploadCard
+   - Favicon: ImagePicker statt alte FaviconUploadCard
+   - LogoUploadCard/FaviconUploadCard Komponenten entfernt
+
+3. **Website SEO** (`/website/seo`)
+   - Open Graph Bild: ImagePicker für og_image_url
+   - Volle Media Library Unterstützung
+
+4. **Property Media** (`/properties/[id]/media`)
+   - Neuer Tab "Bibliothek" für Media-Library-Auswahl
+   - Mehrfachauswahl aus Media Library möglich
+   - Ausgewählte Bilder werden automatisch mit Property verknüpft
+
+5. **CMS Block Editor** (`/website/pages/[id]`)
+   - **Array-Felder**: MediaModal für image-Felder in ArrayItemEditor
+     - Beispiel: `offer_cards`, `location_grid` mit Bildern
+   - **Single-Felder**: ImagePicker für `backgroundImage`, `image`, etc.
+     - Beispiel: `hero_fullwidth.backgroundImage`, `image_text.image`
+   - Token-Weitergabe durch Komponentenbaum
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/(admin)/settings/branding/branding-form.tsx` | ImagePicker für Logo/Favicon |
+| `frontend/app/(admin)/website/design/design-form.tsx` | ImagePicker, alte Upload-Komponenten entfernt |
+| `frontend/app/(admin)/website/seo/page.tsx` | ImagePicker für OG-Bild |
+| `frontend/app/(admin)/properties/[id]/media/page.tsx` | MediaModal für "Bibliothek"-Tab |
+| `frontend/app/(admin)/website/components/ArrayItemEditor.tsx` | MediaModal für Array-Image-Felder, Type-Fixes |
+| `frontend/app/(admin)/website/pages/[id]/page.tsx` | ImagePicker Import, Token-Prop, Image-Field Handling |
+
+### Verification Path
+
+```bash
+# 1. Branding-Seite öffnen
+# → Logo/Favicon: Button "Medienbibliothek" öffnet Modal
+
+# 2. Website Design öffnen
+# → Logo Light/Dark/Favicon: ImagePicker mit Media-Button
+
+# 3. SEO-Seite öffnen
+# → OG-Bild: ImagePicker mit Media-Button
+
+# 4. Property-Media Seite öffnen
+# → Tab "Bibliothek" zeigt MediaModal
+
+# 5. CMS Page Editor öffnen
+# → Block mit Bild-Feld (z.B. Hero)
+# → Feld "Hintergrundbild" zeigt ImagePicker
+# → Array-Items (z.B. Offer Cards) zeigen Ordner-Icon für Media-Auswahl
 ```
 
 ### Status: ✅ IMPLEMENTED
