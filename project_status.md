@@ -267,6 +267,34 @@ Signed URLs für private Bucket Files implementiert.
 | `frontend/app/(admin)/properties/[id]/media/page.tsx` | MediaModal für "Bibliothek"-Tab |
 | `frontend/app/(admin)/website/components/ArrayItemEditor.tsx` | MediaModal für Array-Image-Felder, Type-Fixes |
 | `frontend/app/(admin)/website/pages/[id]/page.tsx` | ImagePicker Import, Token-Prop, Image-Field Handling |
+| `frontend/app/components/media/MediaModal.tsx` | Solider Hintergrund, Branding-Buttons |
+| `frontend/app/components/media/ImagePicker.tsx` | Signed-URL Thumbnail-Fix, Branding-Buttons |
+| `backend/app/schemas/block_validation.py` | Image-URL max_length 500→2000 |
+
+### Bugfixes (Post-Integration)
+
+1. **MediaModal durchsichtiger Hintergrund**
+   - Problem: `bg-surface-default` war transparent, Inhalt schimmerte durch
+   - Fix: `bg-white` für Modal, `bg-gray-50` für Footer
+
+2. **Buttons nicht im Branding**
+   - Problem: `bg-accent-primary` statt Tenant-Primärfarbe
+   - Fix: `bg-t-primary text-t-primary-fg hover:bg-t-primary-hover`
+
+3. **Block-Bilder: "string_too_long" Fehler**
+   - Problem: Signed URLs sind ~700-800 Zeichen, Schema erlaubte nur 500
+   - Fix: `max_length=2000` für alle Image-URL-Felder in `block_validation.py`
+   - Betroffene Felder: `backgroundImage`, `background_image`, `image` (in OfferCardItem, LocationItem, ImageTextProps)
+
+4. **ImagePicker zeigt keine Thumbnails**
+   - Problem: Regex `/\.(jpg|jpeg|png|webp|gif|svg)$/i` erkennt keine URLs mit Query-Parametern
+   - Fix: Regex geändert zu `/\.(jpg|jpeg|png|webp|gif|svg)(\?|$)/i`
+
+### Commits
+
+- `e92929e`: feat: Media Library Phase 7 - ImagePicker Integration
+- `55e0e8c`: fix: MediaModal solid backgrounds + increase image URL length limits
+- `1f0f786`: fix: ImagePicker shows thumbnails + buttons use branding colors
 
 ### Verification Path
 
