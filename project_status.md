@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-03-02
 
-**Current Phase:** Media Library Implementation - Phase 5 ✅ IMPLEMENTED
+**Current Phase:** Media Library Implementation - Phase 6 ✅ IMPLEMENTED (Unified Architecture)
 
 ---
 
@@ -70,12 +70,96 @@ curl https://api.fewo.kolibri-visions.de/api/v1/media \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-### Nächste Schritte (Phase 6)
+### Nächste Schritte (Phase 7)
 
 - Phase 3: ~~ImagePicker Component~~ ✅ (in Phase 2 integriert)
 - Phase 4: Image Editor (Crop, Rotate, Resize) - Optional
 - Phase 5: ~~Admin Media Page~~ ✅
-- Phase 6: Integration in bestehende Formulare (Properties, Branding, etc.)
+- Phase 6: ~~Unified Media Architecture~~ ✅
+- Phase 7: Integration in bestehende Formulare (Properties, Branding, etc.)
+
+---
+
+## Media Library - Phase 6: Unified Media Architecture (2026-03-02) — IMPLEMENTED
+
+**Scope**: WordPress-style zentrale Medien-Architektur - Media Library zeigt ALLE Medien unabhängig vom Upload-Weg.
+
+### Problem (vorher)
+
+1. `property_media` Tabelle war isoliert - Property-Bilder erschienen NICHT in Media Library
+2. Media Library zeigte nur direkt hochgeladene Dateien aus `media_files`
+3. Zwei getrennte Datenspeicher für gleiche Funktion (Medien)
+
+### Architektur (nachher)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     media_files (ZENTRAL)                       │
+│  - Alle Medien (Bilder, PDFs, Videos)                          │
+│  - WordPress-Stil "Attachment Library"                          │
+│  - agency_id für Tenant-Isolation                               │
+└─────────────────────────────────────────────────────────────────┘
+                              ▲
+                              │ FK: media_file_id
+                              │
+┌─────────────────────────────────────────────────────────────────┐
+│                   property_media (Junction)                     │
+│  - Verknüpft Properties mit media_files                        │
+│  - Enthält property-spezifische Daten (is_cover, sort_order)   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Was wurde implementiert
+
+1. **Migration** (`20260302180000_unify_media_architecture.sql`)
+   - `media_file_id` FK-Spalte zu `property_media` hinzugefügt
+   - Bestehende property_media Records in media_files migriert
+   - property_media mit neuen media_files Einträgen verknüpft
+   - Helper-Funktion `get_property_media_with_files()` erstellt
+   - Stats-View `media_migration_stats` für Monitoring
+
+2. **Backend Service Anpassungen**
+   - `MediaService.list_files()` fragt nur noch `media_files` ab
+   - Signed URL Generierung für private Bucket Files
+   - `PropertyService.add_property_media()` erstellt zuerst media_files Eintrag
+   - `PropertyService.delete_property_media()` löscht auch aus media_files
+
+3. **Signed URL Support** (für private Buckets)
+   - `_get_signed_url()` Methode für Supabase Storage API
+   - Automatische URL-Signierung für Property-Medien in list_files()
+   - 1h Gültigkeitsdauer für signierte URLs
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `supabase/migrations/20260302180000_unify_media_architecture.sql` | NEU: Migration |
+| `backend/app/services/media.py` | GEÄNDERT: Signed URLs, Single-Table Query |
+| `backend/app/services/property_service.py` | GEÄNDERT: Dual-Insert für neue Uploads |
+| `backend/app/api/routes/media.py` | GEÄNDERT: get_current_agency_id Dependency |
+| `frontend/app/(admin)/media/page.tsx` | GEÄNDERT: accessToken useEffect Dependency |
+
+### Verification Path
+
+```bash
+# Nach Migration:
+# 1. Migration Status prüfen (SQL Editor)
+SELECT * FROM media_migration_stats;
+
+# 2. Media Library öffnen
+# → Sollte Property-Bilder + direkt hochgeladene Dateien zeigen
+
+# 3. Property-Bild hochladen (über Property-Formular)
+# → Bild sollte in Media Library erscheinen
+
+# 4. Bild in Media Library hochladen
+# → Kann später einer Property zugewiesen werden
+```
+
+### Status: ✅ IMPLEMENTED
+
+Migration erfolgreich ausgeführt, 4 Property-Bilder in Media Library sichtbar.
+Signed URLs für private Bucket Files implementiert.
 
 ---
 
