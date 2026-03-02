@@ -163,6 +163,68 @@ Signed URLs für private Bucket Files implementiert.
 
 ---
 
+## Media Library - Phase 6.1: UI Fixes & Signed URL Improvements (2026-03-02) — IMPLEMENTED
+
+**Scope**: Bugfixes für Media Library UI und vollständige Signed-URL-Unterstützung.
+
+### Probleme (vorher)
+
+1. **Thumbnails brechen nach Metadaten-Edit**: Nach Klick auf Alt-Text/Caption Felder wurden Bilder plötzlich gebrochen
+2. **Upload-Button verschwindet**: Hydration-Issue - Button sichtbar für Millisekunden, dann weg
+3. **Modal transparent**: CSS-Variablen griffen nicht korrekt nach Hydration
+4. **Buttons ohne Branding**: Hardcoded Farben statt Admin-Panel CSS-Variablen
+5. **Neu hochgeladene Bilder gebrochen**: 400 Bad Request weil private Bucket URLs ohne Signierung
+
+### Fixes implementiert
+
+1. **Signed URLs für ALLE Dateien**
+   - `_add_signed_url_to_item()` generiert jetzt URLs für alle Files mit `storage_path`
+   - Vorher nur für `"agencies/"` Pfade - Library-Uploads (`{agency_id}/library/...`) fehlten
+   - Fix in `create_file()`: Signierte URL wird direkt nach DB-Insert generiert
+
+2. **Floating Action Button (FAB)**
+   - Zuverlässiger Upload-Button unten rechts als Fallback
+   - Branding-konform: `bg-t-accent hover:bg-t-accent-hover`
+   - Position: `bottom-20 lg:bottom-8 right-8`
+
+3. **Modal mit korrektem Background**
+   - Overlay: `bg-black/60` (statt problematischer CSS-Variable)
+   - Content: `bg-surface-elevated` für Branding-Konformität
+
+4. **Unnötige PATCH-Requests verhindert**
+   - `originalFileValues` useRef speichert Initialwerte
+   - `handleUpdateFile` prüft auf echte Änderungen vor API-Call
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `backend/app/services/media.py` | GEÄNDERT: Signed URLs für alle Files |
+| `frontend/app/(admin)/media/page.tsx` | GEÄNDERT: FAB, Modal-Styles, Branding |
+
+### Commits
+
+- `57b91e9`: fix: generate signed URLs for all files in private bucket
+- `1c53519`: fix: use branding CSS variables for buttons and modals
+- `6547da2`: fix: modal backgrounds with explicit colors instead of CSS variables
+- `ee52065`: fix: add floating upload button as reliable alternative
+
+### Verification Path
+
+```bash
+# 1. Datei in Media Library hochladen
+# → Bild sollte sofort korrekt angezeigt werden (nicht 400 Error)
+
+# 2. Alt-Text/Caption bearbeiten
+# → Thumbnail bleibt intakt nach Save
+
+# 3. FAB Button sollte immer sichtbar sein (unten rechts)
+```
+
+### Status: ✅ IMPLEMENTED
+
+---
+
 ## Media Library - Phase 5: Admin Page (2026-03-02) — IMPLEMENTED
 
 **Scope**: Vollständige Admin-Seite für Medienverwaltung unter `/media`.
