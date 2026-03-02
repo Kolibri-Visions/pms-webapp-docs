@@ -44,15 +44,16 @@ Das Problem: Wenn Next.js Server-Side fetches an das Backend macht, geht der Req
 |----------|--------------|
 | **Individual Social Items** | `social_facebook`, `social_instagram`, `social_twitter`, `social_youtube`, `social_linkedin` |
 | **Layout: Gap** | Abstand zwischen Elementen: `sm` (16px), `md` (24px), `lg` (32px) |
-| **Layout: Alignment** | Ausrichtung: `start`, `center`, `end`, `between` |
+| **Layout: Gruppen** | Jedes Element kann in `left`, `center` oder `right` Gruppe platziert werden |
 | **Separator** | Optionale Trennlinie zwischen Gruppen |
 
 ### Geänderte Dateien
 
 | Datei | Änderung |
 |-------|----------|
-| `supabase/migrations/20260302000000_add_topbar_config.sql` | GEÄNDERT: gap, alignment, individuelle Social Items |
+| `supabase/migrations/20260302000000_add_topbar_config.sql` | GEÄNDERT: gap, individuelle Social Items |
 | `supabase/migrations/20260302120000_add_agency_contact_fields.sql` | NEU: address, social_links für agencies |
+| `supabase/migrations/20260302140000_add_topbar_item_groups.sql` | NEU: group Feld für Topbar-Items (left/center/right) |
 | `backend/app/schemas/epic_a.py` | GEÄNDERT: AgencyResponse/UpdateRequest mit neuen Feldern |
 | `backend/app/api/routes/epic_a.py` | GEÄNDERT: GET/PATCH mit phone, address, social_links |
 | `backend/app/api/routes/public_site.py` | GEÄNDERT: JOIN mit agencies für Kontaktdaten |
@@ -87,8 +88,17 @@ interface TopbarConfig {
   bg_color: string | null;
   text_color: string | null;
   gap: "sm" | "md" | "lg";
-  alignment: "start" | "center" | "end" | "between";
   items: TopbarItem[];
+}
+
+// TopbarItem
+interface TopbarItem {
+  id: string;
+  type: TopbarItemType;
+  visible: boolean;
+  position: number;
+  group: "left" | "center" | "right";  // Platzierung
+  // ...
 }
 ```
 
