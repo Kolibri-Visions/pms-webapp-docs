@@ -1,8 +1,79 @@
 # PMS-Webapp Project Status
 
-**Last Updated:** 2026-03-01
+**Last Updated:** 2026-03-02
 
 **Current Phase:** CMS Upgrade Roadmap - Phase 8 (Performance & Polish) ✅ COMPLETE
+
+---
+
+## Topbar CMS-Konfiguration (2026-03-02) — IMPLEMENTED
+
+**Scope**: Flexible Topbar-Konfiguration über das Design-Panel der Admin-UI mit Drag-Drop-Reordering, benutzerdefinierte Items und individuelle Farben.
+
+### Problem (vorher)
+
+Die Topbar (Leiste über der Hauptnavigation mit Telefon, E-Mail, Social Links, Login) war vollständig hardcodiert in `HeaderClient.tsx`. Keine Möglichkeit für den Admin, die Inhalte anzupassen, auszublenden oder neu anzuordnen.
+
+### Lösung (nachher)
+
+| Funktion | Beschreibung |
+|----------|--------------|
+| **Item-Typen** | `phone`, `email`, `social`, `login`, `custom` |
+| **Visibility Toggle** | Jedes Item kann einzeln ein-/ausgeblendet werden |
+| **Reordering** | Items können per Pfeiltasten neu angeordnet werden |
+| **Custom Items** | Benutzerdefinierte Einträge mit Icon, Text und Link |
+| **Farben** | Separate Hintergrund- und Textfarbe für Topbar |
+| **Icon-Auswahl** | 16 Lucide-Icons zur Auswahl für Custom Items |
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `supabase/migrations/20260302000000_add_topbar_config.sql` | NEU: JSONB-Spalte `topbar_config` |
+| `backend/app/schemas/public_site.py` | NEU: `TopbarItem`, `TopbarConfig` Pydantic-Modelle |
+| `backend/app/api/routes/website_admin.py` | GEÄNDERT: topbar_config in SELECT/UPDATE/RETURNING |
+| `backend/app/api/routes/public_site.py` | GEÄNDERT: topbar_config im Public-Endpoint |
+| `frontend/app/(public)/context/DesignContext.tsx` | NEU: TypeScript-Interfaces für TopbarConfig |
+| `frontend/app/(public)/components/HeaderClient.tsx` | GEÄNDERT: Dynamisches Rendering basierend auf Config |
+| `frontend/app/(admin)/website/design/design-form.tsx` | NEU: TopbarEditor-Komponente mit vollständigem UI |
+
+### Datenstruktur
+
+```typescript
+interface TopbarConfig {
+  visible: boolean;
+  bg_color: string | null;      // null = Primärfarbe
+  text_color: string | null;    // null = weiß
+  items: TopbarItem[];
+}
+
+interface TopbarItem {
+  id: string;
+  type: "phone" | "email" | "social" | "login" | "custom";
+  visible: boolean;
+  position: number;
+  icon?: string;          // Lucide-Icon-Name
+  text?: string;          // Anzeigetext
+  url?: string;           // Link-URL
+  open_new_tab?: boolean;
+}
+```
+
+### Verification Path
+
+```bash
+# 1. Migration anwenden
+psql -c "SELECT topbar_config FROM public_site_design LIMIT 1;"
+# Erwartung: JSONB mit visible, bg_color, text_color, items Array
+
+# 2. Admin-UI Design-Panel öffnen
+# /website/design → Neue "Topbar"-Sektion mit Editor sichtbar
+
+# 3. Frontend testen
+# Topbar zeigt Items gemäß Config an
+```
+
+**Status:** ✅ IMPLEMENTED
 
 ---
 
