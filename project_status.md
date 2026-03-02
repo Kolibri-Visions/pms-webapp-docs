@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-03-02
 
-**Current Phase:** Media Library Implementation - Phase 6 ✅ IMPLEMENTED (Unified Architecture)
+**Current Phase:** Media Library Implementation - Phase 6.2 ✅ IMPLEMENTED (Responsive & UX)
 
 ---
 
@@ -219,6 +219,82 @@ Signed URLs für private Bucket Files implementiert.
 # → Thumbnail bleibt intakt nach Save
 
 # 3. FAB Button sollte immer sichtbar sein (unten rechts)
+```
+
+### Status: ✅ IMPLEMENTED
+
+---
+
+## Media Library - Phase 6.2: Responsive Design & UX Improvements (2026-03-02) — IMPLEMENTED
+
+**Scope**: Responsive Design, Verschieben-Funktion, UI-Verbesserungen.
+
+### Neue Features
+
+1. **Responsive Design**
+   - Mobile: Ordner-Sidebar als Slide-In Overlay
+   - Mobile: Datei-Details als Bottom Sheet
+   - Mobile: Vereinfachte Toolbar mit Wrap
+   - Breakpoint: `md` (768px)
+
+2. **Verschieben-Funktion**
+   - Dateien können zwischen Ordnern verschoben werden
+   - Bulk-Move für mehrere ausgewählte Dateien
+   - Dialog mit Ordner-Hierarchie zur Auswahl
+
+3. **Grid/Listen-Ansicht**
+   - Toggle zwischen Grid und List View
+   - Listen-Ansicht mit Spalten: Name, Typ, Größe, Datum
+
+4. **Inline-Bestätigungsdialoge**
+   - Browser `confirm()` durch Inline-Modals ersetzt
+   - Einheitliches Design für alle Lösch-Aktionen
+
+### UI-Korrekturen
+
+1. **Folder-Icon statt Hamburger**
+   - Ordner-Sidebar Button verwendet jetzt Folder-Icon
+   - Unterscheidbar vom globalen Navigation-Hamburger
+
+2. **Topbar Mobile Logo entfernt**
+   - Logo war redundant (bereits in Navigation sichtbar)
+   - Topbar ist jetzt aufgeräumter
+
+3. **Logo Shadow Fallbacks entfernt**
+   - Gecancelte Gradient-Funktion komplett entfernt
+   - Kein oranger Schatten mehr als Fallback
+
+4. **Solide Hintergründe**
+   - Mobile Sidebar: Explizit weiß statt CSS-Variable
+   - Mobile Bottom Sheet: Explizit weiß
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/(admin)/media/page.tsx` | Responsive, Move, ViewMode, Inline-Modals |
+| `frontend/app/components/media/MediaGrid.tsx` | Grid + List View Support |
+| `frontend/app/components/AdminShell.tsx` | Logo/Shadow entfernt |
+
+### Commits
+
+- `f194dc0`: fix: replace browser confirm() with inline confirmation modal
+- `e336de6`: feat: Medienbibliothek - responsive design, Verschieben-Funktion, deutsche Bezeichnung
+- `308e1a5`: fix: Medienbibliothek - solid backgrounds, viewMode toggle working
+- `c37dac9`: fix: remove topbar mobile logo, remove logo shadow fallbacks, use Folder icon
+
+### Verification Path
+
+```bash
+# Mobile (< 768px):
+# 1. Folder-Icon öffnet Ordner-Sidebar (Slide-In)
+# 2. Bild anklicken zeigt Bottom Sheet
+# 3. Topbar zeigt KEIN Logo mehr
+
+# Desktop:
+# 1. Grid/List Toggle funktioniert
+# 2. Dateien auswählen → Verschieben-Button → Ordner wählen
+# 3. Logo hat keinen orangenen Schatten
 ```
 
 ### Status: ✅ IMPLEMENTED
