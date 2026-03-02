@@ -11,12 +11,14 @@
 **Scope**:
 1. Organisation-Seite um Telefon, Adresse und Social Media Links erweitern
 2. Topbar-Konfiguration mit individuellen Social Media Items und Layout-Optionen
+3. **Fix**: Tenant-Resolution für Server-Side Fetches
 
 ### Problem (vorher)
 
 1. Die Organisation-Seite (`/organization`) hatte nur Name und E-Mail - keine Telefon, Adresse oder Social Media Links
 2. Die Topbar zeigte alle Social Media Links als Block - keine individuelle Steuerung
 3. Kontaktdaten waren in `public_site_settings` und `agencies` dupliziert
+4. **Bug**: Server-Side Fetches sendeten keinen Host-Header → Backend konnte Tenant nicht auflösen
 
 ### Lösung (nachher)
 
@@ -29,6 +31,12 @@
 | `social_links` | `agencies` | JSONB mit Social Media URLs |
 
 Die Public Website liest diese Daten jetzt aus der `agencies` Tabelle (JOIN).
+
+#### 3. Fix: Tenant-Resolution für Server-Side Rendering
+
+Das Problem: Wenn Next.js Server-Side fetches an das Backend macht, geht der Request an `api.fewo.kolibri-visions.de` statt an die Public-Domain `fewo.kolibri-visions.de`. Das Backend konnte daher den Tenant nicht aus dem Host-Header auflösen.
+
+**Lösung**: Die API-Helpers in `api.ts` lesen jetzt den Original-Host aus dem eingehenden Request (`headers()`) und senden ihn als `x-public-host` Header an das Backend weiter.
 
 #### 2. Erweiterte Topbar-Konfiguration
 
@@ -54,6 +62,7 @@ Die Public Website liest diese Daten jetzt aus der `agencies` Tabelle (JOIN).
 | `frontend/app/(public)/context/DesignContext.tsx` | GEÄNDERT: TopbarItemType mit Social-Plattformen |
 | `frontend/app/(public)/components/HeaderClient.tsx` | GEÄNDERT: Rendering für individuelle Social Items |
 | `frontend/app/(admin)/website/design/design-form.tsx` | GEÄNDERT: Layout-Optionen im TopbarEditor |
+| `frontend/app/(public)/lib/api.ts` | GEÄNDERT: Tenant-Resolution via x-public-host Header |
 
 ### Datenstruktur
 
@@ -96,6 +105,11 @@ psql -c "SELECT phone, address, social_links FROM agencies LIMIT 1;"
 # 3. Topbar-Editor testen
 # /website/design → Topbar → Layout-Optionen (Gap, Ausrichtung) sichtbar
 # Individuelle Social-Plattform Items (Facebook, Instagram, etc.)
+
+# 4. Public Website testen
+# Nach Deploy: Topbar sollte Telefon + Social Icons anzeigen
+# Test: curl -H "x-public-host: fewo.kolibri-visions.de" https://api.fewo.kolibri-visions.de/api/v1/public/site/settings
+# Erwartung: phone, social_links sind befüllt
 ```
 
 **Status:** ✅ IMPLEMENTED
