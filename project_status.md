@@ -50,6 +50,76 @@ cd frontend && npm audit
 
 ---
 
+## AdminShell Refactoring: Modulare Architektur (2026-03-03) — IMPLEMENTED
+
+**Scope**: Refactoring der monolithischen AdminShell.tsx (1979 Zeilen) in modulare Sub-Komponenten.
+
+### Problem (vorher)
+
+- AdminShell.tsx war mit 1979 Zeilen zu groß für effektive Wartung
+- Alle Verantwortlichkeiten (Navigation, State, Layout, Dropdowns) in einer Datei
+- Schwierig zu testen und zu debuggen
+- Code-Reviews kompliziert durch Dateigröße
+
+### Lösung: Modulare Architektur
+
+Extraktion in fokussierte Sub-Komponenten:
+
+| Komponente | Zeilen | Verantwortlichkeit |
+|------------|--------|-------------------|
+| nav-config.ts | 272 | Navigation-Konfiguration, Typen, Helper |
+| SidebarNavigation.tsx | 837 | Desktop-Sidebar mit Flyouts |
+| MobileDrawer.tsx | 461 | Mobile Navigation-Drawer |
+| TopBar.tsx | 202 | Header mit Language/Notifications |
+| ProfileDropdown.tsx | 227 | Benutzer-Menü |
+| AdminShell.tsx | 543 | Orchestrierung (↓73%) |
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/components/AdminShell.tsx` | REDUZIERT: 1979 → 543 Zeilen |
+| `frontend/app/components/admin-shell/nav-config.ts` | NEU |
+| `frontend/app/components/admin-shell/SidebarNavigation.tsx` | NEU |
+| `frontend/app/components/admin-shell/MobileDrawer.tsx` | NEU |
+| `frontend/app/components/admin-shell/TopBar.tsx` | NEU |
+| `frontend/app/components/admin-shell/ProfileDropdown.tsx` | NEU |
+| `frontend/app/components/admin-shell/hooks/useAdminShellState.ts` | NEU (vorbereitet) |
+
+### Beibehaltene Funktionalität
+
+- ✅ Desktop-Navigation mit Collapsible Groups
+- ✅ Mobile-Drawer mit Backdrop
+- ✅ Favorites-System (localStorage)
+- ✅ Language-Switcher
+- ✅ ProfileDropdown mit Impersonation
+- ✅ CommandPalette-Integration
+- ✅ Branding CSS-Variablen
+- ✅ ARIA Accessibility
+
+### Verification Path
+
+```bash
+cd frontend && npm run build
+# → Build erfolgreich, keine TypeScript-Fehler
+```
+
+### Status
+
+✅ IMPLEMENTED
+
+**Commits:**
+- `b451f61` - nav-config.ts
+- `d35de65` - useAdminShellState Hook
+- `ab6e8f5` - ProfileDropdown (Type-Fix)
+- `9e2bde9` - SidebarNavigation
+- `704722a` - MobileDrawer
+- `bf168f8` - TopBar
+
+**Runbook:** [44-adminshell-architecture.md](./ops/runbook/44-adminshell-architecture.md)
+
+---
+
 ## Media Library - Phase 8: Public Bucket für CMS/Website (2026-03-03) — IMPLEMENTED
 
 **Scope**: Umstellung von Signed URLs auf permanente Public URLs für CMS-/Website-Inhalte.
