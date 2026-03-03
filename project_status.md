@@ -120,6 +120,90 @@ cd frontend && npm run build
 
 ---
 
+## BookingService Refactoring: Modulare Sub-Services (2026-03-03) — IMPLEMENTED
+
+**Scope**: Refactoring des monolithischen BookingService (2464 Zeilen) in modulare Sub-Services mit Composition Pattern.
+
+### Problem (vorher)
+
+- `booking_service.py` war mit 2464 Zeilen zu groß für effektive Wartung
+- Alle Operationen (Query, Create, Update, Cancel) in einer Klasse
+- Schwierig zu testen, keine Isolation
+- Hohe kognitive Last beim Code-Review
+
+### Lösung: Modulare Architektur mit Composition Pattern
+
+Extraktion in fokussierte Sub-Services:
+
+| Modul | Zeilen | Verantwortlichkeit |
+|-------|--------|-------------------|
+| utils.py | ~350 | Helper-Funktionen (normalize_*, to_uuid, retry_on_deadlock) |
+| query.py | ~440 | BookingQueryService (list, get, check_availability) |
+| create.py | ~710 | BookingCreateService (create_booking, guest upsert) |
+| update.py | ~730 | BookingUpdateService (status transitions, update) |
+| cancellation.py | ~390 | BookingCancellationService (cancel, calculate_refund) |
+| service.py | ~300 | BookingService (Orchestrierung, Delegation) |
+| booking_service.py | 58 | Backward-Compat Re-Export (↓98%) |
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `backend/app/services/booking/__init__.py` | NEU: Package-Exports |
+| `backend/app/services/booking/utils.py` | NEU: Helper-Funktionen |
+| `backend/app/services/booking/query.py` | NEU: Lese-Operationen |
+| `backend/app/services/booking/create.py` | NEU: Buchungserstellung |
+| `backend/app/services/booking/update.py` | NEU: Status-Updates |
+| `backend/app/services/booking/cancellation.py` | NEU: Stornierung |
+| `backend/app/services/booking/service.py` | NEU: Hauptklasse |
+| `backend/app/services/booking_service.py` | REDUZIERT: 2464 → 58 Zeilen |
+
+### Beibehaltene Funktionalität
+
+- ✅ Alle öffentlichen Methoden identisch
+- ✅ Backward-Kompatibilität für bestehende Imports
+- ✅ State Machine für Buchungsstatus
+- ✅ Double-Booking Prevention
+- ✅ Advisory Locks für Concurrent Updates
+- ✅ Optimistic Locking mit version-Feld
+- ✅ Refund-Berechnung basierend auf Policy
+
+### Import-Patterns
+
+```python
+# Empfohlen (neu):
+from app.services.booking import BookingService
+
+# Backward-kompatibel (deprecated):
+from app.services.booking_service import BookingService
+```
+
+### Verification Path
+
+```bash
+cd backend
+python -m compileall app/services/booking/ -q
+python -c "from app.services.booking import BookingService; print('OK')"
+python -c "from app.services.booking_service import BookingService; print('OK')"
+```
+
+### Status
+
+✅ IMPLEMENTED
+
+**Commits:**
+- `83abd7a` - booking/ Ordner + utils.py
+- `150514e` - query.py
+- `0fc64ad` - create.py
+- `c7b364d` - update.py
+- `4628259` - cancellation.py
+- `5ddcb64` - service.py
+- `f13dc74` - booking_service.py Re-Export
+
+**Runbook:** [45-booking-service-architecture.md](./ops/runbook/45-booking-service-architecture.md)
+
+---
+
 ## Media Library - Phase 8: Public Bucket für CMS/Website (2026-03-03) — IMPLEMENTED
 
 **Scope**: Umstellung von Signed URLs auf permanente Public URLs für CMS-/Website-Inhalte.

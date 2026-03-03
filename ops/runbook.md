@@ -40,6 +40,7 @@
 | [42-media-library.md](./runbook/42-media-library.md) | Medienbibliothek (Upload, Storage, Signed URLs) |
 | [43-accessibility-keyboard.md](./runbook/43-accessibility-keyboard.md) | Accessibility: Keyboard & ARIA (K1 htmlFor, K2 FocusTrap, K4 Labels, K5 Errors) |
 | [44-adminshell-architecture.md](./runbook/44-adminshell-architecture.md) | AdminShell Refactoring: Modulare Architektur (Sidebar, Drawer, TopBar) |
+| [45-booking-service-architecture.md](./runbook/45-booking-service-architecture.md) | BookingService Refactoring: Modulare Sub-Services (Query, Create, Update, Cancellation) |
 
 ### Golden Paths (Most Common Operations)
 
