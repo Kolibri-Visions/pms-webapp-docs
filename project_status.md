@@ -51,6 +51,24 @@ Industry-Standard für CMS-Systeme:
 |-------|----------|
 | `supabase/migrations/20260303080000_make_property_media_bucket_public.sql` | NEU: Migration |
 | `backend/app/services/media.py` | GEÄNDERT: Public URLs statt Signed URLs |
+| `backend/app/services/property_service.py` | GEÄNDERT: Public URLs, media_file_id Support |
+| `backend/app/schemas/properties.py` | GEÄNDERT: media_file_id Feld hinzugefügt |
+| `frontend/app/components/media/MediaGrid.tsx` | GEÄNDERT: pickerMode für Checkbox-Toggle |
+| `frontend/app/components/media/MediaModal.tsx` | GEÄNDERT: pickerMode aktiviert |
+
+### Bugfixes (2026-03-03)
+
+1. **500 Error beim Hinzufügen aus Media Library**
+   - Problem: Backend erwartete `storage_path`, aber Media Library sendet `media_file_id`
+   - Fix: `PropertyMediaCreate` Schema um `media_file_id` erweitert
+   - Fix: `add_property_media` verwendet vorhandene `media_file_id` statt neuen Eintrag
+
+2. **Checkbox-Mehrfachauswahl nur mit Cmd-Taste**
+   - Problem: Normal-Klick ersetzte Auswahl statt zu togglen
+   - Fix: `pickerMode` Prop in MediaGrid - Checkbox immer sichtbar, Klick togglet
+
+3. **Signed URLs in property_service.py**
+   - Alle `get_signed_url()` Aufrufe durch Public URLs ersetzt
 
 ### Security
 
