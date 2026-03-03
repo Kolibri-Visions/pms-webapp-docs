@@ -50,6 +50,95 @@ cd frontend && npm audit
 
 ---
 
+## Security Fix: Smoke Auth Bypass Default (M-01) (2026-03-03) — IMPLEMENTED
+
+**Scope**: Änderung des Defaults für den Smoke Test Auth Bypass von "aktiviert" auf "deaktiviert".
+
+### Problem
+
+- `SMOKE_AUTH_BYPASS_ENABLED` war standardmäßig aktiviert (opt-out)
+- Erlaubte Admin-Bypass mit `x-pms-smoke: 1` Header + JWT
+- Production war nur sicher wenn explizit `SMOKE_AUTH_BYPASS_ENABLED=false` gesetzt
+
+### Lösung
+
+Default von opt-out auf opt-in geändert:
+
+```typescript
+// Vorher (unsicher):
+const smokeBypassEnabled = process.env.SMOKE_AUTH_BYPASS_ENABLED !== 'false';
+
+// Nachher (sicher):
+const smokeBypassEnabled = process.env.SMOKE_AUTH_BYPASS_ENABLED === 'true';
+```
+
+### Auswirkung
+
+| Umgebung | Vorher | Nachher |
+|----------|--------|---------|
+| Production (kein Env-Var) | Aktiviert ❌ | Deaktiviert ✅ |
+| Dev/Staging | `=true` setzen | `=true` setzen |
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/middleware.ts` | Default auf `=== 'true'` geändert |
+| `backend/docs/ops/runbook/40-rate-limiting-security.md` | Dokumentation aktualisiert |
+
+### Status
+
+✅ IMPLEMENTED (Commit `7259328`)
+
+---
+
+## Security Fix: SECURITY DEFINER search_path (M-02) (2026-03-03) — VERIFIED
+
+**Scope**: Hinzufügen von `SET search_path = ''` zu SECURITY DEFINER Funktionen ohne expliziten Pfad.
+
+### Problem
+
+- 4 SECURITY DEFINER Funktionen hatten keinen expliziten `search_path`
+- Potentielles Risiko für search_path injection attacks
+- SECURITY DEFINER läuft mit Owner-Rechten (postgres) - wie sudo
+
+### Betroffene Funktionen
+
+| Funktion | Zweck |
+|----------|-------|
+| `encrypt_pii` | PII-Verschlüsselung |
+| `decrypt_pii` | PII-Entschlüsselung |
+| `user_has_permission` | Permission-Check |
+| `get_user_permissions` | Permission-Liste |
+
+### Lösung
+
+Migration `20260303183211_fix_security_definer_search_path.sql`:
+- `SET search_path = ''` zu allen 4 Funktionen hinzugefügt
+- Tabellennamen voll qualifiziert (`public.table_name`)
+
+### Verification (DB-Abfrage nach Migration)
+
+```
+function_name        | config_options
+---------------------|---------------
+decrypt_pii          | search_path=""
+encrypt_pii          | search_path=""
+get_user_permissions | search_path=""
+user_has_permission  | search_path=""
+```
+
+### Nicht betroffene Funktionen
+
+- `st_estimatedextent` (3x) - PostGIS System-Funktionen, nicht anfassen
+- `end_user_session`, `end_all_user_sessions`, `get_user_agency_ids`, `get_user_role_in_agency`, `user_has_agency_access` - bereits mit `search_path=public`
+
+### Status
+
+✅ VERIFIED (Commit `12c7bce`, Migration ausgeführt 2026-03-03)
+
+---
+
 ## AdminShell Refactoring: Modulare Architektur (2026-03-03) — IMPLEMENTED
 
 **Scope**: Refactoring der monolithischen AdminShell.tsx (1979 Zeilen) in modulare Sub-Komponenten.
