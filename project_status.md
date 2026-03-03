@@ -4051,6 +4051,50 @@ object-src 'none'
 
 ---
 
+## Accessibility: Keyboard Navigation K2-Extended (2026-03-03) - IMPLEMENTED
+
+**Issue**: Inline-Modals in der Admin-UI hatten keine FocusTrap-Implementierung, was gegen WCAG 2.1.2 "No Keyboard Trap" verstößt. Tab-Navigation konnte aus dem Modal herausspringen.
+
+**Lösung**: `focus-trap-react` FocusTrap für alle 48 Modals in 13 Admin-Seiten implementiert.
+
+**Features**:
+- Tab-Navigation bleibt im Modal
+- ESC schließt Modal (`escapeDeactivates: true`)
+- Klick außerhalb schließt Modal (`clickOutsideDeactivates: true`)
+- ARIA-Attribute für Screen Reader (`role="dialog"`, `aria-modal="true"`, `aria-labelledby`)
+
+**Änderungen**:
+
+| Datei | Modals |
+|-------|--------|
+| `app/(admin)/properties/[id]/rate-plans/page.tsx` | 7 |
+| `app/(admin)/seasons/page.tsx` | 7 |
+| `app/(admin)/visitor-tax/page.tsx` | 7 |
+| `app/(admin)/connections/page.tsx` | 5 |
+| `app/(admin)/channel-sync/page.tsx` | 4 |
+| `app/(admin)/booking-requests/page.tsx` | 4 |
+| `app/(admin)/website/pages/page.tsx` | 1 |
+| `app/(admin)/website/templates/page.tsx` | 1 |
+| `app/(admin)/website/components/RichTextEditor.tsx` | 1 |
+| `app/(admin)/website/pages/[id]/page.tsx` | 4 |
+| `app/(admin)/properties/[id]/media/page.tsx` | 2 |
+| `app/(admin)/properties/[id]/gebuehren/page.tsx` | 2 |
+| `app/(admin)/fees-taxes/page.tsx` | 3 |
+
+**Total**: 48 Modals in 13 Dateien
+
+**Verification Path**:
+1. Modal öffnen (z.B. Rate Plans > Import)
+2. Tab-Taste → Focus bleibt im Modal
+3. ESC → Modal schließt
+4. Außerhalb klicken → Modal schließt
+
+**Runbook**: [43-accessibility-keyboard.md](./ops/runbook/43-accessibility-keyboard.md)
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
 ## Status Semantics
 
 | Status | Bedeutung |
@@ -4068,4 +4112,4 @@ Historische Einträge (Phase 1-20, vor 2026-02-14) wurden ausgelagert:
 
 ---
 
-*Last updated: 2026-02-27 (Brand-Gradient Entfernung IMPLEMENTED)*
+*Last updated: 2026-03-03 (Accessibility K2-Extended IMPLEMENTED)*

@@ -38,6 +38,7 @@
 | [40-rate-limiting-security.md](./runbook/40-rate-limiting-security.md) | Rate Limiting Security & Fallback |
 | [41-cms-ssr-seo.md](./runbook/41-cms-ssr-seo.md) | CMS Server-Side Rendering & SEO |
 | [42-media-library.md](./runbook/42-media-library.md) | Medienbibliothek (Upload, Storage, Signed URLs) |
+| [43-accessibility-keyboard.md](./runbook/43-accessibility-keyboard.md) | Accessibility: Keyboard Navigation (FocusTrap K2) |
 
 ### Golden Paths (Most Common Operations)
 
