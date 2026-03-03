@@ -4095,6 +4095,126 @@ object-src 'none'
 
 ---
 
+## Accessibility: Icon Button Labels K4 (2026-03-03) - IMPLEMENTED
+
+**Issue**: Icon-only Buttons (z.B. Schließen-X, Menü-Dots) hatten keine `aria-label` Attribute. Screen Reader können diese Buttons nicht sinnvoll beschreiben.
+
+**Lösung**: Alle Icon-Buttons mit `aria-label` für Screen Reader Unterstützung versehen.
+
+**Pattern**:
+```tsx
+<button aria-label="Schließen" className="...">
+  <X className="w-5 h-5" />
+</button>
+```
+
+**Änderungen** (13 Dateien, 24 Buttons):
+- `properties/page.tsx` - MoreVertical, Drawer close
+- `properties/[id]/page.tsx` - 2x Modal close
+- `properties/[id]/calendar/page.tsx` - Toast, Modal close
+- `properties/[id]/extra-services/page.tsx` - Toast, Modal close
+- `bookings/page.tsx` - Drawer close, Clear guest
+- `guests/page.tsx` - Toast, Search clear, Drawer close
+- `guests/[id]/page.tsx` - Toast, Drawer close
+- `team/page.tsx` - 2x MoreVertical
+- `amenities/page.tsx` - MoreVertical
+- `media/page.tsx` - 3x Close buttons
+- `extra-services/page.tsx` - Toast, Drawer close
+- `notifications/email-outbox/page.tsx` - 2x Modal close
+- `settings/branding/branding-form.tsx` - 2x Eye/EyeOff visibility toggles
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
+## Accessibility: Form Validation Error Links K5 (2026-03-03) - IMPLEMENTED
+
+**Issue**: Formular-Validierungsfehler waren nicht programmatisch mit den zugehörigen Eingabefeldern verknüpft. Screen Reader konnten Fehlermeldungen nicht mit den korrekten Feldern assoziieren.
+
+**Lösung**: `aria-describedby` und `aria-invalid` Attribute für alle Formularfelder mit Validierung implementiert.
+
+**Pattern**:
+```tsx
+<label htmlFor="field-id">Feldname *</label>
+<input
+  id="field-id"
+  aria-invalid={!!errors.field}
+  aria-describedby={errors.field ? "field-id-error" : undefined}
+  ...
+/>
+{errors.field && (
+  <p id="field-id-error" role="alert" className="text-state-error">
+    {errors.field}
+  </p>
+)}
+```
+
+**Änderungen** (3 Dateien, 11 Felder):
+- `bookings/page.tsx` - property_id, check_in, check_out, num_adults (4 Felder)
+- `website/templates/page.tsx` - name, block_type, block_props, style_overrides (4 Felder)
+- `channel-sync/page.tsx` - connection_id, start_date, end_date (3 Felder, date_range Fehler)
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
+## Accessibility: Label-Input-Verknüpfung K1 (2026-03-03) - IMPLEMENTED
+
+**Issue**: Formular-Labels waren nicht programmatisch mit ihren Eingabefeldern verknüpft. Screen Reader konnten Labels und Inputs nicht zuordnen (WCAG 1.3.1, 4.1.2).
+
+**Lösung**: `htmlFor` und `id` Attribute für alle Labels und Eingabefelder in Admin-UI implementiert.
+
+**Pattern**:
+```tsx
+<label htmlFor="page-fieldname">Feldname</label>
+<input id="page-fieldname" ... />
+```
+
+**ID-Namenskonvention**: `{seite}-{feldname}` (z.B. `booking-guest-email`, `property-edit-name`)
+
+**Änderungen** (23 Dateien, ~200 Labels):
+
+| Datei | Labels |
+|-------|--------|
+| `bookings/page.tsx` | 12 |
+| `bookings/[id]/page.tsx` | 5 |
+| `guests/page.tsx` | 7 |
+| `guests/[id]/page.tsx` | 10 |
+| `properties/page.tsx` | 34 |
+| `properties/[id]/page.tsx` | 37 |
+| `properties/[id]/rate-plans/page.tsx` | 10 |
+| `seasons/page.tsx` | 13 |
+| `visitor-tax/page.tsx` | 18 |
+| `team/page.tsx` | 3 |
+| `extra-services/page.tsx` | 4 |
+| `amenities/page.tsx` | 5 |
+| `fees-taxes/page.tsx` | 6 |
+| `cancellation-rules/page.tsx` | 5 |
+| `connections/page.tsx` | 10 |
+| `profile/edit/page.tsx` | 9 |
+| `profile/security/page.tsx` | 3 |
+| `organization/page.tsx` | 13 |
+| `settings/branding/branding-form.tsx` | 10 |
+| `settings/roles/page.tsx` | 7 |
+| `website/domain/page.tsx` | 1 |
+| `website/seo/page.tsx` | 4 |
+| `website/design/design-form.tsx` | 22 |
+
+**Ausnahmen**: Checkbox-Labels die ihr Input umschließen (`<label><input type="checkbox"/>...</label>`) brauchen kein htmlFor.
+
+**Verification Path**:
+```bash
+# Prüfen dass Labels htmlFor haben
+rg -l "htmlFor=" frontend/app/\(admin\)/
+
+# Prüfen dass IDs vorhanden sind
+rg "id=\"(booking|guest|property|season|visitor-tax|team|profile|org|branding|seo|design)-" frontend/app/\(admin\)/
+```
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
 ## Status Semantics
 
 | Status | Bedeutung |
@@ -4112,4 +4232,4 @@ Historische Einträge (Phase 1-20, vor 2026-02-14) wurden ausgelagert:
 
 ---
 
-*Last updated: 2026-03-03 (Accessibility K2-Extended IMPLEMENTED)*
+*Last updated: 2026-03-03 (Accessibility K1 + K4 + K5 IMPLEMENTED)*
