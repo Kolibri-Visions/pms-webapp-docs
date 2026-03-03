@@ -139,6 +139,85 @@ user_has_permission  | search_path=""
 
 ---
 
+## Security: CSP unsafe-inline Dokumentation (H-02) (2026-03-03) — ACCEPTED RISK
+
+**Scope**: Dokumentation der CSP-Konfiguration mit `unsafe-inline` als akzeptiertes Risiko.
+
+### Aktuelle CSP-Konfiguration
+
+```
+default-src 'self'
+script-src 'self' 'unsafe-inline' 'unsafe-eval'
+style-src 'self' 'unsafe-inline'
+img-src 'self' data: blob: https://*.supabase.co ...
+connect-src 'self' https://*.supabase.co ...
+frame-ancestors 'none'
+form-action 'self'
+base-uri 'self'
+object-src 'none'
+```
+
+### Warum unsafe-inline erforderlich ist
+
+| Direktive | Grund |
+|-----------|-------|
+| `script-src 'unsafe-inline'` | Next.js 15 injiziert Hydration-Scripts ohne Nonce-Support |
+| `script-src 'unsafe-eval'` | Next.js Development-Modus, Hot Reload |
+| `style-src 'unsafe-inline'` | Tailwind CSS, dynamische Styles |
+
+### Next.js 15 Limitation
+
+- Next.js 15 unterstützt **keine automatischen Nonces** für interne Scripts
+- Ohne `unsafe-inline` blockiert CSP alle Next.js Hydration-Scripts
+- Die App würde nicht funktionieren (keine Interaktivität)
+- Siehe: [Next.js CSP Docs](https://nextjs.org/docs/app/building-your-application/configuring/content-security-policy)
+
+### Kompensierende Maßnahmen
+
+Trotz `unsafe-inline` sind folgende Schutzmaßnahmen aktiv:
+
+| Header | Wert | Schutz gegen |
+|--------|------|--------------|
+| `frame-ancestors 'none'` | Entspricht X-Frame-Options: DENY | Clickjacking |
+| `form-action 'self'` | Nur eigene Domain | Form Hijacking |
+| `base-uri 'self'` | Nur eigene Domain | Base Tag Injection |
+| `object-src 'none'` | Keine Plugins | Flash/Java Exploits |
+| `X-Content-Type-Options` | nosniff | MIME Sniffing |
+| `X-Frame-Options` | DENY | Clickjacking (Legacy) |
+| `Strict-Transport-Security` | max-age=31536000 | Downgrade Attacks |
+
+### Risikobewertung
+
+| Aspekt | Bewertung |
+|--------|-----------|
+| **CVSS** | 6.1 (Medium) |
+| **Wahrscheinlichkeit** | Niedrig - erfordert andere Schwachstelle (z.B. XSS via User Input) |
+| **Impact** | Mittel - Script-Injection möglich wenn XSS-Lücke existiert |
+| **Akzeptanz** | ✅ Akzeptiert - Next.js Framework-Limitation |
+
+### Zukunft: Nonce-Support
+
+Wenn Next.js vollständigen Nonce-Support implementiert:
+
+1. `unsafe-inline` aus `script-src` entfernen
+2. Nonce-basierte CSP aktivieren: `script-src 'self' 'nonce-{random}'`
+3. Middleware generiert bereits Nonces (vorbereitet)
+
+**Tracking**: Next.js GitHub Issues beobachten für Nonce-Support in App Router.
+
+### Betroffene Dateien
+
+| Datei | Beschreibung |
+|-------|--------------|
+| `frontend/middleware.ts` | CSP-Header-Generierung |
+| `CLAUDE.md` § 11 | CSP-Dokumentation für Entwickler |
+
+### Status
+
+✅ ACCEPTED RISK (dokumentiert 2026-03-03)
+
+---
+
 ## AdminShell Refactoring: Modulare Architektur (2026-03-03) — IMPLEMENTED
 
 **Scope**: Refactoring der monolithischen AdminShell.tsx (1979 Zeilen) in modulare Sub-Komponenten.
