@@ -6,6 +6,50 @@
 
 ---
 
+## Security Fix: NPM minimatch ReDoS (2026-03-03) — IMPLEMENTED
+
+**Scope**: Behebung einer High-Severity Vulnerability in der Frontend-Dependency `minimatch`.
+
+### Problem
+
+- **CVE:** GHSA-7r86-cg39-jmmj, GHSA-23c5-xmqv-rm74
+- **Severity:** HIGH (CVSS 7.5)
+- **Betroffene Versionen:** minimatch <=3.1.3 und 9.0.0-9.0.6
+- **Risiko:** ReDoS (Regular Expression Denial of Service) durch speziell gestaltete Glob-Patterns
+
+### Lösung
+
+```bash
+cd frontend && npm audit fix
+```
+
+### Geänderte Versionen
+
+| Package | Vorher | Nachher |
+|---------|--------|---------|
+| minimatch | 3.1.3 | 3.1.5 |
+| minimatch | 9.0.6 | 9.0.9 |
+| brace-expansion | 5.0.3 | 2.0.2 |
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/package-lock.json` | Dependency-Updates |
+
+### Verification Path
+
+```bash
+cd frontend && npm audit
+# → found 0 vulnerabilities
+```
+
+### Status
+
+✅ IMPLEMENTED (Commit `6f707e6`)
+
+---
+
 ## Media Library - Phase 8: Public Bucket für CMS/Website (2026-03-03) — IMPLEMENTED
 
 **Scope**: Umstellung von Signed URLs auf permanente Public URLs für CMS-/Website-Inhalte.
