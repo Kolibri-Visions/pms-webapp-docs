@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-03-02
 
-**Current Phase:** Media Library Implementation - Phase 7 ✅ IMPLEMENTED (Form Integration)
+**Current Phase:** Media Library Implementation - Phase 4 ✅ IMPLEMENTED (Image Editor)
 
 ---
 
@@ -70,13 +70,15 @@ curl https://api.fewo.kolibri-visions.de/api/v1/media \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-### Nächste Schritte (Phase 7)
+### Nächste Schritte
 
 - Phase 3: ~~ImagePicker Component~~ ✅ (in Phase 2 integriert)
-- Phase 4: Image Editor (Crop, Rotate, Resize) - Optional
+- Phase 4: ~~Image Editor (Crop, Rotate, Flip)~~ ✅
 - Phase 5: ~~Admin Media Page~~ ✅
 - Phase 6: ~~Unified Media Architecture~~ ✅
 - Phase 7: ~~Integration in bestehende Formulare~~ ✅
+
+**Media Library vollständig implementiert!**
 
 ---
 
@@ -315,6 +317,74 @@ Signed URLs für private Bucket Files implementiert.
 # → Block mit Bild-Feld (z.B. Hero)
 # → Feld "Hintergrundbild" zeigt ImagePicker
 # → Array-Items (z.B. Offer Cards) zeigen Ordner-Icon für Media-Auswahl
+```
+
+### Status: ✅ IMPLEMENTED
+
+---
+
+## Media Library - Phase 4: Image Editor (2026-03-02) — IMPLEMENTED
+
+**Scope**: Bildbearbeitung direkt in der Media Library mit Crop, Rotate und Flip-Funktionen.
+
+### Was wurde implementiert
+
+1. **ImageEditor Component** (`frontend/app/components/media/ImageEditor.tsx`)
+   - Vollwertiger Bild-Editor als Modal-Dialog
+   - Verwendet `react-image-crop` für Zuschneiden
+   - Canvas API für Transformationen
+
+2. **Crop-Funktionen**
+   - Freies Zuschneiden oder mit Seitenverhältnis
+   - Voreinstellungen: Frei, 1:1, 16:9, 4:3, 3:2, 9:16
+   - Visueller Crop-Rahmen mit Handles
+
+3. **Rotation & Spiegelung**
+   - 90°-Drehung links/rechts
+   - Horizontale Spiegelung
+   - Vertikale Spiegelung
+   - Kombinierbar
+
+4. **Responsive Design**
+   - **Desktop**: Sidebar mit allen Werkzeugen
+   - **Mobile**: Tab-Navigation (Zuschneiden / Drehen & Spiegeln)
+   - Optimierte Touch-Bedienung
+
+5. **Speicherung**
+   - Bearbeitete Bilder werden als neue Kopie gespeichert
+   - Suffix `_edited.jpg` wird angehängt
+   - Original bleibt unverändert
+
+### Integration
+
+- **Media Library Page** (`/media`)
+  - "Bearbeiten"-Button im FileDetailsPanel (nur für Bilder)
+  - Verfügbar in Desktop-Sidebar und Mobile-Bottom-Sheet
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/components/media/ImageEditor.tsx` | NEU: Image Editor Component |
+| `frontend/app/components/media/index.ts` | Export hinzugefügt |
+| `frontend/app/(admin)/media/page.tsx` | ImageEditor Integration |
+| `frontend/package.json` | react-image-crop Dependency |
+
+### Commits
+
+- `295e7ab`: feat: add ImageEditor component for media library (Phase 4)
+
+### Verification Path
+
+```bash
+# 1. Media Library öffnen (/media)
+# 2. Bild anklicken → Details-Panel öffnet
+# 3. "Bearbeiten" Button klicken
+# 4. Im Editor:
+#    - Seitenverhältnis wählen → Crop-Rahmen erscheint
+#    - Drehen/Spiegeln testen
+#    - "Als Kopie speichern" klicken
+# 5. Neues Bild mit "_edited" Suffix erscheint in Library
 ```
 
 ### Status: ✅ IMPLEMENTED
