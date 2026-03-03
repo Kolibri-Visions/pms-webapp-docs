@@ -122,32 +122,37 @@ Alle Rate-Limited Endpoints setzen diese Headers:
 
 ### Aktivierung/Deaktivierung
 
-Der Smoke Test Auth Bypass für automatisierte Tests kann in Production deaktiviert werden:
+Der Smoke Test Auth Bypass für automatisierte Tests ist **standardmäßig deaktiviert** (sicher für Production).
 
 ```bash
-# In Production deaktivieren (empfohlen)
-SMOKE_AUTH_BYPASS_ENABLED=false
+# Default: Deaktiviert (sicher für Production)
+# Keine Variable setzen = deaktiviert
 
-# Aktiviert lassen (Default für Entwicklung)
+# Für Dev/Staging aktivieren (opt-in)
 SMOKE_AUTH_BYPASS_ENABLED=true
+
+# Explizit deaktivieren
+SMOKE_AUTH_BYPASS_ENABLED=false
 ```
 
 ### Funktionsweise
 
-Wenn aktiviert, erlaubt der Bypass:
+Wenn aktiviert (`SMOKE_AUTH_BYPASS_ENABLED=true`), erlaubt der Bypass:
 - GET/HEAD Requests auf Admin-Routen
 - Mit `x-pms-smoke: 1` Header
 - Und gültigem `Authorization: Bearer <token>` Header
 - Token wird gegen Supabase validiert
 
-### Security-Empfehlung
+### Security
 
-**Production:** `SMOKE_AUTH_BYPASS_ENABLED=false`
+**Default (kein Env-Var):** Deaktiviert ✅
 
-Der Bypass ist für CI/CD-Smoke-Tests gedacht. In Production sollte er deaktiviert sein, da:
+Der Bypass ist für CI/CD-Smoke-Tests gedacht. In Production bleibt er deaktiviert, da:
 - Token-Cookies sind nicht httpOnly (für Client lesbar)
 - Keine IP-Whitelist implementiert
 - Erhöhte Angriffsfläche
+
+**Änderung 2026-03-03:** Default von "aktiviert" auf "deaktiviert" geändert (M-01 Security Fix).
 
 ## Dateien
 
