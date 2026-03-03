@@ -50,6 +50,85 @@ cd frontend && npm audit
 
 ---
 
+## A-03: Dependency Injection statt Lazy Imports (2026-03-03) — IMPLEMENTED
+
+**Scope:** Umstellung der BookingService Sub-Services von Lazy Imports auf Dependency Injection (DI) für bessere Testbarkeit und Code-Qualität.
+
+### Problem
+
+Die Booking-Sub-Services (`create.py`, `update.py`, `cancellation.py`) verwendeten eine "Lazy Import"-Hilfsfunktion in `utils.py`, um zirkuläre Imports zu vermeiden:
+
+```python
+# Alter Pattern in utils.py
+_availability_service = None
+def get_availability_service(db):
+    global _availability_service
+    if _availability_service is None:
+        from app.services.availability_service import AvailabilityService
+        _availability_service = AvailabilityService(db)
+    return _availability_service
+```
+
+Dieser Pattern hat mehrere Nachteile:
+- Globaler Zustand erschwert Unit-Tests
+- Versteckte Abhängigkeiten (nicht im Konstruktor sichtbar)
+- Potentielle Connection-Mismatch-Probleme
+
+### Lösung: Dependency Injection
+
+1. **Service-Konstruktoren**: `availability_service` wird jetzt explizit im Konstruktor übergeben
+2. **FastAPI Depends()**: Neue Provider in `deps.py` für automatische DI in Routes
+3. **TYPE_CHECKING Pattern**: Vermeidet zirkuläre Imports zur Laufzeit
+
+```python
+# Neuer Pattern in deps.py
+def get_booking_service(db: asyncpg.Connection = Depends(get_db_authed)):
+    availability_service = AvailabilityService(db)
+    return BookingService(db, availability_service)
+
+# Route-Usage
+@router.post("/bookings")
+async def create_booking(
+    service: BookingService = Depends(get_booking_service)
+):
+    ...
+```
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `backend/app/services/booking/create.py` | Konstruktor: `availability_service` Parameter |
+| `backend/app/services/booking/update.py` | Konstruktor: `availability_service` Parameter |
+| `backend/app/services/booking/cancellation.py` | Konstruktor: `availability_service` Parameter |
+| `backend/app/services/booking/service.py` | Facade akzeptiert & delegiert `availability_service` |
+| `backend/app/services/booking/utils.py` | Lazy-Import-Helper entfernt |
+| `backend/app/services/booking/__init__.py` | Export-Liste aktualisiert |
+| `backend/app/services/booking_service.py` | Re-Export aktualisiert |
+| `backend/app/api/routes/bookings.py` | Routes nutzen `Depends(get_booking_service)` |
+| `backend/app/api/deps.py` | `get_booking_service` & `get_availability_service` Provider |
+
+### Bugfix während Refactoring
+
+Die Route `update_booking_status` hatte einen Signatur-Mismatch (aufruf mit `updated_by_user_id`, `notes` statt `role`). Dies wurde korrigiert.
+
+### Verification Path
+
+```bash
+# Syntaxprüfung
+python -m py_compile backend/app/services/booking/service.py
+python -m py_compile backend/app/api/routes/bookings.py
+
+# Smoke Test (nach Deploy)
+./backend/scripts/pms_smoke_bookings.sh
+```
+
+### Status
+
+✅ IMPLEMENTED
+
+---
+
 ## Security Fix: defusedxml als Hard-Requirement (M-03) (2026-03-03) — IMPLEMENTED
 
 **Scope**: Entfernung des unsicheren Fallbacks auf `xml.etree.ElementTree` bei fehlendem `defusedxml`.
