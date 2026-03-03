@@ -1,8 +1,78 @@
 # PMS-Webapp Project Status
 
-**Last Updated:** 2026-03-02
+**Last Updated:** 2026-03-03
 
-**Current Phase:** Media Library Implementation - Phase 4 ✅ IMPLEMENTED (Image Editor)
+**Current Phase:** Media Library Implementation - Phase 8 ✅ IMPLEMENTED (Public Bucket)
+
+---
+
+## Media Library - Phase 8: Public Bucket für CMS/Website (2026-03-03) — IMPLEMENTED
+
+**Scope**: Umstellung von Signed URLs auf permanente Public URLs für CMS-/Website-Inhalte.
+
+### Problem (vorher)
+
+CMS-Bilder (z.B. Hero-Blocks) waren nach 1 Stunde nicht mehr sichtbar:
+- `property-media` Bucket war PRIVAT
+- Signed URLs hatten 1h Ablaufzeit
+- CMS speicherte URLs in Datenbank → nach 1h ungültig
+- Property Showcase funktionierte (API generiert frische URLs)
+
+### Lösung: WordPress/Strapi-Style Public Bucket
+
+Industry-Standard für CMS-Systeme:
+- Website-/CMS-Bilder sind öffentlich zugänglich
+- Tenant-Isolation über Pfad-Struktur (`agencies/{agency_id}/...`)
+- URLs sind permanent, CDN-cacheable, SEO-freundlich
+
+### Was wurde implementiert
+
+1. **Migration** (`20260303080000_make_property_media_bucket_public.sql`)
+   - `property-media` Bucket auf public=true gesetzt
+   - RLS Policies für public read, auth write/delete
+   - Bestehende URLs von signed auf public konvertiert
+   - Thumbnails URLs ebenfalls konvertiert
+
+2. **Backend Service** (`media.py`)
+   - `_get_signed_url()` → `_get_public_url()` (permanent)
+   - `_add_signed_url_to_item()` → `_ensure_public_url()`
+   - `upload_to_storage()` gibt direkt public URL zurück
+
+### URL-Format Vergleich
+
+| Typ | URL-Format | Gültigkeit |
+|-----|------------|------------|
+| Signed (alt) | `/storage/v1/object/sign/...?token=xyz` | 1 Stunde |
+| Public (neu) | `/storage/v1/object/public/...` | Permanent |
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `supabase/migrations/20260303080000_make_property_media_bucket_public.sql` | NEU: Migration |
+| `backend/app/services/media.py` | GEÄNDERT: Public URLs statt Signed URLs |
+
+### Security
+
+- ✅ Tenant-Isolation bleibt (Pfad-basiert)
+- ✅ Write/Delete nur für authentifizierte User (RLS)
+- ✅ Öffentliche Lesbarkeit ist CMS-Standard
+
+### Verification Path
+
+```bash
+# Nach Migration:
+# 1. Bucket prüfen (SQL Editor)
+SELECT id, name, public FROM storage.buckets WHERE id = 'property-media';
+# → public = true
+
+# 2. CMS Hero-Block mit Bild testen
+# → Bild bleibt dauerhaft sichtbar (auch nach 1h+)
+
+# 3. URL-Format prüfen
+SELECT id, public_url FROM media_files LIMIT 5;
+# → URLs enthalten /object/public/
+```
 
 ---
 
