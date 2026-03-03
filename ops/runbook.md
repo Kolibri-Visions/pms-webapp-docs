@@ -4,7 +4,7 @@
 
 **Audience**: Ops engineers, DevOps, on-call responders.
 
-**Last Updated**: 2026-02-26
+**Last Updated**: 2026-03-03
 
 ---
 
@@ -41,6 +41,8 @@
 | [43-accessibility-keyboard.md](./runbook/43-accessibility-keyboard.md) | Accessibility: Keyboard & ARIA (K1 htmlFor, K2 FocusTrap, K4 Labels, K5 Errors) |
 | [44-adminshell-architecture.md](./runbook/44-adminshell-architecture.md) | AdminShell Refactoring: Modulare Architektur (Sidebar, Drawer, TopBar) |
 | [45-booking-service-architecture.md](./runbook/45-booking-service-architecture.md) | BookingService Refactoring: Modulare Sub-Services (Query, Create, Update, Cancellation) |
+| [46-file-upload-security.md](./runbook/46-file-upload-security.md) | File Upload Security: Magic Bytes, SVG Sanitization, XXE-Schutz (defusedxml) |
+| [47-module-system.md](./runbook/47-module-system.md) | Module-System Architektur: Router-Registrierung, ModuleSpec, Troubleshooting |
 
 ### Golden Paths (Most Common Operations)
 

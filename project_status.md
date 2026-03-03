@@ -50,6 +50,133 @@ cd frontend && npm audit
 
 ---
 
+## Security Fix: defusedxml als Hard-Requirement (M-03) (2026-03-03) — IMPLEMENTED
+
+**Scope**: Entfernung des unsicheren Fallbacks auf `xml.etree.ElementTree` bei fehlendem `defusedxml`.
+
+### Problem
+
+- `defusedxml` war als optional behandelt (try/except ImportError)
+- Bei fehlendem `defusedxml` Fallback auf unsichere Standard-Library
+- Standard `xml.etree.ElementTree` ist anfällig für XXE (XML External Entity) Attacken
+- SVG-Uploads könnten lokale Dateien lesen oder SSRF auslösen
+
+### Vorher (unsicher)
+
+```python
+# file_validator.py / branding.py
+try:
+    import defusedxml.ElementTree as ET
+    DEFUSEDXML_AVAILABLE = True
+except ImportError:
+    import xml.etree.ElementTree as ET  # ← XXE-verwundbar!
+    DEFUSEDXML_AVAILABLE = False
+```
+
+### Lösung
+
+Fallback entfernt, defusedxml ist jetzt REQUIRED. App startet nicht ohne (Fail Fast).
+
+```python
+# SECURITY: defusedxml is REQUIRED for XXE attack prevention in SVG uploads.
+# Do NOT make this optional - the app should fail to start if defusedxml is missing.
+import defusedxml.ElementTree as ET
+```
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `backend/app/services/file_validator.py` | Optional-Import → Direct Import |
+| `backend/app/api/routes/branding.py` | Optional-Import → Direct Import + Fallback entfernt |
+
+### Verification Path
+
+```bash
+# App startet nur mit defusedxml
+python -c "from app.services.file_validator import sanitize_svg; print('OK')"
+python -c "from app.api.routes.branding import sanitize_svg; print('OK')"
+
+# Bei fehlendem defusedxml → ImportError (gewünscht)
+pip uninstall defusedxml -y && python -c "from app.services.file_validator import sanitize_svg"
+# → ImportError: No module named 'defusedxml'
+```
+
+### Status
+
+✅ IMPLEMENTED
+
+---
+
+## Architecture Fix: Module-System vervollständigen (A-01) (2026-03-03) — IMPLEMENTED
+
+**Scope**: Entfernung des FAILSAFE-Codes durch Migration aller Router ins Module-System.
+
+### Problem
+
+- ~150 Zeilen FAILSAFE-Code in `main.py` mounteten Router manuell
+- 8 Router hatten keine entsprechenden Module
+- Doppelte Mount-Logik und unklare Verantwortlichkeiten
+- Inkonsistente Architektur
+
+### Lösung
+
+8 neue Module erstellt und FAILSAFE-Code entfernt:
+
+| Neues Modul | Router | Prefix |
+|-------------|--------|--------|
+| `public_site` | public_site.router + agency_domain_router | `/api/v1/public` |
+| `public_domain_admin` | public_domain_admin.router | `/api/v1/public-site` |
+| `roles` | roles.router | `/api/v1` |
+| `visitor_tax` | visitor_tax.router | `/api/v1` |
+| `cancellation_policies` | cancellation_policies.router | `/api/v1` |
+| `analytics` | analytics.router | `/api/v1` |
+| `block_templates` | block_templates.router | `/api/v1/website` |
+| `public_root_meta` | public_root_meta.router | `/` (root) |
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `backend/app/modules/public_site.py` | NEU - Modul erstellt |
+| `backend/app/modules/public_domain_admin.py` | NEU - Modul erstellt |
+| `backend/app/modules/roles.py` | NEU - Modul erstellt |
+| `backend/app/modules/visitor_tax.py` | NEU - Modul erstellt |
+| `backend/app/modules/cancellation_policies.py` | NEU - Modul erstellt |
+| `backend/app/modules/analytics.py` | NEU - Modul erstellt |
+| `backend/app/modules/block_templates.py` | NEU - Modul erstellt |
+| `backend/app/modules/public_root_meta.py` | NEU - Modul erstellt |
+| `backend/app/modules/bootstrap.py` | +8 Import-Blöcke |
+| `backend/app/main.py` | -147 Zeilen FAILSAFE-Code |
+
+### Verification Path
+
+```bash
+# 1. App startet
+curl https://api.pms.../api/v1/health
+
+# 2. Alle Endpoints erreichbar
+curl https://api.pms.../api/v1/public/site/settings
+curl https://api.pms.../api/v1/permissions
+curl https://api.pms.../api/v1/visitor-tax/locations
+curl https://api.pms.../api/v1/cancellation-policies
+curl https://api.pms.../api/v1/analytics/vitals
+curl https://api.pms.../api/v1/website/block-templates
+curl https://api.pms.../robots.txt
+```
+
+### Rollback
+
+```bash
+git revert HEAD
+```
+
+### Status
+
+✅ IMPLEMENTED
+
+---
+
 ## Security Fix: Smoke Auth Bypass Default (M-01) (2026-03-03) — IMPLEMENTED
 
 **Scope**: Änderung des Defaults für den Smoke Test Auth Bypass von "aktiviert" auf "deaktiviert".
