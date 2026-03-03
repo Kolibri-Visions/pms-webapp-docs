@@ -112,6 +112,17 @@ async def create_booking(
 
 Die Route `update_booking_status` hatte einen Signatur-Mismatch (aufruf mit `updated_by_user_id`, `notes` statt `role`). Dies wurde korrigiert.
 
+### Hotfix: skip_availability_check Parameter (628f0ef)
+
+Nach dem initialen Deploy trat ein TypeError auf:
+```
+BookingCreateService.create_booking() takes from 3 to 4 positional arguments but 5 were given
+```
+
+**Ursache:** Die Facade `BookingService.create_booking()` übergab `skip_availability_check` an den Sub-Service, aber `BookingCreateService.create_booking()` akzeptierte diesen Parameter nicht.
+
+**Fix:** Parameter `skip_availability_check: bool = False` zu `BookingCreateService.create_booking()` hinzugefügt und in der Availability-Check-Logik verwendet.
+
 ### Verification Path
 
 ```bash
@@ -125,7 +136,7 @@ python -m py_compile backend/app/api/routes/bookings.py
 
 ### Status
 
-✅ IMPLEMENTED
+✅ IMPLEMENTED (Commit b45f0aa, Hotfix 628f0ef)
 
 ---
 
