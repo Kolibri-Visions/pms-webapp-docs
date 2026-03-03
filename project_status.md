@@ -136,7 +136,57 @@ python -m py_compile backend/app/api/routes/bookings.py
 
 ### Status
 
-✅ IMPLEMENTED (Commit b45f0aa, Hotfix 628f0ef)
+✅ IMPLEMENTED (Commit b45f0aa, Hotfix 628f0ef, fd94776)
+
+---
+
+## Bugfix: Status-Update idempotent + Zahlungsdetails (2026-03-03) — IMPLEMENTED
+
+**Scope:** Zwei Bugs bei der Buchungsverwaltung behoben.
+
+### Bug 1: Status-Update warf Fehler bei idempotenten Aufrufen
+
+**Problem:** Wenn eine Buchung bereits den gewünschten Status hatte (z.B. "confirmed -> confirmed"), warf die State Machine einen ValidationException statt den aktuellen Zustand zurückzugeben.
+
+**Ursache:** Die `VALID_TRANSITIONS` Map erlaubte keine "same status" Transitionen.
+
+**Fix:** Idempotenz-Check vor der Transition-Validierung:
+```python
+# Idempotent: If already at target status, return current booking
+if current_status == new_status:
+    return await self._get_booking_dict(booking_id, agency_id)
+```
+
+### Bug 2: Zahlungsdetails zeigten keine Aufschlüsselung
+
+**Problem:** Bei neuen Buchungen wurden Endreinigung, Servicegebühr, Steuern und Zusatzleistungen als 0,00 € angezeigt, obwohl der Gesamtpreis korrekt war.
+
+**Ursache:**
+1. Frontend sendete nur `total_price`, nicht die einzelnen Preiskomponenten
+2. Ausgewählte Zusatzleistungen (`selectedExtras`) wurden nicht an Backend gesendet
+
+**Fix (Frontend):**
+- Alle Quote-Preise (nightly_rate, subtotal, cleaning_fee, service_fee, tax_amount) werden im Payload gesendet
+- Ausgewählte Extras werden in `channel_data.booked_extras` als JSON gespeichert
+- Buchungsdetail-Seite zeigt `booked_extras` an
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `backend/app/services/booking/update.py` | Idempotenz-Check hinzugefügt |
+| `frontend/app/(admin)/bookings/page.tsx` | Quote-Preise + Extras im Payload |
+| `frontend/app/(admin)/bookings/[id]/page.tsx` | Extras-Anzeige in Zahlungsdetails |
+
+### Hinweis: Technische Schulden
+
+Die Extras werden aktuell als JSON in `channel_data.booked_extras` gespeichert.
+Für eine saubere Lösung sollte eine `booking_extra_services` Junction-Tabelle erstellt werden.
+Dies ist als zukünftige Verbesserung markiert.
+
+### Status
+
+✅ IMPLEMENTED (Commit fd94776)
 
 ---
 
