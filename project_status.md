@@ -1,8 +1,51 @@
 # PMS-Webapp Project Status
 
-**Last Updated:** 2026-03-03
+**Last Updated:** 2026-03-04
 
 **Current Phase:** Media Library Implementation - Phase 8 ✅ IMPLEMENTED (Public Bucket)
+
+---
+
+## Buchungslogik: no_show Status-Transition (2026-03-04) — IMPLEMENTED
+
+**Scope:** Erweiterung der Buchungs-State-Machine um Transition `confirmed → no_show`.
+
+### Problem
+
+Der Status `no_show` war als Terminal-Status definiert, aber nicht von `confirmed` erreichbar. Wenn ein Gast mit bestätigter Buchung nicht erscheint, konnte der Status nicht korrekt gesetzt werden.
+
+### Lösung
+
+`VALID_TRANSITIONS` in `backend/app/services/booking/update.py` erweitert:
+
+```python
+# Vorher
+"confirmed": ["checked_in", "cancelled"],
+
+# Nachher
+"confirmed": ["checked_in", "cancelled", "no_show"],
+```
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `backend/app/services/booking/update.py:31` | `no_show` zu confirmed-Transitions hinzugefügt |
+
+### Verification Path
+
+```bash
+# Backend-Test (wenn vorhanden)
+pytest backend/tests/services/booking/ -v -k "no_show"
+
+# Manueller Test via API
+curl -X PATCH /api/v1/bookings/{id}/status -d '{"status": "no_show"}'
+# → Sollte bei confirmed Booking funktionieren
+```
+
+### Status
+
+✅ IMPLEMENTED (Commit `70fac5d`)
 
 ---
 
