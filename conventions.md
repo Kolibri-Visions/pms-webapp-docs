@@ -649,4 +649,112 @@ default_price_cents  - Standardpreis (in Cent)
 
 ---
 
-**Letzte Aktualisierung:** 2026-03-04 (Type-Consistency Phase 2 abgeschlossen)
+### 12.9 Offene Inkonsistenzen Phase 3 (Stand 2026-03-04)
+
+> **Baseline-Tag:** `pre-type-consistency-3-baseline`
+> **TODO-Liste:** `/PMS-Webapp-Dokumente/PMS-Webapp-TODO.md`
+
+#### 12.9.1 Availability-Feldnamen (KRITISCH)
+
+| Frontend (FALSCH) | Backend (RICHTIG) | Aktion |
+|-------------------|-------------------|--------|
+| `date_from` / `date_to` | `from_date` / `to_date` | Frontend anpassen |
+| `status` | `state` | Frontend anpassen |
+| `start` / `end` | `start_date` / `end_date` | Frontend anpassen |
+| `pending_markers` | `pending_requests` | Frontend anpassen |
+| — | `kind: 'available' \| 'booking' \| 'block'` | Frontend hinzufügen |
+
+**Standard-Konvention für Availability-Felder:**
+```
+from_date / to_date     - Query-Parameter für Zeitraum
+start_date / end_date   - Segment-Grenzen (Beginn/Ende)
+state                   - Status: 'available' | 'booked' | 'blocked'
+kind                    - Art: 'available' | 'booking' | 'block'
+```
+
+#### 12.9.2 Media-Feldnamen (KRITISCH)
+
+| Frontend (FALSCH) | Backend (RICHTIG) | Aktion |
+|-------------------|-------------------|--------|
+| `tenant_id` | `agency_id` | Frontend umbenennen |
+| `FileType` (3 Werte) | `ALLOWED_FILE_TYPES` (4 Werte) | `"document"` hinzufügen |
+
+**Standard-Konvention für Media-Felder:**
+```
+agency_id    - Tenant/Agentur-Referenz (NICHT tenant_id!)
+file_type    - 'image' | 'pdf' | 'video' | 'document'
+```
+
+#### 12.9.3 Branding-Felder (KRITISCH)
+
+| Schema-Feld | DB-Status | Aktion |
+|-------------|-----------|--------|
+| `gradient_from` | NICHT IN DB | Migration ODER Schema-Cleanup |
+| `gradient_via` | NICHT IN DB | Migration ODER Schema-Cleanup |
+| `gradient_to` | NICHT IN DB | Migration ODER Schema-Cleanup |
+
+#### 12.9.4 Property Required-Felder (HOCH)
+
+Backend erwartet diese Felder als **REQUIRED** bei `PropertyCreate`:
+
+**Pflicht:**
+- `name`, `property_type`
+- `bedrooms`, `beds`, `bathrooms`, `max_guests`
+- `address_line1`, `city`, `postal_code`, `country`
+- `base_price`, `currency`
+
+**Optional:**
+- `internal_name`, `description`, `size_sqm`
+- `owner_id`, `latitude`, `longitude`
+- `cleaning_fee`, `security_deposit`, `extra_guest_fee`
+
+**Frontend muss prüfen:** Sind diese Felder als `optional` markiert obwohl Backend sie erwartet?
+
+#### 12.9.5 Website/Public-Felder (HOCH)
+
+| Frontend (FEHLT) | Backend | Aktion |
+|------------------|---------|--------|
+| — | `phone: Optional[str]` | Frontend hinzufügen |
+| — | `email: Optional[str]` | Frontend hinzufügen |
+| — | `address: Optional[str]` | Frontend hinzufügen |
+| — | `social_links: Dict[str, str]` | Frontend hinzufügen |
+
+#### 12.9.6 Block-System (HOCH)
+
+**Aktuell:** Frontend nutzt `Record<string, unknown>` für Block-Props.
+**Problem:** Backend hat 20+ typisierte Block-Prop-Schemas in `block_validation.py`.
+
+**Lösung:** Neue Datei `frontend/app/types/blocks.ts` mit:
+
+```typescript
+// Block-Type Enum
+type BlockType = 'hero-fullwidth' | 'trust-indicators' | 'features-grid' | ...;
+
+// Props per Block-Typ
+interface HeroFullwidthProps { title: string; subtitle?: string; ... }
+interface TrustIndicatorsProps { items: TrustItem[]; ... }
+
+// Union-Type
+type BlockProps = HeroFullwidthProps | TrustIndicatorsProps | ...;
+
+// Block-Interface
+interface Block {
+  id: string;
+  type: BlockType;
+  props: BlockProps;
+  style_overrides?: BlockStyleOverrides;
+}
+```
+
+#### 12.9.7 Operations/AuditLog (HOCH)
+
+| Frontend (VERALTET) | Backend (AKTUELL) | Aktion |
+|---------------------|-------------------|--------|
+| `actor_id` | `actor_user_id` | Umbenennen |
+| `target_type` | `entity_type` | Umbenennen |
+| `target_id` | `entity_id` | Umbenennen |
+| `ip_address` | `ip` | Umbenennen |
+
+---
+
+**Letzte Aktualisierung:** 2026-03-04 (Type-Consistency Phase 3 Definitionen hinzugefügt)
