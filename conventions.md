@@ -559,16 +559,28 @@ const getGuestAddress = (guest: Guest) =>
   [guest.address_line1, guest.address_line2].filter(Boolean).join(', ');
 ```
 
-### 12.6 Bekannte Inkonsistenzen (Stand 2026-03-04)
+### 12.6 Behobene Inkonsistenzen (Type-Consistency Konsolidierung 2026-03-04)
 
-| Entity | Problem | Status |
-|--------|---------|--------|
-| OwnerBooking | `date_from`/`date_to` statt `check_in`/`check_out` | TODO: Phase 1 |
-| ExtraService | Frontend hat `per_person` (Backend nicht) | TODO: Phase 2 |
-| Owner | Frontend erwartet `name` (Backend liefert nicht) | TODO: Phase 3 |
-| Guest | Legacy `address` Feld | TODO: Phase 4 |
-| ExtraServiceList | `.data` Fallback im Frontend | TODO: Phase 5 |
+| Entity | Problem | Status | Commit |
+|--------|---------|--------|--------|
+| OwnerBooking | `date_from`/`date_to` statt `check_in`/`check_out` | ✅ BEHOBEN | Phase 1 |
+| ExtraService | Frontend hatte `per_person` (Backend nicht) | ✅ BEHOBEN | Phase 2 |
+| Owner | Frontend erwartete `name` (Backend liefert nicht) | ✅ BEHOBEN | Phase 3 |
+| Guest | Legacy `address` Feld | ✅ BEHOBEN (bereits) | Phase 4 |
+| ExtraServiceList | `.data` Fallback im Frontend | ✅ BEHOBEN | Phase 5 (`bc2864d`) |
+| BookingRequest | Ungenutzes `deadline` Feld | ✅ BEHOBEN | Phase 6 (`3ba6947`) |
+| PropertyExtraService | `extra_service_id` statt `service_id` | ✅ BEHOBEN | Phase 7 (`c605537`) |
+
+### 12.7 Revert-Strategie
+
+```bash
+# Einzelne Phase revertieren
+git reset --hard pre-type-consistency-phase-{N}
+
+# Alles revertieren
+git reset --hard pre-type-consistency-baseline
+```
 
 ---
 
-**Letzte Aktualisierung:** 2026-03-04 (Type-Konsistenz-Definitionen hinzugefügt)
+**Letzte Aktualisierung:** 2026-03-04 (Type-Consistency Konsolidierung abgeschlossen)

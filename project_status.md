@@ -6,6 +6,58 @@
 
 ---
 
+## Type-Consistency Konsolidierung (2026-03-04) — IMPLEMENTED
+
+**Scope:** Behebung aller Type-Inkonsistenzen zwischen Frontend (TypeScript) und Backend (Pydantic).
+
+### Phasen
+
+| Phase | Beschreibung | Commit | Status |
+|-------|-------------|--------|--------|
+| 1 | OwnerBooking date_from→check_in | (frühere Session) | ✅ |
+| 2 | BillingUnit per_person entfernt | (frühere Session) | ✅ |
+| 3 | Owner name→computed property | (frühere Session) | ✅ |
+| 4 | Guest address @deprecated | (bereits vorhanden) | ✅ |
+| 5 | Response-Wrapper .data Fallback | `bc2864d` | ✅ |
+| 6 | BookingRequest deadline @deprecated | `3ba6947` | ✅ |
+| 7 | PropertyExtraService extra_service_id @deprecated | `c605537` | ✅ |
+| 8 | Dokumentation | (dieser Commit) | ✅ |
+
+### Geänderte Dateien (Phase 5-8)
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/(admin)/extra-services/page.tsx` | .data Fallback entfernt |
+| `frontend/app/(admin)/ops/audit-log/page.tsx` | .data Fallback entfernt |
+| `frontend/app/(admin)/owners/[ownerId]/page.tsx` | .data Fallback entfernt |
+| `frontend/app/(admin)/connections/page.tsx` | normalizeConnections/normalizeLogs bereinigt |
+| `frontend/app/(admin)/channel-sync/page.tsx` | .data Fallback entfernt (2×) |
+| `frontend/app/types/extra-service.ts` | ExtraServiceListResponse, extra_service_id @deprecated |
+| `frontend/app/types/booking.ts` | deadline @deprecated, JSDoc |
+| `backend/docs/conventions.md` | §12.6 aktualisiert |
+
+### Verification Path
+
+```bash
+cd frontend && npm run build  # TypeScript-Validierung
+```
+
+### Revert
+
+```bash
+# Einzelne Phase
+git reset --hard pre-type-consistency-phase-{N}
+
+# Alles
+git reset --hard pre-type-consistency-baseline
+```
+
+### Status
+
+✅ IMPLEMENTED
+
+---
+
 ## Pricing-Bug: Vollständige Preisaufschlüsselung bei Buchungserstellung (2026-03-04) — IMPLEMENTED
 
 **Scope:** Fix für fehlende Gebühren/Steuern-Aufschlüsselung bei manuell erstellten Buchungen.
