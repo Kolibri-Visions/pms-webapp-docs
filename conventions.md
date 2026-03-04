@@ -459,4 +459,116 @@ const blob = await response.blob();
 
 ---
 
-**Letzte Aktualisierung:** 2026-03-04 (Konsolidierung Phase 2 abgeschlossen)
+## 12. Type-Konsistenz (Frontend ↔ Backend)
+
+### 12.1 BillingUnit (Extra Services)
+
+**Backend (authoritative):**
+```python
+# backend/app/schemas/extra_services.py
+BillingUnit = Literal[
+    "per_night",
+    "per_stay",
+    "per_person_per_night",
+    "per_person_per_stay",
+    "per_unit",
+    "per_unit_night",
+]
+```
+
+**Frontend MUSS identisch sein:**
+```typescript
+// frontend/app/types/extra-service.ts
+export type BillingUnit =
+  | 'per_night'
+  | 'per_stay'
+  | 'per_person_per_night'
+  | 'per_person_per_stay'
+  | 'per_unit'
+  | 'per_unit_night';
+```
+
+**NICHT ERLAUBT:** `per_person` (ohne Präzision) - Backend unterstützt es nicht!
+
+### 12.2 Response-Wrapper (List-Responses)
+
+**Backend-Standard:**
+```python
+class PaginatedResponse(BaseModel, Generic[T]):
+    items: list[T]    # IMMER 'items', NIE 'data'
+    total: int
+    limit: int
+    offset: int
+```
+
+**Frontend MUSS `.items` verwenden:**
+```typescript
+// RICHTIG
+const data = await apiClient.get<{ items: T[] }>('/api/v1/...', accessToken);
+setItems(data.items);
+
+// FALSCH (Legacy - entfernen!)
+setItems(data.items ?? data.data ?? []);
+```
+
+### 12.3 FK-Referenzen
+
+| RICHTIG | FALSCH | Entity |
+|---------|--------|--------|
+| `service_id` | `extra_service_id` | PropertyExtraService |
+| `property_id` | `propertyId` | Alle |
+| `guest_id` | `guestId` | Booking |
+
+### 12.4 Owner-Booking Felder (KRITISCH)
+
+**Backend (Ziel-Schema):**
+```python
+class OwnerBookingResponse(BaseModel):
+    check_in: date              # NICHT: date_from
+    check_out: date             # NICHT: date_to
+    total_price_cents: int      # Standardformat
+```
+
+**Frontend (mit Deprecation-Marker):**
+```typescript
+interface OwnerBooking {
+  check_in: string;
+  check_out: string;
+  total_price_cents: number;
+
+  /** @deprecated Use check_in instead */
+  date_from?: string;
+  /** @deprecated Use check_out instead */
+  date_to?: string;
+  /** @deprecated Use total_price_cents instead */
+  total_price?: string;
+}
+```
+
+### 12.5 Computed-Properties (Frontend)
+
+Felder die das Backend NICHT liefert, aber das Frontend braucht:
+
+```typescript
+// Owner: name wird aus first_name + last_name berechnet
+const getOwnerName = (owner: Owner) =>
+  `${owner.first_name ?? ''} ${owner.last_name ?? ''}`.trim() || 'Unbekannt';
+
+// Guest: address wird aus address_line1 + address_line2 berechnet
+const getGuestAddress = (guest: Guest) =>
+  [guest.address_line1, guest.address_line2].filter(Boolean).join(', ');
+```
+
+### 12.6 Bekannte Inkonsistenzen (Stand 2026-03-04)
+
+| Entity | Problem | Status |
+|--------|---------|--------|
+| OwnerBooking | `date_from`/`date_to` statt `check_in`/`check_out` | TODO: Phase 1 |
+| ExtraService | Frontend hat `per_person` (Backend nicht) | TODO: Phase 2 |
+| Owner | Frontend erwartet `name` (Backend liefert nicht) | TODO: Phase 3 |
+| Guest | Legacy `address` Feld | TODO: Phase 4 |
+| ExtraServiceList | `.data` Fallback im Frontend | TODO: Phase 5 |
+
+---
+
+**Letzte Aktualisierung:** 2026-03-04 (Type-Konsistenz-Definitionen hinzugefügt)
