@@ -6,6 +6,54 @@
 
 ---
 
+## Pricing-Bug: Vollständige Preisaufschlüsselung bei Buchungserstellung (2026-03-04) — IMPLEMENTED
+
+**Scope:** Fix für fehlende Gebühren/Steuern-Aufschlüsselung bei manuell erstellten Buchungen.
+
+### Problem
+
+Bei manueller Buchungserstellung wurden Gebühren (Buchungsgebühr, Endreinigung) und Steuern nicht in die Buchung übernommen, obwohl sie in der Preisvorschau korrekt angezeigt wurden.
+
+**Root Cause:** Frontend suchte nach Fee-Types `"cleaning"`, `"service"` die im Backend nicht existieren. Backend sendet `"per_stay"`, `"per_night"`, `"percent"`, `"per_person"`.
+
+### Lösung
+
+1. **Fee-Summierung:** Alle Fees via `fees_total_cents` in `cleaning_fee` speichern
+2. **Steuer-Summierung:** `taxes_total_cents + visitor_tax_cents` in `tax_amount` speichern
+3. **Vollständige Breakdown:** `pricing_breakdown` Objekt in `channel_data` speichern
+4. **Detail-Anzeige:** Dynamisches Rendering aus `pricing_breakdown` mit Legacy-Fallback
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/(admin)/bookings/page.tsx` | Fee/Tax-Extraktion via Summen, `pricing_breakdown` in channel_data |
+| `frontend/app/(admin)/bookings/[id]/page.tsx` | Dynamische Breakdown-Anzeige, "Sonstige Gebühren" Fallback |
+| `frontend/app/types/booking.ts` | `pricing_breakdown` Type in channel_data |
+
+### Verification Path
+
+```bash
+cd frontend && npm run build
+
+# Manueller Test:
+# 1. Neue Buchung mit Objekt das Gebühren/Steuern hat erstellen
+# 2. Buchungs-Detail öffnen
+# 3. Prüfen: Alle Gebühren einzeln sichtbar, Summe = Gesamtpreis
+```
+
+### Revert
+
+```bash
+git revert <commit-hash>
+```
+
+### Status
+
+✅ IMPLEMENTED
+
+---
+
 ## Buchungslogik: no_show Status-Transition (2026-03-04) — IMPLEMENTED
 
 **Scope:** Erweiterung der Buchungs-State-Machine um Transition `confirmed → no_show`.
