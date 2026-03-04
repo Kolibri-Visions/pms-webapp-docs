@@ -55,6 +55,44 @@ git revert <commit-hash>
 
 ---
 
+## Architektur-Konsolidierung Phase 1 (2026-03-04) — IMPLEMENTED
+
+**Scope:** Frontend Type-Bereinigung (Non-Breaking)
+
+### Änderungen
+
+1. **Redundantes Feld entfernt:** `guests_count` aus `Booking` Interface (nicht verwendet)
+2. **Union Type bereinigt:** `total_price: string | number` → `total_price: string`
+3. **Redundantes Feld entfernt:** `guests` aus `BookingRequest` Interface
+4. **Deprecation-Kommentare:** Legacy-Felder markiert für spätere Migration
+5. **Zentrale Exports:** `index.ts` mit Konventions-Referenz aktualisiert
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/types/booking.ts` | Type-Bereinigung, Deprecation-Kommentare |
+| `frontend/app/types/index.ts` | Konventions-Referenz, fehlende Exports |
+
+### Verification Path
+
+```bash
+cd frontend && npm run build
+git tag -l | grep pre-consolidation-phase-1
+```
+
+### Revert
+
+```bash
+git reset --hard pre-consolidation-phase-1
+```
+
+### Status
+
+✅ IMPLEMENTED
+
+---
+
 ## Architektur-Konsolidierung Phase 0 (2026-03-04) — IMPLEMENTED
 
 **Scope:** Vorbereitung und Dokumentation für systematische Behebung von Architektur-Inkonsistenzen.
