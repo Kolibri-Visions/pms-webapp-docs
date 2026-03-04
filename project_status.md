@@ -2,7 +2,68 @@
 
 **Last Updated:** 2026-03-04
 
-**Current Phase:** Media Library Implementation - Phase 8 ✅ IMPLEMENTED (Public Bucket)
+**Current Phase:** Type-Consistency Phase 3 ✅ IMPLEMENTED
+
+---
+
+## Type-Consistency Konsolidierung Phase 3 (2026-03-04) — IMPLEMENTED
+
+**Scope:** Umfassende Type-Synchronisation zwischen Frontend (TypeScript) und Backend (Pydantic) - 27 Issues in 12 Kategorien.
+
+### Phasen
+
+| Phase | Beschreibung | Commit | Status |
+|-------|-------------|--------|--------|
+| 3.1 | Availability Types (5 kritische Feldnamen) | `4716fb9` | ✅ |
+| 3.2 | Media Library Types (tenant_id→agency_id, document type) | `378a835` | ✅ |
+| 3.3 | Branding Types (FALSE POSITIVE korrigiert) | `482fb9d` | ✅ |
+| 3.4 | Property Types (deactivated_at, required fields) | `760c8ba` | ✅ |
+| 3.5 | Website/Public Types (SiteSettings, TopbarConfig) | `d530628` | ✅ |
+| 3.6 | Block System Types (600+ Zeilen neue blocks.ts) | `50a2e8c` | ✅ |
+| 3.7 | Operations/AuditLog Types (actor_user_id, entity_type) | `cdd30df` | ✅ |
+| 3.8 | Cleanup & Medium Priority (Dokumentation) | `92aee55` | ✅ |
+| 3.9 | Dokumentation & Abschluss | (dieser Commit) | ✅ |
+
+### Neue/Geänderte Type-Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/types/availability.ts` | Vollständige Neufassung: from_date/to_date, state/kind |
+| `frontend/app/types/media.ts` | agency_id, FileType mit 'document', Normalizer |
+| `frontend/app/types/property.ts` | deactivated_at, PropertyCreateData, PropertyUpdateData |
+| `frontend/app/types/website.ts` | SiteSettings, TopbarConfig, PublicDesignData erweitert |
+| `frontend/app/types/blocks.ts` | **NEU** - 600+ Zeilen: 26 BlockTypes, 20+ Props, StyleOverrides |
+| `frontend/app/types/operations.ts` | AuditLogEntry aktualisiert, ComponentHealth |
+| `frontend/app/types/cancellation.ts` | refund_percent INTEGER Dokumentation |
+| `frontend/app/types/dashboard.ts` | _cents vs float Dokumentation |
+| `frontend/app/types/owner.ts` | Amount-Felder Dokumentation |
+
+### Highlights
+
+- **blocks.ts erstellt:** Vollständiges Block-Type-System mit 26 Block-Typen, 20+ Props-Interfaces, 30+ StyleOverrides
+- **@deprecated Marker:** Legacy-Felder konsistent markiert für schrittweise Migration
+- **Type Guards:** Utility-Funktionen für Runtime-Checks (isContainerBlock, isDeactivated, etc.)
+- **Normalizer-Funktionen:** Für Backend-Kompatibilität (normalizeMediaFile, normalizeRange)
+
+### Verification Path
+
+```bash
+cd frontend && npm run build  # TypeScript-Validierung
+```
+
+### Revert
+
+```bash
+# Einzelne Phase
+git reset --hard pre-type-consistency-3-phase-{N}
+
+# Alles Phase 3
+git reset --hard pre-type-consistency-3-baseline
+```
+
+### Status
+
+✅ IMPLEMENTED
 
 ---
 

@@ -685,13 +685,17 @@ agency_id    - Tenant/Agentur-Referenz (NICHT tenant_id!)
 file_type    - 'image' | 'pdf' | 'video' | 'document'
 ```
 
-#### 12.9.3 Branding-Felder (KRITISCH)
+#### 12.9.3 Branding-Felder ✅ OK (False Positive korrigiert)
 
-| Schema-Feld | DB-Status | Aktion |
+Die gradient-Felder existieren bereits in der Datenbank:
+
+| Schema-Feld | DB-Spalte | Status |
 |-------------|-----------|--------|
-| `gradient_from` | NICHT IN DB | Migration ODER Schema-Cleanup |
-| `gradient_via` | NICHT IN DB | Migration ODER Schema-Cleanup |
-| `gradient_to` | NICHT IN DB | Migration ODER Schema-Cleanup |
+| `gradient_from` | `tenant_branding.gradient_from` | ✅ Existiert (Migration 20260226163000) |
+| `gradient_via` | `tenant_branding.gradient_via` | ✅ Existiert (Migration 20260226163000) |
+| `gradient_to` | `tenant_branding.gradient_to` | ✅ Existiert (Migration 20260226163000) |
+
+**Nachweis:** `supabase/migrations/20260226163000_add_branding_nav_behavior.sql` Zeilen 18-20
 
 #### 12.9.4 Property Required-Felder (HOCH)
 
@@ -710,51 +714,99 @@ Backend erwartet diese Felder als **REQUIRED** bei `PropertyCreate`:
 
 **Frontend muss prüfen:** Sind diese Felder als `optional` markiert obwohl Backend sie erwartet?
 
-#### 12.9.5 Website/Public-Felder (HOCH)
+#### 12.9.5 Website/Public-Felder ✅ BEHOBEN (Phase 3.5)
 
-| Frontend (FEHLT) | Backend | Aktion |
-|------------------|---------|--------|
-| — | `phone: Optional[str]` | Frontend hinzufügen |
-| — | `email: Optional[str]` | Frontend hinzufügen |
-| — | `address: Optional[str]` | Frontend hinzufügen |
-| — | `social_links: Dict[str, str]` | Frontend hinzufügen |
+| Frontend | Backend | Status |
+|----------|---------|--------|
+| `SiteSettings.phone` | `phone: Optional[str]` | ✅ Hinzugefügt |
+| `SiteSettings.email` | `email: Optional[str]` | ✅ Hinzugefügt |
+| `SiteSettings.address` | `address: Optional[str]` | ✅ Hinzugefügt |
+| `SiteSettings.social_links` | `social_links: Dict[str, str]` | ✅ Hinzugefügt |
+| `TopbarConfig` (vollständig) | `TopbarConfig` | ✅ Hinzugefügt |
+| `TopbarItem` | `TopbarItem` | ✅ Hinzugefügt |
+| `PublicDesignData` erweitert | `PublicSiteDesignResponse` | ✅ Vollständig synchronisiert |
 
-#### 12.9.6 Block-System (HOCH)
+**Neue Felder in `PublicDesignData`:**
+- `logo_light_url`, `logo_dark_url`, `favicon_url`, `logo_display_mode`, `logo_height_px`
+- `header_padding_top_px`, `header_padding_bottom_px`
+- `topbar_config: TopbarConfig`
+- `updated_at`
 
-**Aktuell:** Frontend nutzt `Record<string, unknown>` für Block-Props.
-**Problem:** Backend hat 20+ typisierte Block-Prop-Schemas in `block_validation.py`.
+**Synchronisiert:** `frontend/app/types/website.ts` ↔ `backend/app/schemas/public_site.py`
 
-**Lösung:** Neue Datei `frontend/app/types/blocks.ts` mit:
+#### 12.9.6 Block-System ✅ BEHOBEN (Phase 3.6)
 
-```typescript
-// Block-Type Enum
-type BlockType = 'hero-fullwidth' | 'trust-indicators' | 'features-grid' | ...;
+**Neue Datei:** `frontend/app/types/blocks.ts`
 
-// Props per Block-Typ
-interface HeroFullwidthProps { title: string; subtitle?: string; ... }
-interface TrustIndicatorsProps { items: TrustItem[]; ... }
+**Implementiert:**
 
-// Union-Type
-type BlockProps = HeroFullwidthProps | TrustIndicatorsProps | ...;
+| Typ-Kategorie | Anzahl | Status |
+|---------------|--------|--------|
+| BlockType (Union) | 26 Block-Typen | ✅ |
+| Block-Item-Types | 6 (Testimonial, FAQ, Trust, Offer, Location, USP) | ✅ |
+| Block-Props | 20+ typisierte Props-Interfaces | ✅ |
+| Widget-Props | 6 (Button, Headline, Paragraph, Spacer, Divider, IconBox) | ✅ |
+| BlockStyleOverrides | 30+ Style-Properties | ✅ |
+| BlockTemplate CRUD | 4 Interfaces | ✅ |
+| Type Guards | `isContainerBlock()`, `isWidgetBlock()` | ✅ |
 
-// Block-Interface
-interface Block {
-  id: string;
-  type: BlockType;
-  props: BlockProps;
-  style_overrides?: BlockStyleOverrides;
-}
+**Architektur:**
+- `blocks.ts`: Vollständige Block-Typ-Definitionen (Backend-Sync)
+- `website.ts`: Re-exportiert Block-Types + Website-spezifische Types
+- `Block.props: Record<string, unknown>` für Flexibilität
+- Spezifische `*Props` Interfaces für typsicheren Zugriff
+
+**Synchronisiert:** `blocks.ts` ↔ `block_validation.py`, `block_templates.py`
+
+#### 12.9.7 Operations/AuditLog ✅ BEHOBEN (Phase 3.7)
+
+| Frontend (alt) | Backend (aktuell) | Status |
+|----------------|-------------------|--------|
+| `actor_id`, `user_id` | `actor_user_id` | ✅ @deprecated |
+| `target_type`, `resource_type` | `entity_type` | ✅ @deprecated |
+| `target_id`, `resource_id` | `entity_id` | ✅ @deprecated |
+| `ip_address` | `ip` | ✅ @deprecated |
+| `details` | `metadata` | ✅ @deprecated |
+
+**AuditLogEntry Backend-Schema:**
+```
+agency_id, actor_user_id, actor_type,
+action, entity_type, entity_id,
+request_id, idempotency_key,
+ip, user_agent, metadata, created_at
 ```
 
-#### 12.9.7 Operations/AuditLog (HOCH)
-
-| Frontend (VERALTET) | Backend (AKTUELL) | Aktion |
-|---------------------|-------------------|--------|
-| `actor_id` | `actor_user_id` | Umbenennen |
-| `target_type` | `entity_type` | Umbenennen |
-| `target_id` | `entity_id` | Umbenennen |
-| `ip_address` | `ip` | Umbenennen |
+**Synchronisiert:** `operations.ts` ↔ `core/audit.py`
 
 ---
 
-**Letzte Aktualisierung:** 2026-03-04 (Type-Consistency Phase 3 Definitionen hinzugefügt)
+## 12.10 Type-Consistency Phase 3 Abschluss (2026-03-04)
+
+**Status:** ✅ ABGESCHLOSSEN
+
+| Phase | Beschreibung | Status |
+|-------|-------------|--------|
+| 3.1 | Availability Types | ✅ |
+| 3.2 | Media Library Types | ✅ |
+| 3.3 | Branding Types (FALSE POSITIVE) | ✅ |
+| 3.4 | Property Types | ✅ |
+| 3.5 | Website/Public Types | ✅ |
+| 3.6 | Block System Types | ✅ |
+| 3.7 | Operations/AuditLog Types | ✅ |
+| 3.8 | Cleanup & Medium Priority | ✅ |
+| 3.9 | Documentation & Completion | ✅ |
+
+**Neue Dateien:**
+- `frontend/app/types/blocks.ts` (600+ Zeilen)
+
+**Synchronisierte Dateien:**
+- availability.ts, media.ts, property.ts, website.ts
+- operations.ts, cancellation.ts, dashboard.ts, owner.ts
+
+**Revert-Tags:**
+- `pre-type-consistency-3-baseline`
+- `pre-type-consistency-3-phase-{1-8}`
+
+---
+
+**Letzte Aktualisierung:** 2026-03-04 (Type-Consistency Phase 3 abgeschlossen)
