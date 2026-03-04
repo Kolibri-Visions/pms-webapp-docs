@@ -1,0 +1,343 @@
+# PMS-Webapp Entwicklungskonventionen
+
+**Erstellt:** 2026-03-04
+**Status:** Verbindlich
+**Scope:** Alle neuen Entwicklungen, Refaktorisierungen
+
+> Diese Konventionen sind **verbindlich** für alle Code-Änderungen.
+> Bei Abweichungen: Dokumentieren und im PR begründen.
+
+---
+
+## 1. Feldnamen-Konventionen
+
+### 1.1 Datum/Zeit
+
+| Korrekt | FALSCH | Bemerkung |
+|---------|--------|-----------|
+| `check_in` | ~~date_from~~, ~~start_date~~, ~~arrival~~ | Ankunftsdatum |
+| `check_out` | ~~date_to~~, ~~end_date~~, ~~departure~~ | Abreisedatum |
+| `created_at` | ~~createdAt~~, ~~create_date~~ | Erstellungszeitpunkt |
+| `updated_at` | ~~updatedAt~~, ~~modify_date~~ | Aktualisierungszeitpunkt |
+| `confirmed_at` | ~~confirmedAt~~ | Bestätigungszeitpunkt |
+| `cancelled_at` | ~~cancelledAt~~ | Stornierungszeitpunkt |
+
+**Format:**
+- Datum: ISO 8601 String `"YYYY-MM-DD"`
+- Zeitstempel: ISO 8601 mit Timezone `"YYYY-MM-DDTHH:mm:ssZ"`
+
+### 1.2 Gästezahlen
+
+| Korrekt | FALSCH | Bemerkung |
+|---------|--------|-----------|
+| `num_adults` | ~~adults~~, ~~adult_count~~, ~~guests~~ | Anzahl Erwachsene |
+| `num_children` | ~~children~~, ~~child_count~~ | Anzahl Kinder |
+| `num_infants` | ~~infants~~, ~~baby_count~~ | Anzahl Kleinkinder |
+| `num_pets` | ~~pets~~, ~~pet_count~~ | Anzahl Haustiere |
+| `num_guests` | ~~guests~~, ~~guests_count~~, ~~total_guests~~ | Aggregiert (adults + children) |
+
+**Regel:** Immer `num_` Präfix für alle Zählfelder.
+
+### 1.3 Preise
+
+| Korrekt | FALSCH | Verwendung |
+|---------|--------|------------|
+| `total_price_cents` | ~~totalPrice~~, ~~total~~ | Gesamtpreis in Cents |
+| `subtotal_cents` | ~~subtotal~~ (ohne Suffix) | Zwischensumme in Cents |
+| `nightly_rate_cents` | ~~nightlyRate~~, ~~rate~~ | Nachtpreis in Cents |
+| `cleaning_fee_cents` | ~~cleaningFee~~ | Reinigungsgebühr in Cents |
+| `tax_amount_cents` | ~~tax~~, ~~taxes~~ | Steuerbetrag in Cents |
+
+**Regeln:**
+- **Neue Felder:** Immer in Cents als Integer mit `_cents` Suffix
+- **Legacy-Felder:** `total_price`, `cleaning_fee` etc. (Decimal) nur für DB-Kompatibilität
+- **Display:** Frontend formatiert Cents zu Euro (`cents / 100`)
+
+### 1.4 IDs
+
+| Korrekt | FALSCH | Bemerkung |
+|---------|--------|-----------|
+| `property_id` | ~~propertyId~~, ~~property~~ | Objekt-ID |
+| `guest_id` | ~~guestId~~, ~~guest~~ | Gast-ID |
+| `booking_id` | ~~bookingId~~ | Buchungs-ID |
+| `agency_id` | ~~agencyId~~, ~~tenant_id~~ | Agentur/Tenant-ID |
+
+**Format:** UUID v4 als String `"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"`
+
+### 1.5 Status
+
+| Korrekt | FALSCH | Bemerkung |
+|---------|--------|-----------|
+| `confirmed` | ~~CONFIRMED~~, ~~Confirmed~~ | Bestätigt |
+| `checked_in` | ~~checkedIn~~, ~~CHECKED_IN~~ | Eingecheckt |
+| `checked_out` | ~~checkedOut~~ | Ausgecheckt |
+| `cancelled` | ~~CANCELLED~~, ~~canceled~~ | Storniert |
+| `no_show` | ~~noShow~~, ~~NO_SHOW~~ | Nicht erschienen |
+
+**Regel:** Immer snake_case, lowercase.
+
+### 1.6 Boolean
+
+| Korrekt | FALSCH | Bemerkung |
+|---------|--------|-----------|
+| `is_active` | ~~active~~, ~~isActive~~ | Aktivstatus |
+| `is_taxable` | ~~taxable~~ | Steuerpflichtig |
+| `has_breakfast` | ~~breakfast~~, ~~hasBreakfast~~ | Hat Frühstück |
+| `is_blocked` | ~~blocked~~ | Blockiert |
+
+**Regel:** `is_` Präfix für Zustand, `has_` Präfix für Besitz.
+
+---
+
+## 2. Type-Konventionen
+
+### 2.1 Frontend (TypeScript)
+
+```typescript
+// KORREKT: Strikte, eindeutige Typen
+interface Booking {
+  id: string;                    // UUID als String
+  check_in: string;              // ISO Date "YYYY-MM-DD"
+  check_out: string;             // ISO Date "YYYY-MM-DD"
+  num_adults: number;            // Integer
+  num_children: number;          // Integer
+  total_price: string;           // Decimal vom Backend als String
+  total_price_cents?: number;    // Neues Format (Integer)
+  status: BookingStatus;         // Enum/Union Type
+  created_at: string;            // ISO Timestamp
+}
+
+// FALSCH: Union Types für einzelne API-Felder
+interface Booking {
+  total_price: string | number;  // NIEMALS!
+  num_adults: number | null;     // Wenn required, dann kein null
+}
+```
+
+### 2.2 Backend (Pydantic)
+
+```python
+# KORREKT: Explizite Typen mit Validierung
+class BookingCreate(BaseModel):
+    property_id: UUID
+    check_in: date
+    check_out: date
+    num_adults: int = Field(ge=1, le=20)
+    num_children: int = Field(default=0, ge=0, le=20)
+    total_price_cents: Optional[int] = Field(default=None, ge=0)
+
+# FALSCH: Unklare optionale Felder
+class BookingCreate(BaseModel):
+    guests: Optional[int]  # Was passiert bei None? Welche Gäste?
+```
+
+### 2.3 Type-Mapping Backend → Frontend
+
+| Python (Pydantic) | TypeScript | Serialisierung |
+|-------------------|------------|----------------|
+| `str` | `string` | Direkt |
+| `int` | `number` | Direkt |
+| `float` | `number` | Direkt |
+| `bool` | `boolean` | Direkt |
+| `UUID` | `string` | Als String |
+| `datetime` | `string` | ISO 8601 |
+| `date` | `string` | "YYYY-MM-DD" |
+| `Decimal` | `string` | Als String (Präzision!) |
+| `Optional[T]` | `T \| null` | null wenn nicht gesetzt |
+| `List[T]` | `T[]` | Array |
+| `Dict[str, Any]` | `Record<string, unknown>` | Object |
+
+---
+
+## 3. API-Konventionen
+
+### 3.1 URL-Struktur
+
+```
+# KORREKT (RESTful)
+GET    /api/v1/bookings              # Liste
+GET    /api/v1/bookings/{id}         # Detail
+POST   /api/v1/bookings              # Erstellen
+PATCH  /api/v1/bookings/{id}         # Aktualisieren
+DELETE /api/v1/bookings/{id}         # Löschen
+
+# Aktionen als Sub-Resource
+POST   /api/v1/bookings/{id}/cancel
+POST   /api/v1/bookings/{id}/confirm
+POST   /api/v1/booking-requests/{id}/approve
+POST   /api/v1/booking-requests/{id}/decline
+
+# FALSCH (RPC-Style)
+GET    /api/v1/getBookings
+POST   /api/v1/createBooking
+POST   /api/v1/cancelBooking/{id}
+```
+
+### 3.2 Query-Parameter
+
+```
+# KORREKT (snake_case)
+?sort_by=created_at&sort_order=desc&page_size=20&property_id=xxx
+
+# FALSCH (camelCase)
+?sortBy=createdAt&sortOrder=desc&pageSize=20&propertyId=xxx
+```
+
+### 3.3 Pagination Response
+
+```json
+{
+  "items": [...],
+  "total": 100,
+  "limit": 20,
+  "offset": 0
+}
+```
+
+### 3.4 Error Response
+
+```json
+{
+  "detail": "Booking nicht gefunden",
+  "error_code": "BOOKING_NOT_FOUND",
+  "status_code": 404
+}
+```
+
+---
+
+## 4. Versionierung
+
+### 4.1 API-Versionen
+
+- **v1:** Aktuelle stabile Version
+- **v2:** Breaking Changes (z.B. Public API Feldnamen-Vereinheitlichung)
+
+### 4.2 Breaking vs. Non-Breaking
+
+**Non-Breaking (direkt deployen):**
+- Neue optionale Felder
+- Neue optionale Query-Parameter
+- Neue Endpoints
+- Erweiterte Enum-Werte
+
+**Breaking (neue Version):**
+- Feld umbenennen
+- Feld entfernen
+- Typ ändern
+- Feld required machen
+- Response-Struktur ändern
+
+---
+
+## 5. Verbotene Patterns
+
+### 5.1 Keine defensiven Parsing-Funktionen
+
+```typescript
+// FALSCH: Zeigt inkonsistente Datenquellen
+const safeNumber = (value: string | number | null | undefined): number => {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === "number") return value;
+  return parseFloat(value) || 0;
+};
+
+// RICHTIG: Typ ist bereits korrekt definiert
+const price: number = booking.total_price_cents;
+```
+
+### 5.2 Keine redundanten Felder
+
+```typescript
+// FALSCH: Mehrere Felder für dasselbe
+interface Booking {
+  guests: number;
+  guests_count: number;
+  num_guests: number;
+}
+
+// RICHTIG: Ein eindeutiges Feld
+interface Booking {
+  num_guests: number;
+}
+```
+
+### 5.3 Keine impliziten Konvertierungen
+
+```typescript
+// FALSCH
+const total = Number(booking.total_price) || 0;
+
+// RICHTIG
+const total = booking.total_price_cents;  // Bereits number
+```
+
+---
+
+## 6. Dokumentation
+
+### 6.1 Neue Felder dokumentieren
+
+```python
+class BookingResponse(BaseModel):
+    pricing_breakdown: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Detaillierte Preisaufschlüsselung. Neu ab v1.5.0"
+    )
+```
+
+### 6.2 Deprecation markieren
+
+```typescript
+interface Booking {
+  /**
+   * @deprecated Verwende `total_price_cents` stattdessen.
+   * Wird in v2.0.0 entfernt.
+   */
+  total_price?: string;
+
+  total_price_cents: number;
+}
+```
+
+---
+
+## 7. Checkliste für Code-Reviews
+
+### Neue Felder
+
+- [ ] Name folgt Konventionen (§1)?
+- [ ] Typ ist eindeutig (keine Union für API-Felder)?
+- [ ] Frontend und Backend synchron?
+- [ ] In diesem Dokument referenziert?
+
+### API-Änderungen
+
+- [ ] Rückwärtskompatibel?
+- [ ] Query-Parameter in snake_case?
+- [ ] Response-Format konsistent?
+
+### Types
+
+- [ ] Keine `any` oder `unknown` ohne Begründung?
+- [ ] Keine defensive Parsing-Logik?
+- [ ] Optional/Nullable korrekt markiert?
+
+---
+
+## 8. Bekannte Legacy-Abweichungen
+
+Diese Abweichungen existieren im aktuellen Code und werden in Phase 3 der Architektur-Konsolidierung behoben:
+
+| Legacy | Korrekt | Betroffene APIs | Migration |
+|--------|---------|-----------------|-----------|
+| `date_from` | `check_in` | Public API | Phase 3 |
+| `date_to` | `check_out` | Public API | Phase 3 |
+| `adults` | `num_adults` | Public API | Phase 3 |
+| `children` | `num_children` | Public API | Phase 3 |
+| `guests_count` | `num_guests` | Frontend Types | Phase 1 |
+| `total_price: string \| number` | `total_price: string` | Frontend Types | Phase 1 |
+
+---
+
+**Letzte Aktualisierung:** 2026-03-04

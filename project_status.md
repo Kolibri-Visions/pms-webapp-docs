@@ -55,6 +55,58 @@ git revert <commit-hash>
 
 ---
 
+## Architektur-Konsolidierung Phase 0 (2026-03-04) — IMPLEMENTED
+
+**Scope:** Vorbereitung und Dokumentation für systematische Behebung von Architektur-Inkonsistenzen.
+
+### Problem
+
+Verschiedene Teile der Anwendung wurden mit inkonsistenten Konventionen entwickelt:
+- **Feldnamen:** `date_from/date_to` (Public) vs `check_in/check_out` (Admin)
+- **Gästezahlen:** `adults/children` (Public) vs `num_adults/num_children` (Admin)
+- **Types:** `total_price: string | number` (Frontend) - Union statt eindeutiger Typ
+- **Redundanz:** `guests`, `guests_count`, `num_guests` als separate Felder
+
+### Lösung Phase 0
+
+1. **Baseline-Tag:** `pre-consolidation-baseline` erstellt
+2. **Konventionen-Dokument:** Verbindliche Namensregeln definiert
+3. **Field-Mapping:** Legacy → Standard Zuordnung dokumentiert
+4. **Architecture-Skills:** 3 neue Claude-Skills für konsistente Entwicklung
+
+### Neue Dokumentation
+
+| Datei | Inhalt |
+|-------|--------|
+| `backend/docs/conventions.md` | Verbindliche Namens- und Type-Konventionen |
+| `backend/docs/field-mapping.md` | Legacy → Standard Mapping, betroffene Dateien |
+| `.claude/skills/architecture/conventions-check.md` | Skill: Konventions-Prüfung vor Code-Änderungen |
+| `.claude/skills/architecture/type-sync.md` | Skill: Frontend/Backend Type-Synchronisation |
+| `.claude/skills/architecture/api-refactor.md` | Skill: Sichere API-Refaktorisierung |
+
+### Verification Path
+
+```bash
+# Baseline-Tag prüfen
+git tag -l | grep pre-consolidation
+
+# Dokumentation prüfen
+ls -la backend/docs/conventions.md backend/docs/field-mapping.md
+ls -la .claude/skills/architecture/
+```
+
+### Revert
+
+```bash
+git reset --hard pre-consolidation-baseline
+```
+
+### Status
+
+✅ IMPLEMENTED
+
+---
+
 ## Buchungslogik: no_show Status-Transition (2026-03-04) — IMPLEMENTED
 
 **Scope:** Erweiterung der Buchungs-State-Machine um Transition `confirmed → no_show`.
