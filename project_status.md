@@ -55,6 +55,57 @@ git revert <commit-hash>
 
 ---
 
+## API-Migration Teil 2: Properties, Roles, Bookings (2026-03-04) — IMPLEMENTED
+
+**Scope:** Migration verbleibender Proxy-Routes von `/api/internal/` zu direkten `/api/v1/` apiClient-Calls
+
+### Änderungen
+
+**Phase 1: Properties-Seiten (9 Calls)**
+- `properties/[id]/page.tsx`: Amenities GET/PUT
+- `properties/[id]/extra-services/page.tsx`: Extra-Services CRUD
+
+**Phase 2: Settings/Roles (6 Calls)**
+- `settings/roles/page.tsx`: Roles + Permissions CRUD
+
+**Phase 3: Bookings-Detail (1 Call)**
+- `bookings/[id]/page.tsx`: Property Media GET
+
+### Geänderte Dateien
+
+| Datei | Calls | Änderung |
+|-------|-------|----------|
+| `frontend/app/(admin)/properties/[id]/page.tsx` | 3 | apiClient Migration |
+| `frontend/app/(admin)/properties/[id]/extra-services/page.tsx` | 6 | apiClient Migration |
+| `frontend/app/(admin)/settings/roles/page.tsx` | 6 | apiClient Migration |
+| `frontend/app/(admin)/bookings/[id]/page.tsx` | 1 | apiClient Migration |
+
+### Git Tags
+
+- `pre-api-migrate-2-baseline` → vor allen Änderungen
+- `pre-api-migrate-2-phase-2` → nach Properties
+- `pre-api-migrate-2-phase-3` → nach Roles
+- `pre-api-migrate-2-phase-4` → nach Bookings
+
+### Verification Path
+
+```bash
+cd frontend && npm run build  # Keine Fehler
+git tag -l | grep api-migrate-2
+```
+
+### Revert
+
+```bash
+git reset --hard pre-api-migrate-2-baseline
+```
+
+### Status
+
+✅ IMPLEMENTED
+
+---
+
 ## Backend-Frontend Synchronisation (2026-03-04) — IMPLEMENTED
 
 **Scope:** API-Prefix Migration und Type-Dokumentation

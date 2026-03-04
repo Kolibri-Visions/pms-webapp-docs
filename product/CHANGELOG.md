@@ -20,6 +20,11 @@
   - Admin-Frontend: Migration von `/api/internal/` zu `/api/v1/` mit `apiClient`
   - Betroffene Seiten: amenities, extra-services, team, ops/modules, ops/audit-log, notifications/email-outbox
   - Standardisiertes API-Call-Pattern mit `useAuth()` und `apiClient`
+- **API-Migration Teil 2**:
+  - Properties-Seiten: Amenities und Extra-Services Zuweisung
+  - Settings/Roles: Vollständige RBAC-Verwaltung
+  - Bookings-Detail: Property Media
+  - 16 weitere Calls migriert
 - **Type-Dokumentation**: `@deprecated` Marker für Legacy-Feldnamen in Frontend-Types
 - **Dokumentation**: Semantische Datumsfeldnamen-Konvention (check_in vs date_from vs start_date)
 
