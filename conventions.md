@@ -325,19 +325,82 @@ interface Booking {
 
 ---
 
-## 8. Bekannte Legacy-Abweichungen
+## 8. Legacy-Abweichungen (GELÖST)
 
-Diese Abweichungen existieren im aktuellen Code und werden in Phase 3 der Architektur-Konsolidierung behoben:
+Die folgenden Legacy-Abweichungen wurden in der Architektur-Konsolidierung behoben:
 
-| Legacy | Korrekt | Betroffene APIs | Migration |
-|--------|---------|-----------------|-----------|
-| `date_from` | `check_in` | Public API | Phase 3 |
-| `date_to` | `check_out` | Public API | Phase 3 |
-| `adults` | `num_adults` | Public API | Phase 3 |
-| `children` | `num_children` | Public API | Phase 3 |
-| `guests_count` | `num_guests` | Frontend Types | Phase 1 |
-| `total_price: string \| number` | `total_price: string` | Frontend Types | Phase 1 |
+| Legacy | Korrekt | Betroffene APIs | Status |
+|--------|---------|-----------------|--------|
+| `date_from` | `check_in` | Public API | ✅ v2 API erstellt |
+| `date_to` | `check_out` | Public API | ✅ v2 API erstellt |
+| `adults` | `num_adults` | Public API | ✅ v2 API erstellt |
+| `children` | `num_children` | Public API | ✅ v2 API erstellt |
+| `guests_count` | `num_guests` | Frontend Types | ✅ Entfernt |
+| `total_price: string \| number` | `total_price: string` | Frontend Types | ✅ Korrigiert |
+| `safeNumber()` Workaround | `parsePrice()` | Frontend | ✅ Ersetzt |
 
 ---
 
-**Letzte Aktualisierung:** 2026-03-04
+## 9. API-Versionen
+
+### 9.1 Aktuelle Versionen
+
+| Version | Pfad | Status | Feldnamen |
+|---------|------|--------|-----------|
+| **v1** | `/api/v1/public/*` | ⚠️ DEPRECATED | Legacy: `date_from`, `adults` |
+| **v2** | `/api/v2/public/*` | ✅ AKTUELL | Standard: `check_in`, `num_adults` |
+
+### 9.2 v1 → v2 Migration (Public API)
+
+```typescript
+// v1 (deprecated) → v2 (aktuell)
+{
+  "date_from": "2026-01-01",    → "check_in": "2026-01-01",
+  "date_to": "2026-01-07",      → "check_out": "2026-01-07",
+  "adults": 2,                  → "num_adults": 2,
+  "children": 1                 → "num_children": 1
+}
+```
+
+### 9.3 Deprecation-Timeline
+
+- **2026-03-04:** v2 API erstellt, v1 als deprecated markiert
+- **2026-06-01:** (geplant) v1 Deprecation-Warning in Response-Header
+- **2026-09-01:** (geplant) v1 API entfernen
+
+---
+
+## 10. Type-Generierung
+
+### 10.1 Single Source of Truth
+
+Das OpenAPI-Schema des Backends ist die einzige verbindliche Quelle für API-Types:
+
+```bash
+# Schema exportieren (von PROD)
+cd backend && python3 scripts/export_openapi.py --prod
+
+# Frontend-Types generieren
+cd frontend && npm run generate:types
+```
+
+### 10.2 Generierte Types verwenden
+
+```typescript
+// Option 1: API-Aliase (empfohlen)
+import type { APIBooking, APIGuest } from '@/app/types';
+
+// Option 2: Direkt aus generierten Types
+import type { components } from '@/app/types';
+type Booking = components['schemas']['BookingResponse'];
+```
+
+### 10.3 Wann Types neu generieren?
+
+- Nach Backend-Schema-Änderungen
+- Nach API-Änderungen (neue Felder, geänderte Typen)
+- Vor größeren Frontend-Releases
+
+---
+
+**Letzte Aktualisierung:** 2026-03-04 (Architektur-Konsolidierung Phase 6)

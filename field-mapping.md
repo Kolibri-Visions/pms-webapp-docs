@@ -11,11 +11,12 @@
 
 | Kontext | Aktuell | Standard | Status |
 |---------|---------|----------|--------|
-| Admin API (bookings.py) | `check_in` | `check_in` | OK |
-| Public API (public_booking.py) | `date_from` | `check_in` | Migration Phase 3 |
-| Frontend Types (booking.ts) | `check_in` | `check_in` | OK |
-| Frontend Public (BuchungClient.tsx) | `date_from` | `check_in` | Migration Phase 3 |
-| DB Schema | `check_in` | `check_in` | OK |
+| Admin API (bookings.py) | `check_in` | `check_in` | ✅ OK |
+| Public API v1 (public_booking.py) | `date_from` | `check_in` | ⚠️ Deprecated |
+| Public API v2 (public_booking_v2.py) | `check_in` | `check_in` | ✅ OK |
+| Frontend Types (booking.ts) | `check_in` | `check_in` | ✅ OK |
+| Frontend Public (BuchungClient.tsx) | `check_in` | `check_in` | ✅ Migriert zu v2 |
+| DB Schema | `check_in` | `check_in` | ✅ OK |
 
 **Betroffene Dateien:**
 - `backend/app/api/routes/public_booking.py:76-77`
@@ -26,11 +27,12 @@
 
 | Kontext | Aktuell | Standard | Status |
 |---------|---------|----------|--------|
-| Admin API | `check_out` | `check_out` | OK |
-| Public API | `date_to` | `check_out` | Migration Phase 3 |
-| Frontend Types | `check_out` | `check_out` | OK |
-| Frontend Public | `date_to` | `check_out` | Migration Phase 3 |
-| DB Schema | `check_out` | `check_out` | OK |
+| Admin API | `check_out` | `check_out` | ✅ OK |
+| Public API v1 | `date_to` | `check_out` | ⚠️ Deprecated |
+| Public API v2 | `check_out` | `check_out` | ✅ OK |
+| Frontend Types | `check_out` | `check_out` | ✅ OK |
+| Frontend Public | `check_out` | `check_out` | ✅ Migriert zu v2 |
+| DB Schema | `check_out` | `check_out` | ✅ OK |
 
 **Betroffene Dateien:**
 - `backend/app/api/routes/public_booking.py:76-77`
@@ -44,12 +46,13 @@
 
 | Kontext | Aktuell | Standard | Status |
 |---------|---------|----------|--------|
-| Admin API | `num_adults` | `num_adults` | OK |
-| Public API | `adults` | `num_adults` | Migration Phase 3 |
-| Booking Requests API | `num_adults` | `num_adults` | OK |
-| Frontend Admin Types | `num_adults` | `num_adults` | OK |
-| Frontend Public | `adults` | `num_adults` | Migration Phase 3 |
-| DB Schema | `num_adults` | `num_adults` | OK |
+| Admin API | `num_adults` | `num_adults` | ✅ OK |
+| Public API v1 | `adults` | `num_adults` | ⚠️ Deprecated |
+| Public API v2 | `num_adults` | `num_adults` | ✅ OK |
+| Booking Requests API | `num_adults` | `num_adults` | ✅ OK |
+| Frontend Admin Types | `num_adults` | `num_adults` | ✅ OK |
+| Frontend Public | `num_adults` | `num_adults` | ✅ Migriert zu v2 |
+| DB Schema | `num_adults` | `num_adults` | ✅ OK |
 
 **Betroffene Dateien:**
 - `backend/app/api/routes/public_booking.py:78-79`
@@ -59,12 +62,13 @@
 
 | Kontext | Aktuell | Standard | Status |
 |---------|---------|----------|--------|
-| Admin API | `num_children` | `num_children` | OK |
-| Public API | `children` | `num_children` | Migration Phase 3 |
-| Booking Requests API | `num_children` | `num_children` | OK |
-| Frontend Admin Types | `num_children` | `num_children` | OK |
-| Frontend Public | `children` | `num_children` | Migration Phase 3 |
-| DB Schema | `num_children` | `num_children` | OK |
+| Admin API | `num_children` | `num_children` | ✅ OK |
+| Public API v1 | `children` | `num_children` | ⚠️ Deprecated |
+| Public API v2 | `num_children` | `num_children` | ✅ OK |
+| Booking Requests API | `num_children` | `num_children` | ✅ OK |
+| Frontend Admin Types | `num_children` | `num_children` | ✅ OK |
+| Frontend Public | `num_children` | `num_children` | ✅ Migriert zu v2 |
+| DB Schema | `num_children` | `num_children` | ✅ OK |
 
 **Betroffene Dateien:**
 - `backend/app/api/routes/public_booking.py:78-79`
@@ -155,19 +159,24 @@
 | Display-Komponente erstellen | `frontend/app/components/booking/PricingBreakdown.tsx` |
 | Backend: `pricing_breakdown` immer setzen | `backend/app/services/booking/create.py` |
 
-### Phase 3: Public API v2 (Minor Breaking)
+### Phase 3: Public API v2 (Minor Breaking) ✅ ABGESCHLOSSEN
 
 | Änderung | v1 → v2 |
 |----------|---------|
-| Endpoint | `/api/v1/public/booking-requests` → `/api/v2/public/booking-requests` |
+| Availability | `/api/v1/public/availability` → `/api/v2/public/availability` |
+| Booking Requests | `/api/v1/public/booking-requests` → `/api/v2/public/booking-requests` |
 | `date_from` | → `check_in` |
 | `date_to` | → `check_out` |
 | `adults` | → `num_adults` |
 | `children` | → `num_children` |
 
-**Frontend-Änderungen:**
-- `frontend/app/(public)/buchung/BuchungClient.tsx`
-- `frontend/app/(public)/buchung/api.ts` (falls vorhanden)
+**Durchgeführte Änderungen (2026-03-04):**
+- `backend/app/api/routes/public_booking_v2.py` (NEU)
+- `backend/app/api/routes/public_booking.py` (Deprecation-Warnung hinzugefügt)
+- `backend/app/modules/public_booking.py` (v2 Router registriert)
+- `backend/app/main.py` (v2 Fallback-Router)
+- `frontend/app/(public)/buchung/BuchungClient.tsx` (auf v2 API umgestellt)
+- `frontend/app/types/booking.ts` (`PublicBookingRequestV2`, `AvailabilityResponseV2` hinzugefügt)
 
 ---
 
@@ -209,4 +218,28 @@ git reset --hard pre-consolidation-phase-X
 
 ---
 
-**Letzte Aktualisierung:** 2026-03-04
+---
+
+## 8. Migration: Pricing Breakdown Backfill
+
+Für bestehende Buchungen mit Legacy-Feldern (cleaning_fee, service_fee, tax) existiert ein
+Backfill-Script unter:
+
+```
+supabase/scripts/backfill_pricing_breakdown.sql
+```
+
+**Status:** NICHT AUSGEFÜHRT (optional, Frontend unterstützt beide Formate)
+
+Das Script:
+- Analysiert betroffene Buchungen
+- Erstellt pricing_breakdown aus Legacy-Feldern
+- Ist auskommentiert zur Sicherheit (manuell ausführen nach Backup)
+
+**Hinweis:** Die PricingBreakdown-Komponente unterstützt automatisch beide Formate:
+- Neues Format: `channel_data.pricing_breakdown`
+- Legacy-Fallback: `cleaning_fee`, `service_fee`, `tax`
+
+---
+
+**Letzte Aktualisierung:** 2026-03-04 (Architektur-Konsolidierung abgeschlossen)
