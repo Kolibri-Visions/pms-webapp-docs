@@ -583,4 +583,66 @@ git reset --hard pre-type-consistency-baseline
 
 ---
 
-**Letzte Aktualisierung:** 2026-03-04 (Type-Consistency Konsolidierung abgeschlossen)
+### 12.8 Offene Inkonsistenzen Phase 2 (Stand 2026-03-04)
+
+#### 12.8.1 Pricing-Feldnamen (KRITISCH)
+
+| Entity | Frontend (FALSCH) | Backend (RICHTIG) | Aktion |
+|--------|-------------------|-------------------|--------|
+| RatePlan | `base_price_cents` | `base_nightly_cents` | Frontend anpassen |
+| Season | `nightly_rate_cents` | `nightly_cents` | Frontend anpassen |
+| ExtraService | `price_cents` | `default_price_cents` | Frontend anpassen |
+| ExtraService | `price_type` | `billing_unit` | Frontend anpassen |
+| PropertyExtraService | `custom_price_cents` | `price_override_cents` | Frontend anpassen |
+| VisitorTax | `rate_cents` | `amount_cents` | Frontend anpassen |
+| VisitorTax | `child_age_limit` | `free_under_age` | Frontend anpassen |
+
+**Standard-Konvention für Pricing-Felder:**
+```
+nightly_cents      - Preis pro Nacht (in Cent)
+base_nightly_cents - Basispreis pro Nacht (in Cent)
+amount_cents       - Betrag (in Cent)
+price_override_cents - Preisüberschreibung (in Cent)
+default_price_cents  - Standardpreis (in Cent)
+```
+
+#### 12.8.2 Booking-Feldnamen (KRITISCH)
+
+| Frontend (FALSCH) | Backend (RICHTIG) | Aktion |
+|-------------------|-------------------|--------|
+| `tax` | `tax_amount` | Frontend anpassen |
+| `guest_notes` | `guest_message` | Frontend anpassen |
+
+#### 12.8.3 Fehlende Backend-Spalten (KRITISCH)
+
+| Entity | Fehlendes Feld | Typ | Aktion |
+|--------|----------------|-----|--------|
+| Amenity | `is_highlighted` | `bool` | Backend-Migration erstellen |
+| Tax | `is_inclusive` | `bool` | Backend-Migration erstellen |
+| VisitorTaxPeriod | `child_rate_cents` | `int` | Backend-Migration erstellen |
+
+#### 12.8.4 Zeit-Felder
+
+| Entity | Feld | Backend-Typ | Frontend-Typ | Status |
+|--------|------|-------------|--------------|--------|
+| Property | `check_in_time` | `time` | `string` | OK (JSON serialisiert als String) |
+| Property | `check_out_time` | `time` | `string` | OK (JSON serialisiert als String) |
+
+#### 12.8.5 Guest-Timeline Felder
+
+| Frontend (FALSCH) | Backend (RICHTIG) | Aktion |
+|-------------------|-------------------|--------|
+| `check_in_date` | `check_in` | Frontend anpassen |
+| `check_out_date` | `check_out` | Frontend anpassen |
+
+#### 12.8.6 Doppelte Varianten (Cleanup)
+
+| Entity | Varianten | Standard | Aktion |
+|--------|-----------|----------|--------|
+| VisitorTax | `active` / `is_active` | `active` | `is_active` entfernen |
+| FeeTemplate | `taxable` / `is_taxable` | `taxable` | `is_taxable` entfernen |
+| TeamMember | `role` / `role_id` / `role_name` | `role_id` + `role_name` | `role` entfernen |
+
+---
+
+**Letzte Aktualisierung:** 2026-03-04 (Type-Consistency Phase 2 Definitionen hinzugefügt)
