@@ -13,10 +13,21 @@
 
 ### 1.1 Datum/Zeit
 
+**Semantische Feldnamen (kontextabhängig):**
+
+| Kontext | Feldnamen | Verwendung |
+|---------|-----------|------------|
+| **Buchungen** | `check_in`, `check_out` | Gäste checken ein/aus |
+| **Zeiträume** | `date_from`, `date_to` | Seasons, Tax Periods, etc. |
+| **Verfügbarkeit** | `start_date`, `end_date` | Availability Segments |
+
+> **Wichtig:** `date_from`/`date_to` ist **KORREKT** für Zeiträume wie Seasons und Kurtaxe-Perioden.
+> Diese sind **keine** Legacy-Felder, sondern semantisch passend für den Kontext.
+
+**Timestamp-Felder:**
+
 | Korrekt | FALSCH | Bemerkung |
 |---------|--------|-----------|
-| `check_in` | ~~date_from~~, ~~start_date~~, ~~arrival~~ | Ankunftsdatum |
-| `check_out` | ~~date_to~~, ~~end_date~~, ~~departure~~ | Abreisedatum |
 | `created_at` | ~~createdAt~~, ~~create_date~~ | Erstellungszeitpunkt |
 | `updated_at` | ~~updatedAt~~, ~~modify_date~~ | Aktualisierungszeitpunkt |
 | `confirmed_at` | ~~confirmedAt~~ | Bestätigungszeitpunkt |
@@ -403,4 +414,49 @@ type Booking = components['schemas']['BookingResponse'];
 
 ---
 
-**Letzte Aktualisierung:** 2026-03-04 (Architektur-Konsolidierung Phase 6)
+---
+
+## 11. API-Prefix Konventionen
+
+### 11.1 Admin-Frontend API-Aufrufe
+
+Das Admin-Frontend nutzt zwei Arten von API-Routen:
+
+| Pfad | Verwendung | Authentifizierung |
+|------|------------|-------------------|
+| `/api/v1/*` | Direkte Backend-Calls | JWT via `apiClient` + `accessToken` |
+| `/api/internal/*` | Next.js Proxy-Routes | Session-Cookie → JWT Konvertierung |
+
+**Standard-Pattern (empfohlen):**
+
+```typescript
+import { useAuth } from "@/app/lib/auth-context";
+import { apiClient, ApiError } from "@/app/lib/api-client";
+
+const { accessToken } = useAuth();
+const data = await apiClient.get<ResponseType>("/api/v1/endpoint", accessToken);
+```
+
+### 11.2 Wann `/api/internal/` verwenden?
+
+Nur für spezielle Fälle:
+- **Auth/Session:** Routes die mit Supabase Auth arbeiten
+- **File Upload:** Avatar-Uploads zu Supabase Storage
+- **SSR:** Server-Side Rendering ohne Client-Token
+
+### 11.3 Blob-Downloads
+
+Für Datei-Downloads (CSV, PDF) direkt `fetch` verwenden:
+
+```typescript
+import { getApiBase } from "@/app/lib/api-client";
+
+const response = await fetch(`${getApiBase()}/api/v1/export`, {
+  headers: { Authorization: `Bearer ${accessToken}` },
+});
+const blob = await response.blob();
+```
+
+---
+
+**Letzte Aktualisierung:** 2026-03-04 (Konsolidierung Phase 2 abgeschlossen)

@@ -7,7 +7,24 @@
 
 ## 1. Datumsfelder
 
-### Check-in Datum
+### Semantische Unterscheidung
+
+> **WICHTIG:** Nicht alle Datumsfelder sind gleich! Die Feldnamen sind **kontextabhängig**:
+
+| Kontext | Korrekte Felder | Erklärung |
+|---------|-----------------|-----------|
+| **Buchungen** | `check_in`, `check_out` | Gäste checken ein/aus |
+| **Zeiträume** | `date_from`, `date_to` | Seasons, Kurtaxe-Perioden |
+| **Verfügbarkeit** | `start_date`, `end_date` | Availability Segments |
+
+**Beispiele:**
+- `booking.check_in` ✅ (Gast kommt an)
+- `season_period.date_from` ✅ (Saison beginnt)
+- `availability_segment.start_date` ✅ (Verfügbarkeit beginnt)
+
+Diese sind **keine Inkonsistenzen**, sondern **semantisch korrekte** Feldnamen für den jeweiligen Kontext.
+
+### Check-in Datum (Buchungen)
 
 | Kontext | Aktuell | Standard | Status |
 |---------|---------|----------|--------|

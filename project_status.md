@@ -55,6 +55,73 @@ git revert <commit-hash>
 
 ---
 
+## Backend-Frontend Synchronisation (2026-03-04) — IMPLEMENTED
+
+**Scope:** API-Prefix Migration und Type-Dokumentation
+
+### Änderungen
+
+**Phase 3: API-Prefix Migration**
+- Admin-Frontend von `/api/internal/` zu `/api/v1/` mit `apiClient` migriert
+- Betroffene Seiten: amenities, extra-services, team, ops/modules, ops/audit-log, notifications/email-outbox
+- Standardisiertes Pattern: `useAuth()` → `accessToken` → `apiClient.get/post/patch/delete()`
+
+**Phase 4: Legacy-Feldnamen Dokumentation**
+- `@deprecated` Marker in Frontend-Types hinzugefügt
+- Semantische Datumsfeldnamen-Konvention dokumentiert:
+  - `check_in`/`check_out` → Buchungen
+  - `date_from`/`date_to` → Zeiträume (Seasons, Tax Periods)
+  - `start_date`/`end_date` → Availability Segments
+
+**Phase 5: Type-Validierung**
+- Frontend Build erfolgreich (keine TypeScript-Fehler)
+
+**Phase 6: Dokumentation**
+- `conventions.md` aktualisiert (Semantische Feldnamen, API-Prefix Regeln)
+- `field-mapping.md` erweitert (Semantik-Erklärung)
+- `CHANGELOG.md` aktualisiert
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/(admin)/amenities/page.tsx` | apiClient Migration |
+| `frontend/app/(admin)/extra-services/page.tsx` | apiClient Migration |
+| `frontend/app/(admin)/team/page.tsx` | apiClient Migration |
+| `frontend/app/(admin)/ops/modules/page.tsx` | apiClient Migration |
+| `frontend/app/(admin)/ops/audit-log/page.tsx` | apiClient Migration |
+| `frontend/app/(admin)/notifications/email-outbox/page.tsx` | apiClient Migration |
+| `frontend/app/types/availability.ts` | @deprecated Marker |
+| `frontend/app/types/owner.ts` | @deprecated Marker |
+| `frontend/app/types/pricing.ts` | Dokumentation |
+| `frontend/app/types/visitor-tax.ts` | Dokumentation |
+
+### Git Tags
+
+- `pre-sync-phase-3` → vor API-Migration
+- `pre-sync-phase-4` → vor Type-Dokumentation
+- `pre-sync-phase-5` → vor Validierung
+- `pre-sync-phase-6` → vor Dokumentation
+
+### Verification Path
+
+```bash
+cd frontend && npm run build  # Keine Fehler
+git tag -l | grep pre-sync
+```
+
+### Revert
+
+```bash
+git reset --hard pre-sync-phase-3  # Zurück vor alle Änderungen
+```
+
+### Status
+
+✅ IMPLEMENTED
+
+---
+
 ## Architektur-Konsolidierung Phase 2 (2026-03-04) — IMPLEMENTED
 
 **Scope:** Pricing-Struktur Konsolidierung (Non-Breaking)

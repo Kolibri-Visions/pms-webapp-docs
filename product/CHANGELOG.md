@@ -16,10 +16,20 @@
 - Navigation Schriftgrößen-Anpassung (Gruppen/Items separat)
 
 ### Changed
-- (None)
+- **API-Architektur Konsolidierung (Phase 2)**:
+  - Admin-Frontend: Migration von `/api/internal/` zu `/api/v1/` mit `apiClient`
+  - Betroffene Seiten: amenities, extra-services, team, ops/modules, ops/audit-log, notifications/email-outbox
+  - Standardisiertes API-Call-Pattern mit `useAuth()` und `apiClient`
+- **Type-Dokumentation**: `@deprecated` Marker für Legacy-Feldnamen in Frontend-Types
+- **Dokumentation**: Semantische Datumsfeldnamen-Konvention (check_in vs date_from vs start_date)
 
 ### Fixed
 - (None)
+
+### Deprecated
+- Frontend Types: `date_from`/`date_to` in `AvailabilitySegment` (verwende `start_date`/`end_date`)
+- Frontend Types: `date_from`/`date_to` in `OwnerBooking` (verwende `check_in`/`check_out`)
+- Frontend Types: `total_price` in `OwnerBooking` (verwende `total_price_cents`)
 
 ---
 
