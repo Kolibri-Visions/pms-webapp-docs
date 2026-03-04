@@ -583,66 +583,70 @@ git reset --hard pre-type-consistency-baseline
 
 ---
 
-### 12.8 Offene Inkonsistenzen Phase 2 (Stand 2026-03-04)
+### 12.8 Behobene Inkonsistenzen Phase 2 (2026-03-04) — ✅ COMPLETE
 
-#### 12.8.1 Pricing-Feldnamen (KRITISCH)
+#### 12.8.1 Pricing-Feldnamen ✅ BEHOBEN (Phase 1, Commit `a502bcd`)
 
-| Entity | Frontend (FALSCH) | Backend (RICHTIG) | Aktion |
-|--------|-------------------|-------------------|--------|
-| RatePlan | `base_price_cents` | `base_nightly_cents` | Frontend anpassen |
-| Season | `nightly_rate_cents` | `nightly_cents` | Frontend anpassen |
-| ExtraService | `price_cents` | `default_price_cents` | Frontend anpassen |
-| ExtraService | `price_type` | `billing_unit` | Frontend anpassen |
-| PropertyExtraService | `custom_price_cents` | `price_override_cents` | Frontend anpassen |
-| VisitorTax | `rate_cents` | `amount_cents` | Frontend anpassen |
-| VisitorTax | `child_age_limit` | `free_under_age` | Frontend anpassen |
+| Entity | Legacy (FALSCH) | Korrekt (Backend) | Status |
+|--------|-----------------|-------------------|--------|
+| RatePlan | `base_price_cents` | `base_nightly_cents` | ✅ @deprecated |
+| Season | `nightly_rate_cents` | `nightly_cents` | ✅ @deprecated |
+| ExtraService | `price_cents` | `default_price_cents` | ✅ @deprecated |
+| ExtraService | `price_type` | `billing_unit` | ✅ @deprecated |
+| PropertyExtraService | `custom_price_cents` | `price_override_cents` | ✅ @deprecated |
+| VisitorTax | `rate_cents` | `amount_cents` | ✅ @deprecated |
+| VisitorTax | `child_age_limit` | `free_under_age` | ✅ @deprecated |
 
 **Standard-Konvention für Pricing-Felder:**
 ```
-nightly_cents      - Preis pro Nacht (in Cent)
-base_nightly_cents - Basispreis pro Nacht (in Cent)
-amount_cents       - Betrag (in Cent)
+nightly_cents        - Preis pro Nacht (in Cent)
+base_nightly_cents   - Basispreis pro Nacht (in Cent)
+amount_cents         - Betrag (in Cent)
 price_override_cents - Preisüberschreibung (in Cent)
 default_price_cents  - Standardpreis (in Cent)
 ```
 
-#### 12.8.2 Booking-Feldnamen (KRITISCH)
+#### 12.8.2 Booking-Feldnamen ✅ BEHOBEN (Phase 2, Commit `b07ef5a`)
 
-| Frontend (FALSCH) | Backend (RICHTIG) | Aktion |
-|-------------------|-------------------|--------|
-| `tax` | `tax_amount` | Frontend anpassen |
-| `guest_notes` | `guest_message` | Frontend anpassen |
+| Legacy (FALSCH) | Korrekt (Backend) | Status |
+|-----------------|-------------------|--------|
+| `tax` | `tax_amount` | ✅ @deprecated |
+| `guest_notes` | `guest_message` | ✅ @deprecated |
 
-#### 12.8.3 Fehlende Backend-Spalten (KRITISCH)
+#### 12.8.3 Nicht-implementierte Backend-Felder ✅ DOKUMENTIERT (Phase 3, Commit `97650b4`)
 
-| Entity | Fehlendes Feld | Typ | Aktion |
-|--------|----------------|-----|--------|
-| Amenity | `is_highlighted` | `bool` | Backend-Migration erstellen |
-| Tax | `is_inclusive` | `bool` | Backend-Migration erstellen |
-| VisitorTaxPeriod | `child_rate_cents` | `int` | Backend-Migration erstellen |
+| Entity | Feld | Frontend-Status | Entscheidung |
+|--------|------|-----------------|--------------|
+| Amenity | `is_highlighted` | ✅ @deprecated | Keine Migration nötig (0 Verwendungen) |
+| Tax | `is_inclusive` | ✅ @deprecated | Keine Migration nötig (0 Verwendungen) |
+| VisitorTaxPeriod | `child_rate_cents` | ✅ @deprecated | Keine Migration nötig (0 Verwendungen) |
 
-#### 12.8.4 Zeit-Felder
+#### 12.8.4 Zeit-Felder (OK - keine Änderung nötig)
 
 | Entity | Feld | Backend-Typ | Frontend-Typ | Status |
 |--------|------|-------------|--------------|--------|
-| Property | `check_in_time` | `time` | `string` | OK (JSON serialisiert als String) |
-| Property | `check_out_time` | `time` | `string` | OK (JSON serialisiert als String) |
+| Property | `check_in_time` | `time` | `string` | ✅ OK (JSON serialisiert als String) |
+| Property | `check_out_time` | `time` | `string` | ✅ OK (JSON serialisiert als String) |
 
-#### 12.8.5 Guest-Timeline Felder
+#### 12.8.5 Guest-Timeline Felder ✅ KORRIGIERT (Phase 4, Commit `0620cf2`)
 
-| Frontend (FALSCH) | Backend (RICHTIG) | Aktion |
-|-------------------|-------------------|--------|
-| `check_in_date` | `check_in` | Frontend anpassen |
-| `check_out_date` | `check_out` | Frontend anpassen |
+**Erkenntnis:** Backend `GuestTimelineBooking` verwendet korrekterweise `_date` Suffix.
 
-#### 12.8.6 Doppelte Varianten (Cleanup)
+| Korrekt (Backend) | Alias (Legacy) | Status |
+|-------------------|----------------|--------|
+| `check_in_date` | `check_in` | ✅ Alias @deprecated |
+| `check_out_date` | `check_out` | ✅ Alias @deprecated |
 
-| Entity | Varianten | Standard | Aktion |
-|--------|-----------|----------|--------|
-| VisitorTax | `active` / `is_active` | `active` | `is_active` entfernen |
-| FeeTemplate | `taxable` / `is_taxable` | `taxable` | `is_taxable` entfernen |
-| TeamMember | `role` / `role_id` / `role_name` | `role_id` + `role_name` | `role` entfernen |
+#### 12.8.6 Doppelte Varianten ✅ BEHOBEN (Phase 5, Commit `f0764b2`)
+
+| Entity | Legacy | Korrekt (Backend) | Status |
+|--------|--------|-------------------|--------|
+| VisitorTax | `is_active` | `active` | ✅ @deprecated |
+| FeeTemplate | `is_taxable` | `taxable` | ✅ @deprecated |
+| PropertyFee | `is_taxable` | `taxable` | ✅ @deprecated |
+| TeamMember | `role` | `role_id` + `role_code` + `role_name` | ✅ @deprecated |
+| Invite | `role` | `role_id` + `role_code` + `role_name` | ✅ @deprecated |
 
 ---
 
-**Letzte Aktualisierung:** 2026-03-04 (Type-Consistency Phase 2 Definitionen hinzugefügt)
+**Letzte Aktualisierung:** 2026-03-04 (Type-Consistency Phase 2 abgeschlossen)

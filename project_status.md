@@ -6,6 +6,60 @@
 
 ---
 
+## Type-Consistency Konsolidierung Phase 2 (2026-03-04) — IMPLEMENTED
+
+**Scope:** Behebung von 17 zusätzlichen Type-Inkonsistenzen, die nach der ersten Konsolidierung entdeckt wurden.
+
+### Phasen
+
+| Phase | Beschreibung | Commit | Status |
+|-------|-------------|--------|--------|
+| 1 | Pricing-Feldnamen (7 Felder) | `a502bcd` | ✅ |
+| 2 | Booking-Feldnamen (2 Felder) | `b07ef5a` | ✅ |
+| 3 | Nicht-implementierte Backend-Felder (@deprecated) | `97650b4` | ✅ |
+| 4 | Guest-Timeline Felder (Korrektur) | `0620cf2` | ✅ |
+| 5 | Doppelte Varianten Cleanup | `f0764b2` | ✅ |
+| 6 | Dokumentation | (dieser Commit) | ✅ |
+
+### Geänderte Type-Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/types/pricing.ts` | RatePlan, Season, FeeTemplate, PropertyFee Felder |
+| `frontend/app/types/extra-service.ts` | ExtraService, PropertyExtraService Felder |
+| `frontend/app/types/visitor-tax.ts` | VisitorTaxPeriod Felder |
+| `frontend/app/types/booking.ts` | tax→tax_amount, guest_notes→guest_message |
+| `frontend/app/types/amenity.ts` | is_highlighted @deprecated |
+| `frontend/app/types/guest.ts` | TimelineBooking Felder korrigiert |
+| `frontend/app/types/user.ts` | TeamMember, Invite role-Felder |
+
+### Erkenntnisse
+
+- **Guest-Timeline:** Backend verwendet korrekterweise `check_in_date`/`check_out_date` (mit `_date` Suffix) - dies war KEIN Fehler
+- **Backend-Spalten:** `is_highlighted`, `is_inclusive`, `child_rate_cents` werden nicht verwendet - keine Migration nötig
+
+### Verification Path
+
+```bash
+cd frontend && npm run build  # TypeScript-Validierung
+```
+
+### Revert
+
+```bash
+# Einzelne Phase
+git reset --hard pre-type-consistency-2-phase-{N}
+
+# Alles
+git reset --hard pre-type-consistency-2-baseline
+```
+
+### Status
+
+✅ IMPLEMENTED
+
+---
+
 ## Type-Consistency Konsolidierung (2026-03-04) — IMPLEMENTED
 
 **Scope:** Behebung aller Type-Inkonsistenzen zwischen Frontend (TypeScript) und Backend (Pydantic).
