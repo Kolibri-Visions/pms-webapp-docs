@@ -2,7 +2,360 @@
 
 **Last Updated:** 2026-03-04
 
-**Current Phase:** Type-Consistency Phase 3 ✅ IMPLEMENTED
+**Current Phase:** Type-Consistency Phase 4 ✅ COMPLETE
+
+---
+
+## Type-Consistency Re-Audit Phase 4: COMPLETE (2026-03-04)
+
+**Gesamtumfang:** 6 Phasen, 12 Commits, ~700 Zeilen neue/geänderte Types
+
+### Phase-Übersicht
+
+| Phase | Beschreibung | Commit | Status |
+|-------|--------------|--------|--------|
+| 4.1 | Branding Types (30+ Felder) | `e449de9` | ✅ |
+| 4.2 | Guest Types (9 Felder, 7 Guards) | `23e930e` | ✅ |
+| 4.3 | API-Pagination (limit/offset) | `cda0b02` | ✅ |
+| 4.4 | Response-Wrapper (.items) | `4516c25` | ✅ |
+| 4.5 | Accessibility Audit | `97a4ca9` | ✅ |
+| 4.6 | Documentation | `30d81e4` | ✅ |
+
+### Neue Dateien
+
+| Datei | Zeilen | Inhalt |
+|-------|--------|--------|
+| `frontend/app/types/branding.ts` | 356 | Vollständige Branding-Types |
+
+### Erweiterte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/types/guest.ts` | +228 Zeilen (9 Felder, 7 Guards) |
+| `frontend/app/types/api.ts` | Pagination-Standard, Utilities |
+| `frontend/app/types/media.ts` | limit/offset Support |
+| `frontend/app/types/operations.ts` | Response-Wrapper Cleanup |
+| `frontend/app/lib/api-utils.ts` | normalizeResponse erweitert |
+| `frontend/app/(auth)/login/login-client.tsx` | a11y Improvements |
+
+### Git-Tags
+
+- `pre-type-consistency-4-phase-1` ... `pre-type-consistency-4-phase-6`
+- `type-consistency-4-complete` ← **Finale Version**
+
+### Revert (alle Phase 4 Änderungen)
+
+```bash
+git reset --hard b97c6a9  # Commit vor Phase 4.1
+```
+
+---
+
+## Type-Consistency Re-Audit Phase 4.5: Accessibility (2026-03-04) — IMPLEMENTED
+
+**Scope:** WCAG 2.1 AA Compliance-Audit und Verbesserungen
+
+### Audit-Ergebnis: Größtenteils Compliant ✅
+
+Die meisten kritischen WCAG-Anforderungen waren bereits implementiert.
+
+### Bereits Implementiert (vor Phase 4.5)
+
+| Feature | WCAG | Dateien |
+|---------|------|---------|
+| Skip-Links | 2.4.1 | AdminShell.tsx, public/layout.tsx |
+| FocusTrap in Modals | 2.1.2 | 70+ Modal-Komponenten |
+| role="dialog" + aria-modal | 4.1.2 | Alle Dialog-Komponenten |
+| aria-label auf Icon-Buttons | 4.1.2 | 431 Vorkommen in 60 Dateien |
+| htmlFor auf Labels | 1.3.1 | Alle kritischen Formulare |
+| aria-live auf Toast | 4.1.3 | Toast.tsx |
+| aria-labelledby auf Dialoge | 4.1.2 | Modal.tsx, ConfirmDialog.tsx |
+
+### Verbesserungen (Phase 4.5)
+
+| Komponente | Änderung | WCAG |
+|------------|----------|------|
+| login-client.tsx | role="alert" + aria-live auf Fehlermeldung | 4.1.3 |
+| login-client.tsx | aria-invalid + aria-describedby auf Inputs | 3.3.1 |
+
+### Komponenten mit voller WCAG-Compliance
+
+- `Modal.tsx` - FocusTrap, aria-modal, aria-labelledby, aria-describedby, ESC-Support
+- `ConfirmDialog.tsx` - FocusTrap, aria-modal, aria-labelledby, Cancel-Focus
+- `Toast.tsx` - aria-live="polite", role="alert", aria-label
+- `AdminShell.tsx` - Skip-Link, aria-current auf Navigation
+
+### Commits
+
+| Phase | Commit | Status |
+|-------|--------|--------|
+| Git-Tag erstellt | `pre-type-consistency-4-phase-5` | ✅ |
+| Login-Form verbessert | `97a4ca9` | ✅ |
+
+### Verification Path
+
+```bash
+cd frontend && npm run build  # TypeScript-Validierung ✅
+# Manuelle Tests: Tab-Navigation, Screen-Reader, ESC-Taste
+```
+
+### Revert
+
+```bash
+git reset --hard pre-type-consistency-4-phase-5
+```
+
+### Status
+
+✅ IMPLEMENTED
+
+---
+
+## Type-Consistency Re-Audit Phase 4.4: Response-Wrapper (2026-03-04) — IMPLEMENTED
+
+**Scope:** Standardisierung aller List-Responses auf `.items` Pattern
+
+### Änderungen
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/types/operations.ts` | AuditLogResponse, OutboxListResponse bereinigt |
+| `frontend/app/lib/api-utils.ts` | normalizeResponse erweitert um `entries` Support |
+
+### Response-Wrapper Standard
+
+```typescript
+// Standard Format (alle neuen APIs)
+interface ListResponse<T> {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+```
+
+### Backend-Ausnahmen
+
+| API | Feld | Hinweis |
+|-----|------|---------|
+| AuditLogListResponse | `entries` | Historisch, normalizeResponse konvertiert |
+
+### normalizeResponse Priorität
+
+1. Custom `itemsKey` (wenn angegeben)
+2. `items` (Standard)
+3. `entries` (AuditLog)
+4. `data` (Legacy)
+5. `results` (Legacy)
+
+### Commits
+
+| Phase | Commit | Status |
+|-------|--------|--------|
+| Git-Tag erstellt | `pre-type-consistency-4-phase-4` | ✅ |
+| Response-Wrapper standardisiert | `4516c25` | ✅ |
+
+### Verification Path
+
+```bash
+cd frontend && npm run build  # TypeScript-Validierung ✅
+```
+
+### Revert
+
+```bash
+git reset --hard pre-type-consistency-4-phase-4
+```
+
+### Status
+
+✅ IMPLEMENTED
+
+---
+
+## Type-Consistency Re-Audit Phase 4.3: API-Pagination (2026-03-04) — IMPLEMENTED
+
+**Scope:** Standardisierung aller Pagination-Types auf limit/offset
+
+### Neue Types
+
+| Type | Beschreibung |
+|------|--------------|
+| `PaginationParams` | Standard: { limit?: number; offset?: number } |
+| `StandardPaginatedResponse<T>` | Standard: { items, total, limit, offset } |
+| `StandardListParams` | PaginationParams + sort_by, sort_order, search |
+
+### Utilities
+
+| Funktion | Beschreibung |
+|----------|--------------|
+| `pageToOffset(page, perPage)` | Konvertiert page/per_page → limit/offset |
+| `offsetToPage(offset, limit)` | Konvertiert offset/limit → page (1-based) |
+| `calculateTotalPages(total, limit)` | Berechnet Seitenzahl |
+| `DEFAULT_PAGINATION` | Konstante: { limit: 20, offset: 0 } |
+
+### Deprecated (Legacy)
+
+| Type/Field | Ersatz |
+|------------|--------|
+| `PaginatedResponse.data` | `StandardPaginatedResponse.items` |
+| `PaginatedResponse.page` | `offset = (page - 1) * limit` |
+| `PaginatedResponse.per_page` | `limit` |
+| `ListParams.page` | `StandardListParams.offset` |
+| `ListParams.per_page` | `StandardListParams.limit` |
+| `MediaFileFilter.page_size` | `limit` |
+
+### Commits
+
+| Phase | Commit | Status |
+|-------|--------|--------|
+| Git-Tag erstellt | `pre-type-consistency-4-phase-3` | ✅ |
+| Pagination standardisiert | `cda0b02` | ✅ |
+
+### Verification Path
+
+```bash
+cd frontend && npm run build  # TypeScript-Validierung ✅
+```
+
+### Revert
+
+```bash
+git reset --hard pre-type-consistency-4-phase-3
+```
+
+### Status
+
+✅ IMPLEMENTED
+
+---
+
+## Type-Consistency Re-Audit Phase 4.2: Guest Types (2026-03-04) — IMPLEMENTED
+
+**Scope:** Fehlende Guest-Felder und Type Guards hinzufügen
+
+### Änderungen
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/types/guest.ts` | 228 neue Zeilen (+9 Felder, +7 Type Guards) |
+
+### Neue Union Types
+
+| Type | Beschreibung |
+|------|--------------|
+| `IdDocumentType` | 'passport' \| 'id_card' \| 'drivers_license' |
+| `CommunicationChannel` | 'email' \| 'phone' \| 'whatsapp' \| 'sms' |
+| `GuestSource` | 'direct' \| 'airbnb' \| ... \| 'referral' \| 'other' |
+
+### Neue Guest-Felder
+
+| Feld | Typ | Beschreibung |
+|------|-----|--------------|
+| `auth_user_id` | `string \| null` | Link zu auth.users |
+| `id_document_type` | `IdDocumentType \| null` | Ausweistyp |
+| `id_document_number` | `string \| null` | Ausweisnummer |
+| `id_verified_at` | `string \| null` | Verifizierungs-Timestamp |
+| `marketing_consent_at` | `string \| null` | Consent-Timestamp |
+| `first_booking_at` | `string \| null` | Erste Buchung |
+| `average_rating` | `string \| null` | Durchschnittsbewertung |
+| `source` | `GuestSource \| null` | Akquise-Quelle |
+| `deleted_at` | `string \| null` | Soft-Delete Timestamp |
+
+### Type Guards & Utilities
+
+- `isGuestDeleted()` - Soft-Delete Check
+- `isGuestActive()` - Aktiv-Check
+- `isGuestVip()` - VIP-Status Check
+- `isGuestBlacklisted()` - Blacklist Check
+- `isGuestVerified()` - ID-Verifizierungs Check
+- `hasGuestAccount()` - Auth-Account Check
+- `getGuestFullName()` - Name-Helper
+
+### Commits
+
+| Phase | Commit | Status |
+|-------|--------|--------|
+| Git-Tag erstellt | `pre-type-consistency-4-phase-2` | ✅ |
+| guest.ts erweitert | `23e930e` | ✅ |
+
+### Verification Path
+
+```bash
+cd frontend && npm run build  # TypeScript-Validierung ✅
+```
+
+### Revert
+
+```bash
+git reset --hard pre-type-consistency-4-phase-2
+```
+
+### Status
+
+✅ IMPLEMENTED
+
+---
+
+## Type-Consistency Re-Audit Phase 4.1: Branding Types (2026-03-04) — IMPLEMENTED
+
+**Scope:** Umfassende TypeScript-Typdefinitionen für alle tenant_branding DB-Spalten (30+ Felder)
+
+### Neue Datei
+
+| Datei | Beschreibung |
+|-------|--------------|
+| `frontend/app/types/branding.ts` | Vollständige Branding-Types (356 Zeilen) |
+
+### Inhalt branding.ts
+
+| Type | Beschreibung |
+|------|--------------|
+| `FontFamily` | Union: 'system' \| 'inter' \| 'roboto' \| 'open-sans' \| 'poppins' |
+| `RadiusScale` | Union: 'none' \| 'sm' \| 'md' \| 'lg' |
+| `ThemeMode` | Union: 'system' \| 'light' \| 'dark' |
+| `ShadowIntensity` | Union: 'none' \| 'subtle' \| 'normal' \| 'strong' |
+| `LogoPosition` | Union: 'left' \| 'center' |
+| `NavigationBrandingConfig` | JSONB nav_config Struktur |
+| `ThemeTokens` | Computed Theme-Tokens (8 Felder) |
+| `TenantBranding` | Haupt-Interface (30+ Felder, alle Phasen 1-6) |
+| `BrandingUpdate` | Partial für API-Updates |
+| `BrandingResponse` | API-Response mit tokens |
+| `BrandingLogoResponse` | Logo-Upload Response |
+
+### Utility-Funktionen
+
+- `isValidHexColor()` - Hex-Farbvalidierung
+- `getDefaultThemeTokens()` - Fallback-Tokens
+- `deriveBrandingTokens()` - Token-Berechnung aus Branding
+
+### Synchronisation
+
+- Synchronisiert mit: `backend/app/schemas/branding.py`
+- Alle 6+ Migrationen berücksichtigt
+
+### Commits
+
+| Phase | Commit | Status |
+|-------|--------|--------|
+| Git-Tag erstellt | `pre-type-consistency-4-phase-1` | ✅ |
+| branding.ts + Export | `e449de9` | ✅ |
+
+### Verification Path
+
+```bash
+cd frontend && npm run build  # TypeScript-Validierung ✅
+```
+
+### Revert
+
+```bash
+git reset --hard pre-type-consistency-4-phase-1
+```
+
+### Status
+
+✅ IMPLEMENTED
 
 ---
 

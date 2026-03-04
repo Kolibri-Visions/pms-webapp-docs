@@ -809,4 +809,147 @@ ip, user_agent, metadata, created_at
 
 ---
 
-**Letzte Aktualisierung:** 2026-03-04 (Type-Consistency Phase 3 abgeschlossen)
+## 13. Type-Consistency Konventionen (Phase 4)
+
+> **Status:** ✅ IMPLEMENTIERT (2026-03-04)
+> **Commits:** Siehe `backend/docs/project_status.md`
+
+### 13.1 Branding-Type Konventionen
+
+**Datei:** `frontend/app/types/branding.ts` (356 Zeilen)
+
+**Union Types:**
+
+| Type | Werte |
+|------|-------|
+| `FontFamily` | `'system' \| 'inter' \| 'roboto' \| 'open-sans' \| 'poppins'` |
+| `RadiusScale` | `'none' \| 'sm' \| 'md' \| 'lg'` |
+| `ThemeMode` | `'system' \| 'light' \| 'dark'` |
+| `ShadowIntensity` | `'none' \| 'subtle' \| 'normal' \| 'strong'` |
+| `LogoPosition` | `'left' \| 'center'` |
+
+**Haupt-Interfaces:**
+
+| Interface | Beschreibung |
+|-----------|--------------|
+| `TenantBranding` | Alle 30+ Branding-Felder |
+| `NavigationBrandingConfig` | JSONB nav_config Struktur |
+| `ThemeTokens` | Berechnete Theme-Tokens |
+| `BrandingUpdate` | Partial für API-Updates |
+| `BrandingResponse` | API-Response mit tokens |
+
+**Feld-Kategorien:**
+
+| Kategorie | Beispiele | TypeScript-Typ |
+|-----------|-----------|----------------|
+| Farben | `primary_color`, `nav_bg_color` | `string \| null` (Hex #RRGGBB) |
+| Größen | `topbar_height_px`, `nav_item_font_size_px` | `number \| null` |
+| Skalen | `radius_scale`, `shadow_intensity` | Union Type |
+| Boolean | `enable_favorites`, `default_sidebar_collapsed` | `boolean \| null` |
+| JSONB | `nav_config` | `NavigationBrandingConfig \| null` |
+
+**Utilities:**
+- `isValidHexColor()` - Hex-Farbvalidierung
+- `getDefaultThemeTokens()` - Fallback-Tokens
+- `deriveBrandingTokens()` - Token-Berechnung aus Branding
+- `ALLOWED_NAV_KEYS` - Konstante für Navigation-Validierung
+
+### 13.2 Guest-Erweiterungen
+
+**Datei:** `frontend/app/types/guest.ts`
+
+**Neue Union Types:**
+
+| Type | Werte |
+|------|-------|
+| `IdDocumentType` | `'passport' \| 'id_card' \| 'drivers_license'` |
+| `CommunicationChannel` | `'email' \| 'phone' \| 'whatsapp' \| 'sms'` |
+| `GuestSource` | `'direct' \| 'airbnb' \| 'booking_com' \| ...` |
+
+**Hinzugefügte Felder:**
+
+| Feld | Typ | Beschreibung |
+|------|-----|--------------|
+| `auth_user_id` | `string \| null` | Link zu auth.users |
+| `id_document_type` | `IdDocumentType \| null` | Ausweistyp |
+| `id_document_number` | `string \| null` | Ausweisnummer |
+| `id_verified_at` | `string \| null` | Verifizierungs-Timestamp |
+| `marketing_consent_at` | `string \| null` | Consent-Timestamp |
+| `first_booking_at` | `string \| null` | Erste Buchung |
+| `average_rating` | `string \| null` | Durchschnittsbewertung (Decimal) |
+| `source` | `GuestSource \| null` | Akquise-Quelle |
+| `deleted_at` | `string \| null` | Soft-Delete Timestamp |
+
+**Type Guards:**
+- `isGuestDeleted()`, `isGuestActive()`
+- `isGuestVip()`, `isGuestBlacklisted()`
+- `isGuestVerified()`, `hasGuestAccount()`
+- `getGuestFullName()`
+
+### 13.3 API-Pagination Standard
+
+**Einheitliches Format:**
+
+```typescript
+// Query-Parameter
+interface PaginationParams {
+  limit: number;   // Default: 20, Max: 100
+  offset: number;  // Default: 0
+}
+
+// Response-Wrapper
+interface PaginatedResponse<T> {
+  items: T[];      // IMMER 'items', NIEMALS 'data'
+  total: number;   // Gesamtanzahl (ohne Pagination)
+  limit: number;   // Angewendetes Limit
+  offset: number;  // Angewendeter Offset
+}
+```
+
+**Deprecated (nicht mehr verwenden):**
+- `page` / `page_size` → Ersetzen durch `limit` / `offset`
+- `per_page` → Ersetzen durch `limit`
+- `.data` in Response → Ersetzen durch `.items`
+
+### 13.4 Accessibility-Konventionen
+
+**Pflicht für alle UI-Komponenten:**
+
+| Element | Pflicht-Attribute |
+|---------|-------------------|
+| `<button>` (Icon-only) | `aria-label="..."` |
+| `<input>` | `id="..."` + `<label htmlFor="...">` |
+| Modal/Dialog | `role="dialog"` + `aria-modal="true"` + FocusTrap |
+| Fehlermeldung | `id="...-error"` + `aria-describedby` auf Input |
+| Navigation | `aria-label="Hauptnavigation"` |
+| Aktiver Nav-Link | `aria-current="page"` |
+
+**Skip-Link Pattern:**
+```tsx
+<a href="#main-content" className="sr-only focus:not-sr-only ...">
+  Zum Hauptinhalt springen
+</a>
+```
+
+### 13.5 Audit-Workflow
+
+**Regelmäßige Audits:**
+
+| Audit-Typ | Häufigkeit | Skill |
+|-----------|------------|-------|
+| Type-Consistency | Nach Schema-Änderungen | `/type-audit` |
+| Accessibility | Nach UI-Änderungen | `/accessibility-audit` |
+| Security | Vor Releases | Runbook |
+
+**Audit-Berichte speichern:**
+```
+/PMS-Webapp-Dokumente/Audit/
+├── Code-Struktur/
+├── Funktional/
+├── UX-UI/
+└── Type-Konsistenz/
+```
+
+---
+
+**Letzte Aktualisierung:** 2026-03-04 (Type-Consistency Phase 4 geplant)
