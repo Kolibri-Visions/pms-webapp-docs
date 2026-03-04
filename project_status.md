@@ -6,58 +6,6 @@
 
 ---
 
-## Pricing-Bug: Fee-Extraktion bei manueller Buchungserstellung (2026-03-04) — IMPLEMENTED
-
-**Scope:** Fix für fehlende Preisaufschlüsselung bei manuell erstellten Buchungen.
-
-### Problem
-
-Bei manueller Buchungserstellung wurden die Gebühren (cleaning_fee, service_fee) nicht korrekt aus dem Pricing-Quote extrahiert. Das Frontend suchte nach Fee-Types `"cleaning"`, `"service"`, `"booking"`, aber das Backend sendet Types `"per_stay"`, `"per_night"`, `"percent"`, `"per_person"`.
-
-**Symptom:** Buchungs-Detail zeigte `Basispreis + 0 + 0 + 0 = 130€`, aber Gesamt war `428,24€`.
-
-### Root Cause
-
-```javascript
-// VORHER (falsch) - Types existieren nicht im Backend
-const cleaningFee = quote.fees?.find(f => f.type === "cleaning")?.amount_cents || 0;
-const serviceFee = quote.fees?.find(f => f.type === "service")?.amount_cents || 0;
-// → Immer 0, weil find() nichts findet!
-```
-
-### Lösung
-
-1. **Fee-Extraktion nach Namen** statt nach Type (regex-basiert)
-2. **Vollständige Breakdown in channel_data speichern** für korrekte Anzeige
-3. **Detail-Seite dynamisch** rendert fees_breakdown/taxes_breakdown aus channel_data
-4. **TypeScript-Typen erweitert** für channel_data
-
-### Geänderte Dateien
-
-| Datei | Änderung |
-|-------|----------|
-| `frontend/app/(admin)/bookings/page.tsx` | Fee-Extraktion: Regex nach Namen, channel_data speichert fees_breakdown/taxes_breakdown |
-| `frontend/app/(admin)/bookings/[id]/page.tsx` | Dynamische Anzeige von fees_breakdown, taxes_breakdown, visitor_tax; Legacy-Fallback |
-| `frontend/app/types/booking.ts` | channel_data-Type erweitert um fees_breakdown, taxes_breakdown, visitor_tax |
-
-### Verification Path
-
-```bash
-# Frontend Build
-cd frontend && npm run build
-
-# Manuelle Tests:
-# 1. Neue Buchung erstellen mit Objekt das Gebühren/Steuern hat
-# 2. Buchungs-Detail öffnen
-# 3. Prüfen: Summe der Einzelposten = Gesamtpreis
-```
-
-### Status
-
-✅ IMPLEMENTED
-
----
-
 ## Buchungslogik: no_show Status-Transition (2026-03-04) — IMPLEMENTED
 
 **Scope:** Erweiterung der Buchungs-State-Machine um Transition `confirmed → no_show`.
