@@ -4864,4 +4864,106 @@ Historische Einträge (Phase 1-20, vor 2026-02-14) wurden ausgelagert:
 
 ---
 
-*Last updated: 2026-03-03 (Accessibility K1 + K4 + K5 IMPLEMENTED)*
+## Accessibility Audit Abschluss A-08, A-04, A-09, A-10 (2026-03-04) - IMPLEMENTED
+
+**Scope**: WCAG 2.1 Compliance - aria-live Regionen, Form-Labels, Dekorative Icons, Skeleton Loading.
+
+### A-08: aria-live Regionen für dynamische Inhalte (WCAG 4.1.3)
+
+Screen Reader erhalten nun Ankündigungen bei Lade- und Ergebnis-Zuständen.
+
+**Pattern**:
+```tsx
+const [ariaAnnouncement, setAriaAnnouncement] = useState("");
+useEffect(() => {
+  if (loading) setAriaAnnouncement("Lade Daten...");
+  else setAriaAnnouncement(`${items.length} Einträge geladen`);
+}, [loading, items.length]);
+
+<div aria-live="polite" aria-atomic="true" className="sr-only">
+  {ariaAnnouncement}
+</div>
+```
+
+**Implementiert in**: `bookings/page.tsx`, `guests/page.tsx`, `properties/page.tsx`, `team/page.tsx`
+
+**i18n**: `de.json` und `en.json` um `aria` Sektion erweitert.
+
+### A-04: Form-Labels mit htmlFor/id Paaren (WCAG 1.3.1, 3.3.2)
+
+Alle Formularfelder haben nun programmatisch verknüpfte Labels.
+
+**Pattern**:
+```tsx
+<label htmlFor="field-id">Feldname</label>
+<input id="field-id" ... />
+```
+
+**Implementiert in**: `BuchungClient.tsx` (10 Felder), `channel-sync/page.tsx` (4 Felder), `website/filters/page.tsx`, `BlockRenderer.tsx`
+
+### A-09: Dekorative Icons mit aria-hidden (WCAG 1.1.1)
+
+80+ Lucide-Icons mit `aria-hidden="true"` für Screen Reader ausgeblendet.
+
+**Pattern**:
+```tsx
+<Icon className="w-4 h-4" aria-hidden="true" />
+```
+
+**Implementiert in**: Toast, ErrorBoundary, ProfileDropdown, TopBar, MobileDrawer, Breadcrumb, ImpersonationBanner, FooterServer, PropertyFilter, MonthQuickNav, ViewToggle, PropertySidebar, BookingPopover, Modal, Alert, ConfirmDialog, BuchungClient, BlockRenderer (18 Komponenten)
+
+### A-10: Konsistente Skeleton Loading Screens
+
+Neue wiederverwendbare `Skeleton.tsx` Komponente mit:
+- `Skeleton` - Basis-Block mit animate-pulse
+- `SkeletonText` - Textzeilen-Platzhalter
+- `SkeletonAvatar` - Runde Avatar-Platzhalter
+- `SkeletonTable` / `SkeletonTableRow` - Tabellen-Skeleton
+- `SkeletonList` - Mobile Karten-Liste
+- `SkeletonGrid` - Grid-Layout
+
+**Ersetzt** Spinner-Loading durch konsistente Skeleton-Screens (responsive: Desktop=Table, Mobile=List).
+
+**Implementiert in**: `bookings/page.tsx`, `guests/page.tsx`, `properties/page.tsx`, `team/page.tsx`
+
+### Änderungen
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/components/ui/Skeleton.tsx` | Neue Komponente (8 Varianten) |
+| `frontend/app/(admin)/bookings/page.tsx` | aria-live, SkeletonTable/List |
+| `frontend/app/(admin)/guests/page.tsx` | aria-live, SkeletonTable/List |
+| `frontend/app/(admin)/properties/page.tsx` | aria-live, SkeletonTable/List |
+| `frontend/app/(admin)/team/page.tsx` | aria-live, SkeletonTable/List |
+| `frontend/app/(public)/buchung/BuchungClient.tsx` | htmlFor/id, aria-hidden |
+| `frontend/app/(public)/components/BlockRenderer.tsx` | htmlFor/id, aria-hidden |
+| `frontend/app/components/*.tsx` (18 Dateien) | aria-hidden für Icons |
+| `frontend/app/lib/i18n/translations/de.json` | aria Sektion |
+| `frontend/app/lib/i18n/translations/en.json` | aria Sektion |
+
+### Commits
+
+- `8b30ead`: fix(a11y): WCAG compliance - aria-live, htmlFor, aria-hidden
+- `c54c39a`: feat(ui): add consistent skeleton loading screens (A-10)
+
+### Verification Path
+
+1. **aria-live Test**: Öffne Buchungen-Seite → Screen Reader sollte "Lade Buchungen..." und dann "X Buchungen geladen" ansagen
+2. **Form-Labels Test**: Tab durch BuchungClient → Screen Reader liest Label für jedes Feld
+3. **Icon Test**: axe DevTools → Keine "Images must have alternate text" Fehler für dekorative Icons
+4. **Skeleton Test**: Öffne Gäste-Seite → Skeleton-Blöcke erscheinen statt Spinner
+
+### Status
+
+✅ **Accessibility Audit vollständig abgeschlossen**: 10/10 Items behoben
+
+| Kategorie | Behoben |
+|-----------|---------|
+| P1 Kritisch | 5 |
+| P2 Wichtig | 3 |
+| P3 Moderat | 2 |
+| **Gesamt** | **10** |
+
+---
+
+*Last updated: 2026-03-04 (Accessibility Audit A-08, A-04, A-09, A-10 IMPLEMENTED)*
