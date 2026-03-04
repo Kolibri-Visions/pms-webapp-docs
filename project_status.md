@@ -22,6 +22,7 @@ Bei manueller Buchungserstellung wurden Gebühren (Buchungsgebühr, Endreinigung
 2. **Steuer-Summierung:** `taxes_total_cents + visitor_tax_cents` in `tax_amount` speichern
 3. **Vollständige Breakdown:** `pricing_breakdown` Objekt in `channel_data` speichern
 4. **Detail-Anzeige:** Dynamisches Rendering aus `pricing_breakdown` mit Legacy-Fallback
+5. **Extras-Validierung:** `extrasTotal` in `service_fee` speichern (Backend validiert `total_price == sum(subtotal + cleaning_fee + service_fee + tax_amount)`)
 
 ### Geänderte Dateien
 
