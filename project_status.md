@@ -55,6 +55,51 @@ git revert <commit-hash>
 
 ---
 
+## Architektur-Konsolidierung Phase 2 (2026-03-04) — IMPLEMENTED
+
+**Scope:** Pricing-Struktur Konsolidierung (Non-Breaking)
+
+### Änderungen
+
+1. **Konsolidierte Pricing-Types:** `PricingBreakdown`, `PricingFee`, `PricingTax`, `VisitorTaxDetails`, `BookedExtra`
+2. **Type Guards:** `hasPricingBreakdown()`, `hasBookedExtras()` für Runtime-Checks
+3. **Helper Functions:** `calculateExtrasTotal()`, `formatCentsAsEuro()`
+4. **Wiederverwendbare Komponente:** `PricingBreakdown.tsx` mit Legacy-Fallback
+5. **Booking-Detail refaktoriert:** 120+ Zeilen Code durch Komponente ersetzt
+
+### Neue Dateien
+
+| Datei | Inhalt |
+|-------|--------|
+| `frontend/app/types/pricing.ts` | PricingBreakdown-Types, Type Guards, Helpers |
+| `frontend/app/components/booking/PricingBreakdown.tsx` | Wiederverwendbare Pricing-Anzeige |
+| `frontend/app/components/booking/index.ts` | Component Exports |
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `frontend/app/(admin)/bookings/[id]/page.tsx` | Verwendet PricingBreakdown-Komponente |
+
+### Verification Path
+
+```bash
+cd frontend && npm run build
+git tag -l | grep pre-consolidation-phase-2
+```
+
+### Revert
+
+```bash
+git reset --hard pre-consolidation-phase-2
+```
+
+### Status
+
+✅ IMPLEMENTED
+
+---
+
 ## Architektur-Konsolidierung Phase 1 (2026-03-04) — IMPLEMENTED
 
 **Scope:** Frontend Type-Bereinigung (Non-Breaking)
