@@ -2,7 +2,50 @@
 
 **Last Updated:** 2026-03-05
 
-**Current Phase:** Code-Cleanup Sprint 1 ✅ COMPLETE
+**Current Phase:** Code-Cleanup Sprint 2 ✅ COMPLETE
+
+---
+
+## Code-Cleanup Sprint 2: COMPLETE (2026-03-05)
+
+**Ziel:** Validators und Currency Formatting konsolidieren
+
+### Übersicht
+
+| Phase | Beschreibung | Commit | Status |
+|-------|--------------|--------|--------|
+| 2.1 | Backend Validators extrahieren | `eb2ec26` | ✅ |
+| 2.2 | Frontend formatCurrency() konsolidieren | `eb2ec26` | ✅ |
+
+### Neue Dateien
+
+| Datei | Inhalt |
+|-------|--------|
+| `backend/app/schemas/validators.py` | Shared validators (phone, country, currency) |
+| `frontend/app/lib/currency-utils.ts` | Currency formatting utilities |
+
+### Aktualisierte Dateien
+
+**Backend:**
+- `app/schemas/guests.py` - nutzt shared validators
+- `app/schemas/properties.py` - nutzt shared validators
+
+**Frontend (7 Dateien):**
+- `guests/[id]/page.tsx`
+- `booking-requests/page.tsx`
+- `bookings/page.tsx`
+- `bookings/[id]/page.tsx`
+- `properties/[id]/page.tsx`
+- `dashboard/page.tsx`
+- `components/booking/PricingBreakdown.tsx`
+
+### Ergebnis
+
+- **~100 Zeilen Code reduziert**
+- **Einheitliche Formatierung** im gesamten Frontend
+- **DRY-Prinzip** für Validators eingehalten
+
+**Status:** ✅ IMPLEMENTED
 
 ---
 
