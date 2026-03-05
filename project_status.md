@@ -2,7 +2,51 @@
 
 **Last Updated:** 2026-03-05
 
-**Current Phase:** Code-Cleanup Sprint 2 ✅ COMPLETE
+**Current Phase:** Multi-VAT System Phase 10 ✅ IMPLEMENTED
+
+---
+
+## Multi-VAT System: IN PROGRESS (2026-03-05)
+
+**Ziel:** Differenzierte Mehrwertsteuersätze für Unterkünfte (7%), Services (19%) und durchlaufende Posten (0%)
+
+### Übersicht
+
+| Phase | Beschreibung | Git Tag | Status |
+|-------|--------------|---------|--------|
+| 1-3 | DB Schema, Backend Models | - | ✅ (Vorarbeit) |
+| 4 | Fee Templates UI: tax_id Dropdown | - | ✅ |
+| 5 | Build Verification | - | ✅ |
+| 6 | Extra Services UI: tax_id Dropdown | - | ✅ |
+| 7 | Property Form: accommodation_tax_id | `multi-vat-phase7-ui` | ✅ |
+| 8 | Pricing Engine: compute_totals_multi_vat() | `multi-vat-phase8-engine` | ✅ |
+| 9 | Price Breakdown Display | `multi-vat-phase9-display` | ✅ |
+| 10 | E-Mail Templates MwSt.-Anzeige | `multi-vat-phase10-email` | ✅ IMPLEMENTED |
+| 11 | Test & Verifikation | - | ⏳ PENDING |
+
+### Phase 10: E-Mail Templates (2026-03-05)
+
+**Änderungen:**
+- `backend/app/services/email_notification_service.py`:
+  - `format_pricing_breakdown_for_email()` - Multi-VAT Preisaufschlüsselung
+  - `format_legacy_pricing_for_email()` - Fallback für alte Buchungen
+  - Templates `booking_confirmed`, `booking_request_approved` mit `{pricing_breakdown}` Placeholder
+
+**Verification Path:** Manual Template Review + Runbook Documentation
+
+### Architektur
+
+```
+pricing_taxes (MwSt.-Katalog)
+    ├── id, name, percent, is_inclusive
+    │
+fee_templates.tax_id ───┘ (FK für Gebühren-MwSt.)
+extra_services.tax_id ──┘ (FK für Service-MwSt.)
+properties.accommodation_tax_id ─┘ (FK für Unterkunfts-MwSt.)
+
+pricing_totals.py:
+    compute_totals_multi_vat() → TaxLineItem mit source, source_name
+```
 
 ---
 

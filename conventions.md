@@ -952,4 +952,107 @@ interface PaginatedResponse<T> {
 
 ---
 
-**Letzte Aktualisierung:** 2026-03-04 (Type-Consistency Phase 4 geplant)
+---
+
+## 14. Tax/VAT Feld-Konventionen (Multi-VAT System)
+
+> **Status:** ✅ IMPLEMENTIERT (Core) — 2026-03-05
+> **Scope:** Differenzierte MwSt-Sätze (7%, 19%, 0%)
+> **Git-Tags:** `multi-vat-phase7-ui`, `multi-vat-phase8-engine`, `multi-vat-phase9-display`, `multi-vat-phase10-email`
+
+### 14.1 Steuer-Tabelle (`pricing_taxes`)
+
+| Feld | Typ | Beschreibung |
+|------|-----|--------------|
+| `name` | `string` | Anzeigename (z.B. "MwSt 7%", "MwSt 19%") |
+| `percent` | `Decimal(5,2)` | Steuersatz (z.B. 7.00, 19.00, 0.00) |
+| `is_inclusive` | `boolean` | Brutto (true) oder Netto (false) |
+| `hint` | `string` | UI-Hinweis (z.B. "für Übernachtungen", "für Services") |
+| `is_default_accommodation` | `boolean` | Standard für Unterkünfte |
+| `active` | `boolean` | Aktiv/Inaktiv |
+
+### 14.2 FK-Referenzen (tax_id statt taxable)
+
+**Alt (DEPRECATED):**
+```
+taxable: boolean  // true/false
+```
+
+**Neu (STANDARD):**
+```
+tax_id: UUID | null      // FK zu pricing_taxes
+tax_name?: string        // Denormalisiert für Display
+tax_percent?: Decimal    // Denormalisiert für Display
+```
+
+**Betroffene Tabellen:**
+- `pricing_fees` → `tax_id` (ersetzt `taxable`)
+- `extra_services` → `tax_id` (NEU)
+- `properties` → `accommodation_tax_id` (NEU)
+
+### 14.3 Naming-Konventionen
+
+| Korrekt | FALSCH | Beschreibung |
+|---------|--------|--------------|
+| `tax_id` | ~~vat_id~~, ~~mwst_id~~ | FK zu pricing_taxes |
+| `tax_percent` | ~~vat_rate~~, ~~mwst_satz~~ | Steuersatz |
+| `is_inclusive` | ~~brutto~~, ~~inclusive~~ | Brutto/Netto Flag |
+| `accommodation_tax_id` | ~~property_tax_id~~ | Property-Level Steuer |
+
+### 14.4 is_inclusive Semantik
+
+```
+is_inclusive = true  (Brutto)
+  → Eingegebener Preis ENTHÄLT Steuer
+  → Netto = Brutto / (1 + percent/100)
+  → Steuer = Brutto - Netto
+
+is_inclusive = false (Netto)
+  → Eingegebener Preis ist OHNE Steuer
+  → Steuer = Netto * percent/100
+  → Brutto = Netto + Steuer
+```
+
+### 14.5 Kurtaxe/Visitor Tax (Sonderfall)
+
+Kurtaxe ist **immer 0% MwSt** (durchlaufender Posten):
+- Keine tax_id erforderlich
+- `visitor_tax_periods.amount_cents` ist Brutto = Netto
+- UI-Info-Banner zur Erläuterung
+
+### 14.6 Price Breakdown Struktur
+
+```typescript
+interface PricingBreakdown {
+  fees: PricingFee[];             // Mit tax_id pro Gebühr
+  taxes: PricingTax[];            // Multi-VAT: Steuern mit source Attribution
+  visitor_tax: VisitorTaxDetails | null;
+  fees_total_cents: number;
+  taxes_total_cents: number;
+  visitor_tax_cents: number;
+}
+
+// Multi-VAT: Tax-Zeile mit Herkunfts-Attribution
+interface PricingTax {
+  name: string;                   // z.B. "MwSt 7%"
+  percent: number;                // 7.00
+  amount_cents: number;           // Berechneter Betrag
+  source?: string;                // "accommodation" | "fee" | "service" | "legacy"
+  source_name?: string;           // z.B. "Übernachtungen", "Endreinigung"
+}
+```
+
+**Backend:** `compute_totals_multi_vat()` in `pricing_totals.py`
+**Frontend:** `PricingBreakdown.tsx` zeigt `source_name` in Sublabel
+
+### 14.7 Default-Steuersätze (Deutschland)
+
+| Typ | Steuersatz | Verwendung |
+|-----|------------|------------|
+| MwSt 7% | 7.00 | Übernachtungen (ermäßigt) |
+| MwSt 19% | 19.00 | Services, Extras (regulär) |
+| MwSt 0% | 0.00 | Durchlaufende Posten |
+
+---
+
+**Letzte Aktualisierung:** 2026-03-05 (Multi-VAT System implementiert)

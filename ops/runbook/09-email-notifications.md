@@ -88,6 +88,57 @@ curl -sS -X POST "${API}/api/v1/notifications/email/test" \
 | `booking_cancelled` | Booking cancelled | Guest |
 | `test` | Manual test | Specified recipient |
 
+### Pricing Breakdown in Templates (Multi-VAT)
+
+Die Templates `booking_confirmed` und `booking_request_approved` unterstützen detaillierte Preisaufschlüsselung mit Multi-VAT:
+
+**Template-Placeholder:** `{pricing_breakdown}`
+
+**Erforderlicher Kontext:**
+```python
+from app.services.email_notification_service import (
+    format_pricing_breakdown_for_email,
+    format_legacy_pricing_for_email,
+)
+
+# Multi-VAT Format (mit Gebühren und Steuern)
+pricing_breakdown = format_pricing_breakdown_for_email(
+    subtotal="450.00",
+    nightly_rate="90.00",
+    num_nights=5,
+    fees=[
+        {"name": "Endreinigung", "amount_cents": 8000},
+        {"name": "Bettwäsche", "amount_cents": 2500},
+    ],
+    taxes=[
+        {"name": "MwSt.", "percent": 7, "amount_cents": 3150, "source_name": "Übernachtungen"},
+        {"name": "MwSt.", "percent": 19, "amount_cents": 1520, "source_name": "Endreinigung"},
+    ],
+    visitor_tax_cents=1200,
+    visitor_tax_details={"persons": 2, "nights": 5},
+    total_price="542.70",
+    currency="EUR",
+)
+
+# Legacy Format (nur Gesamtpreis)
+pricing_breakdown = format_legacy_pricing_for_email(
+    total_price="542.70",
+    currency="EUR",
+)
+```
+
+**Beispiel-Ausgabe (Multi-VAT):**
+```
+Übernachtungen (5 Nächte × 90.00 €): 450.00 €
+Endreinigung: 80.00 €
+Bettwäsche: 25.00 €
+MwSt. (7% auf Übernachtungen): 31.50 €
+MwSt. (19% auf Endreinigung): 15.20 €
+Kurtaxe (2 Pers. × 5 Nächte): 12.00 €
+----------------------------------------
+Gesamtbetrag: 542.70 €
+```
+
 ## Troubleshooting
 
 ### Emails Not Being Sent
