@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-03-05
 
-**Current Phase:** Multi-VAT System Phase 10++ Tax Fields Fix ✅ IMPLEMENTED
+**Current Phase:** Multi-VAT System Phase 10+++ Property Service Fix ✅ IMPLEMENTED
 
 ---
 
@@ -24,6 +24,7 @@
 | 10 | E-Mail Templates MwSt.-Anzeige | `multi-vat-phase10-email` | ✅ IMPLEMENTED |
 | 10+ | Backend API Routes Fix (tax_id Persistierung) | `a1008ce` | ✅ IMPLEMENTED |
 | 10++ | Tax Fields Fix (hint, is_inclusive, is_default_accommodation) | `009cc93` | ✅ IMPLEMENTED |
+| 10+++ | Property Service Fix (accommodation_tax_id in Queries) | `f7f7c53` | ✅ IMPLEMENTED |
 | 11 | Test & Verifikation | - | ⏳ PENDING |
 
 ### Phase 10: E-Mail Templates (2026-03-05)
@@ -79,6 +80,27 @@
 **Commit:** `009cc93` - fix(multi-vat): persist tax fields and update UI info box
 
 **Verification Path:** Steuer erstellen/bearbeiten mit Hinweis-Feld → Hinweis muss in Tabelle erscheinen
+
+**Status:** ✅ IMPLEMENTED
+
+### Phase 10+++: Property Service Fix (2026-03-05)
+
+**Problem:** `accommodation_tax_id` wurde beim Laden/Speichern von Properties nicht berücksichtigt.
+
+**Ursache:**
+- `get_property()` und `list_properties()` Queries enthielten `accommodation_tax_id` nicht
+- `update_property()` hatte `accommodation_tax_id` nicht in `allowed_fields`
+
+**Änderungen:**
+
+**property_service.py:**
+- `get_property()`: `accommodation_tax_id` + LEFT JOIN für `accommodation_tax_name`, `accommodation_tax_percent`
+- `list_properties()`: Gleiche Änderung wie oben
+- `update_property()`: `accommodation_tax_id` zu `allowed_fields` + UUID-Konvertierung
+
+**Commit:** `f7f7c53` - fix(multi-vat): add accommodation_tax_id to property queries
+
+**Verification Path:** Objekt bearbeiten → MwSt. ändern → Speichern → Erneut bearbeiten → Dropdown zeigt korrekte Auswahl
 
 **Status:** ✅ IMPLEMENTED
 
