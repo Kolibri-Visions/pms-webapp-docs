@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-03-05
 
-**Current Phase:** Multi-VAT System Phase 10+ Backend Fix ✅ IMPLEMENTED
+**Current Phase:** Multi-VAT System Phase 10++ Tax Fields Fix ✅ IMPLEMENTED
 
 ---
 
@@ -23,6 +23,7 @@
 | 9 | Price Breakdown Display | `multi-vat-phase9-display` | ✅ |
 | 10 | E-Mail Templates MwSt.-Anzeige | `multi-vat-phase10-email` | ✅ IMPLEMENTED |
 | 10+ | Backend API Routes Fix (tax_id Persistierung) | `a1008ce` | ✅ IMPLEMENTED |
+| 10++ | Tax Fields Fix (hint, is_inclusive, is_default_accommodation) | `009cc93` | ✅ IMPLEMENTED |
 | 11 | Test & Verifikation | - | ⏳ PENDING |
 
 ### Phase 10: E-Mail Templates (2026-03-05)
@@ -58,6 +59,26 @@
 **Commit:** `a1008ce` - fix(multi-vat): persist and return tax_id in backend API routes
 
 **Verification Path:** POST/GET Extra Service oder Fee mit tax_id, Response muss tax_id + tax_name + tax_percent enthalten
+
+**Status:** ✅ IMPLEMENTED
+
+### Phase 10++: Tax Fields Fix (2026-03-05)
+
+**Problem:** Steuerfelder `hint`, `is_inclusive`, `is_default_accommodation` wurden nicht gespeichert.
+
+**Änderungen:**
+
+**pricing.py:**
+- `create_tax()`: Alle Felder in INSERT (is_inclusive, hint, is_default_accommodation)
+- `update_tax()`: Alle Felder in UPDATE-Handler + RETURNING *
+
+**fees-taxes/page.tsx:**
+- Info-Kasten aktualisiert: erklärt Multi-VAT-Zweck statt veralteter Text
+- Geändert von Warnungs-Stil zu primärem Info-Stil
+
+**Commit:** `009cc93` - fix(multi-vat): persist tax fields and update UI info box
+
+**Verification Path:** Steuer erstellen/bearbeiten mit Hinweis-Feld → Hinweis muss in Tabelle erscheinen
 
 **Status:** ✅ IMPLEMENTED
 
