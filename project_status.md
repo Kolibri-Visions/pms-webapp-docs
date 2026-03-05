@@ -1,8 +1,86 @@
 # PMS-Webapp Project Status
 
-**Last Updated:** 2026-03-04
+**Last Updated:** 2026-03-05
 
-**Current Phase:** Type-Consistency Phase 4 ✅ COMPLETE
+**Current Phase:** Code-Cleanup Sprint 1 ✅ COMPLETE
+
+---
+
+## Code-Cleanup Sprint 1: COMPLETE (2026-03-05)
+
+**Ziel:** Public Booking Code konsolidieren, kritischen Bug fixen, API-Versionen vereinheitlichen
+
+### Übersicht
+
+| Phase | Beschreibung | Commit | Status |
+|-------|--------------|--------|--------|
+| 1.1 | PublicBookingService erstellen | `d08ff1f` | ✅ |
+| 1.2 | Availability Bug Fix (inventory_ranges) | `d08ff1f` | ✅ |
+| 1.3 | Booking Creation konsolidiert | `d08ff1f` | ✅ |
+| 1.4 | v1/v2 API konsolidiert | `d1488f4` | ✅ |
+
+### Kritischer Bug Fix
+
+**Problem (BEHOBEN):**
+- Availability-Check fragte nur `bookings` Tabelle
+- Sperrzeiten (`availability_blocks`) wurden ignoriert
+- Gäste konnten für gesperrte Zeiträume buchen
+
+**Lösung:**
+- `PublicBookingService.check_availability()` nutzt jetzt `inventory_ranges`
+- Erkennt sowohl Buchungen als auch Sperrzeiten
+- Returns `reason: "blocked"` oder `reason: "double_booking"`
+
+### API-Konsolidierung
+
+**Problem (BEHOBEN):**
+- v1 für site/properties, v2 für booking → Inkonsistent
+- v2 war nur Feldnamen-Konvention, keine echte API-Version
+
+**Lösung:**
+- Alle Public APIs jetzt unter `/api/v1/public/*`
+- Standardisierte Feldnamen: `check_in`, `check_out`, `num_adults`, `num_children`
+- `public_booking_v2.py` gelöscht
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `backend/app/services/public_booking_service.py` | NEU (320 Zeilen) |
+| `backend/app/api/routes/public_booking.py` | Neu geschrieben |
+| `backend/app/api/routes/public_booking_v2.py` | GELÖSCHT |
+| `backend/app/modules/public_booking.py` | v2 entfernt |
+| `frontend/app/(public)/buchung/BuchungClient.tsx` | v2 → v1 |
+
+### PROD-Verifikation
+
+```bash
+# Ping
+curl https://api.fewo.kolibri-visions.de/api/v1/public/ping
+# → {"status": "ok", "message": "Public booking router operational"}
+
+# Availability (freie Daten)
+curl ".../availability?property_id=...&check_in=2026-06-15&check_out=2026-06-20"
+# → {"available": true, ...}
+
+# Availability (Sperrzeit)
+curl ".../availability?property_id=...&check_in=2026-03-26&check_out=2026-03-29"
+# → {"available": false, "reason": "blocked"}
+```
+
+### Git-Tags
+
+- `pre-cleanup-baseline` (Commit: ef44c41)
+- `pre-cleanup-phase-1.1` (Commit: ef44c41)
+- `pre-v1-consolidation` (Commit: d08ff1f)
+
+### Ergebnis
+
+- **~714 Zeilen Code reduziert**
+- **Kritischer Bug behoben** (Sperrzeiten werden erkannt)
+- **Einheitliche API-Struktur** (alle unter /api/v1/public/*)
+
+**Status:** ✅ VERIFIED (PROD-Tests erfolgreich)
 
 ---
 
