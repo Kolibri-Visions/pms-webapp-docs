@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-03-05
 
-**Current Phase:** Multi-VAT System Phase 12 Cleaning Tax UI ✅ IMPLEMENTED
+**Current Phase:** Multi-VAT System Phase 13 Price Preview Enhancement ✅ IMPLEMENTED
 
 ---
 
@@ -28,7 +28,8 @@
 | 10++++ | List Taxes Fix (fehlende Felder in SELECT) | `b4438e9` | ✅ IMPLEMENTED |
 | 10+++++ | Fee Edit UI + Info-Box Platzierung | - | ✅ IMPLEMENTED |
 | 12 | Cleaning Tax UI (separater MwSt.-Satz für Endreinigung) | - | ✅ IMPLEMENTED |
-| 13 | Test & Verifikation | - | ⏳ PENDING |
+| 13 | Price Preview Enhancement (MwSt. pro Zeile + Gruppierung) | `8e894a0` | ✅ IMPLEMENTED |
+| 14 | Test & Verifikation | - | ⏳ PENDING |
 
 ### Phase 10: E-Mail Templates (2026-03-05)
 
@@ -176,6 +177,43 @@
 1. Objekt bearbeiten → Preise-Bereich zeigt MwSt.-Dropdowns nebeneinander
 2. MwSt. Endreinigung auf 19% setzen → Speichern
 3. Preisaufschlüsselung zeigt Endreinigung mit 19%
+
+**Status:** ✅ IMPLEMENTED
+
+### Phase 13: Price Preview Enhancement (2026-03-05)
+
+**Ziel:** Preisvorschau im Buchungsformular verbessern - MwSt.-Sätze pro Zeile anzeigen und nach Satz gruppierte Zusammenfassung.
+
+**Änderungen:**
+
+**pricing.py (API Route):**
+- Property-Query erweitert um `cleaning_tax_id`, `cleaning_tax_percent`, `cleaning_tax_is_inclusive`
+- LEFT JOIN auf `pricing_taxes` für Cleaning Tax Daten
+- Endreinigung-Berechnung nutzt jetzt `cleaning_tax_id` für MwSt.-Berechnung
+- Brutto/Netto-Unterscheidung basierend auf `is_inclusive` Flag
+
+**pricing.py (Schema):**
+- `FeeLineItem.tax_percent` Feld hinzugefügt für MwSt.-Anzeige pro Zeile
+
+**pricing_totals.py:**
+- `FeeLineItem` Dataclass erweitert um `tax_percent: Optional[float]`
+
+**bookings/page.tsx (Frontend):**
+- Jede Zeile zeigt MwSt.-Satz: `Endreinigung ... (19%)`
+- Gruppierte MwSt.-Zusammenfassung vor Gesamtpreis:
+  ```
+  Enthaltene MwSt.:
+  7% (Netto: €X.XX)    €Y.YY
+  19% (Netto: €A.AA)   €B.BB
+  ```
+- Gesamtpreis-Label: "Gesamtpreis (inkl. MwSt.)"
+
+**Verification Path:**
+1. Buchung erstellen mit Objekt das cleaning_tax_id gesetzt hat
+2. Preisvorschau prüfen:
+   - Jede Zeile zeigt MwSt.-Prozentsatz
+   - MwSt.-Zusammenfassung gruppiert nach Satz
+   - Gesamtpreis zeigt "(inkl. MwSt.)"
 
 **Status:** ✅ IMPLEMENTED
 
