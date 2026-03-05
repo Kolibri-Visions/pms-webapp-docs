@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-03-05
 
-**Current Phase:** Multi-VAT System Phase 10++++ List Taxes Fix ✅ IMPLEMENTED
+**Current Phase:** Multi-VAT System Phase 10+++++ Fee Edit UI Fix ✅ IMPLEMENTED
 
 ---
 
@@ -26,6 +26,7 @@
 | 10++ | Tax Fields Fix (hint, is_inclusive, is_default_accommodation) | `009cc93` | ✅ IMPLEMENTED |
 | 10+++ | Property Service Fix (accommodation_tax_id in Queries) | `f7f7c53` | ✅ IMPLEMENTED |
 | 10++++ | List Taxes Fix (fehlende Felder in SELECT) | `b4438e9` | ✅ IMPLEMENTED |
+| 10+++++ | Fee Edit UI + Info-Box Platzierung | - | ✅ IMPLEMENTED |
 | 11 | Test & Verifikation | - | ⏳ PENDING |
 
 ### Phase 10: E-Mail Templates (2026-03-05)
@@ -119,6 +120,28 @@
 **Commit:** `b4438e9` - fix(multi-vat): add missing fields to list_taxes query
 
 **Verification Path:** Steuer bearbeiten → Hinweis eingeben → Speichern → Tabelle zeigt Hinweis in HINWEIS-Spalte
+
+**Status:** ✅ IMPLEMENTED
+
+### Phase 10+++++: Fee Edit UI + Info-Box Platzierung (2026-03-05)
+
+**Probleme:**
+1. Gebühren-Vorlagen können nicht bearbeitet werden (nur erstellen war möglich)
+2. Info-Box "Vorlagen-Verwaltung" erscheint auch im Steuern-Tab
+
+**Änderungen:**
+
+**fees-taxes/page.tsx:**
+- `FeeTemplateForm` um `initialData?: FeeTemplate` prop erweitert
+- Edit-Modus: Felder werden mit existierenden Werten vorausgefüllt
+- Titel wechselt zwischen "Gebühr bearbeiten" und "Neue Gebühren-Vorlage"
+- Button wechselt zwischen "Speichern" und "Erstellen"
+- Info-Box "Vorlagen-Verwaltung" in den Gebühren-Tab verschoben (nicht mehr global)
+
+**Verification Path:**
+1. /fees-taxes → Gebühren → Bearbeiten-Icon klicken → Formular öffnet mit vorausgefüllten Werten
+2. Ändern + Speichern → Daten werden aktualisiert
+3. Tab zu Steuern wechseln → Info-Box erscheint NICHT
 
 **Status:** ✅ IMPLEMENTED
 
