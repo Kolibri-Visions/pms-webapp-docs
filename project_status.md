@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-03-05
 
-**Current Phase:** Multi-VAT System Phase 10 ✅ IMPLEMENTED
+**Current Phase:** Multi-VAT System Phase 10+ Backend Fix ✅ IMPLEMENTED
 
 ---
 
@@ -22,6 +22,7 @@
 | 8 | Pricing Engine: compute_totals_multi_vat() | `multi-vat-phase8-engine` | ✅ |
 | 9 | Price Breakdown Display | `multi-vat-phase9-display` | ✅ |
 | 10 | E-Mail Templates MwSt.-Anzeige | `multi-vat-phase10-email` | ✅ IMPLEMENTED |
+| 10+ | Backend API Routes Fix (tax_id Persistierung) | `a1008ce` | ✅ IMPLEMENTED |
 | 11 | Test & Verifikation | - | ⏳ PENDING |
 
 ### Phase 10: E-Mail Templates (2026-03-05)
@@ -33,6 +34,32 @@
   - Templates `booking_confirmed`, `booking_request_approved` mit `{pricing_breakdown}` Placeholder
 
 **Verification Path:** Manual Template Review + Runbook Documentation
+
+### Phase 10+: Backend API Routes Fix (2026-03-05)
+
+**Problem:** tax_id wurde in INSERT-Statements nicht persistiert und in Responses nicht zurückgegeben.
+
+**Änderungen:**
+
+**extra_services.py:**
+- `list_extra_services()`: LEFT JOIN für tax_name/tax_percent hinzugefügt
+- `create_extra_service()`: tax_id in INSERT + Follow-up Query für Response
+- `get_extra_service()`: LEFT JOIN für tax_name/tax_percent hinzugefügt
+- `update_extra_service()`: Follow-up Query für tax_info in Response
+
+**pricing.py:**
+- `list_fees()`: tax_id, tax_name, tax_percent via LEFT JOIN
+- `create_fee()`: tax_id in INSERT + Follow-up Query für Response
+- `update_fee()`: tax_id Handling in UPDATE + Follow-up Query
+- `list_fee_templates()`: tax_info via LEFT JOIN
+- `list_property_fees()`: tax_info via LEFT JOIN
+- `assign_fee_from_template()`: tax_id aus Template kopieren + Follow-up Query
+
+**Commit:** `a1008ce` - fix(multi-vat): persist and return tax_id in backend API routes
+
+**Verification Path:** POST/GET Extra Service oder Fee mit tax_id, Response muss tax_id + tax_name + tax_percent enthalten
+
+**Status:** ✅ IMPLEMENTED
 
 ### Architektur
 
