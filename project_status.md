@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-03-05
 
-**Current Phase:** Multi-VAT System Phase 10+++ Property Service Fix ✅ IMPLEMENTED
+**Current Phase:** Multi-VAT System Phase 10++++ List Taxes Fix ✅ IMPLEMENTED
 
 ---
 
@@ -25,6 +25,7 @@
 | 10+ | Backend API Routes Fix (tax_id Persistierung) | `a1008ce` | ✅ IMPLEMENTED |
 | 10++ | Tax Fields Fix (hint, is_inclusive, is_default_accommodation) | `009cc93` | ✅ IMPLEMENTED |
 | 10+++ | Property Service Fix (accommodation_tax_id in Queries) | `f7f7c53` | ✅ IMPLEMENTED |
+| 10++++ | List Taxes Fix (fehlende Felder in SELECT) | `b4438e9` | ✅ IMPLEMENTED |
 | 11 | Test & Verifikation | - | ⏳ PENDING |
 
 ### Phase 10: E-Mail Templates (2026-03-05)
@@ -101,6 +102,23 @@
 **Commit:** `f7f7c53` - fix(multi-vat): add accommodation_tax_id to property queries
 
 **Verification Path:** Objekt bearbeiten → MwSt. ändern → Speichern → Erneut bearbeiten → Dropdown zeigt korrekte Auswahl
+
+**Status:** ✅ IMPLEMENTED
+
+### Phase 10++++: List Taxes Fix (2026-03-05)
+
+**Problem:** Hinweis-Feld wird in der Steuern-Tabelle nicht angezeigt (immer "—").
+
+**Ursache:** `list_taxes()` Query selektierte nur Basis-Felder, nicht die Multi-VAT Felder.
+
+**Änderungen:**
+
+**pricing.py:**
+- `list_taxes()`: SELECT erweitert um `is_inclusive`, `hint`, `is_default_accommodation`
+
+**Commit:** `b4438e9` - fix(multi-vat): add missing fields to list_taxes query
+
+**Verification Path:** Steuer bearbeiten → Hinweis eingeben → Speichern → Tabelle zeigt Hinweis in HINWEIS-Spalte
 
 **Status:** ✅ IMPLEMENTED
 
