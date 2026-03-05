@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-03-05
 
-**Current Phase:** Multi-VAT System Phase 10+++++ Fee Edit UI Fix ✅ IMPLEMENTED
+**Current Phase:** Multi-VAT System Phase 12 Cleaning Tax UI ✅ IMPLEMENTED
 
 ---
 
@@ -27,7 +27,8 @@
 | 10+++ | Property Service Fix (accommodation_tax_id in Queries) | `f7f7c53` | ✅ IMPLEMENTED |
 | 10++++ | List Taxes Fix (fehlende Felder in SELECT) | `b4438e9` | ✅ IMPLEMENTED |
 | 10+++++ | Fee Edit UI + Info-Box Platzierung | - | ✅ IMPLEMENTED |
-| 11 | Test & Verifikation | - | ⏳ PENDING |
+| 12 | Cleaning Tax UI (separater MwSt.-Satz für Endreinigung) | - | ✅ IMPLEMENTED |
+| 13 | Test & Verifikation | - | ⏳ PENDING |
 
 ### Phase 10: E-Mail Templates (2026-03-05)
 
@@ -145,6 +146,39 @@
 
 **Status:** ✅ IMPLEMENTED
 
+### Phase 12: Cleaning Tax UI (2026-03-05)
+
+**Problem:** Endreinigung hat 19% MwSt. (Dienstleistung), aber kein eigener Dropdown dafür existiert im Objekt-Formular. Layout-Problem: "Ab Gast Nr." war nicht aligned.
+
+**Änderungen:**
+
+**Migration:**
+- `supabase/migrations/20260305224500_add_cleaning_tax_to_properties.sql`
+- Neues Feld `cleaning_tax_id` UUID (FK zu pricing_taxes)
+
+**property_service.py:**
+- `list_properties()`: `cleaning_tax_id`, `cleaning_tax_name`, `cleaning_tax_percent` via LEFT JOIN
+- `get_property()`: dto.
+- `update_property()`: `cleaning_tax_id` zu `allowed_fields` + UUID-Konvertierung
+
+**PropertyForm.tsx:**
+- Neues Feld `cleaning_tax_id` in `PropertyFormData`
+- Neuer Dropdown "MwSt. Endreinigung" neben "MwSt. Übernachtung"
+- Layout-Fix: Preise-Grid in zwei separate Zeilen aufgeteilt
+  - Zeile 1: Basispreis | Währung | Endreinigung | Kaution
+  - Zeile 2: Extra-Gast-Gebühr | Ab Gast Nr.
+- MwSt.-Dropdowns in eigener 2-Spalten-Zeile
+
+**property.ts (Types):**
+- `cleaning_tax_id`, `cleaning_tax_name`, `cleaning_tax_percent` zu Property, PropertyCreate, PropertyUpdate
+
+**Verification Path:**
+1. Objekt bearbeiten → Preise-Bereich zeigt MwSt.-Dropdowns nebeneinander
+2. MwSt. Endreinigung auf 19% setzen → Speichern
+3. Preisaufschlüsselung zeigt Endreinigung mit 19%
+
+**Status:** ✅ IMPLEMENTED
+
 ### Architektur
 
 ```
@@ -153,7 +187,8 @@ pricing_taxes (MwSt.-Katalog)
     │
 fee_templates.tax_id ───┘ (FK für Gebühren-MwSt.)
 extra_services.tax_id ──┘ (FK für Service-MwSt.)
-properties.accommodation_tax_id ─┘ (FK für Unterkunfts-MwSt.)
+properties.accommodation_tax_id ─┘ (FK für Unterkunfts-MwSt., z.B. 7%)
+properties.cleaning_tax_id ─┘ (FK für Endreinigung-MwSt., z.B. 19%)
 
 pricing_totals.py:
     compute_totals_multi_vat() → TaxLineItem mit source, source_name
