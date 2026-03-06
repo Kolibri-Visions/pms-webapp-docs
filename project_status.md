@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-03-05
 
-**Current Phase:** Multi-VAT System Phase 13 Price Preview Enhancement ✅ IMPLEMENTED
+**Current Phase:** Multi-VAT System Phase 15 Type Konsolidierung ✅ IMPLEMENTED
 
 ---
 
@@ -29,7 +29,9 @@
 | 10+++++ | Fee Edit UI + Info-Box Platzierung | - | ✅ IMPLEMENTED |
 | 12 | Cleaning Tax UI (separater MwSt.-Satz für Endreinigung) | - | ✅ IMPLEMENTED |
 | 13 | Price Preview Enhancement (MwSt. pro Zeile + Gruppierung) | `8e894a0` | ✅ IMPLEMENTED |
-| 14 | Test & Verifikation | - | ⏳ PENDING |
+| 14 | Tax Fallback für Pre-Multi-VAT Fees | `93c4f87` | ✅ IMPLEMENTED |
+| 15 | Type Konsolidierung (Frontend Types) | `7e5270a` | ✅ IMPLEMENTED |
+| 16 | Test & Verifikation | - | ⏳ PENDING |
 
 ### Phase 10: E-Mail Templates (2026-03-05)
 
@@ -214,6 +216,71 @@
    - Jede Zeile zeigt MwSt.-Prozentsatz
    - MwSt.-Zusammenfassung gruppiert nach Satz
    - Gesamtpreis zeigt "(inkl. MwSt.)"
+
+**Status:** ✅ IMPLEMENTED
+
+### Phase 14: Tax Fallback für Pre-Multi-VAT Fees (2026-03-06)
+
+**Problem:** Property-Gebühren, die VOR dem Multi-VAT Feature aus Templates importiert wurden, haben `tax_id=NULL`. Obwohl das Template jetzt `tax_id` hat, zeigt die Preisvorschau 0% statt 19%.
+
+**Ursache:**
+```sql
+-- ALT: Nur die Property-Fee's tax_id wird geprüft
+LEFT JOIN pricing_taxes pt ON pt.id = pf.tax_id
+-- Property-Fee hat tax_id=NULL → JOIN findet nichts → tax_percent=NULL → 0%
+```
+
+**Lösung:**
+```sql
+-- NEU: Fallback auf Template's tax_id
+LEFT JOIN pricing_fees tmpl ON pf.source_template_id = tmpl.id
+LEFT JOIN pricing_taxes pt ON pt.id = COALESCE(pf.tax_id, tmpl.tax_id)
+-- Property-Fee hat tax_id=NULL, aber Template hat tax_id → 19%
+```
+
+**Geänderte Datei:**
+- `backend/app/api/routes/pricing.py` (fees_query in quote calculation)
+
+**Verification Path:**
+1. Property mit alter importierter Gebühr (pre-Multi-VAT)
+2. Template hat tax_id gesetzt (z.B. 19%)
+3. Preisvorschau zeigt jetzt korrekten MwSt.-Satz
+
+**Status:** ✅ IMPLEMENTED
+
+### Phase 15: Type Konsolidierung (2026-03-06)
+
+**Ziel:** Frontend Types konsolidieren - manuelle Duplikate durch Aliase auf generierte Types ersetzen.
+
+**Problem:** `extra-service.ts` hatte manuelle Type-Definitionen, die mit `api-generated.ts` dupliziert waren. Führte zu Inkonsistenzen und Type-Fehlern beim Deployment.
+
+**Änderungen:**
+
+**extra-service.ts (Frontend):**
+```typescript
+// VORHER: Manuelle Duplikate
+export interface ExtraService { ... }
+export interface PropertyExtraService { ... }
+
+// NACHHER: Aliase auf generierte Types
+export type ExtraService = components['schemas']['ExtraServiceResponse'];
+export type PropertyExtraService = components['schemas']['PropertyExtraServiceResponse'];
+```
+
+**Backend Schema + Routes:**
+- `PropertyExtraServiceResponse`: `service_tax_id`, `service_tax_percent` hinzugefügt
+- Routes: JOIN mit `pricing_taxes` für Tax-Daten
+
+**Deployment-Fixes (7 Commits):**
+| Commit | Problem | Fix |
+|--------|---------|-----|
+| `72e853b` | tax_percent fehlt | Felder hinzugefügt |
+| `1316c11` | Backend + Frontend Types | Konsolidierung |
+| `6524f29` | extra_service_id deprecated | service_id verwenden |
+| `fd64fa2` | readonly Arrays | Spread-Operator |
+| `bca8985` | price_type deprecated | Entfernt |
+| `fd91d55` | tax_id fehlt in ExtraService | Hinzugefügt |
+| `7e5270a` | null vs undefined | ?? undefined |
 
 **Status:** ✅ IMPLEMENTED
 
