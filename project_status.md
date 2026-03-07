@@ -1,8 +1,41 @@
 # PMS-Webapp Project Status
 
-**Last Updated:** 2026-03-06
+**Last Updated:** 2026-03-08
 
 **Current Phase:** Security-Audit Phase 10 — Migrations-Konsolidierung + RLS ✅ IMPLEMENTED
+
+---
+
+## Audit-Logging: CRUD-Routes Erweiterung (2026-03-08) — IMPLEMENTED
+
+**Ziel:** emit_audit_event() zu allen CRUD-Routes hinzufuegen, die bisher kein Audit-Logging hatten.
+
+### Geaenderte Dateien
+
+| Datei | Hinzugefuegte Audit-Events |
+|-------|---------------------------|
+| `app/api/routes/properties.py` | property_created, property_updated, property_deleted |
+| `app/api/routes/guests.py` | guest_created, guest_updated, guest_deleted, guest_gdpr_deleted |
+| `app/api/routes/bookings.py` | booking_updated, booking_status_changed, booking_cancelled (booking_created war bereits vorhanden) |
+| `app/api/routes/owners/crud.py` | owner_created, owner_updated, owner_deleted, owner_gdpr_deleted, property_owner_assigned |
+| `app/api/routes/availability.py` | availability_block_created, availability_block_updated, availability_block_deleted |
+| `app/api/routes/extra_services.py` | extra_service_created, extra_service_updated, extra_service_deleted |
+| `app/api/routes/amenities.py` | amenity_created, amenity_updated, amenity_deleted |
+
+### Details
+
+- Alle Audit-Events werden NACH erfolgreicher DB-Operation ausgeloest
+- actor_type = "user" fuer alle authentifizierten Endpoints
+- GDPR-Loeschungen sind als `critical=True` markiert
+- Metadata enthaelt kontextrelevante Informationen (geaenderte Felder, Entity-Namen)
+- emit_audit_event ist best-effort (Fehler brechen die Anfrage nicht ab)
+
+### Verification Path
+
+```bash
+rg "emit_audit_event" backend/app/api/routes/ --count
+# Erwartetes Ergebnis: Alle 7 Route-Dateien mit Audit-Events
+```
 
 ---
 
@@ -6066,6 +6099,50 @@ object-src 'none'
 - `bookings/page.tsx` - property_id, check_in, check_out, num_adults (4 Felder)
 - `website/templates/page.tsx` - name, block_type, block_props, style_overrides (4 Felder)
 - `channel-sync/page.tsx` - connection_id, start_date, end_date (3 Felder, date_range Fehler)
+
+**Status**: ✅ IMPLEMENTED
+
+---
+
+## Accessibility: Label-Input-Verknüpfung K2 (2026-03-07) - IMPLEMENTED
+
+**Issue**: Weitere Labels ohne `htmlFor`/`id`-Verknüpfung in Admin-UI gefunden (WCAG 1.3.1, 4.1.2). Betrifft vor allem Website-Builder-Seiten und weitere Admin-Formulare.
+
+**Lösung**: `htmlFor` und `id` Attribute systematisch ergänzt. Dynamische IDs für Felder in Schleifen (z.B. `` `block-prop-${key}` ``, `` `array-${fieldName}-${index}-${fieldKey}` ``).
+
+**Änderungen** (18 Dateien, ~80 Labels):
+
+| Datei | Labels | ID-Prefix |
+|-------|--------|-----------|
+| `booking-requests/components/ManualBookingModal.tsx` | 9 | `manual-booking-` |
+| `owners/[ownerId]/page.tsx` | 12 | `owner-` |
+| `properties/[id]/gebuehren/page.tsx` | 3 | `custom-fee-` |
+| `properties/[id]/calendar/page.tsx` | 1 | `calendar-` |
+| `properties/[id]/extra-services/page.tsx` | 3 | dynamisch mit `assignment.id` |
+| `properties/[id]/media/page.tsx` | 1 | `property-media-` |
+| `notifications/email-outbox/page.tsx` | 1 | `test-email-` |
+| `media/page.tsx` | 3 | dynamisch mit `file.id` |
+| `website/pages/[id]/components/PageSettingsModal.tsx` | 5 | `page-settings-` |
+| `website/pages/[id]/components/SaveTemplateModal.tsx` | 2 | `save-template-` |
+| `website/pages/page.tsx` | 3 | `new-page-` |
+| `website/templates/page.tsx` | 3 | `template-` |
+| `website/pages/[id]/components/BlockPropsEditor.tsx` | 10 | `block-prop-${key}` |
+| `website/components/ArrayItemEditor.tsx` | 8 | `array-${fieldName}-${index}-${fieldKey}` |
+| `website/pages/[id]/components/BlockStyleEditor.tsx` | 26 | `style-` |
+| `website/pages/[id]/components/SectionPropsEditor.tsx` | 2 | `section-` |
+
+**Ausnahmen (kein htmlFor noetig)**:
+- Wrapping Labels (`<label><input .../></label>`) — bereits accessible
+- Display-only Labels (Label + `<p>` Text, ohne Input)
+- Labels für Button-Groups (kein einzelnes Input-Element)
+- Labels für ImagePicker/RichTextEditor (Komponenten verwalten eigene a11y)
+- Color-Inputs (type="color") erhalten `aria-label` statt htmlFor
+
+**Verification Path**:
+```bash
+rg -l "htmlFor=" frontend/app/\(admin\)/
+rg "id=\"(manual-booking|owner|custom-fee|calendar|property-media|test-email|page-settings|save-template|new-page|template|style|section)-" frontend/app/\(admin\)/
+```
 
 **Status**: ✅ IMPLEMENTED
 

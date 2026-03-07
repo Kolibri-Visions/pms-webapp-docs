@@ -92,6 +92,39 @@ Format: `{seite}-{feldname}`
 - ✅ 1.3.1 Info and Relationships - Labels sind programmatisch verknüpft
 - ✅ 4.1.2 Name, Role, Value - Inputs haben accessible names
 
+### K1 Runde 2 (2026-03-07): Weitere 16 Dateien, ~80 Labels
+
+Zusätzliche Dateien mit fehlenden `htmlFor`/`id`-Verknüpfungen wurden gefunden und behoben:
+
+| Datei | Labels | ID-Prefix |
+|-------|--------|-----------|
+| `booking-requests/components/ManualBookingModal.tsx` | 9 | `manual-booking-` |
+| `owners/[ownerId]/page.tsx` | 12 | `owner-` |
+| `properties/[id]/gebuehren/page.tsx` | 3 | `custom-fee-` |
+| `properties/[id]/calendar/page.tsx` | 1 | `calendar-` |
+| `properties/[id]/extra-services/page.tsx` | 3 | dynamisch |
+| `properties/[id]/media/page.tsx` | 1 | `property-media-` |
+| `notifications/email-outbox/page.tsx` | 1 | `test-email-` |
+| `media/page.tsx` | 3 | dynamisch |
+| `website/pages/[id]/components/PageSettingsModal.tsx` | 5 | `page-settings-` |
+| `website/pages/[id]/components/SaveTemplateModal.tsx` | 2 | `save-template-` |
+| `website/pages/page.tsx` | 3 | `new-page-` |
+| `website/templates/page.tsx` | 3 | `template-` |
+| `website/pages/[id]/components/BlockPropsEditor.tsx` | 10 | `block-prop-${key}` |
+| `website/components/ArrayItemEditor.tsx` | 8 | `array-${fieldName}-${index}-${fieldKey}` |
+| `website/pages/[id]/components/BlockStyleEditor.tsx` | 26 | `style-` |
+| `website/pages/[id]/components/SectionPropsEditor.tsx` | 2 | `section-` |
+
+**Dynamische IDs** fuer Felder in Schleifen/Renderern:
+- `block-prop-${key}` — BlockPropsEditor (key = Feldname)
+- `array-${fieldName}-${index}-${fieldKey}` — ArrayItemEditor
+- `style-*` — BlockStyleEditor (feste Praefixe)
+
+**Zusaetzliche Ausnahmen (kein htmlFor noetig)**:
+- Labels fuer Button-Groups (mehrere Buttons statt einzelnes Input)
+- Labels fuer ImagePicker/RichTextEditor (Komponenten verwalten eigene a11y)
+- Color-Inputs (type="color") erhalten `aria-label` statt htmlFor
+
 ## Was wurde implementiert?
 
 ### K2-Extended: FocusTrap für Inline-Modals
