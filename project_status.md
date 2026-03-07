@@ -1,8 +1,51 @@
 # PMS-Webapp Project Status
 
-**Last Updated:** 2026-03-05
+**Last Updated:** 2026-03-06
 
-**Current Phase:** Multi-VAT System Phase 15 Type Konsolidierung ✅ IMPLEMENTED
+**Current Phase:** Security-Audit Phase 10 — Migrations-Konsolidierung + RLS ✅ IMPLEMENTED
+
+---
+
+## Security-Audit: Migrations-Konsolidierung + RLS-Bereinigung (2026-03-06) — IMPLEMENTED
+
+**Ziel:** RLS-Luecken schliessen + 117 Einzel-Migrationen in saubere Baseline konsolidieren.
+
+### Uebersicht
+
+| Task | Beschreibung | Commit | Status |
+|------|-------------|--------|--------|
+| 10.1 | PROD-Audit (58 Tabellen, 155 Policies, 4 Auth-Patterns) | — | ✅ FERTIG |
+| 10.2 | RLS-Fix: media_audit_log, agency_domains, amenity_definitions | `a658c09` | ✅ FERTIG |
+| 10.3 | Baseline-Migration aus pg_dump (5.001 Zeilen) | `8383d97` | ✅ FERTIG |
+| 10.4 | 117 Migrationen archiviert, Scripts aktualisiert | `8383d97` | ✅ FERTIG |
+| 10.5 | Verifikation + Dokumentation | — | ✅ FERTIG |
+
+### RLS-Audit Findings
+
+| ID | Beschreibung | Severity | Status |
+|----|-------------|----------|--------|
+| K-04 | media_audit_log ohne RLS | HIGH | GEFIXT |
+| K-05 | agency_domains ohne RLS | HIGH | GEFIXT |
+| M-04 | amenity_definitions ohne RLS | LOW | GEFIXT |
+| K-02 | agency_members fehlt | — | FALSE POSITIVE (ist VIEW) |
+| K-03 | USING(true) auf amenities | — | FALSE POSITIVE (spaetere Migration OK) |
+
+### Dateien
+
+- `supabase/migrations/00000000000000_baseline.sql` — Konsolidierte Baseline (58 Tabellen, 190 Policies)
+- `supabase/migrations/20260306220000_enable_rls_media_audit_agency_domains.sql` — RLS-Fix (archiviert)
+- `supabase/migrations/_archive/` — 117 historische Migrationen
+- `supabase/scripts/mark_baseline_applied.sql` — PROD-DB: Baseline als applied markieren
+- `supabase/verify-rls.sql` — Aktualisiertes Verifikations-Script
+- `supabase/rls-policies.sql` — Referenz-Dokument aller RLS-Policies
+
+### Verification Path
+
+```bash
+# Auf PROD im Supabase SQL-Editor:
+# 1. verify-rls.sql ausfuehren — Erwartung: 57/58 RLS, 190 Policies
+# 2. mark_baseline_applied.sql ausfuehren (einmalig nach Deploy)
+```
 
 ---
 

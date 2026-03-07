@@ -43,6 +43,7 @@
 | [45-booking-service-architecture.md](./runbook/45-booking-service-architecture.md) | BookingService Refactoring: Modulare Sub-Services (Query, Create, Update, Cancellation) |
 | [46-file-upload-security.md](./runbook/46-file-upload-security.md) | File Upload Security: Magic Bytes, SVG Sanitization, XXE-Schutz (defusedxml) |
 | [47-module-system.md](./runbook/47-module-system.md) | Module-System Architektur: Router-Registrierung, ModuleSpec, Troubleshooting |
+| [48-rls-migration-consolidation.md](./runbook/48-rls-migration-consolidation.md) | RLS & Migrations-Konsolidierung: Baseline, 4 Auth-Patterns, Verifikation |
 
 ### Golden Paths (Most Common Operations)
 
