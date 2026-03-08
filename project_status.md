@@ -2,7 +2,39 @@
 
 **Last Updated:** 2026-03-08
 
-**Current Phase:** Bugfix Booking-Requests CSP/Trailing-Slash ✅ IMPLEMENTED
+**Current Phase:** Code-Qualitaet Audit Stufe 3 — TypeScript any Eradication ✅ IMPLEMENTED
+
+---
+
+## Code-Qualitaet Stufe 3: TypeScript any Eradication (2026-03-08) — IMPLEMENTED
+
+### Was wurde geaendert
+
+- **62 catch-Bloecke**: `catch (err: any)` → `catch (err: unknown)` mit korrektem Type-Narrowing
+- **Channel/Sync Interfaces**: `types/channel.ts` mit ChannelConnection, SyncLog, BatchOperation, SyncTriggerResult u.a.
+- **AuthContext**: `user: any` → `User` (aus @supabase/supabase-js)
+- **ApiError.data**: `any` → `Record<string, unknown> | null`
+- **apiClient Generics**: `<T = any>` → `<T = unknown>`, `body?: any` → `body?: unknown`
+- **Inline Button**: Ersetzt durch shared `Button` aus `components/ui/Button.tsx`, `accent` Variant hinzugefuegt
+- **[key: string]: any**: Spread Props entfernt (Card/Button in bookings/[id])
+- **~20 API-Callsites**: Explizite Typ-Parameter hinzugefuegt
+
+### Betroffene Dateien
+
+- 46 Dateien geaendert, 581 Einfuegungen, 469 Loeschungen
+- 1 neue Datei: `frontend/app/types/channel.ts`
+
+### Verification Path
+
+```bash
+# TypeScript-Check
+cd frontend && npx tsc --noEmit
+# Erwartung: 0 Fehler
+
+# Verbleibende catch any pruefen
+grep -rn "catch (err: any)\|catch (e: any)\|catch (error: any)" app/ --include="*.tsx" --include="*.ts"
+# Erwartung: 0 Treffer
+```
 
 ---
 
