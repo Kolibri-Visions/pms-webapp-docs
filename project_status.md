@@ -6520,4 +6520,44 @@ python3 -m compileall backend/app/ -q  # EXIT 0 = OK
 
 ---
 
-*Last updated: 2026-03-08 (Code-Qualität FIXPLAN Stufen 5-8 IMPLEMENTED)*
+## CQ-02: Service-Layer Extraktion Stufe 4.2-4.4 (2026-03-08) — IMPLEMENTED
+
+**Scope:** SQL-Logik aus 3 Route-Dateien in eigenständige Service-Klassen extrahieren.
+
+### Änderungen
+
+- **ExtraServiceService** (`services/extra_service_service.py`): 9 Endpoints, 24 SQL-Queries
+  - Shared Helpers: `_verify_property_access()`, `_fetch_with_tax()`
+  - Route-Datei: 597 → 274 Zeilen
+- **VisitorTaxService** (`services/visitor_tax_service.py`): 13 Endpoints, 39 SQL-Queries
+  - Shared Helpers: `_verify_location_access()`, `_fetch_periods_for_location()`, `_build_dynamic_update()`
+  - Route-Datei: 878 → 338 Zeilen
+- **DashboardService** (`services/dashboard_service.py`): 3 Endpoints, 32 SQL-Queries
+  - Owner/Staff-Varianten beibehalten (1:1 Verhaltens-Erhalt)
+  - Route-Datei: 683 → 186 Zeilen
+
+**Zentrale Constants** (`core/constants.py`):
+- `ZERO_UUID` — konsolidiert aus 3 Dateien
+- `BookingStatus` — Klasse mit Status-Konstanten + Sets (OCCUPYING, ACTIVE, COMPLETED)
+- `BookingRequestStatus` — Booking-Request-Status-Konstanten
+
+### Betroffene Dateien
+- Neue Services: 3 (extra_service_service.py, visitor_tax_service.py, dashboard_service.py)
+- Neue Constants: 1 (core/constants.py)
+- Geänderte Routes: 3 (extra_services.py, visitor_tax.py, dashboard.py)
+- Geänderte DI: 1 (deps.py)
+- Geänderte Services: 2 (booking/create.py, booking/query.py)
+- Geänderte Schemas: 1 (bookings.py)
+
+### Verification Path
+```bash
+python3 -m compileall backend/app/ -q  # EXIT 0 = OK
+```
+
+### Status
+
+✅ IMPLEMENTED
+
+---
+
+*Last updated: 2026-03-08 (Service-Layer Extraktion Stufe 4.2-4.4 IMPLEMENTED)*
