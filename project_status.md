@@ -2,7 +2,57 @@
 
 **Last Updated:** 2026-03-08
 
-**Current Phase:** Code-Qualitaet Audit Stufe 2 — Shared Utilities ✅ IMPLEMENTED
+**Current Phase:** Bugfix Booking-Requests CSP/Trailing-Slash ✅ IMPLEMENTED
+
+---
+
+## Bugfix: Booking-Requests CSP Trailing-Slash Redirect (2026-03-08) — IMPLEMENTED
+
+### Problem
+
+Die `/booking-requests`-Seite im Admin-Panel war komplett unbenutzbar. Alle API-Aufrufe wurden von der CSP `connect-src` Direktive blockiert, weil die URLs `http://` statt `https://` verwendeten.
+
+### Root Cause (Kausalkette)
+
+1. **God-File Refactoring** (commit `02a266b`): `booking_requests.py` wurde in Package `booking_requests/` aufgesplittet
+2. **FastAPI Startup-Crash** (commit `3104d23`): Fehler "Prefix and path cannot be both empty" — Fix: Route-Path von `""` auf `"/"` geaendert
+3. **Trailing-Slash Mismatch**: Backend-Route war nun `/api/v1/booking-requests/` (mit Slash), Frontend rief `/api/v1/booking-requests` (ohne Slash) auf
+4. **307 Redirect**: FastAPI leitete automatisch auf die Trailing-Slash-Variante um
+5. **HTTP-Schema im Redirect**: Hinter dem Reverse-Proxy (Traefik/Coolify) nutzte die Redirect-URL `http://` statt `https://`, weil `scope["scheme"]` intern "http" war
+6. **CSP-Blockade**: Browser blockierte den Redirect zu `http://api.fewo...` (CSP erlaubt nur `https://`)
+
+### Fix
+
+- **Commit `7030269`**: Trailing-Slash zu allen 6 List-API-Aufrufen im Frontend hinzugefuegt (`/api/v1/booking-requests/?...`)
+- Kein Redirect mehr noetig → kein http:// → kein CSP-Problem
+
+### Zusaetzlich revertierte Aenderung (Stufe 2, Item 2.6)
+
+- `getApiBase()` in `api-client.ts` wurde zurueck auf eigenstaendige Implementierung gesetzt (commit `e700a46`)
+- **Begruendung:** `config.ts` `getApiBaseUrl()` hat Server-Pfad mit `API_BASE_URL` (potenziell internes `http://`). `getApiBase()` ist absichtlich Client-Only und nutzt nur `NEXT_PUBLIC_*` Vars
+- **Entscheidung:** Revert bleibt — die Trennung ist architektonisch korrekt
+
+### Betroffene Dateien
+
+| Datei | Aenderung |
+|-------|-----------|
+| `frontend/app/(admin)/booking-requests/page.tsx` | 6x URL mit Trailing-Slash |
+| `frontend/app/lib/api-client.ts` | Revert auf eigenstaendige getApiBase() |
+| `backend/app/api/routes/booking_requests/list.py` | Route-Path `"/"` (unveraendert, war der Ausgangs-Fix) |
+
+### Verification Path
+
+```bash
+# PROD: Seite laden und Konsole pruefen
+# https://admin.fewo.kolibri-visions.de/booking-requests
+# Erwartung: Keine CSP-Fehler, Daten laden korrekt
+```
+
+### Lessons Learned
+
+- Bei Route-Path-Aenderungen (`""` → `"/"`) immer Frontend-URLs auf Trailing-Slash pruefen
+- FastAPI `redirect_slashes=True` (Default) + Reverse-Proxy = potenzielle http:// Redirects
+- `ForwardedProtoMiddleware` existiert, aber `TRUST_PROXY_HEADERS` muss in Coolify auf `true` stehen
 
 ---
 
@@ -12,12 +62,12 @@
 - **formatDate/formatDateTime/formatDateISO/formatDateShort** als Shared Utilities in `frontend/app/lib/format-utils.ts` zentralisiert
 - **getApiErrorMessage** als Shared Utility in `frontend/app/lib/api-utils.ts` zentralisiert
 - **escape_like()** Utility in `backend/app/core/sql_utils.py` erstellt — schuetzt ILIKE-Queries vor Metacharacter-Injection
-- **getApiBase()** in `api-client.ts` delegiert jetzt an `getApiBaseUrl()` aus `config.ts` (DRY)
+- **getApiBase()** in `api-client.ts`: Delegation an config.ts wurde revertiert (siehe Bugfix oben) — bleibt eigenstaendig (Client-Only Safety)
 
 ### Betroffene Dateien (Frontend — 22 Dateien)
 - 18 Dateien: inline formatDate/formatDateTime entfernt, Import aus format-utils
 - 4 Dateien: inline getApiErrorMessage entfernt, Import aus api-utils
-- `api-client.ts`: getApiBase() delegiert an config.ts getApiBaseUrl()
+- `api-client.ts`: getApiBase() Delegation revertiert — bleibt eigenstaendig (Client-Only)
 
 ### Betroffene Dateien (Backend — 9 Dateien)
 - Neues Modul: `app/core/sql_utils.py` mit escape_like()
