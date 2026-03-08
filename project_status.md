@@ -2,7 +2,31 @@
 
 **Last Updated:** 2026-03-08
 
-**Current Phase:** Security-Audit Phase 10 — Migrations-Konsolidierung + RLS ✅ IMPLEMENTED
+**Current Phase:** Code-Qualitaet Audit Stufe 2 — Shared Utilities ✅ IMPLEMENTED
+
+---
+
+## Code-Qualitaet Stufe 2: Shared Utilities (2026-03-08) — IMPLEMENTED
+
+### Was wurde geaendert
+- **formatDate/formatDateTime/formatDateISO/formatDateShort** als Shared Utilities in `frontend/app/lib/format-utils.ts` zentralisiert
+- **getApiErrorMessage** als Shared Utility in `frontend/app/lib/api-utils.ts` zentralisiert
+- **escape_like()** Utility in `backend/app/core/sql_utils.py` erstellt — schuetzt ILIKE-Queries vor Metacharacter-Injection
+- **getApiBase()** in `api-client.ts` delegiert jetzt an `getApiBaseUrl()` aus `config.ts` (DRY)
+
+### Betroffene Dateien (Frontend — 22 Dateien)
+- 18 Dateien: inline formatDate/formatDateTime entfernt, Import aus format-utils
+- 4 Dateien: inline getApiErrorMessage entfernt, Import aus api-utils
+- `api-client.ts`: getApiBase() delegiert an config.ts getApiBaseUrl()
+
+### Betroffene Dateien (Backend — 9 Dateien)
+- Neues Modul: `app/core/sql_utils.py` mit escape_like()
+- 9 Dateien mit ILIKE-Queries: escape_like() eingefuegt
+
+### Verification Path
+- `python3 -m py_compile app/core/sql_utils.py` — OK
+- `python3 -m py_compile` aller 9 Backend-Dateien — 9/9 OK
+- `npx tsc --noEmit` — 0 Fehler
 
 ---
 
@@ -6324,4 +6348,52 @@ Neue wiederverwendbare `Skeleton.tsx` Komponente mit:
 
 ---
 
-*Last updated: 2026-03-04 (Accessibility Audit A-08, A-04, A-09, A-10 IMPLEMENTED)*
+---
+
+## God-Files aufteilen (Audit Fix 6.3) — ✅ IMPLEMENTED
+
+### Beschreibung
+
+Alle Route-Dateien >800 Zeilen in Python-Packages mit Sub-Modulen aufgeteilt. Reine Datei-Reorganisation, keine Logik-Änderungen. Alle Imports in `main.py` und `modules/` bleiben unverändert (Python behandelt Packages wie Module).
+
+### Aufgeteilte Dateien
+
+| Datei | Zeilen | Aufgeteilt in | Dateien |
+|-------|--------|---------------|---------|
+| `booking_requests.py` | 1.884 | Package `booking_requests/` | 6 |
+| `season_templates.py` | 2.142 | Dateien in `pricing/` | 4 |
+| `website_admin.py` | 1.348 | Package `website_admin/` | 6 |
+| `availability.py` | 1.346 | Package `availability/` | 5 |
+| `branding.py` | 1.197 | Package `branding/` | 3 |
+| `public_site.py` | 1.143 | Package `public_site/` | 6 |
+| **Gesamt** | **~9.000** | **6 Packages** | **30 Dateien** |
+
+### Übersprungen
+
+- `property_service.py` (1.468 Zeilen): Service-Klasse (keine Routes), Aufteilung einer einzelnen Klasse riskanter als Routes
+
+### Dateien
+
+| Pfad | Änderung |
+|------|----------|
+| `backend/app/api/routes/booking_requests/` | NEU: Package mit 6 Sub-Modulen |
+| `backend/app/api/routes/pricing/season_template_*.py` | NEU: 4 Sub-Module |
+| `backend/app/api/routes/pricing/__init__.py` | Angepasst: season_template Imports |
+| `backend/app/api/routes/website_admin/` | NEU: Package mit 6 Sub-Modulen |
+| `backend/app/api/routes/availability/` | NEU: Package mit 5 Sub-Modulen |
+| `backend/app/api/routes/branding/` | NEU: Package mit 3 Sub-Modulen |
+| `backend/app/api/routes/public_site/` | NEU: Package mit 6 Sub-Modulen |
+
+### Verification Path
+
+```bash
+python3 -m compileall backend/app/api/routes/ -q  # EXIT 0 = OK
+```
+
+### Status
+
+✅ IMPLEMENTED
+
+---
+
+*Last updated: 2026-03-08 (God-Files aufteilen — Audit Fix 6.3 IMPLEMENTED)*
