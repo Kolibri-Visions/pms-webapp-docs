@@ -6478,4 +6478,46 @@ python3 -m compileall backend/app/api/routes/ -q  # EXIT 0 = OK
 
 ---
 
-*Last updated: 2026-03-08 (God-Files aufteilen — Audit Fix 6.3 IMPLEMENTED)*
+## CQ-01: Code-Qualität FIXPLAN Stufen 5-8 (2026-03-08) — IMPLEMENTED
+
+**Scope:** Umfassende Code-Qualität-Verbesserungen basierend auf 98 Findings aus 3 Audits.
+
+### Änderungen
+
+**Stufe 5 — Error Handling Konsistenz:**
+- Redundante Exception Re-Catches entfernt (bookings.py)
+- Domain Exception Pass-Through vor Catch-All in Dashboard/Bookings
+- Error Detail Format standardisiert (immer String statt Dict)
+- Public Layout Error Boundary (`error.tsx`) hinzugefügt
+
+**Stufe 6 — Frontend Patterns & Cleanup:**
+- Mock-Daten aus Connections-Formular entfernt (mock_access_token, mock_mode defaults)
+- console.warn/debug Statements entfernt (api-client, properties)
+- Error State standardisiert: `useState("")` → `useState<string | null>(null)` in 5 Dateien
+- Standalone `useDebounce` Hook extrahiert, Inline-Kopie in availability ersetzt
+
+**Stufe 7 — Performance:**
+- React.memo für PropertyRow, PropertyCard, BookingRequestRow, BookingRequestCard
+- Dashboard Revenue: Python-Loop (7 Queries) → single `generate_series()` Query
+
+**Stufe 8 — Naming & Hygiene:**
+- aria-label für 14 Icon-Only Buttons (RichTextEditor, ArrayItemEditor)
+- get_db → get_db_authed in extra_services Routes (9 Endpoints)
+
+### Betroffene Dateien
+- Backend: dashboard.py, bookings.py, extra_services.py, deps.py, schemas/dashboard.py
+- Frontend: 15+ Dateien (availability, connections, seasons, visitor-tax, properties, booking-requests, website)
+
+### Verification Path
+```bash
+cd frontend && npm run build  # EXIT 0 = OK
+python3 -m compileall backend/app/ -q  # EXIT 0 = OK
+```
+
+### Status
+
+✅ IMPLEMENTED
+
+---
+
+*Last updated: 2026-03-08 (Code-Qualität FIXPLAN Stufen 5-8 IMPLEMENTED)*
