@@ -2,7 +2,94 @@
 
 **Last Updated:** 2026-03-08
 
-**Current Phase:** Code-Qualitaet Audit Stufe 3 — TypeScript any Eradication ✅ IMPLEMENTED
+**Current Phase:** Infrastruktur-Hardening Phase P1-P8 (P6+P7 ✅ IMPLEMENTED)
+
+---
+
+## Infrastruktur-Hardening P6+P7: Observability + DB-Hardening (2026-03-08) — IMPLEMENTED
+
+### Was wurde geaendert
+
+**P6: Observability**
+- `backend/app/core/logging_config.py` (NEU): Structured Logging mit structlog (JSON in Prod, farbig in Dev)
+- `backend/app/core/request_id_middleware.py` (NEU): X-Request-ID Middleware mit structlog-Context-Binding
+- `backend/app/core/metrics.py` (BEREITS VORHANDEN): Prometheus-Metrics (HTTP, Business, DB-Pool, Events)
+- `backend/app/main.py`: Structured Logging integriert, /metrics Endpoint, Request-ID Middleware, erweiterte Startup-Diagnostics
+- GET `/metrics` Endpoint fuer Prometheus-Scraping
+
+**P7: DB-Hardening**
+- `supabase/scripts/index_usage_audit.sql` (NEU): Ungenutzte Indexes, Sequential Scans, doppelte Indexes
+- `supabase/scripts/rls_performance_check.sql` (NEU): RLS-Policy-Analyse, Index-Pruefung fuer team_members
+- P7.1 Slow-Query Logging: Server-seitige PostgreSQL-Konfiguration (Anleitung im FIXPLAN)
+- P7.2 Pool-Metrics: Integriert in GET /metrics (db_pool_size, db_pool_free, db_pool_used)
+
+### Betroffene Dateien
+
+- `backend/app/main.py` (geaendert)
+- `backend/app/core/logging_config.py` (neu)
+- `backend/app/core/request_id_middleware.py` (neu)
+- `supabase/scripts/index_usage_audit.sql` (neu)
+- `supabase/scripts/rls_performance_check.sql` (neu)
+
+### Verification Path
+
+```bash
+# Syntax-Check:
+cd backend && python3 -m compileall app/core/logging_config.py app/core/request_id_middleware.py app/core/metrics.py -q
+
+# Metrics-Endpoint (nach Deploy):
+curl -s https://YOUR_DOMAIN/metrics | head -20
+
+# Request-ID Header:
+curl -sI https://YOUR_DOMAIN/health | grep -i x-request-id
+
+# Index-Audit (Supabase SQL Editor):
+# Inhalt von supabase/scripts/index_usage_audit.sql ausfuehren
+
+# RLS-Check (Supabase SQL Editor):
+# Inhalt von supabase/scripts/rls_performance_check.sql ausfuehren
+```
+
+---
+
+## Infrastruktur-Hardening P1+P2: CI Quality Gates + Backend-Refactoring (2026-03-08) — IMPLEMENTED
+
+### Was wurde geaendert
+
+**P1: CI/CD Quality Gates**
+- `ci-backend.yml`: pytest von optional (`|| echo`) auf mandatory geaendert
+- `ci-backend.yml`: Ruff Lint-Check als zusaetzlichen Step hinzugefuegt
+- `ci-backend.yml`: Umgebungsvariablen fuer CI-Tests hinzugefuegt (Placeholder)
+- `lint-full.yml`: Von manuell (`workflow_dispatch`) auf automatisch bei PRs umgestellt
+
+**P2: Backend deps.py Refactoring**
+- `backend/app/api/deps.py` (1.078 Zeilen God-File) aufgeteilt in Package:
+  - `deps/__init__.py` — Re-Exports (volle Backward-Kompatibilitaet)
+  - `deps/auth.py` — Agency-Context, Role-Resolution
+  - `deps/rbac.py` — Role/Permission-Based Access Control (V1 + V2)
+  - `deps/services.py` — Service Factory Functions (DI)
+  - `deps/verification.py` — Cross-Tenant Resource Verification
+
+### Betroffene Dateien
+
+- `.github/workflows/ci-backend.yml` (geaendert)
+- `.github/workflows/lint-full.yml` (geaendert)
+- `backend/app/api/deps.py` → `backend/app/api/deps/` Package (5 neue Dateien)
+
+### Verification Path
+
+```bash
+# Syntax-Check:
+cd backend && python3 -m compileall app/ -q
+# Erwartung: Exit-Code 0
+
+# Import-Check (auf Python 3.12):
+python3 -c "from app.api.deps import get_booking_service, require_roles, get_current_agency_id; print('OK')"
+
+# CI-Datei Check:
+grep -c "echo.*No unit tests" .github/workflows/ci-backend.yml
+# Erwartung: 0 (kein echo-Fallback mehr)
+```
 
 ---
 
