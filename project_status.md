@@ -6699,4 +6699,37 @@ cd frontend && npm run build  # EXIT 0
 
 ---
 
-*Last updated: 2026-03-09 (P5.5 ManualBookingModal + P5.7 AvailabilityCalendar IMPLEMENTED)*
+---
+
+## P5.8 Bookings/Booking-Requests UX-Überarbeitung (2026-03-09)
+
+### Was wurde geändert
+- Status-Filter `/bookings`: `requested`, `under_review`, `inquiry` entfernt (gehören nur in `/booking-requests`)
+- "Neue Buchung" Button aus `/booking-requests` entfernt (nur in `/bookings`)
+- Genehmigungs-Toast zeigt Link "Zur Buchung →" zu `/bookings?highlight={id}`
+- Sidebar-Badge: Zähler offener Anfragen neben "Anfragen" Nav-Item (auto-refresh 60s)
+- Cross-Navigation Banner auf `/bookings`: Warnung bei offenen Anfragen mit Link
+- Drawer-Breite: Alle Admin-Drawer auf `md:w-[60%] lg:w-1/3` standardisiert
+- Toast-Komponente: optionaler Action-Link Support
+
+### Wo
+- `frontend/app/(admin)/bookings/page.tsx`
+- `frontend/app/(admin)/booking-requests/page.tsx`
+- `frontend/app/components/AdminShell.tsx`
+- `frontend/app/components/admin-shell/SidebarNavigation.tsx`
+- `frontend/app/components/Toast.tsx`
+- 9 Drawer-Dateien (width-Standardisierung)
+
+### Verification Path
+```bash
+cd frontend && npm run build  # EXIT 0
+# Live-Test: /bookings Banner + /booking-requests Genehmigung mit Link
+# Sidebar-Badge: offene Anfragen sichtbar
+```
+
+### Status
+✅ IMPLEMENTED
+
+---
+
+*Last updated: 2026-03-09 (P5.8 Bookings/Booking-Requests UX-Überarbeitung IMPLEMENTED)*
