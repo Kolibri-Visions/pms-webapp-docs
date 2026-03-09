@@ -6678,6 +6678,7 @@ python3 -m compileall backend/app/ -q  # EXIT 0 = OK
 - Integration in CreateBookingDrawer: DatePicker durch AvailabilityDatePicker ersetzt
 - Check-in Reset bei neuer Auswahl setzt Check-out zurück
 - Min-Stay Enforcement im Check-out Modus
+- Barriere-Logik: verhindert Check-out über Buchungen/Sperrzeiten/Preislücken hinweg
 - WCAG Keyboard Navigation (role="grid", Arrow Keys, Enter/Space)
 - Automatisches API-Fetching (Availability + Rate-Plan Seasons)
 
