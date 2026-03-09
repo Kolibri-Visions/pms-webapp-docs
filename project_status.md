@@ -6647,4 +6647,55 @@ python3 -m compileall backend/app/ -q  # EXIT 0 = OK
 
 ---
 
-*Last updated: 2026-03-08 (Service-Layer Extraktion Stufe 4.2-4.4 IMPLEMENTED)*
+---
+
+## P5.5 ManualBookingModal → CreateBookingDrawer
+
+### Was
+- Unvollständiges ManualBookingModal (282 Zeilen) durch vollwertigen CreateBookingDrawer ersetzt
+- booking-requests Seite nutzt jetzt denselben Drawer wie /bookings
+
+### Wo
+- `frontend/app/(admin)/booking-requests/page.tsx` (Import + State angepasst)
+- `frontend/app/(admin)/booking-requests/components/ManualBookingModal.tsx` (GELÖSCHT)
+
+### Status
+✅ IMPLEMENTED
+
+---
+
+## P5.7 AvailabilityCalendar + AvailabilityDatePicker
+
+### Was
+- Wiederverwendbarer Verfügbarkeitskalender mit Farbkodierung:
+  - Grün: verfügbar (mit Nachtpreis-Anzeige)
+  - Rot: belegt (nicht klickbar)
+  - Amber (#fde68a): gesperrt/Sperrzeit (nicht klickbar, mit Grund-Tooltip)
+  - Grau: kein Saisonpreis definiert (nicht klickbar)
+  - Diagonal rot/grün: Wechseltag (Check-in möglich)
+  - Vergangenheit: ausgegraut
+- AvailabilityDatePicker: Popover-Wrapper (analog zu DatePicker)
+- Integration in CreateBookingDrawer: DatePicker durch AvailabilityDatePicker ersetzt
+- Check-in Reset bei neuer Auswahl setzt Check-out zurück
+- Min-Stay Enforcement im Check-out Modus
+- WCAG Keyboard Navigation (role="grid", Arrow Keys, Enter/Space)
+- Automatisches API-Fetching (Availability + Rate-Plan Seasons)
+
+### Wo
+- `frontend/app/components/ui/AvailabilityCalendar.tsx` (NEU)
+- `frontend/app/components/ui/AvailabilityDatePicker.tsx` (NEU)
+- `frontend/app/(admin)/bookings/components/CreateBookingDrawer.tsx` (DatePicker → AvailabilityDatePicker)
+
+### Verification Path
+```bash
+# Build-Verifikation
+cd frontend && npm run build  # EXIT 0
+# Live-Test: Neue Buchung erstellen → Kalender muss Farben/Preise zeigen
+```
+
+### Status
+✅ IMPLEMENTED
+
+---
+
+*Last updated: 2026-03-09 (P5.5 ManualBookingModal + P5.7 AvailabilityCalendar IMPLEMENTED)*
