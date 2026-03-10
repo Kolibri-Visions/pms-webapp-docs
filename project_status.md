@@ -6732,4 +6732,92 @@ cd frontend && npm run build  # EXIT 0
 
 ---
 
-*Last updated: 2026-03-09 (P5.8 Bookings/Booking-Requests UX-Überarbeitung IMPLEMENTED)*
+---
+
+## P5.10 Availability-Check, Mixed-Content-Fix & Booking-Approve-Constraint (2026-03-10)
+
+### Was wurde geändert
+
+**Availability Internal Proxy (Mixed-Content-Prävention):**
+- Neuer interner API-Proxy `frontend/app/api/internal/availability/route.ts` erstellt
+- Availability-Calls in Booking-Requests-Seite und Drawer nutzen jetzt `/api/internal/availability` mit `fetch()` statt `apiClient.get()` direkt an `/api/v1/availability/`
+- Verhindert Mixed-Content-Fehler (Browser blockiert HTTP-Requests von HTTPS-Seite)
+
+**Mixed-Content-Hardening (api-client.ts):**
+- `getApiBase()` in `frontend/app/lib/api-client.ts` — robustes HTTPS-Protokoll-Matching
+- Belt-and-Suspenders Check in `apiRequest()` als zusätzliche Absicherung
+
+**CSP Security Hardening:**
+- `frontend/middleware.ts` — unsicheres `http://api.fewo.kolibri-visions.de` aus CSP `connect-src` entfernt
+
+**Booking-Request Approve Constraint Fix:**
+- `backend/app/api/routes/booking_requests/actions.py` — `cancelled_by=user_id` aus Approve-Query entfernt
+- Fehler: Feld verletzte `bookings_cancelled_by_check` Constraint (cancelled_by darf nur bei Status cancelled gesetzt sein)
+
+### Wo
+- `frontend/app/api/internal/availability/route.ts` (NEU)
+- `frontend/app/lib/api-client.ts`
+- `frontend/middleware.ts`
+- `frontend/app/(admin)/booking-requests/page.tsx`
+- `frontend/app/(admin)/booking-requests/components/RequestDetailDrawer.tsx`
+- `backend/app/api/routes/booking_requests/actions.py`
+
+### Migrationen
+Keine.
+
+### Verification Path
+```bash
+cd frontend && npm run build  # EXIT 0
+# Live-Test: Booking-Request genehmigen → kein DB-Constraint-Fehler
+# Live-Test: Availability-Badge in /booking-requests lädt ohne Mixed-Content-Fehler
+# CSP: Keine http:// Origins in connect-src
+```
+
+### Status
+✅ IMPLEMENTED
+
+---
+
+---
+
+## Stufe 9+10: Availability/Bookings Konsistenz + A11y (2026-03-10)
+
+### Was wurde geändert
+- **9.1 (KRITISCH):** DB-Migration `20260310000001` — `under_review` zu `bookings_status_check` Constraint hinzugefügt
+- **9.2:** Backend `BookingRequestStatus` Enum definiert, alle `status: str` durch typisiertes Literal ersetzt
+- **9.3 + 9.6:** Datum-Feldnamen-Konvention + Availability-State-Semantik in `conventions.md` dokumentiert
+- **10.1:** Availability Refresh-Button: `aria-label="Aktualisieren"` ergänzt
+- **10.2:** ViewToggle-Buttons: `aria-label` für Icon-only Buttons
+- **10.3:** Availability Suchfeld: `<label>` mit `htmlFor` + `id` verknüpft (WCAG 1.3.1)
+- **10.5:** Booking-Requests Row: `aria-label` für Approve/Decline/Detail Icon-Buttons
+- **10.6:** Booking-Requests Mobile Cards: `role="button"` + `tabIndex` + `onKeyDown` für Tastaturzugänglichkeit
+- **10.7:** Drawer Close-Button + Toast Close-Button: `aria-label` ergänzt
+
+### Wo
+- `supabase/migrations/20260310000001_add_under_review_status.sql`
+- `backend/app/schemas/booking_requests.py`
+- `backend/docs/conventions.md`
+- `frontend/app/(admin)/availability/page.tsx`
+- `frontend/app/components/calendar/ViewToggle.tsx`
+- `frontend/app/(admin)/booking-requests/components/BookingRequestRow.tsx`
+- `frontend/app/(admin)/booking-requests/components/BookingRequestCard.tsx`
+- `frontend/app/(admin)/booking-requests/components/RequestDetailDrawer.tsx`
+- `frontend/app/(admin)/booking-requests/page.tsx`
+
+### Migrationen
+- `20260310000001_add_under_review_status.sql` — Erweitert bookings_status_check Constraint
+
+### Verification Path
+```bash
+cd frontend && npm run build  # EXIT 0
+python3 -m py_compile backend/app/schemas/booking_requests.py  # EXIT 0
+# DB-Migration auf Staging ausführen und prüfen
+# Playwright e2e/availability-explore.spec.ts (8/13 pass, 3 rate-limited, 2 minor)
+```
+
+### Status
+✅ IMPLEMENTED
+
+---
+
+*Last updated: 2026-03-10 (Stufe 9+10 Konsistenz + A11y IMPLEMENTED)*

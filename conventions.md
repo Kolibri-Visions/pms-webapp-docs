@@ -24,6 +24,26 @@
 > **Wichtig:** `date_from`/`date_to` ist **KORREKT** für Zeiträume wie Seasons und Kurtaxe-Perioden.
 > Diese sind **keine** Legacy-Felder, sondern semantisch passend für den Kontext.
 
+**Query-Parameter für Datumsbereiche:**
+
+| Endpoint | Parameter | Bedeutung |
+|----------|-----------|-----------|
+| `/api/v1/availability` | `from_date`, `to_date` | Abfragezeitraum (keine Buchungsfelder!) |
+| `/api/v1/bookings` | `from_date`, `to_date` | Filter-Zeitraum (wie Seasons) |
+| Booking-Felder | `check_in`, `check_out` | Gast-An-/Abreise (Response-Felder) |
+| Availability-Segmente | `start_date`, `end_date` | Kalender-Ranges (Response-Felder) |
+
+**Availability-State-Semantik:**
+
+| State | Bedeutung | Quelle |
+|-------|-----------|--------|
+| `available` | Zeitraum ist frei | Kein Eintrag in bookings/blocks |
+| `booked` | Zeitraum belegt (unabhängig vom Buchungsstatus) | Alle bookings (inquiry, pending, confirmed, etc.) |
+| `blocked` | Zeitraum manuell gesperrt | availability_blocks Tabelle |
+
+> **Hinweis:** `booked` umfasst ALLE Buchungsstatus-Werte. Für den detaillierten Status
+> enthält jedes Availability-Segment das Feld `booking_status` (z.B. `confirmed`, `inquiry`).
+
 **Timestamp-Felder:**
 
 | Korrekt | FALSCH | Bemerkung |
