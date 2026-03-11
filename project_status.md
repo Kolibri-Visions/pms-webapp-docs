@@ -7265,4 +7265,34 @@ git reset --hard pre-fixplan-batch1
 
 ---
 
-*Last updated: 2026-03-12 (Code-Qualität FIXPLAN Batch 1-4)*
+## Audit-komplett Finding #2: Booking Type-Sync (2026-03-12) - IMPLEMENTED
+
+### Was wurde geändert
+- Manuelle `Booking` Interface in `frontend/app/types/booking.ts` um 7 fehlende Cancellation-Felder ergänzt
+- Felder: `cancellation_policy`, `cancelled_at`, `cancelled_by`, `cancelled_by_user_id`, `cancellation_reason`, `refund_amount`, `payment_status`
+- Sync-Datum auf 2026-03-12 aktualisiert
+- Manuelle Types sind jetzt konsistent mit `api-generated.ts` (BookingResponse)
+
+### Audit-komplett Finding #4: RLS booking_audit_log + pms_schema_migrations — NOT APPLICABLE
+- `booking_audit_log`: Nur in `database-schema.sql` (Design-Dokument), nie deployed, kein Backend/Frontend-Code
+- `pms_schema_migrations`: Bewusste Ausnahme in `verify-rls.sql` (Meta-Tabelle ohne agency_id)
+- Finding ist False Positive
+
+### Wo
+- `frontend/app/types/booking.ts`
+
+### Verification Path
+```bash
+# TypeScript Check
+cd frontend && npx tsc --noEmit
+
+# Build Check
+cd frontend && npm run build
+
+# Verify Felder vorhanden
+rg "cancelled_by_user_id" frontend/app/types/booking.ts
+```
+
+---
+
+*Last updated: 2026-03-12 (Audit-komplett Finding #2 + #4)*
