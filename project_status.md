@@ -6992,4 +6992,49 @@ cd frontend && npm run build  # EXIT 0
 
 ---
 
-*Last updated: 2026-03-11 (Cleanup Sprint: Dead Code, UI-Tabs, Media Pagination, BlockRenderer)*
+---
+
+## P9: Hardcoded Domains → Env-Vars (2026-03-11) - IMPLEMENTED
+
+### Was wurde geändert
+
+**Backend:**
+- `public_domain_admin.py`: 3x hardcodiertes `fewo.kolibri-visions.de` → `os.environ.get("PUBLIC_DNS_TARGET", "fewo.kolibri-visions.de")`
+- `schemas/public_site.py`: Schema-Default ebenfalls aus `PUBLIC_DNS_TARGET` Env-Var
+- Guidance-Text bei Verifizierungsfehler dynamisch
+
+**Frontend:**
+- `middleware.ts`: CSP `img-src` + `connect-src` dynamisch aus `NEXT_PUBLIC_SB_URL` / `NEXT_PUBLIC_API_BASE`
+- `next.config.js`: Image hostname aus `NEXT_PUBLIC_SB_URL`, API-Fallback aus `API_BASE_URL` / `NEXT_PUBLIC_API_BASE`
+- `vitals/route.ts`: API-Fallback aus `API_BASE_URL` / `NEXT_PUBLIC_API_BASE`
+- `domain/page.tsx`: Fallback-Default entfernt (Backend liefert echten Wert)
+- `organization/page.tsx`: Fallback neutral ("Ihren Server" statt hardcodiert)
+- `playwright.config.ts`: `PLAYWRIGHT_BASE_URL` Env-Var (Default: localhost)
+
+### Neue Env-Vars
+
+| Env-Var | Wo | Default | Beschreibung |
+|---------|-----|---------|-------------|
+| `PUBLIC_DNS_TARGET` | Backend (Coolify) | `fewo.kolibri-visions.de` | CNAME-Ziel für Custom Domains |
+| `PLAYWRIGHT_BASE_URL` | Lokal/CI (optional) | `http://localhost:3000` | Test-URL für E2E |
+
+### Bestehende Env-Vars (bereits konfiguriert)
+- `NEXT_PUBLIC_SB_URL` — Supabase URL (ersetzt `sb-pms.kolibri-visions.de`)
+- `NEXT_PUBLIC_API_BASE` / `API_BASE_URL` — Backend URL (ersetzt `api.fewo.kolibri-visions.de`)
+
+### Revert
+```bash
+git reset --hard pre-p9-hardcoded-domains
+```
+
+### Verification Path
+- Frontend Build: `cd frontend && npm run build` → OK
+- Backend Syntax: `ast.parse()` → OK
+- Grep-Check: Keine funktionalen hardcodierten Domains mehr in App-Code (nur Defaults/Kommentare)
+
+### Status
+✅ IMPLEMENTED
+
+---
+
+*Last updated: 2026-03-11 (P9: Hardcoded Domains → Env-Vars)*
