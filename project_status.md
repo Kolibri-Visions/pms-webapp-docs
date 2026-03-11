@@ -7214,4 +7214,55 @@ git reset --hard pre-p3-cicd-fix
 
 ---
 
-*Last updated: 2026-03-11 (P3: CI/CD Workflow-Fixes)*
+---
+
+## Code-Qualität FIXPLAN Batch 1-4 (2026-03-12) - IMPLEMENTED
+
+### Was wurde geändert
+
+**Backend — Shared Utilities (2.4):**
+- `build_dynamic_update()` in `app/core/sql_utils.py` — eliminiert 7x duplizierten dynamischen UPDATE-Boilerplate
+- Callsites migriert: amenity_service, extra_service_service, visitor_tax_service, block_templates, cancellation_policies, rate_plans, season_template_crud
+- Private `_build_dynamic_update()` aus visitor_tax_service entfernt
+
+**Backend — Hygiene (8.2, 8.3, 8.7, 8.12):**
+- `conn` → `db` Naming in public_domain_admin.py, public_root_meta.py
+- `input` → `payload` Parameter in booking_requests/bulk.py, season_template_crud.py, rate_plans.py
+- Analytics: custom `resolve_agency_id()` (50 Zeilen) entfernt → standard `get_current_agency_id`
+- block_templates: fragiles `query.replace("SELECT *", "SELECT COUNT(*)")` → saubere separate COUNT Query
+
+**Frontend — Toast-Migration (6.1):**
+- 22 Dateien: inline `useState<Toast>()` + `setToast()` + `setTimeout()` → context-basiertes `useToast()` aus `ToastProvider`
+- Standalone Hook `hooks/useToast.ts` gelöscht (Dead Code)
+- Barrel-Export aus `hooks/index.ts` entfernt
+- 0 inline Toast-Renderings verbleiben im Admin-Bereich
+
+**Bewusst belassen:**
+- 2.5 Schema Drift Decorator (Patterns zu heterogen)
+- 6.3 Inline Modals (alle haben bereits FocusTrap — WCAG-konform)
+- 7.1/7.2 React.memo/useMemo (premature optimization)
+- 8.4 Pagination Response Format (Breaking API Change)
+
+### Wo
+- `backend/app/core/sql_utils.py` (erweitert)
+- `backend/app/services/` (3 Services)
+- `backend/app/api/routes/` (8 Route-Dateien)
+- `frontend/app/(admin)/` (22 Page-Dateien)
+- `frontend/app/hooks/` (index.ts bereinigt, useToast.ts gelöscht)
+
+### Verification Path
+- Frontend: `npx next build` → Compiled successfully
+- Backend: `python3 -m py_compile` auf alle 12 geänderten Backend-Dateien → OK
+- Inline Toast Check: `rg "const \[toast, setToast\]" frontend/app/(admin)/` → 0 Treffer
+
+### Revert
+```bash
+git reset --hard pre-fixplan-batch1
+```
+
+### Status
+✅ IMPLEMENTED
+
+---
+
+*Last updated: 2026-03-12 (Code-Qualität FIXPLAN Batch 1-4)*
