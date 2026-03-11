@@ -1,233 +1,157 @@
-# Module System Architecture
+# Modul-System
 
-**Purpose**: Document the module registry pattern, graceful degradation, and feature flag control
+> Source of Truth: `backend/app/modules/bootstrap.py`, `backend/app/modules/_types.py`, `backend/app/modules/registry.py`
 
-**Audience**: Backend developers, architects
+## Ueberblick
 
-**Source of Truth**: `backend/app/modules/bootstrap.py`, `backend/app/main.py:117-136`
+27 Module (+ 1 conditional), organisiert als **flache Dateien** unter `app/modules/`.
+Jedes Modul ist eine einzelne Python-Datei die sich beim Import selbst registriert.
 
----
+**Kein verschachteltes Verzeichnis-Layout.** Module importieren Router aus `app/api/routes/`,
+Services aus `app/services/`, Schemas aus `app/schemas/`.
 
-## Overview
+## Dateistruktur (Ist-Stand)
 
-The module system provides **modular router registration** with graceful degradation instead of hardcoded imports in `main.py`.
-
-**Key Benefits**:
-- Modules self-register when imported (auto-registration pattern)
-- Module import failures logged but don't crash the app (graceful degradation)
-- Feature flag control (`MODULES_ENABLED`) for ops safety
-
-**Feature Flag**: `MODULES_ENABLED` (default: `true`)
-- If `true`: Use module system (`mount_modules(app)`)
-- If `false`: Use fallback (explicit router mounting in `main.py`)
-
----
-
-## Module Registry Pattern
-
-### How It Works
-
-1. **Module Definition** (e.g., `backend/app/modules/properties.py`):
-   ```python
-   from .registry import registry
-
-   # Module self-registers when imported
-   registry.register(
-       name="properties",
-       version="1.0.0",
-       router=properties_router,
-       config={"prefix": "/api/v1", "tags": ["Properties"]}
-   )
-   ```
-
-2. **Bootstrap** (`backend/app/modules/bootstrap.py:30-140`):
-   ```python
-   def mount_modules(app: FastAPI):
-       # Import modules to trigger self-registration
-       from . import core        # Health router
-       from . import inventory   # Availability router
-       from . import properties  # Properties router
-       from . import bookings    # Bookings router
-
-       # Conditionally import Channel Manager
-       if settings.channel_manager_enabled:
-           from . import channel_manager
-
-       # Mount all registered modules
-       registry.mount_all(app)
-   ```
-
-3. **Main App** (`backend/app/main.py:117-124`):
-   ```python
-   if settings.modules_enabled:
-       mount_modules(app)  # Use module system
-   else:
-       # Fallback: explicit router mounting
-       app.include_router(properties.router, prefix="/api/v1", tags=["Properties"])
-       # ...
-   ```
-
----
-
-## Registered Modules
-
-### Current Modules (as of 2025-12-30)
-
-1. **core** - Health router
-   - Route: `/health`
-   - Purpose: Health checks, readiness checks
-
-2. **inventory** - Availability router
-   - Route: `/api/v1/availability`
-   - Purpose: Availability blocks, inventory ranges
-
-3. **properties** - Properties router
-   - Route: `/api/v1/properties`
-   - Purpose: Property CRUD operations
-
-4. **bookings** - Bookings router
-   - Route: `/api/v1/bookings`
-   - Purpose: Booking CRUD operations
-
-5. **channel_manager** - Channel Manager router (CONDITIONAL)
-   - Route: `/api/v1/channel-manager` (or similar, check code)
-   - Purpose: Channel sync, webhooks
-   - **Feature Flag**: `CHANNEL_MANAGER_ENABLED` (default: `false`)
-   - Only imported if `CHANNEL_MANAGER_ENABLED=true`
-
----
-
-## Graceful Degradation
-
-### Module Import Failures
-
-**Behavior**: If a module import fails, log warning and continue without that module
-
-**Example** (`backend/app/modules/bootstrap.py:62-71`):
-```python
-try:
-    from . import core  # noqa: F401
-except ImportError as e:
-    logger.warning(f"Core module not available: {e}")
-    # Continue without core module (graceful degradation)
+```
+app/
+  modules/
+    _types.py           # ModuleSpec Dataclass
+    registry.py         # ModuleRegistry Singleton
+    bootstrap.py        # mount_modules() — Import + Registrierung
+    core.py             # Health, Ops
+    bookings.py         # Buchungen
+    properties.py       # Properties
+    amenities.py        # Ausstattung
+    ...                 # 27 Module insgesamt
+  api/routes/           # FastAPI Router (getrennt von Modulen)
+  services/             # Business Logic
+  schemas/              # Pydantic Schemas
 ```
 
-**Impact**: App starts even if some modules are broken, but missing module endpoints return 404
+## ModuleSpec (app/modules/_types.py)
 
----
-
-### Database Unavailability
-
-**Behavior**: If database is unavailable at startup, app runs in **degraded mode**
-
-**What Works**:
-- Auth-only endpoints (JWT validation, no DB required)
-- Health endpoint (`/health`) returns 200
-
-**What Fails**:
-- DB-dependent endpoints return `503 Service Unavailable`
-- `/health/ready` returns 503
-
-**Where Implemented**: `backend/app/main.py:39-87` (lifespan handler)
-
-**Related Docs**: [Runbook - DB DNS / Degraded Mode](../ops/runbook.md#db-dns--degraded-mode)
-
----
-
-## Fallback Routing
-
-### When MODULES_ENABLED=false
-
-If `MODULES_ENABLED=false` (or unset and defaults to false), the app uses **explicit router mounting** instead of the module system.
-
-**Where**: `backend/app/main.py:126-136`
-
-**Code**:
 ```python
-else:
-    logger.warning("MODULES_ENABLED=false → Mounting routers via fallback (module system bypassed)")
-    # Fallback: Mount routers explicitly (same as modules do)
-    from .core.health import router as health_router
-    app.include_router(health_router)
-
-    from .api.routes import availability, bookings, properties
-    app.include_router(properties.router, prefix="/api/v1", tags=["Properties"])
-    app.include_router(bookings.router, prefix="/api/v1", tags=["Bookings"])
-    app.include_router(availability.router, prefix="/api/v1", tags=["Availability"])
+@dataclass
+class ModuleSpec:
+    name: str                                          # snake_case
+    version: Optional[str] = None
+    routers: list[APIRouter] = []                      # Einfache Router
+    router_configs: list[tuple[APIRouter, dict]] = []  # Router mit Prefix/Tags
+    depends_on: list[str] = []                         # Abhaengigkeiten
+    startup: Optional[Callable] = None                 # Startup-Hook
+    shutdown: Optional[Callable] = None                # Shutdown-Hook
+    tags: Optional[list[str]] = None
+    init_app: Optional[Callable[[FastAPI], None]] = None
+    settings_hook: Optional[Callable] = None
+    migrations_path: Optional[str] = None
+    enabled: Optional[Callable] = None                 # Feature-Gate
 ```
 
-**Use Case**: Ops safety kill-switch if module system has issues
+Validierung in `__post_init__`: snake_case Name, keine Self-Dependencies, keine Duplikate.
 
----
-
-## Module Configuration
-
-### Module Specification
-
-Each module can specify:
-- **name**: Module identifier (e.g., `"properties"`)
-- **version**: Module version (e.g., `"1.0.0"`)
-- **router**: FastAPI router instance
-- **config**: Router configuration (prefix, tags, dependencies)
-
-### Example Configuration
+## Registrierung (Beispiel: amenities.py)
 
 ```python
-registry.register(
-    name="properties",
+from ..api.routes import amenities
+from ._types import ModuleSpec
+from .registry import registry
+
+AMENITIES_MODULE = ModuleSpec(
+    name="amenities",
     version="1.0.0",
-    router=properties_router,
-    config={
-        "prefix": "/api/v1",
-        "tags": ["Properties"],
-        # Optional: dependencies=["core"]
-    }
+    router_configs=[
+        (amenities.router, {"prefix": "/api/v1/amenities", "tags": ["Amenities"]}),
+    ],
+    depends_on=["core_pms", "properties"],
 )
+
+registry.register(AMENITIES_MODULE)
 ```
 
----
+## Registry (app/modules/registry.py)
 
-## Validation
+| Methode | Zweck |
+|---------|-------|
+| `register(spec, fail_soft=True)` | Modul registrieren (Graceful Degradation) |
+| `get(name)` | Einzelnes Modul abfragen |
+| `get_all()` | Alle Module in Dependency-Reihenfolge (Topological Sort) |
+| `validate()` | Dependencies pruefen + Zyklen-Erkennung |
+| `mount_all(app)` | Router an FastAPI mounten (mit Dedup-Guard) |
+| `describe_modules()` | Metadata-Dict fuer Logging |
 
-### Circular Dependency Detection
+Singleton: `registry = ModuleRegistry()` (Zeile 287)
 
-**Where**: `backend/app/modules/registry.py` (assumed, check code)
+## Bootstrap (app/modules/bootstrap.py)
 
-**Purpose**: Prevent circular dependencies between modules
+```python
+def mount_modules(app: FastAPI):
+    # 26 Module mit try/except (Graceful Degradation)
+    try:
+        from . import bookings  # noqa: F401
+    except ImportError as e:
+        logger.warning(f"bookings module not available: {e}")
 
-**Behavior**: If circular dependency detected, raise `CircularDependencyError` at startup
+    # Conditional: Channel Manager
+    if settings.channel_manager_enabled:
+        from . import channel_manager
 
----
+    registry.validate()
+    registry.mount_all(app)
+```
 
-## Code References
+Kill-Switch in `main.py`: `MODULES_ENABLED` (default: `true`).
+Bei `false` werden Router explizit gemountet (Fallback).
 
-**Module Bootstrap**:
-- `backend/app/modules/bootstrap.py` (lines 30-140)
-- Imports modules, validates registry, mounts routers
+## Alle 27 Module (Ist-Stand)
 
-**Main App**:
-- `backend/app/main.py` (lines 117-136)
-- Feature flag check, module vs fallback routing
+| # | Modul | Dependencies | Feature-Gate |
+|---|-------|-------------|--------------|
+| 1 | core | — | — |
+| 2 | inventory | core_pms | — |
+| 3 | properties | core_pms | — |
+| 4 | bookings | core_pms | — |
+| 5 | booking_requests | core_pms | — |
+| 6 | branding | core_pms | — |
+| 7 | amenities | core_pms, properties | — |
+| 8 | guests | core_pms | — |
+| 9 | public_booking | core_pms | — |
+| 10 | pricing | core_pms | — |
+| 11 | owners | core_pms | — |
+| 12 | epic_a | — | — |
+| 13 | dashboard | core_pms | — |
+| 14 | notifications | core_pms | — |
+| 15 | extra_services | core_pms | — |
+| 16 | website_admin | core_pms | — |
+| 17 | media | core_pms | — |
+| 18 | public_site | core_pms | — |
+| 19 | public_domain_admin | core_pms | — |
+| 20 | roles | core_pms | — |
+| 21 | visitor_tax | core_pms | — |
+| 22 | cancellation_policies | core_pms | — |
+| 23 | analytics | core_pms | — |
+| 24 | block_templates | core_pms | — |
+| 25 | public_root_meta | — | — |
+| 26 | registrations | core_pms | — |
+| 27 | channel_manager | core_pms | `CHANNEL_MANAGER_ENABLED` |
 
-**Module Registry**:
-- `backend/app/modules/registry.py` (implementation details)
+## Neues Modul erstellen
 
-**Module Definitions**:
-- `backend/app/modules/core.py` - Health module
-- `backend/app/modules/inventory.py` - Availability module
-- `backend/app/modules/properties.py` - Properties module
-- `backend/app/modules/bookings.py` - Bookings module
-- `backend/app/modules/channel_manager.py` - Channel Manager module (conditional)
+```bash
+python3 backend/scripts/scaffold_feature.py payments --dry-run
+```
 
----
+Generiert 7 Dateien + zeigt manuelle Schritte (DI, Protocol, Bootstrap).
 
-## Related Documentation
+## Dependency Injection
 
-- [Feature Flags](../ops/feature-flags.md) - `MODULES_ENABLED` flag reference
-- [Channel Manager Architecture](channel-manager.md) - Channel Manager module details
-- [Runbook](../ops/runbook.md) - Troubleshooting degraded mode
+Services werden ueber Factory-Funktionen injiziert (`app/api/deps/services.py`):
 
----
+```python
+def get_booking_service(db = Depends(get_db_authed)) -> BookingServiceProtocol:
+    from app.services.booking_service import BookingService
+    return BookingService(db)
+```
 
-**Last Updated**: 2025-12-30
-**Maintained By**: Backend Team
+Alle Services nutzen **Protocol-Types** (nicht konkrete Klassen) fuer Typsicherheit.
+
+Registrierte Services: availability, property, guest, amenity, booking, dashboard, extra_service, visitor_tax.

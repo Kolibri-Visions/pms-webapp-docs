@@ -6,23 +6,32 @@
 
 ---
 
-## P8.4: ADRs komplett neu geschrieben (Ist-Stand) (2026-03-11) — IMPLEMENTED
+## Architecture-Docs komplett neu geschrieben (2026-03-11) — IMPLEMENTED
 
 ### Was wurde geaendert
 
+**ADRs (8 Dateien):**
 - 8 veraltete ADRs geloescht (beschrieben Wunschzustand statt Ist-Zustand)
 - 8 neue ADRs aus Code abgeleitet (rg/grep verifiziert)
 - Kritische Korrekturen: owner_id→agency_id, shadcn→custom, Vercel→Coolify, Redis Locking→DB Constraint
-- Neues ADR-007 (Module System) statt altes ADR-007 (Direct Booking Engine)
+
+**Architecture-Docs (14 → 5 Dateien):**
+- 14 veraltete Dateien geloescht (modular-monolith.md listete 4 statt 27 Module, module-system.md Stand 2025-12-30, etc.)
+- 5 neue Dateien aus Code abgeleitet:
+  - `README.md` — Uebersicht + Architektur-Diagramm
+  - `module-system.md` — 27 Module, Registry, Bootstrap, DI
+  - `database.md` — 58 Tabellen, RLS, Constraints, Connection Pool
+  - `deployment.md` — Docker, Coolify, CI/CD, Health Checks, Env-Vars
+  - `observability.md` — Sentry, Prometheus, structlog, Event Bus, Error Handling
 
 ### Wo
 
-- `backend/docs/architecture/ADRs/ADR-001` bis `ADR-008` (alle 8 Dateien)
+- `backend/docs/architecture/` (komplett)
 
 ### Verification Path
 
-- `ls backend/docs/architecture/ADRs/` — 8 Dateien
-- Inhalt manuell gegen Code pruefen
+- `ls backend/docs/architecture/` — README.md + 4 Docs + ADRs/
+- Inhalt gegen Code pruefen
 
 ---
 
