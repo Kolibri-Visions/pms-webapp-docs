@@ -1,8 +1,63 @@
 # PMS-Webapp Project Status
 
-**Last Updated:** 2026-03-08
+**Last Updated:** 2026-03-11
 
-**Current Phase:** Infrastruktur-Hardening Phase P1-P8 (P6+P7 ✅ IMPLEMENTED)
+**Current Phase:** Code-Qualitaet Audit 2 — Stufe 6-8 abgeschlossen, UI-Fixes + Refactorings
+
+---
+
+## UI-Refactoring: DismissibleHint + CI-Fix + RoleForm (2026-03-11) — IMPLEMENTED
+
+### Was wurde geaendert
+
+**DismissibleHint System:**
+- Neue zentrale Komponente fuer wegklickbare Hinweise (localStorage-basiert)
+- 8 Admin-Seiten auf DismissibleHint migriert (einheitliches Pattern)
+
+**CI-Fix:**
+- `API_BASE_URL` Umgebungsvariable in GitHub Actions korrekt gesetzt
+- Node.js Version von 20 auf 22 aktualisiert in CI-Pipeline
+
+**RoleForm Shared Component:**
+- RoleForm als wiederverwendbare Form-Komponente extrahiert
+- Modal- und useConfirm-Migration fuer Rollen-Verwaltung
+
+### Verification Path
+
+- Frontend Build: `cd frontend && npm run build`
+- DismissibleHint: Manuell pruefen ob Hinweise wegklickbar sind und nach Reload verschwunden bleiben
+- CI: GitHub Actions Pipeline muss gruen sein
+
+---
+
+## Pricing/Booking Fixes + Status-Bereinigung (2026-03-10) — IMPLEMENTED
+
+### Was wurde geaendert
+
+**MwSt Netto/Brutto Fix:**
+- `is_inclusive` Flag durch gesamte Chain propagiert (Backend → Frontend)
+- Korrekte Berechnung bei inklusiver vs exklusiver MwSt
+- Labels angepasst: "enthaltene MwSt." vs "zzgl. MwSt."
+
+**Booking Validierungsfehler-Persistenz:**
+- Validierungsfehler verschwinden jetzt korrekt bei erneuter Feldeingabe
+
+**Calendar Fallback-Basispreis entfernt:**
+- Tage ohne Saison zeigen "Kein Preis" statt falschem 100€-Fallback
+
+**Booking-Status Bereinigung:**
+- Status `pending`, `declined`, `no_show` komplett entfernt
+- DB-Migration, Backend-Constants und Frontend-Labels bereinigt
+
+**Booking-Requests Verfuegbarkeitsfilter:**
+- Zeigt nur zukuenftige Anfragen als "verfuegbar" an
+
+### Verification Path
+
+- Frontend Build: `cd frontend && npm run build`
+- Pricing: Manuell pruefen ob MwSt-Labels korrekt (inklusiv/exklusiv)
+- Calendar: Pruefen ob Tage ohne Saison "Kein Preis" zeigen
+- Booking-Status: Pruefen ob pending/declined/no_show nicht mehr in Dropdowns erscheinen
 
 ---
 
@@ -208,7 +263,7 @@ Die `/booking-requests`-Seite im Admin-Panel war komplett unbenutzbar. Alle API-
 | Datei | Hinzugefuegte Audit-Events |
 |-------|---------------------------|
 | `app/api/routes/properties.py` | property_created, property_updated, property_deleted |
-| `app/api/routes/guests.py` | guest_created, guest_updated, guest_deleted, guest_gdpr_deleted |
+| `app/api/routes/guests.py` | guest_created, guest_updated, guest_deleted, guest_gdpr_deleted, guest_dsgvo_data_exported |
 | `app/api/routes/bookings.py` | booking_updated, booking_status_changed, booking_cancelled (booking_created war bereits vorhanden) |
 | `app/api/routes/owners/crud.py` | owner_created, owner_updated, owner_deleted, owner_gdpr_deleted, property_owner_assigned |
 | `app/api/routes/availability.py` | availability_block_created, availability_block_updated, availability_block_deleted |
@@ -6820,4 +6875,54 @@ python3 -m py_compile backend/app/schemas/booking_requests.py  # EXIT 0
 
 ---
 
-*Last updated: 2026-03-10 (Stufe 9+10 Konsistenz + A11y IMPLEMENTED)*
+## DSGVO Gast-Datenexport (Art. 15/20) (2026-03-11) - IMPLEMENTED
+
+**Feature**: Administratoren können alle personenbezogenen Daten eines Gastes als JSON exportieren (DSGVO Art. 15 Auskunftsrecht / Art. 20 Datenportabilität).
+
+### Endpoint
+
+`GET /api/v1/guests/{guest_id}/dsgvo-export`
+
+### Exportierte Daten
+
+| Kategorie | Beschreibung |
+|-----------|-------------|
+| Stammdaten | Name, E-Mail, Telefon |
+| Adressdaten | address_line1/2, city, postal_code, country |
+| Identitätsdaten | date_of_birth, nationality, Ausweisdaten |
+| Buchungsdaten | Alle Buchungen (Property, Zeitraum, Status, Preis) |
+| Direktbuchungs-Metadaten | UTM-Parameter, Referrer, User-Agent (OHNE IP) |
+| Einwilligungsdaten | marketing_consent, marketing_consent_at |
+| Profilnotizen | profile_notes, VIP-Status, Blacklist-Status |
+
+### Datenminimierung (Art. 5 Abs. 1 lit. c)
+
+- `guest_ip` wird bewusst NICHT exportiert (nicht erforderlich für Auskunft)
+
+### RBAC
+
+- Nur **Admin-Rolle** kann Export ausführen
+- Export wird als `critical=True` im Audit-Log protokolliert
+
+### Dateien
+
+- `backend/app/schemas/guests.py` — GuestDataExportResponse + Hilfs-Schemas
+- `backend/app/services/guest_service.py` — export_guest_data() Methode
+- `backend/app/api/routes/guests.py` — GET /guests/{id}/dsgvo-export Endpoint
+- `frontend/app/(admin)/guests/[id]/page.tsx` — DSGVO-Export Button (Admin only)
+
+### Verification Path
+
+```bash
+python3 -m py_compile backend/app/schemas/guests.py   # EXIT 0
+python3 -m py_compile backend/app/services/guest_service.py  # EXIT 0
+python3 -m py_compile backend/app/api/routes/guests.py  # EXIT 0
+cd frontend && npx tsc --noEmit  # EXIT 0
+```
+
+### Status
+✅ IMPLEMENTED
+
+---
+
+*Last updated: 2026-03-11 (DSGVO Gast-Datenexport Art. 15/20 IMPLEMENTED)*
