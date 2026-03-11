@@ -6925,4 +6925,71 @@ cd frontend && npx tsc --noEmit  # EXIT 0
 
 ---
 
-*Last updated: 2026-03-11 (DSGVO Gast-Datenexport Art. 15/20 IMPLEMENTED)*
+## Meldewesen / Meldescheine (BMG §29-30) (2026-03-11) - IMPLEMENTED
+
+### Was wurde geändert
+- Meldeschein-Modul für ausländische Gäste (seit 01.01.2025 Pflicht)
+- DB-Migration: `registration_forms` Tabelle mit RLS-Policies
+- Backend: 7 Endpoints (CRUD, Sign, Print, Delete)
+- Frontend: Meldeschein-Sektion in Buchungsdetails, Meldescheine-Listenseite
+- SignaturePad-Komponente (react-signature-canvas)
+- HTML-basierter Druckbarer Meldeschein (BMG-konform)
+- Alter-Spalte + manuelle Löschung ab 15 Monaten (BMG §30 Abs. 4)
+- Navigation: Meldescheine als Sub-Item unter Buchungen
+
+### Wo
+- `supabase/migrations/20260311000001_create_registration_forms.sql`
+- `backend/app/schemas/registration.py`
+- `backend/app/services/registration_service.py`
+- `backend/app/api/routes/registrations.py`
+- `backend/app/modules/registrations.py`
+- `frontend/app/(admin)/registrations/page.tsx`
+- `frontend/app/(admin)/bookings/components/RegistrationSection.tsx`
+- `frontend/app/components/ui/SignaturePad.tsx`
+
+### Verification Path
+```bash
+# Meldescheine-Seite öffnen
+curl -s https://admin.fewo.kolibri-visions.de/registrations
+# API-Endpoint prüfen
+curl -s -H "Authorization: Bearer $TOKEN" https://api.fewo.kolibri-visions.de/api/v1/registrations
+```
+
+### Status
+✅ IMPLEMENTED
+
+---
+
+## Cleanup Sprint: Dead Code + UI-Vereinheitlichung (2026-03-11) - IMPLEMENTED
+
+### Was wurde geändert
+- **Dead Code entfernt:** `backend/app/core/entitlements.py` (ungenutzter Stub, 0 Imports), `backend/app/modules/api_v1.py` (Legacy-Wrapper, 0 Imports)
+- **Phone-Validator Fix:** Leerer String `''` crashte Pydantic-Validator auf Gäste-Seite 2 → normalisiert zu `None`
+- **Tab-Design vereinheitlicht:** `rounded-none` gegen globale Button-Rundung, `bg-t-primary/15` + `hover:border-stroke-default` auf allen 9 Tab-Implementierungen (Referenz: properties layout)
+- **Media API Pagination:** `page/page_size` → `limit/offset` migriert (Backend Schema/Route/Service + Frontend Types/API-Client/Pages)
+- **BlockRenderer Normalization:** Zentrale `normalize-props.ts` Utility ersetzt duplizierte `props.x || props.y` Fallbacks in 5 Block-Komponenten
+- **Media-Tabs Farb-Token:** `text-t-accent` → `text-t-primary` korrigiert
+
+### Wo
+- `backend/app/schemas/validators.py` (Phone-Fix)
+- `backend/app/schemas/media.py`, `backend/app/api/routes/media.py`, `backend/app/services/media.py` (Pagination)
+- `frontend/app/(public)/components/blocks/normalize-props.ts` (NEU)
+- `frontend/app/(public)/components/blocks/{Hero,CTA,Offer,Location,Testimonials}Block.tsx`
+- 9 Admin-Seiten (Tab-Styling): registrations, fees-taxes, branding, navigation, guests, gebuehren, media, page-editor, block-picker
+
+### Verification Path
+```bash
+# Gäste-Seite Seite 2 laden (Phone-Validator)
+curl -s -H "Authorization: Bearer $TOKEN" "https://api.fewo.kolibri-visions.de/api/v1/guests?limit=25&offset=25"
+# Media API mit neuem Format
+curl -s -H "Authorization: Bearer $TOKEN" "https://api.fewo.kolibri-visions.de/api/v1/media?limit=24&offset=0"
+# Frontend Build
+cd frontend && npm run build  # EXIT 0
+```
+
+### Status
+✅ IMPLEMENTED
+
+---
+
+*Last updated: 2026-03-11 (Cleanup Sprint: Dead Code, UI-Tabs, Media Pagination, BlockRenderer)*
