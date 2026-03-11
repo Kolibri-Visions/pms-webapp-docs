@@ -6,6 +6,26 @@
 
 ---
 
+## P8.3: Pre-Commit Hook fuer Type-Sync Warnung (2026-03-11) — IMPLEMENTED
+
+### Was wurde geaendert
+
+- **Neuer Hook:** `.githooks/pre-commit` — warnt wenn Backend-Schemas geaendert werden ohne Frontend-Types zu aktualisieren
+- Zweite Pruefung: warnt wenn Backend-Models geaendert werden ohne neue Migration
+- Nicht blockierend (exit 0) — nur Warnung, kein Hard-Fail
+- Installation: `git config core.hooksPath .githooks`
+
+### Wo
+
+- `.githooks/pre-commit`
+
+### Verification Path
+
+- `git config core.hooksPath .githooks` ausfuehren
+- Backend-Schema aendern und committen → Warnung muss erscheinen
+
+---
+
 ## P8.1: Scaffold-Script fuer Feature-Module (2026-03-11) — IMPLEMENTED
 
 ### Was wurde geaendert
