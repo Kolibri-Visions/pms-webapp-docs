@@ -7037,4 +7037,35 @@ git reset --hard pre-p9-hardcoded-domains
 
 ---
 
-*Last updated: 2026-03-11 (P9: Hardcoded Domains → Env-Vars)*
+---
+
+## P3: CI/CD Workflow-Fixes (2026-03-11) - IMPLEMENTED
+
+### Was wurde geändert
+
+**post-deploy-check.yml:**
+- URLs korrigiert: `pms-api.kolibri-visions.de` → `api.fewo.kolibri-visions.de` (alte URL existierte nicht!)
+- `pms-admin.kolibri-visions.de` → `admin.fewo.kolibri-visions.de`
+- URLs jetzt via GitHub Repository Variables überschreibbar (`vars.BACKEND_URL`, `vars.ADMIN_URL`)
+
+**ci-e2e.yml:**
+- Automatischer Trigger nach Frontend-CI (vorher nur manuell)
+- Hardcodierte URL → `vars.ADMIN_URL` mit Fallback
+- `PLAYWRIGHT_BASE_URL` Env-Var statt `BASE_URL`
+
+### GitHub Repository Variables (optional)
+In GitHub → Settings → Variables → Actions eintragen:
+- `BACKEND_URL` = `https://api.fewo.kolibri-visions.de`
+- `ADMIN_URL` = `https://admin.fewo.kolibri-visions.de`
+
+### Revert
+```bash
+git reset --hard pre-p3-cicd-fix
+```
+
+### Status
+✅ IMPLEMENTED
+
+---
+
+*Last updated: 2026-03-11 (P3: CI/CD Workflow-Fixes)*
