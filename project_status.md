@@ -6,6 +6,26 @@
 
 ---
 
+## P8.4: ADRs komplett neu geschrieben (Ist-Stand) (2026-03-11) — IMPLEMENTED
+
+### Was wurde geaendert
+
+- 8 veraltete ADRs geloescht (beschrieben Wunschzustand statt Ist-Zustand)
+- 8 neue ADRs aus Code abgeleitet (rg/grep verifiziert)
+- Kritische Korrekturen: owner_id→agency_id, shadcn→custom, Vercel→Coolify, Redis Locking→DB Constraint
+- Neues ADR-007 (Module System) statt altes ADR-007 (Direct Booking Engine)
+
+### Wo
+
+- `backend/docs/architecture/ADRs/ADR-001` bis `ADR-008` (alle 8 Dateien)
+
+### Verification Path
+
+- `ls backend/docs/architecture/ADRs/` — 8 Dateien
+- Inhalt manuell gegen Code pruefen
+
+---
+
 ## P8.3: Pre-Commit Hook fuer Type-Sync Warnung (2026-03-11) — IMPLEMENTED
 
 ### Was wurde geaendert
