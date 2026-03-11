@@ -351,7 +351,7 @@ Format: `resource.action`
 
 ### Navigation Filtering
 
-**Location**: `frontend/app/components/AdminShell.tsx`
+**Location**: `frontend/app/components/admin-shell/AdminShell.tsx`
 
 The sidebar navigation is filtered based on `NAV_PERMISSION_MAP`:
 
@@ -432,7 +432,7 @@ Shows when impersonating:
 - `frontend/app/lib/supabase-server.ts` - Supabase server client (assumed)
 - `frontend/app/lib/contexts/PermissionContext.tsx` - Permission context + impersonation
 - `frontend/app/components/ImpersonationBanner.tsx` - Impersonation UI banner
-- `frontend/app/components/AdminShell.tsx` - Navigation filtering
+- `frontend/app/components/admin-shell/AdminShell.tsx` - Navigation filtering
 
 ---
 

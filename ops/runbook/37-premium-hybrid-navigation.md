@@ -515,7 +515,7 @@ Neue UI-Sektionen in `/settings/branding`:
 
 ### AdminShell Integration
 
-`frontend/app/components/AdminShell.tsx` respektiert die Branding-Einstellungen:
+`frontend/app/components/admin-shell/AdminShell.tsx` respektiert die Branding-Einstellungen:
 
 | Einstellung | Auswirkung |
 |-------------|------------|

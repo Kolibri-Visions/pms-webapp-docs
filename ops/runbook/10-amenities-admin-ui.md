@@ -261,7 +261,7 @@ Features:
 
 **Verhalten (seit 2026-02-01):**
 - Ausstattungs-Icons werden mit der `AmenityIcon` Komponente gerendert
-- Shared Komponente: `frontend/app/components/amenity-icon.tsx`
+- Shared Komponente: `frontend/app/components/ui/amenity-icon.tsx`
 - Unterstützt alle Icon-Keys aus dem Icon Picker (s.o.)
 
 **API-Payload:**

@@ -87,7 +87,7 @@ billing, status, runbook, audit-log, modules
 | File | Purpose |
 |------|---------|
 | `frontend/app/lib/theme-provider.tsx` | applyNavCssVariables() function |
-| `frontend/app/components/AdminShell.tsx` | Sidebar with CSS var styling |
+| `frontend/app/components/admin-shell/AdminShell.tsx` | Sidebar with CSS var styling |
 | `frontend/app/settings/branding/branding-form.tsx` | Navigation settings UI |
 
 ## API

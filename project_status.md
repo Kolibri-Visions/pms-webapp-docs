@@ -6,6 +6,37 @@
 
 ---
 
+## Frontend Components Cleanup (2026-03-11) — IMPLEMENTED
+
+### Was wurde geaendert
+
+**12 Dateien aus `components/` top-level in passende Unterordner verschoben:**
+
+| Datei | Von | Nach | Grund |
+|-------|-----|------|-------|
+| `Toast.tsx` | top-level | `ui/` | Generische UI-Komponente |
+| `ConfirmDialog.tsx` | top-level | `ui/` | Generische UI-Komponente |
+| `Breadcrumb.tsx` | top-level | `ui/` | Generische UI-Komponente |
+| `amenity-icon.tsx` | top-level | `ui/` | Generische UI-Komponente |
+| `AdminShell.tsx` | top-level | `admin-shell/` | Admin-spezifisch |
+| `AdminErrorBoundary.tsx` | top-level | `admin-shell/` | Admin-spezifisch |
+| `BackofficeLayout.tsx` | top-level | `admin-shell/` | Admin-spezifisch |
+| `CommandPalette.tsx` | top-level | `admin-shell/` | Admin-spezifisch |
+| `ImpersonationBanner.tsx` | top-level | `admin-shell/` | Admin-spezifisch |
+| `AvailabilityCalendar.tsx` | `ui/` | `calendar/` | Domain-spezifisch |
+| `AvailabilityDatePicker.tsx` | `ui/` | `calendar/` | Domain-spezifisch |
+| `PermissionGuard.tsx` | top-level | GELOESCHT | 0 Imports (Dead Code) |
+
+**Verbleibend top-level:** `Providers.tsx`, `WebVitals.tsx` (App-Level Provider)
+
+**Import-Updates:** ~59 Referenzen in ~35 Dateien aktualisiert (absolute + relative Pfade)
+
+**Verification Path:** `npm run build` → erfolgreich, alle 51 Seiten kompiliert
+
+**Revert:** `git reset --hard pre-frontend-cleanup`
+
+---
+
 ## Struktur-Cleanup: routers/ + core/auth/ Package (2026-03-11) — IMPLEMENTED
 
 ### Was wurde geaendert

@@ -101,8 +101,8 @@ The Admin UI Design System provides:
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| `AdminShell` | `components/AdminShell.tsx` | Main admin layout with themed sidebar |
-| `BackofficeLayout` | `components/BackofficeLayout.tsx` | Ops console layout |
+| `AdminShell` | `components/admin-shell/AdminShell.tsx` | Main admin layout with themed sidebar |
+| `BackofficeLayout` | `components/admin-shell/BackofficeLayout.tsx` | Ops console layout |
 
 ## Features
 

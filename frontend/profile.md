@@ -352,13 +352,13 @@ export default function ProfilePage() {
 
 ## AdminShell Integration
 
-**Location**: `frontend/app/components/AdminShell.tsx`
+**Location**: `frontend/app/components/admin-shell/AdminShell.tsx`
 
 ### Profile Data in Topbar
 
 The topbar profile dropdown fetches profile data via `/api/internal/profile`:
 
-**Code** (`frontend/app/components/AdminShell.tsx:278-294`):
+**Code** (`frontend/app/components/admin-shell/AdminShell.tsx:278-294`):
 ```typescript
 // Fetch profile data for topbar display
 useEffect(() => {
@@ -386,7 +386,7 @@ useEffect(() => {
 3. Username from `userName` prop (email prefix if email)
 4. "User" (fallback)
 
-**Code** (`frontend/app/components/AdminShell.tsx:405-420`):
+**Code** (`frontend/app/components/admin-shell/AdminShell.tsx:405-420`):
 ```typescript
 const getUserDisplayName = () => {
   if (profileData?.display_name) {
@@ -457,7 +457,7 @@ const getUserDisplayName = () => {
 - `frontend/app/i18n/en.json` - English translations
 
 **Components**:
-- `frontend/app/components/AdminShell.tsx` - Topbar profile dropdown
+- `frontend/app/components/admin-shell/AdminShell.tsx` - Topbar profile dropdown
 
 ---
 

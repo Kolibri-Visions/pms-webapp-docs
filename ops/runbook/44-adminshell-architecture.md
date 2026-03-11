@@ -205,7 +205,7 @@ localStorage.getItem('pms-favorites-' + tenantId)
 
 | Komponente | Pfad |
 |------------|------|
-| AdminShell | `frontend/app/components/AdminShell.tsx` |
+| AdminShell | `frontend/app/components/admin-shell/AdminShell.tsx` |
 | nav-config | `frontend/app/components/admin-shell/nav-config.ts` |
 | SidebarNavigation | `frontend/app/components/admin-shell/SidebarNavigation.tsx` |
 | MobileDrawer | `frontend/app/components/admin-shell/MobileDrawer.tsx` |
