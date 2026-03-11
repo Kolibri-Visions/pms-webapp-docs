@@ -6,6 +6,35 @@
 
 ---
 
+## P8.1: Scaffold-Script fuer Feature-Module (2026-03-11) — IMPLEMENTED
+
+### Was wurde geaendert
+
+- **Neues Script:** `backend/scripts/scaffold_feature.py` — Code-Generator fuer neue Feature-Module
+- Generiert 7 Dateien: Migration (mit RLS), Schema (Pydantic), Service, Routes, Module, Frontend Types, Frontend Page
+- Basiert auf Amenities-Modul als Referenz-Pattern
+- `--dry-run` Modus zum Testen ohne Dateien zu erstellen
+- Automatische Singular-Erkennung (payments→payment, categories→category)
+- Templates folgen allen Projekt-Konventionen (Design-Tokens, Table-to-Card, require_roles, emit_audit_event)
+
+### Wo
+
+- `backend/scripts/scaffold_feature.py`
+
+### Usage
+
+```bash
+python3 backend/scripts/scaffold_feature.py payments --dry-run  # Vorschau
+python3 backend/scripts/scaffold_feature.py payments            # Dateien erstellen
+```
+
+### Verification Path
+
+- `python3 backend/scripts/scaffold_feature.py payments --dry-run` muss 7 Dateien auflisten
+- Generierte Dateien muessen Projekt-Konventionen einhalten
+
+---
+
 ## UI-Refactoring: DismissibleHint + CI-Fix + RoleForm (2026-03-11) — IMPLEMENTED
 
 ### Was wurde geaendert
