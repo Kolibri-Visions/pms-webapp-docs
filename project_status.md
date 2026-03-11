@@ -6,6 +6,43 @@
 
 ---
 
+## Struktur-Cleanup: routers/ + core/auth/ Package (2026-03-11) — IMPLEMENTED
+
+### Was wurde geaendert
+
+**Prio 1 — Legacy `api/routers/` eliminiert:**
+- `channel_connections.py` von `api/routers/` nach `api/routes/` verschoben
+- Imports in `modules/channel_manager.py`, `tests/smoke/test_channel_manager_smoke.py`, `modules/module_spec.py` aktualisiert
+- `api/routers/` Verzeichnis geloescht
+
+**Prio 3 — `core/auth/` Package:**
+- 8 Auth-Dateien (`auth.py`, `auth_jwt.py`, `auth_rbac.py`, `auth_tenant.py`, `auth_owner.py`, `auth_rate_limit.py`, `auth_rate_limit_deps.py`, `auth_rate_limit_middleware.py`) in `core/auth/` Package konsolidiert
+- `auth.py` → `auth/__init__.py` (Re-Export-Hub bleibt bestehen)
+- `auth_jwt.py` → `auth/jwt.py`, etc.
+- Alle internen Imports aktualisiert
+- Externe Imports (`from app.core.auth import X`) weiterhin kompatibel via `__init__.py`
+- `main.py` Import aktualisiert: `core.auth.rate_limit_middleware`
+
+**Betroffene Dateien:**
+- `backend/app/api/routes/channel_connections.py` (neu)
+- `backend/app/modules/channel_manager.py`
+- `backend/app/modules/module_spec.py`
+- `backend/app/core/auth/__init__.py` (war `core/auth.py`)
+- `backend/app/core/auth/jwt.py` (war `core/auth_jwt.py`)
+- `backend/app/core/auth/rbac.py` (war `core/auth_rbac.py`)
+- `backend/app/core/auth/tenant.py` (war `core/auth_tenant.py`)
+- `backend/app/core/auth/owner.py` (war `core/auth_owner.py`)
+- `backend/app/core/auth/rate_limit.py` (war `core/auth_rate_limit.py`)
+- `backend/app/core/auth/rate_limit_deps.py` (war `core/auth_rate_limit_deps.py`)
+- `backend/app/core/auth/rate_limit_middleware.py` (war `core/auth_rate_limit_middleware.py`)
+- `backend/app/main.py`
+
+**Verification Path:** `python3 -m py_compile` auf alle betroffenen Dateien + `rg` fuer verwaiste Imports
+
+**Revert:** `git reset --hard pre-structure-cleanup`
+
+---
+
 ## Architecture-Docs komplett neu geschrieben (2026-03-11) — IMPLEMENTED
 
 ### Was wurde geaendert
@@ -5149,7 +5186,7 @@ Thread 2: inquiry → confirmed (liest Status, validiert, bestätigt)
 | `backend/app/services/booking_service.py` | 8 |
 | `backend/app/api/routes/booking_requests.py` | 14 |
 | `backend/app/core/auth.py` | 3 |
-| `backend/app/api/routers/channel_connections.py` | 2 |
+| `backend/app/api/routes/channel_connections.py` | 2 |
 | `backend/app/services/channel_connection_service.py` | 1 |
 | `backend/app/services/guest_service.py` | 1 |
 | `backend/app/api/routes/notifications.py` | 1 |
