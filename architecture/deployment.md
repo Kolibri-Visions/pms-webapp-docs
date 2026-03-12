@@ -1,6 +1,6 @@
 # Deployment & CI/CD
 
-> Source of Truth: `backend/Dockerfile`, `backend/Dockerfile.worker`, `frontend/nixpacks.toml`, `.github/workflows/`
+> Source of Truth: `backend/Dockerfile`, `backend/Dockerfile.worker`, `frontend/Dockerfile`, `.github/workflows/`
 
 ## Deployment-Architektur
 
@@ -10,8 +10,8 @@ Alle Apps laufen auf **Coolify** (Self-hosted Docker) auf einem VPS.
 |-----|-------------|------|------------|
 | Backend API | `backend/Dockerfile` (python:3.12-slim) | 8000 | `/backend/**` |
 | Worker | `backend/Dockerfile.worker` (python:3.12-slim) | — | `/backend/**` |
-| Admin Frontend | `frontend/nixpacks.toml` (Node 20) | 3000 | `/frontend/**` |
-| Public Website | `frontend/nixpacks.toml` (Node 20) | 3000 | `/frontend/**` |
+| Admin Frontend | `frontend/Dockerfile` (node:20-alpine, standalone) | 3000 | `/frontend/**` |
+| Public Website | `frontend/Dockerfile` (node:20-alpine, standalone) | 3000 | `/frontend/**` |
 | Supabase | Managed (Supabase Cloud) | — | — |
 
 Watch Paths sorgen dafuer, dass nur relevante Apps bei Commits deployen.
@@ -44,23 +44,35 @@ ENV CELERY_LOGLEVEL=INFO
 CMD ["bash", "/app/scripts/ops/start_worker.sh"]
 ```
 
-## Frontend (Nixpacks)
+## Frontend Dockerfile (Multi-Stage)
 
-```toml
-[phases.setup]
-nixPkgs = ["nodejs_20"]    # Node 22 bricht Next.js 14.1!
+```dockerfile
+# Stage 1: deps (npm ci)
+FROM node:20-alpine AS deps
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
 
-[phases.install]
-cmds = ["npm ci --no-audit --no-fund"]
+# Stage 2: build (next build → standalone output)
+FROM node:20-alpine AS builder
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN npm run build  # output: "standalone" in next.config.js
 
-[phases.build]
-cmds = ["npm run build"]
-
-[start]
-cmd = "npm run start"
+# Stage 3: runner (minimal production image ~200MB)
+FROM node:20-alpine AS runner
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD wget --spider http://localhost:3000/ || exit 1
+CMD ["node", "server.js"]
 ```
 
-**Wichtig:** `NPM_CONFIG_PRODUCTION=false` muss gesetzt sein (sonst werden devDependencies uebersprungen).
+**Wichtig:**
+- `output: "standalone"` in `next.config.js` ist Pflicht
+- `NEXT_PUBLIC_*` Env-Vars werden zur **Build-Zeit** eingebettet (in Coolify als Env Vars setzen)
+- Gleiches Dockerfile fuer pms-admin und public-website (unterschiedliche Env-Vars)
+- `nixpacks.toml` bleibt als Fallback im Repo (wird nicht mehr verwendet)
 
 ## Health Checks
 

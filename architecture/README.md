@@ -11,8 +11,8 @@ PMS-Webapp ist ein **Modular Monolith** fuer Ferienwohnungsverwaltung (Multi-Ten
 |------------|-------------|------------|
 | Backend API | FastAPI 0.115.0 + asyncpg (raw SQL) | Docker (`python:3.12-slim`) |
 | Worker | Celery 5.3.6 + Redis | Docker (`Dockerfile.worker`) |
-| Frontend Admin | Next.js 15.5.12 + Tailwind 3.4.1 | Nixpacks (Node 20) |
-| Public Website | Next.js (gleiche App, Route Group `(public)`) | Nixpacks |
+| Frontend Admin | Next.js 15.5.12 + Tailwind 3.4.1 | Docker (`node:20-alpine`, standalone) |
+| Public Website | Next.js (gleiche App, Route Group `(public)`) | Docker (gleiches Dockerfile) |
 | Datenbank | PostgreSQL via Supabase | Managed (Supabase) |
 | Auth | Supabase Auth (JWT) | Managed |
 | Hosting | Coolify (Self-hosted Docker) | VPS |

@@ -1,8 +1,43 @@
 # PMS-Webapp Project Status
 
-**Last Updated:** 2026-03-11
+**Last Updated:** 2026-03-12
 
 **Current Phase:** Code-Qualitaet Audit 2 — Stufe 6-8 abgeschlossen, UI-Fixes + Refactorings
+
+---
+
+## Nixpacks → Dockerfile Migration (2026-03-12) — IMPLEMENTED
+
+**Was:** Alle Frontend-Services von Nixpacks auf eigene Multi-Stage Dockerfiles migriert.
+
+**Warum:**
+- Docker-native HEALTHCHECK (plattform-unabhaengig)
+- Kleinere Images (~200MB statt ~800MB+ mit Nixpacks)
+- Volle Kontrolle, reproduzierbare Builds
+- Kein Node-Version Workaround mehr noetig
+
+**Aenderungen:**
+- `frontend/next.config.js` — `output: "standalone"` hinzugefuegt
+- `frontend/Dockerfile` — NEU: Multi-Stage Build (deps → builder → runner) mit HEALTHCHECK
+- `frontend/.dockerignore` — NEU: Optimiert Build-Context
+- `backend/Dockerfile` — HEALTHCHECK `--start-period=60s` hinzugefuegt
+- `backend/docs/architecture/deployment.md` — Aktualisiert (Nixpacks → Dockerfile)
+- `backend/docs/architecture/README.md` — Deployment-Spalte aktualisiert
+
+**Betroffene Services:**
+| Service | Vorher | Nachher |
+|---------|--------|---------|
+| Backend API | Nixpacks (hatte Dockerfile, wurde nicht genutzt) | Dockerfile |
+| pms-admin | Nixpacks + nixpacks.toml | Dockerfile (Multi-Stage) |
+| public-website | Nixpacks | Dockerfile (gleiches Frontend-Dockerfile) |
+| pms-worker-v2 | Dockerfile | Dockerfile (keine Aenderung) |
+
+**Coolify-Umstellung:** MANUELL durch User erforderlich (Build Pack von "Nixpacks" auf "Dockerfile" aendern fuer 3 Services)
+
+**Verification Path:**
+- `npm run build` erfolgreich (standalone output verifiziert)
+- `.next/standalone/server.js` + minimales `node_modules` erzeugt
+- PROD-Verifikation nach Coolify-Umstellung noetig
 
 ---
 
