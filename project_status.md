@@ -7348,4 +7348,25 @@ cd frontend && npm run build
 
 ---
 
-*Last updated: 2026-03-12 (DSGVO-Löschung + Branding-Fix)*
+## Dockerfile HEALTHCHECK (2026-03-12) - IMPLEMENTED
+
+### Was wurde geändert
+- **HEALTHCHECK Instruction** zum Backend-Dockerfile hinzugefügt
+- Nutzt Python `urllib` (kein curl in `python:3.12-slim`)
+- Prüft `/health` Liveness-Endpoint (lightweight, kein DB-Check)
+- Interval: 30s, Timeout: 5s, Retries: 3
+
+### Wo
+- `backend/Dockerfile`
+
+### Verification Path
+```bash
+# Lokal prüfen
+docker build -t pms-backend backend/
+docker inspect --format='{{json .Config.Healthcheck}}' pms-backend
+# Deploy: Coolify zeigt Health-Status im Container-Dashboard
+```
+
+---
+
+*Last updated: 2026-03-12 (Dockerfile HEALTHCHECK)*
