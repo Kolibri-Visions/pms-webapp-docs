@@ -7295,4 +7295,33 @@ rg "cancelled_by_user_id" frontend/app/types/booking.ts
 
 ---
 
-*Last updated: 2026-03-12 (Audit-komplett Finding #2 + #4)*
+## Fix: Guest-Detailseite DSGVO-Export Button + Legacy Dead Code Cleanup (2026-03-12) - IMPLEMENTED
+
+### Was wurde geändert
+- **Bug-Fix:** DSGVO-Export-Button auf Gast-Detailseite war für Admins nicht sichtbar
+  - Ursache: Legacy `getUserRole()` (liest `app_metadata.role`) statt `usePermissions().isAdmin` (Backend-API-basiert)
+  - Fix: Import von `ops-utils` → `PermissionContext`
+- **Dead Code entfernt:** `ops-utils.ts` von 155 auf 39 Zeilen reduziert
+  - Entfernt: `isAdmin()`, `checkAdminStatus()`, `canAccessOpsConsole()`, `isOpsConsoleEnabled()`, `AdminCheckResult` Interface
+  - Alle hatten 0 Importer (verifiziert via rg)
+  - Behalten: `getUserRole()` (1x genutzt in ops/status Debug-Display)
+
+### Wo
+- `frontend/app/(admin)/guests/[id]/page.tsx` (Import + isAdmin Quelle)
+- `frontend/app/lib/ops-utils.ts` (Dead Code Cleanup)
+
+### Verification Path
+```bash
+# Build Check
+cd frontend && npm run build
+
+# Verify PermissionContext Import
+rg "usePermissions" frontend/app/\(admin\)/guests/\[id\]/page.tsx
+
+# Verify keine Legacy-Importer mehr
+rg "checkAdminStatus|canAccessOpsConsole|isOpsConsoleEnabled" frontend/app/
+```
+
+---
+
+*Last updated: 2026-03-12 (Guest DSGVO-Export Fix + Dead Code Cleanup)*
