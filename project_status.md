@@ -7324,4 +7324,28 @@ rg "checkAdminStatus|canAccessOpsConsole|isOpsConsoleEnabled" frontend/app/
 
 ---
 
-*Last updated: 2026-03-12 (Guest DSGVO-Export Fix + Dead Code Cleanup)*
+## DSGVO-Löschung Button + Branding-Fix Guest-Detailseite (2026-03-12) - IMPLEMENTED
+
+### Was wurde geändert
+- **Neuer DSGVO-Löschung Button** (Art. 17) auf Gast-Detailseite (nur Admins)
+  - Nutzt `useConfirm()` mit danger-Variant und ausführlicher Warnung
+  - Ruft `DELETE /api/v1/guests/{id}/gdpr-delete?confirm=true` auf
+  - Nach Erfolg: Seite refresht, Toast zeigt Bestätigung
+- **Branding-Fix:** 5 rohe `<button>` Elemente durch `<Button>` Komponente ersetzt
+  - Header: Bearbeiten (outline), DSGVO-Export (outline), DSGVO-Löschung (danger), Löschen (danger)
+  - Modal-Footer: Abbrechen (ghost), Speichern (primary)
+  - Alle Buttons nutzen jetzt Tenant-Branding-Token korrekt
+
+### Wo
+- `frontend/app/(admin)/guests/[id]/page.tsx`
+
+### Verification Path
+```bash
+cd frontend && npm run build
+# Visuell: /guests/{id} als Admin aufrufen — 4 Buttons sichtbar
+# DSGVO-Löschung: Button klicken → Confirm-Dialog → anonymisierte Daten
+```
+
+---
+
+*Last updated: 2026-03-12 (DSGVO-Löschung + Branding-Fix)*
