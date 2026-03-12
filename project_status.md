@@ -7369,4 +7369,36 @@ docker inspect --format='{{json .Config.Healthcheck}}' pms-backend
 
 ---
 
-*Last updated: 2026-03-12 (Dockerfile HEALTHCHECK)*
+## python-jose → PyJWT Migration (2026-03-12) - IMPLEMENTED
+
+### Was wurde geändert
+- **python-jose** (unmaintained) durch **PyJWT 2.8** (aktiv gepflegt) ersetzt
+- Kern-Auth (`jwt.py`): Import + Exception-Handling + Options-Syntax angepasst
+- Tests: Import von `from jose import jwt` → `import jwt`
+- `requirements.txt`: `python-jose[cryptography]` entfernt, `PyJWT[crypto]` beibehalten
+- `pyproject.toml` + `.pre-commit-config.yaml` aktualisiert
+
+### Wo
+- `backend/app/core/auth/jwt.py` — Kern-Migration
+- `backend/tests/integration/conftest.py` — Import-Fix
+- `backend/tests/unit/test_jwt_verification.py` — Import-Fix
+- `backend/requirements.txt` — Dependency
+- `backend/pyproject.toml` — Dependency
+- `backend/.pre-commit-config.yaml` — Type-Stubs
+
+### API-Mapping
+| python-jose | PyJWT 2.8 |
+|-------------|-----------|
+| `from jose import jwt, JWTError` | `import jwt` + `jwt.PyJWTError` |
+| `ExpiredSignatureError` | `jwt.exceptions.ExpiredSignatureError` |
+| `options={"require_aud": True}` | `options={"require": ["aud"]}` |
+
+### Verification Path
+```bash
+# Deploy und Auth-Flow testen (Login, API-Calls, Token-Refresh)
+# rate_limit_middleware nutzte bereits PyJWT — keine Änderung nötig
+```
+
+---
+
+*Last updated: 2026-03-12 (python-jose → PyJWT Migration)*
