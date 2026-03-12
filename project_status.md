@@ -7425,4 +7425,47 @@ cd frontend && npm run build
 
 ---
 
-*Last updated: 2026-03-12 (Pagination Standardisierung)*
+## Sprint 3+4 Cleanup: Alle 6 Tasks abgeschlossen (2026-03-12) - IMPLEMENTED
+
+### Was wurde geändert
+- **Task 3.1** config.py: 2 stale Doc-Referenzen gefixt (`modules-and-entitlements.md` → `module-system.md`)
+- **Task 3.3** Deprecated Frontend-Types entfernt:
+  - `PaginatedResponse<T>` (Legacy page/per_page Format) aus `api.ts`
+  - `ListParams` aus `api.ts`
+  - `pageToOffset()` Utility aus `api.ts` + Re-Export aus `api-utils.ts`
+  - `LegacyFileType` aus `media.ts`
+  - `BillingUnit` Alias aus `extra-service.ts`
+- **Task 4.3** BlockRenderer camelCase → snake_case Normalisierung:
+  - Backend: 28 Pydantic-Felder umbenannt mit `AliasChoices` für Backward-Compat
+  - Frontend Types: `blocks.ts` alle Props-Interfaces auf snake_case
+  - Frontend Components: `SectionBlock`, `ButtonWidget`, `IconBoxWidget` aktualisiert mit `resolveProp()`
+  - Admin Block-Editor: `block-schemas.ts`, `block-editor-constants.ts`, `SectionPropsEditor.tsx` aktualisiert
+  - Backend akzeptiert BEIDE Formate (camelCase aus DB + snake_case neu), Output immer snake_case
+- **Task 4.4** `backend/docs/DEPRECATED.md` erstellt — vollständige Deprecation-Timeline mit 63+ Items
+
+### Bereits in früheren Commits erledigt (kein Handlungsbedarf)
+- **Task 3.1** Entitlements — bereits entfernt (Commit 35385277)
+- **Task 3.4** Media API Pagination — bereits migriert zu limit/offset
+- **Task 4.1** Legacy api_v1.py — bereits gelöscht (Commit 35385277)
+
+### Wo
+- `frontend/app/types/api.ts` (Deprecated Section entfernt)
+- `frontend/app/types/media.ts` (LegacyFileType entfernt)
+- `frontend/app/types/extra-service.ts` (BillingUnit Alias entfernt)
+- `frontend/app/types/blocks.ts` (28 camelCase → snake_case)
+- `frontend/app/lib/api-utils.ts` (pageToOffset Re-Export entfernt)
+- `frontend/app/(public)/components/blocks/` (SectionBlock, ButtonWidget, IconBoxWidget)
+- `frontend/app/(admin)/website/` (block-schemas, block-editor-constants, SectionPropsEditor, BlockPropsEditor)
+- `backend/app/schemas/block_validation.py` (28 Felder + AliasChoices)
+- `backend/app/core/config.py` (Doc-Referenzen gefixt)
+- `backend/docs/DEPRECATED.md` (NEU — Deprecation Timeline)
+
+### Verification Path
+```bash
+cd frontend && npm run build  # ✅ Erfolgreich
+python3 -c "from app.schemas.block_validation import *; validate_block({'type':'hero_fullwidth','props':{'backgroundImage':'/old.jpg','showSearch':True}})"  # Backward-Compat
+```
+
+---
+
+*Last updated: 2026-03-12 (Sprint 3+4 Cleanup)*
