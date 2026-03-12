@@ -7401,4 +7401,28 @@ docker inspect --format='{{json .Config.Healthcheck}}' pms-backend
 
 ---
 
-*Last updated: 2026-03-12 (python-jose → PyJWT Migration)*
+## Pagination Response Format Standardisierung (2026-03-12) - IMPLEMENTED
+
+### Was wurde geändert
+- **Block Templates:** `templates` → `items` + `limit`/`offset`/`has_more` (Breaking Change)
+- **Extra Services:** `has_more` Feld ergänzt (additiv)
+- **Guests:** `has_more` Feld ergänzt (additiv)
+- **Media:** Bereits Standard (keine Änderung)
+- Alle paginierten Responses folgen jetzt dem `PaginatedResponse[T]` Format: `items`, `total`, `limit`, `offset`, `has_more`
+- `has_more` wird automatisch berechnet (`offset + limit < total`)
+
+### Wo
+- Backend-Schemas: `block_templates.py`, `extra_services.py`, `guests.py`
+- Backend-Routes: `block_templates.py` (Return-Werte)
+- Frontend-Types: `blocks.ts`, `templates/page.tsx`, `pages/[id]/page.tsx`
+
+### Verification Path
+```bash
+cd frontend && npm run build
+# API: GET /api/v1/website/block-templates → prüfen dass items[] statt templates[]
+# API: GET /api/v1/guests → prüfen dass has_more Feld vorhanden
+```
+
+---
+
+*Last updated: 2026-03-12 (Pagination Standardisierung)*
