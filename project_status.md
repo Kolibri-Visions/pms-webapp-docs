@@ -6,6 +6,54 @@
 
 ---
 
+## Eigene Auth — Phase 1 Supabase-Abloesung (2026-03-13) — ✅ IMPLEMENTED
+
+**Was:** Supabase GoTrue durch eigene JWT-basierte Authentifizierung ersetzt.
+
+**Warum:**
+- Unabhaengigkeit von Supabase Auth-Service
+- Volle Kontrolle ueber Token-Claims (role, agency_id)
+- Vorbereitung fuer komplette Supabase-Abloesung (Phase 2: Storage, Phase 3: DB)
+
+**Aenderungen:**
+- Backend: 4 Dateien (2 neu, 2 geaendert) — Auth-Endpoints (Login, Refresh, Logout, Me, Passwort aendern)
+- Frontend: 12 Dateien (1 neu, 11 geaendert) — JWT-basierte Auth, Cookie-Management, Proxy-Pattern
+- Datenbank: 1 Migration (880 Zeilen) — `public.users`, RLS-Policies umgeschrieben, Helper-Funktionen
+
+**Geloeste Probleme (5 Stueck):**
+1. passlib/bcrypt Inkompatibilitaet → direktes `import bcrypt` statt passlib
+2. Fehlender `aud` Claim in Tokens → `create_access_token()` setzt aud/iss
+3. PostgREST `role "admin" does not exist` → Proxy-Pattern trennt Auth von DB-Client
+4. RLS-Policies ohne auth.uid() Fallback → COALESCE in Helper-Funktionen
+5. Profildaten leer → SUPABASE_SERVICE_ROLE_KEY im Frontend-Container
+
+**Neue ENV-Variablen:**
+- Backend: `JWT_SECRET` (= SUPABASE_JWT_SECRET)
+- Frontend: `JWT_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`
+
+**Dateien:**
+| Datei | Aenderung |
+|-------|-----------|
+| `backend/app/api/routes/auth.py` | NEU: 5 Auth-Endpoints |
+| `backend/app/modules/auth.py` | NEU: ModuleSpec-Registrierung |
+| `backend/app/core/auth/jwt.py` | GEAENDERT: aud/iss Claims in create_access_token |
+| `backend/app/core/config.py` | GEAENDERT: jwt_refresh_token_expire_days |
+| `frontend/app/lib/supabase-server.ts` | REWRITE: Proxy-Pattern (Auth + PostgREST getrennt) |
+| `frontend/app/lib/auth-client.ts` | NEU: Client-seitige Auth |
+| `frontend/app/lib/auth-context.tsx` | REWRITE: JWT-basierter Auth-Context |
+| `frontend/middleware.ts` | GEAENDERT: JWT-Refresh, Session-Check |
+| `supabase/migrations/20260313000001_own_auth_migration.sql` | NEU: public.users, RLS-Rewrite |
+
+**Verification Path:**
+- Login/Logout funktional (Browser-Test)
+- Dashboard laedt alle Daten (Buchungen, Umsatz, Stats)
+- Profilseite mit Bild, Name, Rolle korrekt
+- Logs fehlerfrei nach Deploy
+
+**Runbook:** [51-own-auth-migration.md](ops/runbook/51-own-auth-migration.md)
+
+---
+
 ## Nixpacks → Dockerfile Migration (2026-03-12/13) — ✅ VERIFIED
 
 **Was:** Alle 4 Services von Nixpacks auf eigene Multi-Stage Dockerfiles migriert.

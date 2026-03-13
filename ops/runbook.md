@@ -46,6 +46,7 @@
 | [48-rls-migration-consolidation.md](./runbook/48-rls-migration-consolidation.md) | RLS & Migrations-Konsolidierung: Baseline, 4 Auth-Patterns, Verifikation |
 | [49-dockerfile-migration.md](./runbook/49-dockerfile-migration.md) | Nixpacks → Dockerfile Migration: HEALTHCHECK-Fixes, IPv6, Supabase-Netzwerk |
 | [50-docker-networking.md](./runbook/50-docker-networking.md) | Docker Networking: Coolify + Self-hosted Supabase, Bridge-Ansatz, Cron-Script |
+| [51-own-auth-migration.md](./runbook/51-own-auth-migration.md) | Eigene Auth (Phase 1): JWT statt Supabase GoTrue, Proxy-Pattern, Troubleshooting |
 
 ### Golden Paths (Most Common Operations)
 
