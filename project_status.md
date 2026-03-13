@@ -6,38 +6,48 @@
 
 ---
 
-## Nixpacks → Dockerfile Migration (2026-03-12) — IMPLEMENTED
+## Nixpacks → Dockerfile Migration (2026-03-12/13) — ✅ VERIFIED
 
-**Was:** Alle Frontend-Services von Nixpacks auf eigene Multi-Stage Dockerfiles migriert.
+**Was:** Alle 4 Services von Nixpacks auf eigene Multi-Stage Dockerfiles migriert.
 
 **Warum:**
-- Docker-native HEALTHCHECK (plattform-unabhaengig)
+- Docker-native HEALTHCHECK (plattformunabhaengig)
 - Kleinere Images (~200MB statt ~800MB+ mit Nixpacks)
 - Volle Kontrolle, reproduzierbare Builds
 - Kein Node-Version Workaround mehr noetig
 
+**Ergebnis (PROD 2026-03-13):**
+| Service | Build Pack | Port | Health |
+|---------|-----------|------|--------|
+| pms-api-backend | Dockerfile | 8000 | healthy |
+| pms-worker-v2 | Dockerfile.worker | 8000 | healthy |
+| pms-admin-frontend | Dockerfile | 3000 | healthy |
+| public-website | Dockerfile | 3000 | healthy |
+
+**Geloeste Probleme (6 Stueck):**
+1. Geister-Container nach Umbenennung → alte Container manuell gestoppt
+2. Coolify UI-Healthcheck nutzt curl (fehlt in Alpine) → deaktiviert
+3. Backend nicht im Supabase-Netzwerk → `docker network connect` (OFFEN: ueberlebt kein Redeploy)
+4. HEALTHCHECK `localhost` → IPv6 in Alpine → Fix: `127.0.0.1`
+5. HEALTHCHECK `--spider` → HEAD-Request → Fix: `-qO /dev/null` (GET)
+6. Root-Path `/` gibt 404 → Fix: `/api/ops/version`
+
 **Aenderungen:**
-- `frontend/next.config.js` — `output: "standalone"` hinzugefuegt
-- `frontend/Dockerfile` — NEU: Multi-Stage Build (deps → builder → runner) mit HEALTHCHECK
-- `frontend/.dockerignore` — NEU: Optimiert Build-Context
-- `backend/Dockerfile` — HEALTHCHECK `--start-period=60s` hinzugefuegt
-- `backend/docs/architecture/deployment.md` — Aktualisiert (Nixpacks → Dockerfile)
-- `backend/docs/architecture/README.md` — Deployment-Spalte aktualisiert
+- `frontend/next.config.js` — `output: "standalone"`
+- `frontend/Dockerfile` — Multi-Stage Build (deps → builder → runner) mit HEALTHCHECK
+- `frontend/.dockerignore` — Optimierter Build-Context
+- `backend/Dockerfile` — HEALTHCHECK `--start-period=60s`
 
-**Betroffene Services:**
-| Service | Vorher | Nachher |
-|---------|--------|---------|
-| Backend API | Nixpacks (hatte Dockerfile, wurde nicht genutzt) | Dockerfile |
-| pms-admin | Nixpacks + nixpacks.toml | Dockerfile (Multi-Stage) |
-| public-website | Nixpacks | Dockerfile (gleiches Frontend-Dockerfile) |
-| pms-worker-v2 | Dockerfile | Dockerfile (keine Aenderung) |
+**Offenes Problem:** Backend Supabase-Netzwerk (`--network` Option unzuverlaessig). Nach jedem Backend-Redeploy: `docker network connect bccg4gs4o4kgsowocw08wkw4 pms-api-backend`
 
-**Coolify-Umstellung:** MANUELL durch User erforderlich (Build Pack von "Nixpacks" auf "Dockerfile" aendern fuer 3 Services)
+**Runbook:** [49-dockerfile-migration.md](ops/runbook/49-dockerfile-migration.md)
 
-**Verification Path:**
-- `npm run build` erfolgreich (standalone output verifiziert)
-- `.next/standalone/server.js` + minimales `node_modules` erzeugt
-- PROD-Verifikation nach Coolify-Umstellung noetig
+**Commits:** `35d3d036`, `324db127`, `d9011f58`, `9c1ff433`, `4231ecc3`
+
+**PROD Evidence:**
+- Alle 4 Services: Running (healthy) — 2026-03-13 09:19 UTC
+- admin.fewo.kolibri-visions.de — erreichbar ✅
+- fewo.kolibri-visions.de — erreichbar ✅
 
 ---
 
