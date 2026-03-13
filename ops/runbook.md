@@ -45,6 +45,7 @@
 | [47-module-system.md](./runbook/47-module-system.md) | Module-System Architektur: Router-Registrierung, ModuleSpec, Troubleshooting |
 | [48-rls-migration-consolidation.md](./runbook/48-rls-migration-consolidation.md) | RLS & Migrations-Konsolidierung: Baseline, 4 Auth-Patterns, Verifikation |
 | [49-dockerfile-migration.md](./runbook/49-dockerfile-migration.md) | Nixpacks → Dockerfile Migration: HEALTHCHECK-Fixes, IPv6, Supabase-Netzwerk |
+| [50-docker-networking.md](./runbook/50-docker-networking.md) | Docker Networking: Coolify + Self-hosted Supabase, Bridge-Ansatz, Cron-Script |
 
 ### Golden Paths (Most Common Operations)
 
@@ -68,7 +69,7 @@
 | Public page cached as 404 | /unterkuenfte shows "not found", x-nextjs-cache: HIT | [Cached 404 Fix](./runbook/27-public-unterkuenfte-next-cache-404.md) |
 | Smoke script fails | Empty TOKEN/PID, bash errors | [Smoke Script Pitfalls](#smoke-script-pitfalls) |
 | "no available server" nach Deploy | Traefik kann Container nicht erreichen | [Dockerfile Migration](./runbook/49-dockerfile-migration.md#problem-4-healthcheck-connection-refused-localhost--ipv6) |
-| Backend DB "name resolution" nach Deploy | Supabase-Netzwerk fehlt | [Dockerfile Migration](./runbook/49-dockerfile-migration.md#problem-3-backend-nicht-im-supabase-netzwerk) |
+| Backend DB "name resolution" nach Deploy | Supabase-Netzwerk fehlt | [Docker Networking](./runbook/50-docker-networking.md) |
 | Amenities filter empty | /unterkuenfte filter shows no amenities | [Amenities RLS](./runbook/10-amenities-admin-ui.md#public-amenities-filter-rls) |
 | Extra service billing error | per_unit_night not saving | [Extra Services Migration](./runbook/16-extra-services.md#migration-per_unit_night-2026-02-15) |
 | Property not on public site | Active property missing from /unterkuenfte | [Public Visibility](./runbook/29-public-website-visibility.md) |
