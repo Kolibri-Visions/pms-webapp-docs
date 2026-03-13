@@ -6,6 +6,49 @@
 
 ---
 
+## Storage → MinIO — Phase 2 Supabase-Abloesung (2026-03-13) — ✅ IMPLEMENTED
+
+**Was:** Supabase Storage durch eigenen MinIO-Container (S3-kompatibel) ersetzt.
+
+**Warum:**
+- Unabhaengigkeit von Supabase Storage API
+- Eigene Kontrolle ueber Buckets, Policies, Zugriff
+- Vorbereitung fuer komplette Supabase-Abloesung (Phase 3: DB)
+
+**Aenderungen:**
+- Backend: `app/core/s3_storage.py` (NEU) — S3Storage-Klasse mit MinIO Python Client
+- Backend: `app/core/storage.py` — Re-Export-Wrapper fuer Rueckwaertskompatibilitaet
+- Backend: `app/api/routes/storage_proxy.py` (NEU) — Public File Proxy `/storage/{bucket}/{path}`
+- Backend: `app/api/routes/avatar.py` (NEU) — Avatar Upload/Delete via S3
+- Backend: `app/modules/avatar.py`, `app/modules/storage_proxy.py` (NEU) — Module-Registrierung
+- Backend: `app/modules/bootstrap.py` — Avatar + Storage Proxy Module hinzugefuegt
+- Backend: `app/main.py` — S3 Bucket-Init im Startup
+- Backend: `app/services/image_processor.py` — Von Supabase SDK zu S3Storage migriert
+- Backend: `app/services/media.py` — Upload/Delete/URL ueber S3Storage
+- Backend: `app/services/property_service.py` — Display-URLs ueber S3Storage statt Supabase
+- Backend: `app/api/routes/branding/endpoints.py` — Logo-Upload ueber S3Storage
+- Backend: `app/api/routes/branding/_helpers.py` — Supabase Bucket-Helper entfernt
+- Backend: `app/api/routes/properties.py` — storage_provider "s3" statt "supabase"
+- Backend: `app/api/routes/public_site/properties.py` — Akzeptiert "supabase" + "s3" Provider
+- Backend: `app/core/config.py` — S3 Konfigurationsfelder (S3_ENDPOINT, S3_ACCESS_KEY, etc.)
+- Backend: `requirements.txt` — minio>=7.2.0 hinzugefuegt
+- Frontend: `app/api/internal/profile/avatar/route.ts` — Proxy zu Backend Avatar API
+- SQL: `supabase/scripts/migrate_storage_urls_to_s3.sql` — URL-Umschreibung (manuell)
+
+**Buckets:** property-media, branding-assets, avatars
+
+**Migrationen:** Keine DB-Migration — URLs werden manuell per SQL-Script umgeschrieben
+
+**Verification Path:**
+1. Storage Proxy: `curl -I https://api.pms.kolibri-visions.de/storage/property-media/<path>`
+2. Admin-UI: Property-Bilder laden, Upload funktioniert
+3. Public Website: Cover-Bilder und Galerie sichtbar
+4. Avatar: Upload und Delete ueber Profil-Seite
+
+**Deployment-Anleitung:** `ANLEITUNG-ZUR-DURCHFUEHRUNG-PHASE-2.md`
+
+---
+
 ## Eigene Auth — Phase 1 Supabase-Abloesung (2026-03-13) — ✅ IMPLEMENTED
 
 **Was:** Supabase GoTrue durch eigene JWT-basierte Authentifizierung ersetzt.

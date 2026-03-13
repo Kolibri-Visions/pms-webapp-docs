@@ -47,6 +47,7 @@
 | [49-dockerfile-migration.md](./runbook/49-dockerfile-migration.md) | Nixpacks → Dockerfile Migration: HEALTHCHECK-Fixes, IPv6, Supabase-Netzwerk |
 | [50-docker-networking.md](./runbook/50-docker-networking.md) | Docker Networking: Coolify + Self-hosted Supabase, Bridge-Ansatz, Cron-Script |
 | [51-own-auth-migration.md](./runbook/51-own-auth-migration.md) | Eigene Auth (Phase 1): JWT statt Supabase GoTrue, Proxy-Pattern, Troubleshooting |
+| [52-storage-minio-migration.md](./runbook/52-storage-minio-migration.md) | Storage → MinIO (Phase 2): S3-kompatibel, Storage Proxy, URL-Migration |
 
 ### Golden Paths (Most Common Operations)
 
