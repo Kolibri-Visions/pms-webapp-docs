@@ -2,7 +2,38 @@
 
 **Last Updated:** 2026-03-14
 
-**Current Phase:** Supabase-Abloesung Phase 4 — Frontend Supabase-Abhaengigkeiten entfernt
+**Current Phase:** Supabase-Abloesung Phase 3 — Backend Supabase-Code entfernt
+
+---
+
+## Phase 3 Supabase-Abloesung — Backend Supabase-Code entfernt (2026-03-14) — ✅ IMPLEMENTED
+
+**Was:** Alle verbleibenden Supabase-Abhaengigkeiten aus dem Backend entfernt (Module, Config, Packages, Docker-Networking).
+
+**Warum:**
+- Komplette Eliminierung der Supabase-Abhaengigkeit im Backend
+- Keine Runtime-Abhaengigkeit mehr auf Supabase SDKs, PostgREST oder Supabase-Domains
+
+**Aenderungen:**
+- `supabase.py` Modul geloescht (0 aktive Imports)
+- `supabase_url`, `supabase_anon_key`, `supabase_service_role_key` aus `config.py` entfernt
+- `SUPABASE_JWT_SECRET` Fallback aus JWT-Config entfernt
+- `supabase` + `postgrest` Python-Packages aus `requirements.txt` + `pyproject.toml` entfernt
+- Supabase-Netzwerk aus `docker-compose.prod.yml` entfernt
+- Supabase CORS-Headers + Frontend Build-Args bereinigt
+- `SupabaseStorage` Alias aus `storage.py` entfernt
+
+**Wo:**
+- Backend: `app/lib/supabase.py` (geloescht), `app/core/config.py`, `app/core/jwt_config.py`, `app/services/storage.py`
+- Backend: `requirements.txt`, `pyproject.toml`
+- Infra: `docker-compose.prod.yml`
+
+**Migrationen:** Keine
+
+**Verification Path:**
+- `rg "SUPABASE|import supabase|from supabase" backend/app` = 0 Treffer
+- `cd backend && pip install -r requirements.txt` — keine Supabase-Packages mehr
+- Build + Startup erfolgreich
 
 ---
 
