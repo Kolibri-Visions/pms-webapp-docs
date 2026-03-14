@@ -1,8 +1,37 @@
 # PMS-Webapp Project Status
 
-**Last Updated:** 2026-03-12
+**Last Updated:** 2026-03-14
 
-**Current Phase:** Code-Qualitaet Audit 2 — Stufe 6-8 abgeschlossen, UI-Fixes + Refactorings
+**Current Phase:** Supabase-Abloesung Phase 3 — PostgREST → asyncpg Migration
+
+---
+
+## Phase 3 Supabase-Abloesung — PostgREST → asyncpg (2026-03-14) — ✅ IMPLEMENTED
+
+**Was:** Frontend PostgREST-Proxies durch Backend-Endpoints + direkte apiClient-Aufrufe ersetzt.
+
+**Warum:**
+- Eliminierung der Supabase PostgREST-Abhaengigkeit im Frontend
+- 27 Next.js `/api/internal/*` Proxy-Routes entfernt (Schritt B.1 + B.2)
+- Neue Backend-Endpoints fuer Profile und Sessions
+- Frontend nutzt jetzt ueberall `apiClient` mit JWT direkt zum Backend
+
+**Aenderungen:**
+- Backend: `app/services/media.py` — Komplette Migration von PostgREST HTTP zu asyncpg SQL
+- Backend: `app/api/routes/media.py` — Alle 13 Endpoints auf asyncpg-DI umgestellt
+- Backend: `app/api/routes/profile.py` (NEU) — GET/PATCH /profile Endpoint
+- Backend: `app/api/routes/sessions.py` (NEU) — GET/DELETE /auth/sessions Endpoint
+- Backend: `app/main.py` — Profile + Sessions Router registriert
+- Frontend: 27 `/api/internal/*` Proxy-Routes geloescht (~4.500 Zeilen entfernt)
+- Frontend: Profile-Seiten (page, edit, security) auf apiClient umgestellt
+- Frontend: AdminShell + useAdminShellState auf apiClient umgestellt
+- Frontend: PermissionContext auf apiClient umgestellt
+- Frontend: Booking-Requests Availability-Check auf apiClient umgestellt
+- Frontend: Einzige verbleibende Proxy-Route: `/api/internal/analytics/vitals` (sendBeacon, kein Auth)
+
+**Verification Path:**
+- `cd frontend && npm run build` — Build erfolgreich
+- Deployment + PROD-Test: Profil laden, bearbeiten, Sessions anzeigen, Passwort aendern
 
 ---
 
