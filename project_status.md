@@ -18,11 +18,11 @@
 **Aenderungen:**
 - Backend: `app/core/s3_storage.py` (NEU) — S3Storage-Klasse mit MinIO Python Client
 - Backend: `app/core/storage.py` — Re-Export-Wrapper fuer Rueckwaertskompatibilitaet
-- Backend: `app/api/routes/storage_proxy.py` (NEU) — Public File Proxy `/storage/{bucket}/{path}`
+- Backend: `app/api/routes/storage_proxy.py` (NEU) — Public File Proxy `/storage/{bucket}/{path}` mit Prefix-Fallback fuer migrierte Supabase-Dateien
 - Backend: `app/api/routes/avatar.py` (NEU) — Avatar Upload/Delete via S3
 - Backend: `app/modules/avatar.py`, `app/modules/storage_proxy.py` (NEU) — Module-Registrierung
 - Backend: `app/modules/bootstrap.py` — Avatar + Storage Proxy Module hinzugefuegt
-- Backend: `app/main.py` — S3 Bucket-Init im Startup
+- Backend: `app/main.py` — S3 Bucket-Init im Startup + StorageCorsMiddleware fuer CORS auf /storage/*
 - Backend: `app/services/image_processor.py` — Von Supabase SDK zu S3Storage migriert
 - Backend: `app/services/media.py` — Upload/Delete/URL ueber S3Storage
 - Backend: `app/services/property_service.py` — Display-URLs ueber S3Storage statt Supabase
@@ -33,19 +33,28 @@
 - Backend: `app/core/config.py` — S3 Konfigurationsfelder (S3_ENDPOINT, S3_ACCESS_KEY, etc.)
 - Backend: `requirements.txt` — minio>=7.2.0 hinzugefuegt
 - Frontend: `app/api/internal/profile/avatar/route.ts` — Proxy zu Backend Avatar API
+- Frontend: `middleware.ts` — CSP img-src um S3_PUBLIC_URL (api.fewo.kolibri-visions.de) erweitert
+- Frontend: `next.config.js` — remotePatterns fuer MinIO-Storage-Domain hinzugefuegt
 - SQL: `supabase/scripts/migrate_storage_urls_to_s3.sql` — URL-Umschreibung (manuell)
 
 **Buckets:** property-media, branding-assets, avatars
 
 **Migrationen:** Keine DB-Migration — URLs werden manuell per SQL-Script umgeschrieben
 
+**Besonderheiten:**
+- Supabase-migrierte Dateien haben einen Trailing-UUID im Pfad (z.B. `property-media/abc/foto.jpg/uuid`)
+- Der Storage Proxy handelt dies via Prefix-Fallback (`list_objects(prefix=path)`) ab
+- StorageCorsMiddleware in `main.py` setzt CORS-Header fuer `/storage/*` Requests (noetig fuer Next.js Image Optimization)
+
 **Verification Path:**
-1. Storage Proxy: `curl -I https://api.pms.kolibri-visions.de/storage/property-media/<path>`
+1. Storage Proxy: `curl -I https://api.fewo.kolibri-visions.de/storage/property-media/<path>`
 2. Admin-UI: Property-Bilder laden, Upload funktioniert
 3. Public Website: Cover-Bilder und Galerie sichtbar
 4. Avatar: Upload und Delete ueber Profil-Seite
+5. CSP/CORS: Keine Console-Fehler bei Bilddarstellung in Admin + Public
 
 **Deployment-Anleitung:** `ANLEITUNG-ZUR-DURCHFUEHRUNG-PHASE-2.md`
+**Runbook:** [52-storage-minio-migration.md](ops/runbook/52-storage-minio-migration.md)
 
 ---
 

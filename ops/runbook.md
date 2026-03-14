@@ -82,6 +82,8 @@
 | Revoked Session bleibt eingeloggt | Anderes Gerät nach Revoke noch aktiv | [Multi-Device Sessions](./runbook/36-multi-device-sessions.md#problem-revoked-session-bleibt-eingeloggt) |
 | CMS-Seite zeigt Loading Skeleton | View-Source zeigt kein HTML-Content | [CMS SSR/SEO](./runbook/41-cms-ssr-seo.md#verifikation-phase-0) |
 | Sitemap leer oder 500 | /sitemap.xml zeigt Fehler | [CMS SSR/SEO](./runbook/41-cms-ssr-seo.md#problem-sitemap-leer) |
+| Bilder laden nicht (404/CORS) | Property-Bilder fehlen oder Console CORS-Fehler | [Storage MinIO](./runbook/52-storage-minio-migration.md#bilder-laden-nicht-404) |
+| Storage-URLs zeigen auf Supabase | Alte URLs nicht migriert | [Storage MinIO](./runbook/52-storage-minio-migration.md#urls-zeigen-noch-auf-supabase) |
 
 ---
 
