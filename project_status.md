@@ -2,36 +2,83 @@
 
 **Last Updated:** 2026-03-14
 
-**Current Phase:** Supabase-Abloesung Phase 3 — PostgREST → asyncpg Migration
+**Current Phase:** Supabase-Abloesung Phase 4 — Frontend Supabase-Abhaengigkeiten entfernt
 
 ---
 
-## Phase 3 Supabase-Abloesung — PostgREST → asyncpg (2026-03-14) — ✅ IMPLEMENTED
+## Phase 3 Supabase-Abloesung — PostgREST Proxy Migration (B.2) (2026-03-14) — ✅ IMPLEMENTED
 
 **Was:** Frontend PostgREST-Proxies durch Backend-Endpoints + direkte apiClient-Aufrufe ersetzt.
 
 **Warum:**
 - Eliminierung der Supabase PostgREST-Abhaengigkeit im Frontend
-- 27 Next.js `/api/internal/*` Proxy-Routes entfernt (Schritt B.1 + B.2)
-- Neue Backend-Endpoints fuer Profile und Sessions
 - Frontend nutzt jetzt ueberall `apiClient` mit JWT direkt zum Backend
 
-**Aenderungen:**
+**Aenderungen (B.2 — Proxy-Routes):**
+- 13 Frontend `/api/internal/*` Proxy-Routes geloescht (profile, avatar, sessions, password, permissions, availability, notifications×3, audit-log×2, branding×2)
+- 1 Proxy behalten: `/api/internal/analytics/vitals` (sendBeacon kann keine Auth-Header setzen)
+- 2 neue Backend-Endpoints: `GET/PATCH /api/v1/profile`, `GET/DELETE /api/v1/auth/sessions` + `GET /api/v1/auth/sessions/{id}/check`
+- Session-Tracking im Login-Endpoint (INSERT in user_sessions, gibt session_id zurueck)
+- Frontend migriert von `fetch("/api/internal/...")` zu `apiClient.get/post/patch("/api/v1/...")` mit JWT
+- Module-Registrierung gefixt (profile + sessions Module in bootstrap.py)
+- Middleware Session-Check: 404 wird nicht mehr als "revoked" behandelt
+- Rate Limit von 100 auf 300 req/min erhoeht (temporaerer Fix fuer erhoehte direkte API-Aufrufe)
+- CORS: X-Session-Id Header erlaubt
+
+**Aenderungen (B.1 — Media asyncpg, frueher abgeschlossen):**
 - Backend: `app/services/media.py` — Komplette Migration von PostgREST HTTP zu asyncpg SQL
 - Backend: `app/api/routes/media.py` — Alle 13 Endpoints auf asyncpg-DI umgestellt
-- Backend: `app/api/routes/profile.py` (NEU) — GET/PATCH /profile Endpoint
-- Backend: `app/api/routes/sessions.py` (NEU) — GET/DELETE /auth/sessions Endpoint
-- Backend: `app/main.py` — Profile + Sessions Router registriert
-- Frontend: 27 `/api/internal/*` Proxy-Routes geloescht (~4.500 Zeilen entfernt)
-- Frontend: Profile-Seiten (page, edit, security) auf apiClient umgestellt
-- Frontend: AdminShell + useAdminShellState auf apiClient umgestellt
-- Frontend: PermissionContext auf apiClient umgestellt
-- Frontend: Booking-Requests Availability-Check auf apiClient umgestellt
-- Frontend: Einzige verbleibende Proxy-Route: `/api/internal/analytics/vitals` (sendBeacon, kein Auth)
+
+**Wo (B.2):**
+- Backend: `api/routes/profile.py`, `api/routes/sessions.py`, `api/routes/auth.py`, `modules/profile.py`, `modules/sessions.py`, `modules/bootstrap.py`, `core/config.py`
+- Frontend: `AdminShell.tsx`, `useAdminShellState.ts`, `profile/page.tsx`, `profile/edit/page.tsx`, `profile/security/page.tsx`, `PermissionContext.tsx`, `booking-requests/page.tsx`, `RequestDetailDrawer.tsx`, `middleware.ts`, `auth/login/route.ts`
+
+**Migrationen:** Keine (user_sessions Tabelle existierte bereits)
 
 **Verification Path:**
+- Profil-Seite laedt korrekt: `https://admin.fewo.kolibri-visions.de/profile`
+- Security-Seite zeigt Sessions: `https://admin.fewo.kolibri-visions.de/profile/security`
+- Login erstellt Session-Eintrag in user_sessions Tabelle
+- Keine verbleibenden `/api/internal/` Referenzen ausser analytics/vitals
 - `cd frontend && npm run build` — Build erfolgreich
-- Deployment + PROD-Test: Profil laden, bearbeiten, Sessions anzeigen, Passwort aendern
+
+**Known Issues (dokumentiert in TODO):**
+- API-Call-Overhead: ~13 Calls/Seite (sollte ~3 sein), Rate Limit temporaer auf 300/min erhoeht
+- Bestehende Sessions erscheinen erst nach Re-Login (Session-Tracking fehlte in Phase 1 Auth)
+
+---
+
+## Phase 4 Supabase-Abloesung — Frontend Supabase-Abhaengigkeiten entfernt (2026-03-14) — ✅ IMPLEMENTED
+
+**Was:** Alle verbleibenden Supabase-Abhaengigkeiten aus dem Frontend entfernt (NPM-Packages, Utility-Dateien, Konfiguration).
+
+**Warum:**
+- Komplette Eliminierung der Supabase-Abhaengigkeit im Frontend
+- Keine Runtime-Abhaengigkeit mehr auf Supabase SDKs oder Domains
+
+**Aenderungen:**
+- 3 Layout-Dateien (cancellation-rules, extra-services, settings/branding) von Supabase PostgREST auf `getAuthenticatedUser()` migriert
+- `supabase-server.ts` und `supabase-browser.ts` geloescht
+- `@supabase/ssr` und `@supabase/supabase-js` NPM-Packages entfernt
+- Logout-Route: `sb-*` Cookie-Clearing entfernt
+- `server-auth.ts`: `SUPABASE_JWT_SECRET` Fallback entfernt
+- CSP: Supabase-Domains aus `middleware.ts` entfernt
+- `next.config.js`: Supabase Image-Patterns entfernt
+- Dockerfile: Supabase ARGs entfernt
+- `.env.example` und `README.md` aktualisiert
+
+**Wo:**
+- Frontend: `app/(admin)/properties/[id]/cancellation-rules/layout.tsx`, `app/(admin)/properties/[id]/extra-services/layout.tsx`, `app/(admin)/settings/branding/layout.tsx`
+- Frontend: `app/lib/supabase-server.ts` (geloescht), `app/lib/supabase-browser.ts` (geloescht)
+- Frontend: `app/lib/server-auth.ts`, `app/api/auth/logout/route.ts`
+- Frontend: `middleware.ts`, `next.config.js`, `Dockerfile`, `.env.example`, `README.md`
+- Frontend: `package.json`, `package-lock.json`
+
+**Migrationen:** Keine
+
+**Verification Path:**
+- `npm run build` — Build erfolgreich
+- Keine Supabase-Imports in `*.ts`/`*.tsx`: `rg "@supabase" frontend/app/ --type ts --type tsx` liefert 0 Treffer
 
 ---
 
