@@ -1,8 +1,43 @@
 # PMS-Webapp Project Status
 
-**Last Updated:** 2026-03-14
+**Last Updated:** 2026-03-15
 
-**Current Phase:** Supabase-Abloesung Phase 3 — Backend Supabase-Code entfernt
+**Current Phase:** API-Call-Overhead Optimierung abgeschlossen
+
+---
+
+## API-Call-Overhead Optimierung (2026-03-15) — ✅ IMPLEMENTED
+
+**Was:** Frontend API-Calls pro Seitenaufruf von ~13 auf 1 reduziert.
+
+**Warum:**
+- Nach Entfernung der PostgREST-Proxy-Routes machte das Frontend ~13 Backend-Calls pro Seite
+- Rate-Limit (100/min) wurde bei 2 Geraeten parallel sofort erreicht (429er)
+- Badge-Polling alle 60s verursachte zusaetzliche Last
+
+**Aenderungen:**
+- **Backend:** Neuer gebuendelter Endpoint `GET /api/v1/me/context` (Profil + Permissions + Branding + Badges + Session-Check in 1 Call)
+- **Frontend:** `MeContextProvider` holt `/me/context` einmal und verteilt Daten an ThemeProvider, PermissionProvider und AdminShell
+- **Middleware:** Session-Check nur noch alle 5 Minuten (Cookie-basiertes Timestamp-Caching statt bei jedem Request)
+- **Badge-Polling:** Von 60s auf 5min reduziert (ueber MeContext)
+
+**Dateien:**
+- `backend/app/api/routes/me_context.py` (NEU)
+- `backend/app/modules/me_context.py` (NEU)
+- `frontend/app/lib/contexts/MeContext.tsx` (NEU)
+- `frontend/app/components/Providers.tsx` (MeContextProvider eingefuegt)
+- `frontend/app/lib/theme-provider.tsx` (nutzt MeContext-Branding statt separatem Fetch)
+- `frontend/app/lib/contexts/PermissionContext.tsx` (nutzt MeContext-Permissions statt separatem Fetch)
+- `frontend/app/components/admin-shell/AdminShell.tsx` (nutzt MeContext fuer Profil + Badges)
+- `frontend/middleware.ts` (Session-Check Cache mit 5min TTL)
+
+**Erwartete Verbesserung:**
+- API-Calls pro Seitenaufruf: ~13 → 1
+- Badge-Polling: 2 Calls/60s → 1 Call/5min
+- Middleware Session-Check: ~8 Calls/Seite → 1 Call/5min
+- Rate-Limit kann zurueck auf 100/min gesetzt werden
+
+**Verification Path:** Deploy + Netzwerk-Tab im Browser pruefen (sollte nur 1 `/me/context` Call zeigen)
 
 ---
 
@@ -74,7 +109,7 @@
 - `cd frontend && npm run build` — Build erfolgreich
 
 **Known Issues (dokumentiert in TODO):**
-- API-Call-Overhead: ~13 Calls/Seite (sollte ~3 sein), Rate Limit temporaer auf 300/min erhoeht
+- ~~API-Call-Overhead: ~13 Calls/Seite~~ → BEHOBEN: Gebuendelter `/api/v1/me/context` Endpoint + Middleware Session-Check Cache (2026-03-15)
 - Bestehende Sessions erscheinen erst nach Re-Login (Session-Tracking fehlte in Phase 1 Auth)
 
 ---
