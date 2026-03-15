@@ -7755,4 +7755,54 @@ python3 -c "from app.schemas.block_validation import *; validate_block({'type':'
 
 ---
 
-*Last updated: 2026-03-12 (Sprint 3+4 Cleanup)*
+## WebSocket Realtime Events — ✅ IMPLEMENTED
+
+**Datum:** 2026-03-15
+
+**Was wurde geändert:**
+- WebSocket-Endpoint mit JWT-Auth und Redis Pub/Sub Bridge
+- Realtime Event-Publishing (fire-and-forget) über alle API-Mutations
+- Frontend RealtimeContext + WebSocket-Client mit Auto-Reconnect
+- 13 Event-Emitter an 5 Backend-Route-Dateien (Bookings, Booking-Requests, Availability, Branding, Permissions)
+- Frontend-Integration: Bookings-Page, Booking-Requests, Calendar, MeContext (Badge), ThemeProvider, PermissionContext
+- Hardening: Connection-Limits (5/user, 50/agency, 500/global), Event-Throttling (10/s/agency), Heartbeat (90s), Graceful Degradation
+- Prometheus Metrics (5 neue: ws_connections_total, ws_connections_by_agency, ws_messages_sent_total, ws_connections_rejected_total, ws_events_throttled_total)
+- Auth Rate-Limit von 300 auf 150 reduziert (WebSocket reduziert Polling)
+
+**Wo (Backend):**
+- `backend/app/core/realtime.py` — Event-Publishing + Throttling
+- `backend/app/core/ws_manager.py` — Connection Manager + Limits + Metrics
+- `backend/app/api/routes/websocket.py` — WS-Endpoint + Heartbeat + Degradation
+- `backend/app/modules/websocket.py` — Modul-Registrierung
+- `backend/app/core/metrics.py` — 5 neue Prometheus-Metriken
+- `backend/app/core/config.py` — Rate-Limit angepasst
+- `backend/app/api/routes/bookings.py` — 4 Events
+- `backend/app/api/routes/booking_requests/actions.py` — 3 Events
+- `backend/app/api/routes/availability/blocks.py` — 3 Events
+- `backend/app/api/routes/branding/endpoints.py` — 1 Event
+- `backend/app/api/routes/roles.py` — 2 Events
+
+**Wo (Frontend):**
+- `frontend/app/types/realtime.ts` — Message-Types
+- `frontend/app/lib/ws-client.ts` — WebSocket-Client (Reconnect, Backoff, Ping/Pong)
+- `frontend/app/lib/contexts/RealtimeContext.tsx` — Provider + Hooks
+- `frontend/app/hooks/useBookingRealtime.ts` — Booking-Events Hook
+- `frontend/app/hooks/useAvailabilityRealtime.ts` — Availability-Events Hook
+- `frontend/app/components/Providers.tsx` — RealtimeProvider eingefügt
+- `frontend/app/(admin)/bookings/page.tsx` — Realtime-Refresh
+- `frontend/app/(admin)/booking-requests/page.tsx` — Realtime-Refresh
+- `frontend/app/(admin)/properties/[id]/calendar/page.tsx` — Realtime-Refresh
+- `frontend/app/lib/contexts/MeContext.tsx` — Badge + Polling-Intervall (5→15min)
+- `frontend/app/lib/theme-provider.tsx` — Branding-Refresh
+- `frontend/app/lib/contexts/PermissionContext.tsx` — Permission-Refresh
+
+**Migrationen:** Keine (nur Backend-Code + Frontend-Code)
+
+**Verification Path:**
+- Frontend Build: `cd frontend && npm run build` → ✅
+- Backend Imports: `python3 -c "from app.core.realtime import publish_event; from app.core.ws_manager import manager"` → ✅
+- PROD Deploy + WS Connect Test: TBD
+
+---
+
+*Last updated: 2026-03-15 (WebSocket Realtime Events)*

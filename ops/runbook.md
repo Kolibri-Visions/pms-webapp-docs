@@ -48,6 +48,7 @@
 | [50-docker-networking.md](./runbook/50-docker-networking.md) | Docker Networking: Coolify + Self-hosted Supabase, Bridge-Ansatz, Cron-Script |
 | [51-own-auth-migration.md](./runbook/51-own-auth-migration.md) | Eigene Auth (Phase 1): JWT statt Supabase GoTrue, Proxy-Pattern, Troubleshooting |
 | [52-storage-minio-migration.md](./runbook/52-storage-minio-migration.md) | Storage → MinIO (Phase 2): S3-kompatibel, Storage Proxy, URL-Migration |
+| [53-websocket-realtime.md](./runbook/53-websocket-realtime.md) | WebSocket Realtime Events: Redis Pub/Sub, Connection-Limits, Heartbeat, Metrics |
 
 ### Golden Paths (Most Common Operations)
 
