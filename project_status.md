@@ -2,7 +2,41 @@
 
 **Last Updated:** 2026-03-15
 
-**Current Phase:** API-Call-Overhead Optimierung abgeschlossen
+**Current Phase:** Branding-Refactoring abgeschlossen
+
+---
+
+## Branding-Refactoring (2026-03-15) — ✅ IMPLEMENTED
+
+**Was:** Branding-Einstellungen UI und Dark-Mode-Ableitung verbessert.
+
+**Aenderungen:**
+- **Form-Splitting:** `branding-form.tsx` (814 Zeilen) in 4 Dateien aufgeteilt:
+  - `branding-form.tsx` (404 Zeilen) — Shared State, Submit, Tab-Navigation
+  - `BrandingTabMarke.tsx` (109 Zeilen) — Logo, Markenfarben, Typografie
+  - `BrandingTabNavigation.tsx` (215 Zeilen) — Sidebar, Topbar, Verhalten, Nav-Builder
+  - `BrandingTabErweitert.tsx` (127 Zeilen) — Layout, Favicon, Custom CSS
+- **Nav-Config Normalisierung:** Doppelte Frontend-Normalisierung (50 Zeilen) entfernt — Backend `normalize_nav_config()` ist Single Source of Truth
+- **Dark-Mode Tokens:** `deriveDarkTokens()` leitet Surface/Text/Border-Werte dynamisch aus Light-Tokens ab (statt hardcodierter Tailwind-Gray-Werte). WCAG AA 4.5:1 Kontrast garantiert.
+
+**Dateien:**
+- `frontend/app/(admin)/settings/branding/branding-form.tsx` (GEAENDERT: -410 Zeilen)
+- `frontend/app/(admin)/settings/branding/BrandingTabMarke.tsx` (NEU)
+- `frontend/app/(admin)/settings/branding/BrandingTabNavigation.tsx` (NEU)
+- `frontend/app/(admin)/settings/branding/BrandingTabErweitert.tsx` (NEU)
+- `frontend/app/lib/theme-provider.tsx` (GEAENDERT: deriveDarkTokens dynamisch)
+
+**Verification Path:**
+```bash
+# TypeScript-Check
+cd frontend && npx tsc --noEmit
+
+# UI-Test
+# 1. /settings/branding oeffnen — alle 3 Tabs funktionieren
+# 2. Farben aendern + speichern — Live-Vorschau + Dark-Mode korrekt
+# 3. Navigation Builder — Ein-/Ausblenden funktioniert
+# 4. Erweitert — Favicon, Custom CSS, Layout-Optionen
+```
 
 ---
 

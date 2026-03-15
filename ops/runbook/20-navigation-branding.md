@@ -711,6 +711,28 @@ Falls ein Tenant bisher manuelle Gradient-Werte hatte:
 - Frontend ignoriert diese Werte nun und nutzt nur `accent_color`
 - Für konsistentes Aussehen: Akzentfarbe auf gewünschte Primärfarbe des alten Gradients setzen
 
+## Dateistruktur (Stand 2026-03-15)
+
+Die Branding-Einstellungen UI wurde in Sub-Komponenten aufgeteilt:
+
+```
+frontend/app/(admin)/settings/branding/
+├── page.tsx                      # Page-Wrapper
+├── layout.tsx                    # Layout
+├── branding-form.tsx             # Shared State, Submit, Tab-Navigation (404 Zeilen)
+├── BrandingTabMarke.tsx          # Tab 1: Logo, Markenfarben, Typografie (109 Zeilen)
+├── BrandingTabNavigation.tsx     # Tab 2: Sidebar, Topbar, Verhalten, Nav-Builder (215 Zeilen)
+└── BrandingTabErweitert.tsx      # Tab 3: Layout, Favicon, Custom CSS (127 Zeilen)
+```
+
+**Nav-Config Normalisierung:**
+- Backend `normalize_nav_config()` in `backend/app/api/routes/branding/_helpers.py` ist Single Source of Truth
+- Frontend verlässt sich auf bereits normalisierte API-Response (keine Duplikat-Logik)
+
+**Dark-Mode Token-Ableitung:**
+- `deriveDarkTokens()` in `frontend/app/lib/theme-provider.tsx` leitet alle Surface/Text/Border-Tokens dynamisch aus Light-Tokens ab
+- Verwendet `darkenColor()`, `lightenColor()`, `ensureMinContrast()` für WCAG AA Konformität
+
 ## Related Documentation
 
 - [Admin UI Design System](./19-admin-theming.md) — Design tokens and theming
