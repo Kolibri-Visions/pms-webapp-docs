@@ -67,14 +67,27 @@ grep "ws_" /var/log/pms-backend/*.log
 
 ## Dateien
 
-**Backend:**
+**Backend (Core):**
 - `app/core/realtime.py` — Event-Publishing + Throttling
 - `app/core/ws_manager.py` — Connection Manager
 - `app/api/routes/websocket.py` — WS-Endpoint
 - `app/modules/websocket.py` — Modul-Registrierung
 
-**Frontend:**
+**Backend (Event-Emitter — 18 Events in 7 Dateien):**
+- `app/api/routes/bookings.py` — 4 Events (created, updated, status_changed, cancelled)
+- `app/api/routes/booking_requests/actions.py` — 3 Events (review, approve, decline)
+- `app/api/routes/availability/blocks.py` — 3 Events (block created/updated/deleted)
+- `app/api/routes/guests.py` — 2 Events (created, updated)
+- `app/api/routes/properties.py` — 1 Event (updated)
+- `app/api/routes/branding/endpoints.py` — 1 Event (updated, mit exclude_user_id)
+- `app/api/routes/roles.py` — 2 Events (permissions_changed, role_changed)
+
+**Frontend (Client + Hooks):**
 - `app/lib/ws-client.ts` — WebSocket-Client
 - `app/lib/contexts/RealtimeContext.tsx` — Provider + Hooks
 - `app/hooks/useBookingRealtime.ts` — Booking-Events
 - `app/hooks/useAvailabilityRealtime.ts` — Availability-Events
+
+**Frontend (integrierte Seiten — 10 Seiten):**
+- Dashboard, Bookings (Liste+Detail), Booking-Requests, Availability-Übersicht
+- Properties (Liste), Calendar, Guests (Liste+Detail), Team
